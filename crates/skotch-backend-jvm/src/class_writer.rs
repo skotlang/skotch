@@ -461,9 +461,8 @@ fn emit_method(
                 stack_map_entries
                     .write_u16::<BigEndian>(ct.stack_count)
                     .unwrap();
-                for _ in 0..ct.stack_count {
-                    stack_map_entries.push(1); // Integer_variable_info
-                }
+                stack_map_entries
+                    .extend(std::iter::repeat_n(1u8, ct.stack_count as usize)); // Integer_variable_info
             }
         }
     }

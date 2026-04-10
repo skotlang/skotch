@@ -135,7 +135,4 @@ debug         = false
 inherits = "release"
 lto = "thin"
 
-[workspace.metadata.dist]
-archive-formats = ["zip"]
-ci = ["github"]
 
