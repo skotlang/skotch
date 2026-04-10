@@ -16,13 +16,16 @@ unique_name=inputkt
       "name": "main",
       "params": [],
       "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
         "Bool",
         "Int",
+        "Unit",
         "Int",
         "Int",
-        "Int",
-        "Int",
-        "Unit"
+        "Int"
       ],
       "blocks": [
         {
@@ -32,18 +35,22 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "Bool": true
+                    "Int": 5
                   }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
                 }
               }
             }
           ],
           "terminator": {
-            "Branch": {
-              "cond": 0,
-              "then_block": 1,
-              "else_block": 2
-            }
+            "Goto": 1
           }
         },
         {
@@ -52,65 +59,48 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 2
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Const": {
-                    "Int": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 3
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Local": 1
                 }
               }
             },
             {
               "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpGt",
+                    "lhs": 2,
+                    "rhs": 3
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 4,
+              "then_block": 2,
+              "else_block": 3
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 4
+                  "Local": 1
                 }
               }
             },
@@ -126,8 +116,52 @@ unique_name=inputkt
                   }
                 }
               }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 7,
+                    "rhs": 8
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 9
+                }
+              }
             }
           ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [],
           "terminator": "Return"
         }
       ],
