@@ -197,10 +197,13 @@ cargo xtask gen-fixtures --target native
 cargo xtask gen-fixtures --target jvm --skotch-only
 ```
 
-xtask auto-locates `d8` under `~/Library/Android/sdk/build-tools/<version>/`
-and `kotlin-stdlib.jar` next to the `kotlinc` binary. Missing tools log a
-warning and skip their slice of the reference outputs rather than failing
-the run.
+xtask auto-locates `d8` under `$ANDROID_HOME/build-tools/<latest>/` (or
+`$ANDROID_SDK_ROOT/build-tools/<latest>/`, the older variable name still
+recognized by Android Studio and many CI runners), then falls back to
+`d8` on `PATH`. The DEX e2e test uses the same lookup for `dexdump`.
+`kotlin-stdlib.jar` is auto-located next to the `kotlinc` binary.
+Missing tools log a warning and skip their slice of the reference
+outputs rather than failing the run.
 
 ## Workspace layout
 

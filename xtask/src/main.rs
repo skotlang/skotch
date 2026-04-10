@@ -140,8 +140,9 @@ fn gen_fixtures(
         }
         if matches!(target, TargetArg::Dex) && d8.is_none() {
             eprintln!(
-                "warning: d8 not found at /Users/marc/Library/Android/sdk/build-tools/*/d8 \
-                 or on PATH; skipping dex reference outputs"
+                "warning: d8 not found under $ANDROID_HOME/build-tools/*/d8, \
+                 $ANDROID_SDK_ROOT/build-tools/*/d8, or on PATH; \
+                 skipping dex reference outputs"
             );
         }
         if matches!(
@@ -173,16 +174,37 @@ fn gen_fixtures(
 }
 
 /// Locate `d8`, preferring the latest Android SDK build-tools install.
+///
+/// Resolution order:
+///
+/// 1. `$ANDROID_HOME/build-tools/<version>/d8` — the standard
+///    environment variable that the Android SDK manager and Android
+///    Studio set when an SDK is installed. We pick the latest
+///    version directory by lexical sort, which lines up with semver
+///    for Google's `xx.y.z` build-tool versioning.
+/// 2. `$ANDROID_SDK_ROOT/build-tools/<version>/d8` — the older but
+///    still-recognized variable name. Some CI runners and build
+///    systems set this instead of `ANDROID_HOME`.
+/// 3. `which d8` — fall back to anything on `PATH`.
+///
+/// Returns `None` if no `d8` can be found anywhere; the caller
+/// (which sets `skot_only` or warns) handles the missing-tool case.
 fn locate_d8() -> Option<PathBuf> {
-    // First check the user's known SDK location.
-    let sdk_root = PathBuf::from("/Users/marc/Library/Android/sdk/build-tools");
-    if let Ok(read_dir) = std::fs::read_dir(&sdk_root) {
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        let Some(home) = std::env::var_os(var) else {
+            continue;
+        };
+        let build_tools = PathBuf::from(home).join("build-tools");
+        let Ok(read_dir) = std::fs::read_dir(&build_tools) else {
+            continue;
+        };
         let mut versions: Vec<PathBuf> = read_dir
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.join("d8").exists())
             .collect();
-        // Sort by directory name (version), descending.
+        // Lexical sort matches Google's `xx.y.z` build-tool versioning,
+        // so the last entry is the newest.
         versions.sort();
         if let Some(latest) = versions.last() {
             return Some(latest.join("d8"));
