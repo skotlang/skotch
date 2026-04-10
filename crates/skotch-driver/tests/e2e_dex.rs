@@ -6,9 +6,15 @@
 //! the Android SDK build-tools installed see a `[skip]` line and the
 //! test passes.
 //!
-//! Locating `dexdump`: we look at the standard
-//! `~/Library/Android/sdk/build-tools/<version>/dexdump` path used on
-//! macOS first, then fall back to `which dexdump`.
+//! Locating `dexdump` mirrors how `xtask` locates `d8`:
+//!
+//! 1. `$ANDROID_HOME/build-tools/<latest>/dexdump`
+//! 2. `$ANDROID_SDK_ROOT/build-tools/<latest>/dexdump`
+//! 3. `which dexdump` on `PATH`
+//!
+//! Both env vars are recognized because the Android SDK manager and
+//! Android Studio set `ANDROID_HOME` while older docs and some CI
+//! runners use `ANDROID_SDK_ROOT`.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -35,18 +41,24 @@ fn workspace_root() -> PathBuf {
 }
 
 fn locate_dexdump() -> Option<PathBuf> {
-    if let Some(home) = std::env::var_os("HOME") {
-        let sdk = PathBuf::from(home).join("Library/Android/sdk/build-tools");
-        if let Ok(dir) = std::fs::read_dir(&sdk) {
-            let mut versions: Vec<PathBuf> = dir
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.join("dexdump").exists())
-                .collect();
-            versions.sort();
-            if let Some(latest) = versions.last() {
-                return Some(latest.join("dexdump"));
-            }
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        let Some(home) = std::env::var_os(var) else {
+            continue;
+        };
+        let build_tools = PathBuf::from(home).join("build-tools");
+        let Ok(dir) = std::fs::read_dir(&build_tools) else {
+            continue;
+        };
+        let mut versions: Vec<PathBuf> = dir
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.join("dexdump").exists())
+            .collect();
+        // Lexical sort matches Google's `xx.y.z` build-tool versioning,
+        // so the last entry is the newest.
+        versions.sort();
+        if let Some(latest) = versions.last() {
+            return Some(latest.join("dexdump"));
         }
     }
     which::which("dexdump").ok()
