@@ -1,0 +1,14 @@
+[package]
+name         = "skotch-buildscript"
+description  = "Token-walker parser for build.gradle.kts / settings.gradle.kts"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-diagnostics = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }

@@ -80,8 +80,18 @@ enum Command {
         /// Path to the `.kts` script file.
         script: PathBuf,
     },
-    /// Build a project (orchestration; lands in a later PR).
-    Build,
+    /// Build a project from build.gradle.kts.
+    ///
+    /// Discovers source files, compiles them, and packages the result
+    /// into a JAR (JVM) or APK (Android).
+    Build {
+        /// Project directory (default: current directory).
+        #[arg(short = 'C', long = "project-dir", value_name = "DIR")]
+        project_dir: Option<PathBuf>,
+        /// Override target: jvm or android (default: infer from build file).
+        #[arg(long = "target", value_name = "TARGET")]
+        target: Option<String>,
+    },
     /// Run tests (lands in a later PR).
     Test,
 }
@@ -178,8 +188,21 @@ fn main() -> Result<()> {
             // exactly what `java` printed.
             print!("{captured}");
         }
-        Command::Build => {
-            eprintln!("`skotch build` is not yet implemented.");
+        Command::Build {
+            project_dir,
+            target,
+        } => {
+            let dir = project_dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let target_override = target.map(|t| match t.as_str() {
+                "android" => skotch_build::BuildTarget::Android,
+                "native" => skotch_build::BuildTarget::Native,
+                _ => skotch_build::BuildTarget::Jvm,
+            });
+            let opts = skotch_build::BuildOptions {
+                project_dir: dir,
+                target_override,
+            };
+            skotch_build::build_project(&opts)?;
         }
         Command::Test => {
             eprintln!("`skotch test` is not yet implemented.");

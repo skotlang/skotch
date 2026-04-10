@@ -1,0 +1,10 @@
+[package]
+name         = "skotch-axml"
+description  = "Android binary XML (AXML) encoder for AndroidManifest.xml"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+byteorder = { workspace = true }

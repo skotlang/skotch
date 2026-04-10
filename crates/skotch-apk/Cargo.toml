@@ -1,0 +1,12 @@
+[package]
+name         = "skotch-apk"
+description  = "APK (Android Package) assembly with proper ZIP alignment"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-axml = { workspace = true }
+zip         = { workspace = true }
+byteorder   = { workspace = true }
