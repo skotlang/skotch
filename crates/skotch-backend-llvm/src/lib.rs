@@ -88,6 +88,7 @@ struct Emitter<'a> {
     out: String,
     needs_puts: bool,
     needs_printf: bool,
+    needs_bool_strings: bool,
 }
 
 impl<'a> Emitter<'a> {
@@ -104,6 +105,7 @@ impl<'a> Emitter<'a> {
             out: String::new(),
             needs_puts: false,
             needs_printf: false,
+            needs_bool_strings: false,
         }
     }
 
@@ -131,6 +133,12 @@ impl<'a> Emitter<'a> {
         // String constants.
         for (i, s) in self.module.strings.iter().enumerate() {
             self.emit_c_string(&format!("@.str.{i}"), s);
+        }
+
+        // Boolean string constants for println(bool).
+        if self.needs_bool_strings {
+            self.emit_c_string("@.str.true", "true");
+            self.emit_c_string("@.str.false", "false");
         }
 
         // Pre-intern format strings used by println(int).
@@ -184,7 +192,11 @@ impl<'a> Emitter<'a> {
                             let ty = &func.locals[arg.0 as usize];
                             match ty {
                                 Ty::String => self.needs_puts = true,
-                                Ty::Int | Ty::Bool => self.needs_printf = true,
+                                Ty::Bool => {
+                                    self.needs_puts = true;
+                                    self.needs_bool_strings = true;
+                                }
+                                Ty::Int => self.needs_printf = true,
                                 _ => self.needs_puts = true,
                             }
                         } else {
@@ -329,7 +341,8 @@ impl<'a> Emitter<'a> {
         for (i, &na) in needs_alloca.iter().enumerate() {
             if na {
                 let name = format!("%merge_{i}");
-                writeln!(out, "  {name} = alloca i32").unwrap();
+                let lt = llvm_type(&func.locals[i]);
+                writeln!(out, "  {name} = alloca {lt}").unwrap();
                 alloca_names[i] = Some(name);
             }
         }
@@ -344,6 +357,7 @@ impl<'a> Emitter<'a> {
             constant_text: vec![None; func.locals.len()],
             needs_alloca,
             alloca_names,
+            is_i1_local: vec![false; func.locals.len()],
             next_tmp: 0,
         };
         for &p in &func.params {
@@ -374,6 +388,9 @@ struct BlockWalker<'a> {
     constant_text: Vec<Option<String>>,
     /// Which locals use alloca (assigned in multiple blocks).
     needs_alloca: Vec<bool>,
+    /// Tracks which locals were produced by `icmp` (already `i1`
+    /// in LLVM IR) so the `br` emission skips the `trunc`.
+    is_i1_local: Vec<bool>,
     /// The alloca SSA name for each local that needs it.
     alloca_names: Vec<Option<String>>,
     next_tmp: u32,
@@ -401,12 +418,18 @@ impl<'a> BlockWalker<'a> {
 
     fn emit_terminator(&mut self, term: &Terminator, is_main: bool) {
         match term {
-            Terminator::Return | Terminator::ReturnValue(_) => {
+            Terminator::Return => {
                 if is_main {
                     writeln!(self.out, "  ret i32 0").unwrap();
                 } else {
                     writeln!(self.out, "  ret void").unwrap();
                 }
+            }
+            Terminator::ReturnValue(local) => {
+                let val = self.ssa_of_maybe_alloca(*local);
+                let ty = &self.func.locals[local.0 as usize];
+                let llvm_ty = llvm_type(ty);
+                writeln!(self.out, "  ret {llvm_ty} {val}").unwrap();
             }
             Terminator::Branch {
                 cond,
@@ -415,16 +438,28 @@ impl<'a> BlockWalker<'a> {
             } => {
                 let cond_ssa = self.ssa_of(*cond);
                 // MIR bools are i32 (0/1); LLVM `br` needs i1.
-                // Emit a truncation if the source is i32.
-                let cond_i1 = {
-                    let ty = &self.func.locals[cond.0 as usize];
-                    if matches!(ty, Ty::Bool | Ty::Int) {
-                        let t = self.fresh();
-                        writeln!(self.out, "  {t} = trunc i32 {cond_ssa} to i1").unwrap();
-                        t
-                    } else {
-                        cond_ssa
-                    }
+                // If the cond came from `icmp` it's already i1.
+                // If it came from a bool literal (`add i32 0, 1`)
+                // it's i32 and needs truncation.
+                // Heuristic: if the SSA name starts with `%t` and
+                // is_icmp is tracked, skip truncation. For
+                // simplicity, check if the SSA value was bound by
+                // an icmp instruction (its type in MIR is Bool but
+                // the LLVM value is i1). We detect this by checking
+                // if the local was produced by a BinOp comparison.
+                // For now: always truncate, but use `i32` only if
+                // the last def was NOT an icmp.
+                let cond_is_i1 = self
+                    .is_i1_local
+                    .get(cond.0 as usize)
+                    .copied()
+                    .unwrap_or(false);
+                let cond_i1 = if cond_is_i1 {
+                    cond_ssa
+                } else {
+                    let t = self.fresh();
+                    writeln!(self.out, "  {t} = trunc i32 {cond_ssa} to i1").unwrap();
+                    t
                 };
                 let cond_ssa = cond_i1;
                 let then_label = block_label(*then_block);
@@ -448,8 +483,10 @@ impl<'a> BlockWalker<'a> {
             let ptr = self.alloca_names[local.0 as usize]
                 .clone()
                 .expect("alloca name");
+            let ty = &self.func.locals[local.0 as usize];
+            let lt = llvm_type(ty);
             let dst = self.fresh();
-            writeln!(self.out, "  {dst} = load i32, ptr {ptr}").unwrap();
+            writeln!(self.out, "  {dst} = load {lt}, ptr {ptr}").unwrap();
             dst
         } else {
             self.ssa_of(local)
@@ -460,28 +497,50 @@ impl<'a> BlockWalker<'a> {
         let dest_ty = &self.func.locals[dest.0 as usize];
         if matches!(dest_ty, Ty::Unit) {
             if let Rvalue::Call { .. } = rvalue {
-                self.lower_call_void(rvalue);
+                self.lower_call_void(rvalue, dest);
             }
             return;
         }
 
-        // For alloca'd locals, the Rvalue::Local case just stores.
+        // For alloca'd locals, produce the value normally then store
+        // it through the alloca pointer.
         if self.needs_alloca[dest.0 as usize] {
-            if let Rvalue::Local(src) = rvalue {
-                let val = self.ssa_of(*src);
-                let ptr = self.alloca_names[dest.0 as usize]
-                    .as_ref()
-                    .expect("alloca name");
-                writeln!(self.out, "  store i32 {val}, ptr {ptr}").unwrap();
-                return;
-            }
-            if let Rvalue::Const(MirConst::Int(v)) = rvalue {
-                let ptr = self.alloca_names[dest.0 as usize]
-                    .as_ref()
-                    .expect("alloca name");
-                writeln!(self.out, "  store i32 {v}, ptr {ptr}").unwrap();
-                return;
-            }
+            let val = match rvalue {
+                Rvalue::Local(src) => {
+                    let v = self.ssa_of_maybe_alloca(*src);
+                    // If the source is i1 but the dest alloca is i32, extend.
+                    if self.is_i1_local[src.0 as usize] && matches!(dest_ty, Ty::Bool | Ty::Int) {
+                        let ext = self.fresh();
+                        writeln!(self.out, "  {ext} = zext i1 {v} to i32").unwrap();
+                        ext
+                    } else {
+                        v
+                    }
+                }
+                Rvalue::Const(MirConst::Int(v)) => format!("{v}"),
+                Rvalue::Const(MirConst::Bool(b)) => format!("{}", if *b { 1 } else { 0 }),
+                Rvalue::Const(MirConst::String(sid)) => {
+                    let global = &self.string_globals[sid.0 as usize];
+                    self.constant_text[dest.0 as usize] =
+                        Some(self.module.lookup_string(*sid).to_string());
+                    global.clone()
+                }
+                Rvalue::Const(MirConst::Unit) => return,
+                _ => {
+                    panic!(
+                        "alloca'd local {:?} assigned from unsupported rvalue; \
+                         extend the alloca path in lower_assign",
+                        dest
+                    );
+                }
+            };
+            let dest_ty = &self.func.locals[dest.0 as usize];
+            let lt = llvm_type(dest_ty);
+            let ptr = self.alloca_names[dest.0 as usize]
+                .as_ref()
+                .expect("alloca name");
+            writeln!(self.out, "  store {lt} {val}, ptr {ptr}").unwrap();
+            return;
         }
         match rvalue {
             Rvalue::Const(c) => self.lower_const(dest, c),
@@ -526,13 +585,15 @@ impl<'a> BlockWalker<'a> {
                         let dst = self.fresh();
                         writeln!(self.out, "  {dst} = icmp {pred} i32 {l}, {r}").unwrap();
                         self.ssa_for_local[dest.0 as usize] = Some(dst);
+                        self.is_i1_local[dest.0 as usize] = true;
                     }
                 }
             }
-            Rvalue::Call { .. } => {
-                // Non-Unit calls aren't produced by PR #4 lowering.
-                self.lower_call_void(rvalue);
-            }
+            Rvalue::Call { kind, args } => match kind {
+                CallKind::Println => self.lower_println(args),
+                CallKind::PrintlnConcat => self.lower_println_concat(args),
+                CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
+            },
         }
     }
 
@@ -565,14 +626,14 @@ impl<'a> BlockWalker<'a> {
         }
     }
 
-    fn lower_call_void(&mut self, rvalue: &Rvalue) {
+    fn lower_call_void(&mut self, rvalue: &Rvalue, dest: LocalId) {
         let Rvalue::Call { kind, args } = rvalue else {
             return;
         };
         match kind {
             CallKind::Println => self.lower_println(args),
             CallKind::PrintlnConcat => self.lower_println_concat(args),
-            CallKind::Static(target_id) => self.lower_static_call(*target_id, args),
+            CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
         }
     }
 
@@ -628,7 +689,25 @@ impl<'a> BlockWalker<'a> {
             Ty::String => {
                 writeln!(self.out, "  call i32 @puts(ptr {arg_ssa})").unwrap();
             }
-            Ty::Int | Ty::Bool => {
+            Ty::Bool => {
+                // Convert i32 0/1 (or i1) to "true"/"false" string via select.
+                let cond_ssa = if self.is_i1_local[arg.0 as usize] {
+                    arg_ssa.clone()
+                } else {
+                    let c = self.fresh();
+                    writeln!(self.out, "  {c} = trunc i32 {arg_ssa} to i1").unwrap();
+                    c
+                };
+                let sel = self.fresh();
+                writeln!(
+                    self.out,
+                    "  {sel} = select i1 {cond_ssa}, ptr @.str.true, ptr @.str.false"
+                )
+                .unwrap();
+                let _ = self.fresh();
+                writeln!(self.out, "  call i32 @puts(ptr {sel})").unwrap();
+            }
+            Ty::Int => {
                 writeln!(
                     self.out,
                     "  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 {arg_ssa})"
@@ -641,7 +720,7 @@ impl<'a> BlockWalker<'a> {
         }
     }
 
-    fn lower_static_call(&mut self, target_id: FuncId, args: &[LocalId]) {
+    fn lower_static_call(&mut self, target_id: FuncId, args: &[LocalId], dest: LocalId) {
         let target = &self.module.functions[target_id.0 as usize];
         let llvm_name = llvm_name_for(&self.module.wrapper_class, &target.name);
         let mut arg_text = String::new();
@@ -655,7 +734,14 @@ impl<'a> BlockWalker<'a> {
             arg_text.push(' ');
             arg_text.push_str(&ssa);
         }
-        writeln!(self.out, "  call void @{llvm_name}({arg_text})").unwrap();
+        let ret_ty = llvm_type(&target.return_ty);
+        if ret_ty == "void" {
+            writeln!(self.out, "  call void @{llvm_name}({arg_text})").unwrap();
+        } else {
+            let dst = self.fresh();
+            writeln!(self.out, "  {dst} = call {ret_ty} @{llvm_name}({arg_text})").unwrap();
+            self.ssa_for_local[dest.0 as usize] = Some(dst);
+        }
     }
 }
 
@@ -715,7 +801,7 @@ fn block_label(idx: u32) -> String {
 fn llvm_type(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "void",
-        Ty::Bool => "i1",
+        Ty::Bool => "i32", // bools are 0/1 ints; icmp produces i1 but we zext
         Ty::Int => "i32",
         Ty::Long => "i64",
         Ty::Double => "double",

@@ -1,0 +1,4 @@
+name   = "120-logical-and-or"
+status = "supported"
+features = ["logical-and", "logical-or", "comparison", "boolean-println"]
+skip_dex = true  # too many MIR locals for 4-bit register format

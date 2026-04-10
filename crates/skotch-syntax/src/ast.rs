@@ -104,6 +104,14 @@ pub enum Stmt {
     Val(ValDecl),
     /// `return [expr]`.
     Return { value: Option<Expr>, span: Span },
+    /// `while (cond) { body }`.
+    While { cond: Expr, body: Block, span: Span },
+    /// `lhs = rhs` reassignment (for `var` targets).
+    Assign {
+        target: Symbol,
+        value: Expr,
+        span: Span,
+    },
 }
 
 /// Expressions exercised by PR #1 fixtures.

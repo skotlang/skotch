@@ -46,6 +46,7 @@ pub enum TokenKind {
     KwTrue,
     KwFalse,
     KwNull,
+    KwWhile,
     KwClass,
     KwObject,
     KwPackage,

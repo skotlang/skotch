@@ -182,6 +182,27 @@ impl<'a> Resolver<'a> {
                     self.resolve_expr(fn_idx, v, scope, rf);
                 }
             }
+            Stmt::While { cond, body, .. } => {
+                self.resolve_expr(fn_idx, cond, scope, rf);
+                for s in &body.stmts {
+                    self.resolve_stmt(fn_idx, s, scope, rf);
+                }
+            }
+            Stmt::Assign {
+                target,
+                value,
+                span,
+            } => {
+                // Resolve the target — it must already be declared.
+                let _def = lookup(scope, *target).unwrap_or_else(|| {
+                    self.diags.push(Diagnostic::error(
+                        *span,
+                        format!("unresolved identifier `{}`", self.interner.resolve(*target)),
+                    ));
+                    DefId::Local(fn_idx, 0)
+                });
+                self.resolve_expr(fn_idx, value, scope, rf);
+            }
         }
     }
 
