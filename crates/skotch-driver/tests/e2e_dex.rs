@@ -28,6 +28,7 @@ const SUPPORTED: &[&str] = &[
     "04-val-string",
     "05-string-template-simple",
     "06-arithmetic-int",
+    "07-if-expression",
     "08-function-call",
     "09-multiple-statements",
     "10-top-level-val",

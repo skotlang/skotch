@@ -165,6 +165,70 @@ fn const_ty(c: &MirConst) -> Ty {
     }
 }
 
+/// Builder for a multi-block MIR function. Tracks the "current
+/// block" so statements are appended to the right place, and lets
+/// `lower_expr` create new basic blocks for `if`-expressions without
+/// threading a mutable block-list through every function.
+struct FnBuilder {
+    mf: MirFunction,
+    /// Index of the block we're currently emitting into.
+    cur_block: u32,
+}
+
+impl FnBuilder {
+    fn new(fn_idx: usize, name: String, return_ty: Ty) -> Self {
+        let mf = MirFunction {
+            id: FuncId(fn_idx as u32),
+            name,
+            params: Vec::new(),
+            locals: Vec::new(),
+            // Start with one empty entry block (block 0).
+            blocks: vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return, // patched later
+            }],
+            return_ty,
+        };
+        FnBuilder { mf, cur_block: 0 }
+    }
+
+    fn new_local(&mut self, ty: Ty) -> LocalId {
+        self.mf.new_local(ty)
+    }
+
+    fn push_stmt(&mut self, stmt: MStmt) {
+        self.mf.blocks[self.cur_block as usize].stmts.push(stmt);
+    }
+
+    /// Create a fresh empty block and return its index. Does NOT
+    /// switch `cur_block` — the caller decides when to switch.
+    fn new_block(&mut self) -> u32 {
+        let idx = self.mf.blocks.len() as u32;
+        self.mf.blocks.push(BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return, // patched later
+        });
+        idx
+    }
+
+    /// Set the terminator of the current block and switch to
+    /// `next_block`.
+    fn terminate_and_switch(&mut self, terminator: Terminator, next_block: u32) {
+        self.mf.blocks[self.cur_block as usize].terminator = terminator;
+        self.cur_block = next_block;
+    }
+
+    /// Set the terminator of the current block without switching.
+    #[allow(dead_code)]
+    fn set_terminator(&mut self, terminator: Terminator) {
+        self.mf.blocks[self.cur_block as usize].terminator = terminator;
+    }
+
+    fn finish(self) -> MirFunction {
+        self.mf
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn lower_function(
     f: &FunDecl,
@@ -176,16 +240,9 @@ fn lower_function(
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) {
-    // Build the body in a fresh `MirFunction`, then move it back into
-    // the module slot pre-allocated above.
-    let mut mf = MirFunction {
-        id: FuncId(fn_idx as u32),
-        name: interner.resolve(f.name).to_string(),
-        params: Vec::new(),
-        locals: Vec::new(),
-        blocks: Vec::new(),
-        return_ty: typed.map(|t| t.return_ty.clone()).unwrap_or(Ty::Unit),
-    };
+    let name = interner.resolve(f.name).to_string();
+    let return_ty = typed.map(|t| t.return_ty.clone()).unwrap_or(Ty::Unit);
+    let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
 
     // Allocate parameter locals first so they get LocalId 0..N.
     let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
@@ -193,18 +250,16 @@ fn lower_function(
         let ty = typed
             .and_then(|t| t.param_tys.get(pi).cloned())
             .unwrap_or(Ty::Any);
-        let id = mf.new_local(ty);
-        mf.params.push(id);
+        let id = fb.new_local(ty);
+        fb.mf.params.push(id);
         scope.push((p.name, id));
     }
 
-    let mut stmts: Vec<MStmt> = Vec::new();
     let mut ok = true;
     for s in &f.body.stmts {
         if !lower_stmt(
             s,
-            &mut mf,
-            &mut stmts,
+            &mut fb,
             &mut scope,
             module,
             name_to_func,
@@ -216,20 +271,15 @@ fn lower_function(
             break;
         }
     }
-    let terminator = Terminator::Return;
-    let block = BasicBlock { stmts, terminator };
-    mf.blocks.push(block);
+    // The current block's terminator stays `Return` (set by the
+    // FnBuilder constructor and never overwritten for the last block).
 
-    // Record only successfully lowered functions; partial lowerings stay
-    // empty (the backend will skip empty bodies).
     if ok {
-        module.functions[fn_idx] = mf;
+        module.functions[fn_idx] = fb.finish();
     } else {
-        // Replace with a no-op function that just returns so the backend
-        // still emits a syntactically-valid class.
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
-            name: interner.resolve(f.name).to_string(),
+            name,
             params: Vec::new(),
             locals: Vec::new(),
             blocks: vec![BasicBlock {
@@ -244,8 +294,7 @@ fn lower_function(
 #[allow(clippy::too_many_arguments)]
 fn lower_stmt(
     stmt: &Stmt,
-    mf: &mut MirFunction,
-    out: &mut Vec<MStmt>,
+    fb: &mut FnBuilder,
     scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
@@ -256,8 +305,7 @@ fn lower_stmt(
     match stmt {
         Stmt::Expr(e) => lower_expr(
             e,
-            mf,
-            out,
+            fb,
             scope,
             module,
             name_to_func,
@@ -268,8 +316,7 @@ fn lower_stmt(
         .is_some(),
         Stmt::Val(v) => lower_val_stmt(
             v,
-            mf,
-            out,
+            fb,
             scope,
             module,
             name_to_func,
@@ -281,8 +328,7 @@ fn lower_stmt(
             if let Some(v) = value {
                 let _ = lower_expr(
                     v,
-                    mf,
-                    out,
+                    fb,
                     scope,
                     module,
                     name_to_func,
@@ -299,8 +345,7 @@ fn lower_stmt(
 #[allow(clippy::too_many_arguments)]
 fn lower_val_stmt(
     v: &ValDecl,
-    mf: &mut MirFunction,
-    out: &mut Vec<MStmt>,
+    fb: &mut FnBuilder,
     scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
@@ -310,8 +355,7 @@ fn lower_val_stmt(
 ) -> bool {
     let Some(rhs) = lower_expr(
         &v.init,
-        mf,
-        out,
+        fb,
         scope,
         module,
         name_to_func,
@@ -321,9 +365,9 @@ fn lower_val_stmt(
     ) else {
         return false;
     };
-    let ty = mf.locals[rhs.0 as usize].clone();
-    let dest = mf.new_local(ty);
-    out.push(MStmt::Assign {
+    let ty = fb.mf.locals[rhs.0 as usize].clone();
+    let dest = fb.new_local(ty);
+    fb.push_stmt(MStmt::Assign {
         dest,
         value: Rvalue::Local(rhs),
     });
@@ -336,9 +380,8 @@ fn lower_val_stmt(
 #[allow(clippy::too_many_arguments)]
 fn lower_expr(
     e: &Expr,
-    mf: &mut MirFunction,
-    out: &mut Vec<MStmt>,
-    scope: &mut [(Symbol, LocalId)],
+    fb: &mut FnBuilder,
+    scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
     name_to_global: &FxHashMap<Symbol, MirConst>,
@@ -347,16 +390,16 @@ fn lower_expr(
 ) -> Option<LocalId> {
     match e {
         Expr::IntLit(v, _) => {
-            let dest = mf.new_local(Ty::Int);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Const(MirConst::Int(*v as i32)),
             });
             Some(dest)
         }
         Expr::BoolLit(v, _) => {
-            let dest = mf.new_local(Ty::Bool);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Const(MirConst::Bool(*v)),
             });
@@ -364,36 +407,27 @@ fn lower_expr(
         }
         Expr::StringLit(s, _) => {
             let sid = module.intern_string(s);
-            let dest = mf.new_local(Ty::String);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(Ty::String);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Const(MirConst::String(sid)),
             });
             Some(dest)
         }
         Expr::Ident(name, span) => {
-            // Resolution order:
-            //   1. Innermost local (`val`/`var`/parameter)
-            //   2. Top-level `val` constant — inlined
-            //   3. Otherwise: hard error
-            //
-            // Step 2 is what makes top-level `val` work without
-            // emitting JVM static fields or DEX `static_values`. The
-            // caller has already populated `name_to_global` with
-            // every literal-initialized top-level val in the file.
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| *n == *name) {
                 let src = *id;
-                let ty = mf.locals[src.0 as usize].clone();
-                let dest = mf.new_local(ty);
-                out.push(MStmt::Assign {
+                let ty = fb.mf.locals[src.0 as usize].clone();
+                let dest = fb.new_local(ty);
+                fb.push_stmt(MStmt::Assign {
                     dest,
                     value: Rvalue::Local(src),
                 });
                 Some(dest)
             } else if let Some(constant) = name_to_global.get(name) {
                 let ty = const_ty(constant);
-                let dest = mf.new_local(ty);
-                out.push(MStmt::Assign {
+                let dest = fb.new_local(ty);
+                fb.push_stmt(MStmt::Assign {
                     dest,
                     value: Rvalue::Const(constant.clone()),
                 });
@@ -411,8 +445,7 @@ fn lower_expr(
         }
         Expr::Paren(inner, _) => lower_expr(
             inner,
-            mf,
-            out,
+            fb,
             scope,
             module,
             name_to_func,
@@ -423,8 +456,7 @@ fn lower_expr(
         Expr::Binary { op, lhs, rhs, span } => {
             let l = lower_expr(
                 lhs,
-                mf,
-                out,
+                fb,
                 scope,
                 module,
                 name_to_func,
@@ -434,8 +466,7 @@ fn lower_expr(
             )?;
             let r = lower_expr(
                 rhs,
-                mf,
-                out,
+                fb,
                 scope,
                 module,
                 name_to_func,
@@ -443,12 +474,18 @@ fn lower_expr(
                 interner,
                 diags,
             )?;
-            let mop = match op {
-                BinOp::Add => MBinOp::AddI,
-                BinOp::Sub => MBinOp::SubI,
-                BinOp::Mul => MBinOp::MulI,
-                BinOp::Div => MBinOp::DivI,
-                BinOp::Mod => MBinOp::ModI,
+            let (mop, result_ty) = match op {
+                BinOp::Add => (MBinOp::AddI, Ty::Int),
+                BinOp::Sub => (MBinOp::SubI, Ty::Int),
+                BinOp::Mul => (MBinOp::MulI, Ty::Int),
+                BinOp::Div => (MBinOp::DivI, Ty::Int),
+                BinOp::Mod => (MBinOp::ModI, Ty::Int),
+                BinOp::Eq => (MBinOp::CmpEq, Ty::Bool),
+                BinOp::NotEq => (MBinOp::CmpNe, Ty::Bool),
+                BinOp::Lt => (MBinOp::CmpLt, Ty::Bool),
+                BinOp::Gt => (MBinOp::CmpGt, Ty::Bool),
+                BinOp::LtEq => (MBinOp::CmpLe, Ty::Bool),
+                BinOp::GtEq => (MBinOp::CmpGe, Ty::Bool),
                 _ => {
                     diags.push(Diagnostic::error(
                         *span,
@@ -457,8 +494,8 @@ fn lower_expr(
                     return None;
                 }
             };
-            let dest = mf.new_local(Ty::Int);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(result_ty);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::BinOp {
                     op: mop,
@@ -468,29 +505,143 @@ fn lower_expr(
             });
             Some(dest)
         }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
+            // ── Multi-block lowering for if-as-expression ────────
+            //
+            // 1. Lower the condition in the current block
+            // 2. Create then, else, and merge blocks
+            // 3. Terminate current block with Branch
+            // 4. Lower then branch → writes result to shared local → Goto merge
+            // 5. Lower else branch (if present) → writes result → Goto merge
+            // 6. Merge block becomes the new current block
+            //
+            // The shared result local is pre-allocated here. Both
+            // branches write to it via `Rvalue::Local(their_val)`.
+            // The merge block can read it directly.
+
+            let cond_local = lower_expr(
+                cond,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            )?;
+
+            let then_blk = fb.new_block();
+            let else_blk = fb.new_block();
+            let merge_blk = fb.new_block();
+
+            // Pre-allocate the result local. Type: Int for now (the
+            // only if-as-expression type we support). A future PR
+            // should infer the type from the branches.
+            let result = fb.new_local(Ty::Int);
+
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: cond_local,
+                    then_block: then_blk,
+                    else_block: else_blk,
+                },
+                then_blk,
+            );
+
+            // Then branch.
+            for s in &then_block.stmts {
+                match s {
+                    skotch_syntax::Stmt::Expr(e) => {
+                        if let Some(val) = lower_expr(
+                            e,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                        ) {
+                            fb.push_stmt(MStmt::Assign {
+                                dest: result,
+                                value: Rvalue::Local(val),
+                            });
+                        }
+                    }
+                    _ => {
+                        let _ = lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                        );
+                    }
+                }
+            }
+            fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
+
+            // Else branch.
+            if let Some(eb) = else_block {
+                for s in &eb.stmts {
+                    match s {
+                        skotch_syntax::Stmt::Expr(e) => {
+                            if let Some(val) = lower_expr(
+                                e,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                            ) {
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: result,
+                                    value: Rvalue::Local(val),
+                                });
+                            }
+                        }
+                        _ => {
+                            let _ = lower_stmt(
+                                s,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                            );
+                        }
+                    }
+                }
+            }
+            fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+
+            Some(result)
+        }
         Expr::Call { callee, args, span } => {
-            // The callee must be a bare identifier in PR #1.
             let callee_name = match callee.as_ref() {
                 Expr::Ident(name, _) => *name,
                 _ => {
                     diags.push(Diagnostic::error(
                         *span,
-                        "only direct function calls supported in PR #1",
+                        "only direct function calls are supported",
                     ));
                     return None;
                 }
             };
 
             // ─── Special form: println(<string template>) ───────────
-            //
-            // String templates are fused with their immediately
-            // enclosing `println` so that backends never have to
-            // materialize a heap-allocated concatenated `String`
-            // (which would force the LLVM backend to depend on
-            // `malloc`/`asprintf`). The fused form is encoded as
-            // `CallKind::PrintlnConcat` whose args are the parts of
-            // the template in source order. Each backend lowers it
-            // natively (StringBuilder for JVM/DEX, printf for LLVM).
             if interner.resolve(callee_name) == "println"
                 && args.len() == 1
                 && matches!(&args[0], Expr::StringTemplate(_, _))
@@ -500,8 +651,7 @@ fn lower_expr(
                     for part in parts {
                         let id = lower_template_part(
                             part,
-                            mf,
-                            out,
+                            fb,
                             scope,
                             module,
                             name_to_func,
@@ -511,8 +661,8 @@ fn lower_expr(
                         )?;
                         arg_locals.push(id);
                     }
-                    let dest = mf.new_local(Ty::Unit);
-                    out.push(MStmt::Assign {
+                    let dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::Call {
                             kind: CallKind::PrintlnConcat,
@@ -527,8 +677,7 @@ fn lower_expr(
             for a in args {
                 let id = lower_expr(
                     a,
-                    mf,
-                    out,
+                    fb,
                     scope,
                     module,
                     name_to_func,
@@ -551,11 +700,8 @@ fn lower_expr(
                 return None;
             };
 
-            // Calls return Unit in PR #1; the backend ignores `dest`
-            // for void calls but we still allocate a slot for shape
-            // uniformity.
-            let dest = mf.new_local(Ty::Unit);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(Ty::Unit);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Call {
                     kind,
@@ -565,19 +711,13 @@ fn lower_expr(
             Some(dest)
         }
         Expr::StringTemplate(_, span) => {
-            // String templates are only supported as the immediate
-            // argument of `println`. The fused `PrintlnConcat` path
-            // is taken in the `Expr::Call` arm above. A bare-template
-            // expression (e.g. `val s = "Hi $n"`) would require a
-            // real concatenation that returns a String value, which
-            // PR scope explicitly defers.
             diags.push(Diagnostic::error(
                 *span,
                 "string templates are only supported as a direct argument of `println` in PR scope",
             ));
             None
         }
-        Expr::Unary { span, .. } | Expr::Field { span, .. } | Expr::If { span, .. } => {
+        Expr::Unary { span, .. } | Expr::Field { span, .. } => {
             diags.push(Diagnostic::error(
                 *span,
                 "this expression form is not yet lowered to MIR",
@@ -588,16 +728,12 @@ fn lower_expr(
     }
 }
 
-/// Lower one template part — a literal text run, an `$ident`
-/// reference, or an embedded `${expr}` — to a local that holds the
-/// part's value. The local's type drives backend dispatch (e.g. the
-/// LLVM backend picks `%s` vs `%d` based on it).
+/// Lower one template part to a local.
 #[allow(clippy::too_many_arguments)]
 fn lower_template_part(
     part: &skotch_syntax::TemplatePart,
-    mf: &mut MirFunction,
-    out: &mut Vec<MStmt>,
-    scope: &mut [(Symbol, LocalId)],
+    fb: &mut FnBuilder,
+    scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
     name_to_global: &FxHashMap<Symbol, MirConst>,
@@ -608,21 +744,18 @@ fn lower_template_part(
     match part {
         TemplatePart::Text(s, _) => {
             let sid = module.intern_string(s);
-            let dest = mf.new_local(Ty::String);
-            out.push(MStmt::Assign {
+            let dest = fb.new_local(Ty::String);
+            fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Const(MirConst::String(sid)),
             });
             Some(dest)
         }
         TemplatePart::IdentRef(name, span) => {
-            // Forward to the standard `Expr::Ident` lookup so we get
-            // local/parameter/top-level-val resolution for free.
             let synthetic = Expr::Ident(*name, *span);
             lower_expr(
                 &synthetic,
-                mf,
-                out,
+                fb,
                 scope,
                 module,
                 name_to_func,
@@ -633,8 +766,7 @@ fn lower_template_part(
         }
         TemplatePart::Expr(inner) => lower_expr(
             inner,
-            mf,
-            out,
+            fb,
             scope,
             module,
             name_to_func,
