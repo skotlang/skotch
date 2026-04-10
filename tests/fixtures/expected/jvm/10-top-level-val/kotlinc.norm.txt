@@ -1,0 +1,28 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+field         GREETING : Ljava/lang/String; 0x001A
+method        <clinit> ()V 0x0008
+  code        max_stack=1 max_locals=0
+    0000 ldc "hi"
+    0002 op_0xB3
+    0003 nop
+    0004 op_0x0B
+    0005 return
+method        getGREETING ()Ljava/lang/String; 0x0019
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(InputKt.GREETING:Ljava/lang/String;)
+    0003 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 getstatic Field(InputKt.GREETING:Ljava/lang/String;)
+    0003 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0006 op_0x5F
+    0007 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0010 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

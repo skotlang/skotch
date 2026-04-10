@@ -1,0 +1,15 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [40 x i8] c"\0A        line one\0A        line two\0A    \00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  call i32 @puts(ptr @.str.0)
+  ret i32 0
+}
+

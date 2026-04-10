@@ -1,3 +1,11 @@
-name = "39-raw-string"
-status = "stub"
-reason = "Lexer doesn't handle triple-quoted strings yet."
+name     = "39-raw-string"
+status   = "supported"
+features = ["fun", "println", "val", "raw-string"]
+notes    = """
+Triple-quoted raw strings preserve every byte between the opening
+and closing `\"\"\"` verbatim. No escape interpretation, no $-interpolation
+in PR scope (Kotlin's spec allows it but no current fixture exercises
+it). Newlines are preserved, so the println output for the indented
+fixture content will include leading whitespace and a trailing
+whitespace line.
+"""

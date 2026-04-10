@@ -25,9 +25,13 @@ const SUPPORTED: &[&str] = &[
     "02-println-string-literal",
     "03-println-int-literal",
     "04-val-string",
+    "05-string-template-simple",
     "06-arithmetic-int",
     "08-function-call",
     "09-multiple-statements",
+    "10-top-level-val",
+    "38-string-template-expr",
+    "39-raw-string",
 ];
 
 fn workspace_root() -> PathBuf {

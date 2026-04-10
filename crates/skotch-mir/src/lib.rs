@@ -88,6 +88,25 @@ pub enum CallKind {
     /// Hard-coded `println` intrinsic. The backend dispatches by the
     /// type of the (single) argument.
     Println,
+    /// Hard-coded `println` of a string template, fused with the
+    /// concatenation step. The args are the *parts* of the template
+    /// in source order: literal text chunks (typed `String`) and
+    /// runtime values (any type). Each backend implements this
+    /// differently:
+    ///
+    /// - JVM/DEX build a `StringBuilder`, append each part, then
+    ///   call `println(String)` on the result.
+    /// - LLVM emits a single `printf` call with a format string
+    ///   computed from the constant text parts (`%s`/`%d` for the
+    ///   runtime parts).
+    ///
+    /// We fuse the concat into the println at MIR-lower time so the
+    /// LLVM backend never has to materialize an intermediate
+    /// concatenated `String` value (which would require either
+    /// `malloc` or a runtime helper). The fixtures we currently
+    /// support all use string templates as the immediate argument
+    /// of `println`, so this fused form covers everything we need.
+    PrintlnConcat,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

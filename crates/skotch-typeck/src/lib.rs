@@ -71,33 +71,43 @@ pub fn type_check(
 
     // Pass 1: collect signatures for every top-level fun and val so call
     // sites can be checked regardless of declaration order.
-    let mut fun_idx_in_file: u32 = 0;
+    //
+    // The DefId for `Function` and `TopLevelVal` is **kind-relative**
+    // (matching what `skotch-resolve` produces): the i-th *function*
+    // is `DefId::Function(i)`, the j-th *top-level val* is
+    // `DefId::TopLevelVal(j)`. We track those two indices separately
+    // so a file like
+    //
+    //     val GREETING = "hi"   // val_idx 0
+    //     fun main() { ... }    // fn_idx  0
+    //
+    // registers `DefId::Function(0)` for `main`, not `Function(1)`.
+    // Pass 2 below looks up by the same kind-relative index.
+    let mut fn_idx_pass1: u32 = 0;
+    let mut val_idx_pass1: u32 = 0;
     for decl in &file.decls {
         match decl {
             Decl::Fun(f) => {
                 let sig = tc.signature_for_fun(f);
                 tc.out
                     .top_signatures
-                    .insert(DefId::Function(fun_idx_in_file), sig);
-                fun_idx_in_file += 1;
+                    .insert(DefId::Function(fn_idx_pass1), sig);
+                fn_idx_pass1 += 1;
             }
             Decl::Val(v) => {
                 // Top-level val type: synthesized from initializer for
                 // string and int literals; explicit annotation otherwise.
                 let ty = tc.synth_top_init(&v.init);
                 tc.out.top_signatures.insert(
-                    DefId::TopLevelVal(fun_idx_in_file),
+                    DefId::TopLevelVal(val_idx_pass1),
                     Signature {
                         params: vec![],
-                        ret: ty.clone(),
+                        ret: ty,
                     },
                 );
-                let _ = ty;
-                fun_idx_in_file += 1;
+                val_idx_pass1 += 1;
             }
-            Decl::Unsupported { .. } => {
-                fun_idx_in_file += 1;
-            }
+            Decl::Unsupported { .. } => {}
         }
     }
     // Built-in: println accepts Any? and returns Unit.

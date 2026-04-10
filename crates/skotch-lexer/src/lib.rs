@@ -283,7 +283,20 @@ impl<'a> Lexer<'a> {
     /// Scan a string literal in templated form. The opening `"` is at
     /// `self.pos`. Emits `StringStart`, then a sequence of chunks /
     /// interpolations, then `StringEnd`.
+    ///
+    /// If the opening quote is actually a `"""` (triple-quoted),
+    /// dispatches to [`scan_raw_string`] which has its own scanning
+    /// rules: no escape sequences, newlines are allowed, and the
+    /// terminator is the matching `"""`.
     fn scan_string(&mut self) {
+        // Triple-quoted raw string: `"""..."""`. Detected here so we
+        // never enter the normal scanner's escape-aware path for
+        // raw strings.
+        if self.peek_at(1) == Some(b'"') && self.peek_at(2) == Some(b'"') {
+            self.scan_raw_string();
+            return;
+        }
+
         let open = self.pos;
         self.pos += 1; // consume opening "
         self.emit(TokenKind::StringStart, open, self.pos, None);
@@ -394,6 +407,75 @@ impl<'a> Lexer<'a> {
                     self.pos = end;
                 }
             }
+        }
+    }
+
+    /// Scan a triple-quoted raw string `"""...***"""`.
+    ///
+    /// Raw strings are simpler than regular strings:
+    ///
+    /// - **No escape interpretation.** A backslash is a literal
+    ///   backslash; `\n` is the two characters `\` and `n`, not a
+    ///   newline.
+    /// - **Newlines are allowed** in the body. Regular strings reject
+    ///   newlines as a syntax error; raw strings preserve them
+    ///   verbatim.
+    /// - **No `$` interpolation in PR scope.** Kotlin's spec allows
+    ///   `$ident` and `${expr}` inside raw strings, but no current
+    ///   fixture exercises that. The `$` character is preserved as-is
+    ///   here. A future PR can add interpolation by mirroring the
+    ///   regular-string code path.
+    /// - **The terminator is exactly `"""`.** The first `"""`
+    ///   sequence ends the literal. (Kotlin's "longest match" rule
+    ///   for trailing quotes is also out of scope; if a future
+    ///   fixture needs `""""..."""` we'll revisit.)
+    ///
+    /// Emits the same `StringStart` / `StringChunk` / `StringEnd`
+    /// shape as regular strings so the parser doesn't need a separate
+    /// path. The whole content is a single `StringChunk` because raw
+    /// strings have no interpolation in PR scope.
+    fn scan_raw_string(&mut self) {
+        let open = self.pos;
+        self.pos += 3; // consume opening """
+        self.emit(TokenKind::StringStart, open, self.pos, None);
+
+        let chunk_start = self.pos;
+        let mut chunk = String::new();
+
+        loop {
+            // Closing """ — first wins.
+            if self.peek() == Some(b'"')
+                && self.peek_at(1) == Some(b'"')
+                && self.peek_at(2) == Some(b'"')
+            {
+                if !chunk.is_empty() {
+                    self.emit(
+                        TokenKind::StringChunk,
+                        chunk_start,
+                        self.pos,
+                        Some(TokenPayload::StringChunk(chunk)),
+                    );
+                }
+                let close_start = self.pos;
+                self.pos += 3;
+                self.emit(TokenKind::StringEnd, close_start, self.pos, None);
+                return;
+            }
+
+            let Some(b) = self.peek() else {
+                self.error(open, self.pos, "unterminated raw string literal");
+                self.emit(TokenKind::StringEnd, self.pos, self.pos, None);
+                return;
+            };
+
+            // Append the next UTF-8 character verbatim. Newlines,
+            // backslashes, dollar signs, and lone quotes all pass
+            // through unchanged.
+            let ch_len = utf8_char_len(b);
+            let end = (self.pos + ch_len).min(self.bytes.len());
+            let s = std::str::from_utf8(&self.bytes[self.pos..end]).expect("valid UTF-8 in source");
+            chunk.push_str(s);
+            self.pos = end;
         }
     }
 
@@ -654,9 +736,83 @@ mod tests {
         );
     }
 
+    #[test]
+    fn lex_raw_string_simple() {
+        let (lf, d) = lex_str(r#""""hello""""#);
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::StringStart,
+                TokenKind::StringChunk,
+                TokenKind::StringEnd,
+                TokenKind::Eof,
+            ]
+        );
+        assert_eq!(
+            lf.payload(1),
+            Some(&TokenPayload::StringChunk("hello".to_string()))
+        );
+    }
+
+    #[test]
+    fn lex_raw_string_preserves_newlines() {
+        let src = "\"\"\"line one\nline two\"\"\"";
+        let (lf, d) = lex_str(src);
+        assert!(d.is_empty(), "{:?}", d);
+        // Single chunk containing the literal newline.
+        let chunks: Vec<_> = lf
+            .payloads
+            .iter()
+            .filter_map(|p| match p {
+                Some(TokenPayload::StringChunk(s)) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(chunks, vec!["line one\nline two".to_string()]);
+    }
+
+    #[test]
+    fn lex_raw_string_does_not_interpret_escapes() {
+        // `\n` is the literal two characters, NOT a newline.
+        let (lf, _d) = lex_str(r#""""a\nb""""#);
+        let chunks: Vec<_> = lf
+            .payloads
+            .iter()
+            .filter_map(|p| match p {
+                Some(TokenPayload::StringChunk(s)) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(chunks, vec![r#"a\nb"#.to_string()]);
+    }
+
+    #[test]
+    fn lex_raw_string_inside_a_function() {
+        let src = r#"
+            fun main() {
+                val s = """hello"""
+                println(s)
+            }
+        "#;
+        let (lf, d) = lex_str(src);
+        assert!(d.is_empty(), "{:?}", d);
+        // The raw string produces the same StringStart/Chunk/End shape
+        // as a regular string, so the parser handles it transparently.
+        let chunks: Vec<_> = lf
+            .payloads
+            .iter()
+            .filter_map(|p| match p {
+                Some(TokenPayload::StringChunk(s)) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(chunks, vec!["hello".to_string()]);
+    }
+
     // ─── future test stubs ───────────────────────────────────────────────
-    // TODO: lex_raw_string_triple_quoted   — """multi
-    //                                          line""" with no escapes
+    // TODO: lex_raw_string_with_interpolation — Kotlin allows $ident
+    //                                            and ${expr} inside """..."""
     // TODO: lex_char_literal               — 'a', '\n'
     // TODO: lex_int_literals_all_bases     — 0xff, 0b1010, 100_000, 1L
     // TODO: lex_float_literals             — 3.14, 2.5e10, 1.0f
