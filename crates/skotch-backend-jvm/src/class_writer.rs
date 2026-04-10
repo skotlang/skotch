@@ -268,6 +268,76 @@ fn walk_block(
                     code.write_u16::<BigEndian>(mref).unwrap();
                     bump(stack, max_stack, -(args.len() as i32));
                 }
+                CallKind::PrintlnConcat => {
+                    // Build a `StringBuilder`, append each part with
+                    // a type-appropriate `append` overload, call
+                    // `toString()`, then route the result to
+                    // `PrintStream.println(String)`. The whole
+                    // sequence stays branch-free, so we don't need
+                    // a `StackMapTable`.
+                    //
+                    // Stack diagram (PS = PrintStream, SB = StringBuilder):
+                    //
+                    //     getstatic System.out      [PS]
+                    //     new StringBuilder         [PS, SB]
+                    //     dup                       [PS, SB, SB]
+                    //     invokespecial <init>      [PS, SB]
+                    //     <for each part:>
+                    //         load part             [PS, SB, part]
+                    //         invokevirtual append  [PS, SB]   (returns SB)
+                    //     invokevirtual toString    [PS, String]
+                    //     invokevirtual println     []
+                    let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                    code.push(0xB2); // getstatic
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                    bump(stack, max_stack, 1);
+
+                    let sb_class = cp.class("java/lang/StringBuilder");
+                    code.push(0xBB); // new
+                    code.write_u16::<BigEndian>(sb_class).unwrap();
+                    bump(stack, max_stack, 1);
+                    code.push(0x59); // dup
+                    bump(stack, max_stack, 1);
+                    let init = cp.methodref("java/lang/StringBuilder", "<init>", "()V");
+                    code.push(0xB7); // invokespecial
+                    code.write_u16::<BigEndian>(init).unwrap();
+                    bump(stack, max_stack, -1); // pops the duplicated SB
+
+                    for &arg in args {
+                        load_local(code, stack, max_stack, slots, arg, &func.locals);
+                        let arg_ty = &func.locals[arg.0 as usize];
+                        let append_desc = match arg_ty {
+                            Ty::String => "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+                            Ty::Int => "(I)Ljava/lang/StringBuilder;",
+                            Ty::Bool => "(Z)Ljava/lang/StringBuilder;",
+                            Ty::Long => "(J)Ljava/lang/StringBuilder;",
+                            Ty::Double => "(D)Ljava/lang/StringBuilder;",
+                            _ => "(Ljava/lang/Object;)Ljava/lang/StringBuilder;",
+                        };
+                        let append = cp.methodref("java/lang/StringBuilder", "append", append_desc);
+                        code.push(0xB6); // invokevirtual
+                        code.write_u16::<BigEndian>(append).unwrap();
+                        // append: pops [SB, arg], pushes [SB] → net -1
+                        bump(stack, max_stack, -1);
+                    }
+
+                    let to_string = cp.methodref(
+                        "java/lang/StringBuilder",
+                        "toString",
+                        "()Ljava/lang/String;",
+                    );
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(to_string).unwrap();
+                    // toString: pops [SB], pushes [String] → net 0
+                    let _ = stack;
+
+                    let println =
+                        cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/String;)V");
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(println).unwrap();
+                    bump(stack, max_stack, -2); // pops [PS, String]
+                    let _ = dest;
+                }
             },
         }
     }

@@ -1,3 +1,12 @@
-name = "38-string-template-expr"
-status = "stub"
-reason = "Templates with embedded expressions need the same Concat path as 05."
+name     = "38-string-template-expr"
+status   = "supported"
+features = ["fun", "println", "string-template", "expr-interpolation", "arithmetic"]
+notes    = """
+String templates with `${expr}` interpolation. Lowered to the same
+`CallKind::PrintlnConcat` intrinsic as `$ident` interpolation
+(fixture 05); the embedded expression is recursively lowered to a
+local at MIR-lower time, so the backend just sees a sequence of
+typed locals to concatenate. The LLVM backend's printf format
+string folds the literal text inline and passes the int result as
+a `%d` runtime arg.
+"""

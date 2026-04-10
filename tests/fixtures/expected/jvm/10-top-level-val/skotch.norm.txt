@@ -1,0 +1,12 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=2
+    0000 ldc "hi"
+    0002 astore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 return

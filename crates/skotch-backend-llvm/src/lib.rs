@@ -49,6 +49,7 @@ use skotch_mir::{
     Rvalue, Stmt, Terminator,
 };
 use skotch_types::Ty;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
 /// Compile a [`MirModule`] to LLVM textual IR.
@@ -74,6 +75,16 @@ struct Emitter<'a> {
     string_globals: Vec<String>,
     /// Format strings interned by `println(<int>)` etc.
     format_strings: Vec<(String, String)>, // (name, contents)
+    /// Format strings interned by `PrintlnConcat` template lowering.
+    /// Keyed by format-string content so that two call sites with the
+    /// same template share one global. Populated during the pre-scan
+    /// in [`Emitter::emit`] and looked up at codegen time using the
+    /// same format-string-building algorithm.
+    concat_format_lookup: HashMap<String, String>, // text → name
+    /// Insertion-order list of `(name, format_text)` for the
+    /// PrintlnConcat globals, so the emitted IR is deterministic
+    /// across runs.
+    concat_format_globals: Vec<(String, String)>,
     out: String,
     needs_puts: bool,
     needs_printf: bool,
@@ -88,6 +99,8 @@ impl<'a> Emitter<'a> {
             module,
             string_globals,
             format_strings: Vec::new(),
+            concat_format_lookup: HashMap::new(),
+            concat_format_globals: Vec::new(),
             out: String::new(),
             needs_puts: false,
             needs_printf: false,
@@ -95,11 +108,14 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit(&mut self) -> String {
-        // First pass: discover what runtime declarations we need by
-        // scanning the function bodies. This lets us emit the
-        // declarations once at the top of the module.
+        // First pass: discover what runtime declarations we need AND
+        // intern every PrintlnConcat format string. Both must happen
+        // before we start emitting output, because runtime
+        // declarations and global format strings appear at the top
+        // of the module.
         for func in &self.module.functions {
             self.scan_runtime_needs(func);
+            self.scan_concat_formats(func);
         }
 
         // Header.
@@ -125,7 +141,14 @@ impl<'a> Emitter<'a> {
         for (name, contents) in &self.format_strings.clone() {
             self.emit_c_string(name, contents);
         }
-        if !self.format_strings.is_empty() || !self.module.strings.is_empty() {
+        // PrintlnConcat format string globals (deterministic order).
+        for (name, contents) in &self.concat_format_globals.clone() {
+            self.emit_c_string(name, contents);
+        }
+        if !self.format_strings.is_empty()
+            || !self.concat_format_globals.is_empty()
+            || !self.module.strings.is_empty()
+        {
             writeln!(self.out).unwrap();
         }
 
@@ -152,24 +175,79 @@ impl<'a> Emitter<'a> {
         for block in &func.blocks {
             for stmt in &block.stmts {
                 let Stmt::Assign { value, .. } = stmt;
-                if let Rvalue::Call {
-                    kind: CallKind::Println,
-                    args,
-                } = value
-                {
-                    if let Some(&arg) = args.first() {
-                        let ty = &func.locals[arg.0 as usize];
-                        match ty {
-                            Ty::String => self.needs_puts = true,
-                            Ty::Int | Ty::Bool => self.needs_printf = true,
-                            _ => self.needs_puts = true,
+                match value {
+                    Rvalue::Call {
+                        kind: CallKind::Println,
+                        args,
+                    } => {
+                        if let Some(&arg) = args.first() {
+                            let ty = &func.locals[arg.0 as usize];
+                            match ty {
+                                Ty::String => self.needs_puts = true,
+                                Ty::Int | Ty::Bool => self.needs_printf = true,
+                                _ => self.needs_puts = true,
+                            }
+                        } else {
+                            self.needs_puts = true;
                         }
-                    } else {
-                        self.needs_puts = true;
                     }
+                    Rvalue::Call {
+                        kind: CallKind::PrintlnConcat,
+                        ..
+                    } => {
+                        // PrintlnConcat always lowers to a single
+                        // printf call.
+                        self.needs_printf = true;
+                    }
+                    _ => {}
                 }
             }
         }
+    }
+
+    /// Walk one function looking for `CallKind::PrintlnConcat` calls,
+    /// and intern a deduped format-string global for each. This is the
+    /// pre-scan step that lets the function-body emitter look up
+    /// (rather than allocate) globals while it walks.
+    fn scan_concat_formats(&mut self, func: &MirFunction) {
+        // Track which locals hold a constant string literal, so we
+        // know whether each PrintlnConcat arg should be inlined into
+        // the format string or referenced via `%s`/`%d`.
+        let mut constant_text: Vec<Option<String>> = vec![None; func.locals.len()];
+        for block in &func.blocks {
+            for stmt in &block.stmts {
+                let Stmt::Assign { dest, value } = stmt;
+                match value {
+                    Rvalue::Const(MirConst::String(sid)) => {
+                        constant_text[dest.0 as usize] =
+                            Some(self.module.lookup_string(*sid).to_string());
+                    }
+                    Rvalue::Local(src) => {
+                        // SSA copy: dest gets src's literal-status.
+                        constant_text[dest.0 as usize] = constant_text[src.0 as usize].clone();
+                    }
+                    Rvalue::Call {
+                        kind: CallKind::PrintlnConcat,
+                        args,
+                    } => {
+                        let format = build_concat_format(func, &constant_text, args);
+                        self.intern_concat_format(format);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn intern_concat_format(&mut self, format_text: String) -> String {
+        if let Some(name) = self.concat_format_lookup.get(&format_text) {
+            return name.clone();
+        }
+        let name = format!("@.fmt.concat.{}", self.concat_format_globals.len());
+        self.concat_format_globals
+            .push((name.clone(), format_text.clone()));
+        self.concat_format_lookup.insert(format_text, name.clone());
+        name
     }
 
     fn intern_format_string(&mut self, label: &str, contents: &str) -> String {
@@ -223,12 +301,22 @@ impl<'a> Emitter<'a> {
         writeln!(self.out, "entry:").unwrap();
 
         let block: &BasicBlock = &func.blocks[0];
+        // Split-borrow self into the four fields the walker needs;
+        // this lets the walker hold a `&mut out` alongside a
+        // `&concat_format_lookup` without the borrow checker
+        // complaining about overlapping borrows of `self`.
+        let module = self.module;
+        let string_globals: &[String] = &self.string_globals;
+        let concat_format_lookup = &self.concat_format_lookup;
+        let out: &mut String = &mut self.out;
         let mut walker = BlockWalker {
-            module: self.module,
+            module,
             func,
-            string_globals: &self.string_globals,
-            out: &mut self.out,
+            string_globals,
+            concat_format_lookup,
+            out,
             ssa_for_local: vec![None; func.locals.len()],
+            constant_text: vec![None; func.locals.len()],
             next_tmp: 0,
         };
         // Bind parameters: each parameter local needs an SSA name.
@@ -260,11 +348,22 @@ struct BlockWalker<'a> {
     module: &'a MirModule,
     func: &'a MirFunction,
     string_globals: &'a [String],
+    /// `text → global name` lookup for `PrintlnConcat` format strings.
+    /// Populated by `Emitter::scan_concat_formats` before any function
+    /// body is walked.
+    concat_format_lookup: &'a HashMap<String, String>,
     out: &'a mut String,
     /// For each MIR LocalId, the LLVM SSA value name that holds its
     /// current value (e.g. `%tmp3`, `%arg1`, or a literal). `None`
     /// means the local hasn't been materialized yet.
     ssa_for_local: Vec<Option<String>>,
+    /// For each MIR LocalId, the literal text if it was assigned a
+    /// constant string. Used by `lower_println_concat` to decide
+    /// whether each arg should be inlined into the format string or
+    /// referenced via `%s`/`%d`. Mirrors the same field used by
+    /// `Emitter::scan_concat_formats` so the format string built at
+    /// codegen time matches what was interned during the pre-scan.
+    constant_text: Vec<Option<String>>,
     next_tmp: u32,
 }
 
@@ -303,8 +402,13 @@ impl<'a> BlockWalker<'a> {
             Rvalue::Const(c) => self.lower_const(dest, c),
             Rvalue::Local(src) => {
                 // SSA copy: bind dest to the same SSA name as src.
+                // Also propagate the literal-string status so a
+                // chain like `val a = "hi"; val b = a;` keeps `b`
+                // recognizable as a constant for `PrintlnConcat`
+                // format-string folding.
                 let s = self.ssa_of(*src);
                 self.ssa_for_local[dest.0 as usize] = Some(s);
+                self.constant_text[dest.0 as usize] = self.constant_text[src.0 as usize].clone();
             }
             Rvalue::BinOp { op, lhs, rhs } => {
                 let l = self.ssa_of(*lhs);
@@ -344,9 +448,14 @@ impl<'a> BlockWalker<'a> {
             }
             MirConst::String(sid) => {
                 // String constants are referenced as @.str.<n> globals.
-                // We bind the local directly to the global pointer.
+                // We bind the local directly to the global pointer
+                // *and* record the literal text so the
+                // `PrintlnConcat` lowering can fold this constant
+                // into the format string.
                 let global = &self.string_globals[sid.0 as usize];
                 self.ssa_for_local[dest.0 as usize] = Some(global.clone());
+                self.constant_text[dest.0 as usize] =
+                    Some(self.module.lookup_string(*sid).to_string());
             }
         }
     }
@@ -357,8 +466,47 @@ impl<'a> BlockWalker<'a> {
         };
         match kind {
             CallKind::Println => self.lower_println(args),
+            CallKind::PrintlnConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args),
         }
+    }
+
+    /// Lower `CallKind::PrintlnConcat` to a single `printf` call.
+    ///
+    /// The format string was pre-computed and interned in the
+    /// `Emitter`'s `concat_format_lookup` during the pre-scan, so
+    /// we just rebuild it here (deterministically) and look up the
+    /// matching global. The runtime args are everything that wasn't
+    /// folded into the format string at pre-scan time.
+    fn lower_println_concat(&mut self, args: &[LocalId]) {
+        let format = build_concat_format(self.func, &self.constant_text, args);
+        let fmt_global = self
+            .concat_format_lookup
+            .get(&format)
+            .cloned()
+            .expect("PrintlnConcat format string was not interned during pre-scan");
+
+        // Collect runtime args (everything that wasn't a constant string).
+        let mut runtime: Vec<String> = Vec::new();
+        for &arg in args {
+            if self.constant_text[arg.0 as usize].is_some() {
+                continue; // inlined into the format string
+            }
+            let arg_ty = &self.func.locals[arg.0 as usize];
+            let ssa = self.ssa_of(arg);
+            let arg_text = match arg_ty {
+                Ty::Int | Ty::Bool => format!("i32 {ssa}"),
+                _ => format!("ptr {ssa}"),
+            };
+            runtime.push(arg_text);
+        }
+
+        let _ = self.fresh();
+        write!(self.out, "  call i32 (ptr, ...) @printf(ptr {fmt_global}").unwrap();
+        for arg_text in &runtime {
+            write!(self.out, ", {arg_text}").unwrap();
+        }
+        writeln!(self.out, ")").unwrap();
     }
 
     fn lower_println(&mut self, args: &[LocalId]) {
@@ -404,6 +552,51 @@ impl<'a> BlockWalker<'a> {
         }
         writeln!(self.out, "  call void @{llvm_name}({arg_text})").unwrap();
     }
+}
+
+/// Build the printf format string for a `PrintlnConcat` call.
+///
+/// `constant_text[i]` is `Some(text)` if MIR local `i` was assigned
+/// a `Const(MirConst::String(_))` (or copied from one). Constant
+/// args are inlined into the format string verbatim — with `%`
+/// escaped to `%%` so printf doesn't reinterpret them. Runtime args
+/// become `%s` or `%d` depending on type.
+///
+/// A trailing `\n` is appended because `println` (the kotlin builtin
+/// we're lowering) always emits a newline.
+///
+/// This function is **deterministic and pure**: given the same MIR
+/// function, constant_text, and args, it always returns the same
+/// string. Both `Emitter::scan_concat_formats` (pre-scan) and
+/// `BlockWalker::lower_println_concat` (codegen) call it, and they
+/// agree by construction — the codegen path uses the result to look
+/// up the global the pre-scan interned.
+fn build_concat_format(
+    func: &MirFunction,
+    constant_text: &[Option<String>],
+    args: &[LocalId],
+) -> String {
+    let mut format = String::new();
+    for &arg in args {
+        if let Some(literal) = &constant_text[arg.0 as usize] {
+            for ch in literal.chars() {
+                if ch == '%' {
+                    format.push_str("%%");
+                } else {
+                    format.push(ch);
+                }
+            }
+        } else {
+            let arg_ty = &func.locals[arg.0 as usize];
+            match arg_ty {
+                Ty::Int | Ty::Bool => format.push_str("%d"),
+                Ty::Long => format.push_str("%lld"),
+                _ => format.push_str("%s"),
+            }
+        }
+    }
+    format.push('\n');
+    format
 }
 
 fn llvm_type(ty: &Ty) -> &'static str {

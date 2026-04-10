@@ -47,8 +47,11 @@ pub fn lower_file(
         ..MirModule::default()
     };
 
-    // Pre-allocate FuncId for every top-level fun in source order so
-    // calls between them resolve consistently.
+    // ─── Pass 1: register top-level functions ───────────────────────────
+    //
+    // Pre-allocate a `FuncId` for every top-level `fun` in source order
+    // so call sites between them resolve consistently regardless of
+    // declaration order.
     let mut name_to_func: FxHashMap<Symbol, FuncId> = FxHashMap::default();
     for decl in &file.decls {
         if let Decl::Fun(f) = decl {
@@ -66,7 +69,33 @@ pub fn lower_file(
         }
     }
 
-    // Lower each function body.
+    // ─── Pass 2: collect top-level val constants ────────────────────────
+    //
+    // Top-level vals with literal initializers are lowered as
+    // **inlined constants**: every reference site emits a
+    // `Rvalue::Const(<value>)` directly. This avoids the complexity of
+    // emitting JVM static fields + `<clinit>` and DEX `static_values_off`
+    // for the common case where the user wrote a literal. Compile speed
+    // and output accuracy both win — there's no extra method to compile
+    // and the runtime behavior is identical (the JIT would inline these
+    // anyway).
+    //
+    // Non-literal initializers are already rejected by `skotch-typeck`
+    // ("top-level val initializers must be a literal in PR #1"), so we
+    // skip silently here when we can't extract a `MirConst`.
+    let mut name_to_global: FxHashMap<Symbol, MirConst> = FxHashMap::default();
+    for decl in &file.decls {
+        if let Decl::Val(v) = decl {
+            if let Some(c) = lower_const_init(&v.init, &mut module) {
+                name_to_global.insert(v.name, c);
+            }
+            // If we can't extract a constant, typeck already errored;
+            // we just don't register the global, and any reference to
+            // it later will produce its own diagnostic.
+        }
+    }
+
+    // ─── Pass 3: lower each function body ───────────────────────────────
     let mut fn_idx: usize = 0;
     for decl in &file.decls {
         match decl {
@@ -77,17 +106,15 @@ pub fn lower_file(
                     fn_idx,
                     typed_fn,
                     &name_to_func,
+                    &name_to_global,
                     &mut module,
                     interner,
                     diags,
                 );
                 fn_idx += 1;
             }
-            Decl::Val(v) => {
-                diags.push(Diagnostic::error(
-                    v.span,
-                    "top-level val declarations are not yet lowered (PR #1)",
-                ));
+            Decl::Val(_) => {
+                // Already handled in pass 2.
             }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
@@ -102,11 +129,49 @@ pub fn lower_file(
     module
 }
 
+/// Try to extract a compile-time-constant value from a top-level
+/// `val` initializer. Returns `None` for non-literal initializers
+/// (which the type checker has already rejected).
+///
+/// String literals are interned into the module's string pool here so
+/// that the same `StringId` is shared with any inline `println("...")`
+/// uses of the same text — backends dedupe constant-pool entries
+/// across the whole module, and inlining the global through the same
+/// string pool keeps that dedup correct.
+fn lower_const_init(e: &Expr, module: &mut MirModule) -> Option<MirConst> {
+    match e {
+        Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
+        Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
+        Expr::StringLit(s, _) => {
+            let sid = module.intern_string(s);
+            Some(MirConst::String(sid))
+        }
+        // Wrapper around a literal (`val X = (1)`) — recurse so the
+        // user's harmless parens don't break const-folding.
+        Expr::Paren(inner, _) => lower_const_init(inner, module),
+        _ => None,
+    }
+}
+
+/// Surface type of a `MirConst`. Used by the inline-global lowering
+/// in `Expr::Ident` so the local that holds the inlined value gets
+/// the right type for the JVM/DEX/LLVM backends to dispatch on.
+fn const_ty(c: &MirConst) -> Ty {
+    match c {
+        MirConst::Unit => Ty::Unit,
+        MirConst::Bool(_) => Ty::Bool,
+        MirConst::Int(_) => Ty::Int,
+        MirConst::String(_) => Ty::String,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn lower_function(
     f: &FunDecl,
     fn_idx: usize,
     typed: Option<&skotch_typeck::TypedFunction>,
     name_to_func: &FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
     module: &mut MirModule,
     interner: &mut Interner,
     diags: &mut Diagnostics,
@@ -143,6 +208,7 @@ fn lower_function(
             &mut scope,
             module,
             name_to_func,
+            name_to_global,
             interner,
             diags,
         ) {
@@ -183,17 +249,47 @@ fn lower_stmt(
     scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) -> bool {
     match stmt {
-        Stmt::Expr(e) => {
-            lower_expr(e, mf, out, scope, module, name_to_func, interner, diags).is_some()
-        }
-        Stmt::Val(v) => lower_val_stmt(v, mf, out, scope, module, name_to_func, interner, diags),
+        Stmt::Expr(e) => lower_expr(
+            e,
+            mf,
+            out,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+        )
+        .is_some(),
+        Stmt::Val(v) => lower_val_stmt(
+            v,
+            mf,
+            out,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+        ),
         Stmt::Return { value, .. } => {
             if let Some(v) = value {
-                let _ = lower_expr(v, mf, out, scope, module, name_to_func, interner, diags);
+                let _ = lower_expr(
+                    v,
+                    mf,
+                    out,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                );
             }
             true
         }
@@ -208,6 +304,7 @@ fn lower_val_stmt(
     scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) -> bool {
@@ -218,6 +315,7 @@ fn lower_val_stmt(
         scope,
         module,
         name_to_func,
+        name_to_global,
         interner,
         diags,
     ) else {
@@ -243,6 +341,7 @@ fn lower_expr(
     scope: &mut [(Symbol, LocalId)],
     module: &mut MirModule,
     name_to_func: &FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) -> Option<LocalId> {
@@ -273,7 +372,15 @@ fn lower_expr(
             Some(dest)
         }
         Expr::Ident(name, span) => {
-            // Look up local first.
+            // Resolution order:
+            //   1. Innermost local (`val`/`var`/parameter)
+            //   2. Top-level `val` constant — inlined
+            //   3. Otherwise: hard error
+            //
+            // Step 2 is what makes top-level `val` work without
+            // emitting JVM static fields or DEX `static_values`. The
+            // caller has already populated `name_to_global` with
+            // every literal-initialized top-level val in the file.
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| *n == *name) {
                 let src = *id;
                 let ty = mf.locals[src.0 as usize].clone();
@@ -283,23 +390,59 @@ fn lower_expr(
                     value: Rvalue::Local(src),
                 });
                 Some(dest)
+            } else if let Some(constant) = name_to_global.get(name) {
+                let ty = const_ty(constant);
+                let dest = mf.new_local(ty);
+                out.push(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(constant.clone()),
+                });
+                Some(dest)
             } else {
                 diags.push(Diagnostic::error(
                     *span,
                     format!(
-                        "cannot lower reference to `{}` — only locals and parameters supported in PR #1",
+                        "cannot lower reference to `{}` — only locals, parameters, and top-level vals are supported",
                         interner.resolve(*name)
                     ),
                 ));
                 None
             }
         }
-        Expr::Paren(inner, _) => {
-            lower_expr(inner, mf, out, scope, module, name_to_func, interner, diags)
-        }
+        Expr::Paren(inner, _) => lower_expr(
+            inner,
+            mf,
+            out,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+        ),
         Expr::Binary { op, lhs, rhs, span } => {
-            let l = lower_expr(lhs, mf, out, scope, module, name_to_func, interner, diags)?;
-            let r = lower_expr(rhs, mf, out, scope, module, name_to_func, interner, diags)?;
+            let l = lower_expr(
+                lhs,
+                mf,
+                out,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            )?;
+            let r = lower_expr(
+                rhs,
+                mf,
+                out,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            )?;
             let mop = match op {
                 BinOp::Add => MBinOp::AddI,
                 BinOp::Sub => MBinOp::SubI,
@@ -337,9 +480,62 @@ fn lower_expr(
                     return None;
                 }
             };
+
+            // ─── Special form: println(<string template>) ───────────
+            //
+            // String templates are fused with their immediately
+            // enclosing `println` so that backends never have to
+            // materialize a heap-allocated concatenated `String`
+            // (which would force the LLVM backend to depend on
+            // `malloc`/`asprintf`). The fused form is encoded as
+            // `CallKind::PrintlnConcat` whose args are the parts of
+            // the template in source order. Each backend lowers it
+            // natively (StringBuilder for JVM/DEX, printf for LLVM).
+            if interner.resolve(callee_name) == "println"
+                && args.len() == 1
+                && matches!(&args[0], Expr::StringTemplate(_, _))
+            {
+                if let Expr::StringTemplate(parts, _) = &args[0] {
+                    let mut arg_locals = Vec::with_capacity(parts.len());
+                    for part in parts {
+                        let id = lower_template_part(
+                            part,
+                            mf,
+                            out,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                        )?;
+                        arg_locals.push(id);
+                    }
+                    let dest = mf.new_local(Ty::Unit);
+                    out.push(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::PrintlnConcat,
+                            args: arg_locals,
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
+
             let mut arg_locals = Vec::new();
             for a in args {
-                let id = lower_expr(a, mf, out, scope, module, name_to_func, interner, diags)?;
+                let id = lower_expr(
+                    a,
+                    mf,
+                    out,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                )?;
                 arg_locals.push(id);
             }
 
@@ -368,17 +564,84 @@ fn lower_expr(
             });
             Some(dest)
         }
-        Expr::Unary { span, .. }
-        | Expr::Field { span, .. }
-        | Expr::If { span, .. }
-        | Expr::StringTemplate(_, span) => {
+        Expr::StringTemplate(_, span) => {
+            // String templates are only supported as the immediate
+            // argument of `println`. The fused `PrintlnConcat` path
+            // is taken in the `Expr::Call` arm above. A bare-template
+            // expression (e.g. `val s = "Hi $n"`) would require a
+            // real concatenation that returns a String value, which
+            // PR scope explicitly defers.
             diags.push(Diagnostic::error(
                 *span,
-                "this expression form is not yet lowered to MIR (PR #1)",
+                "string templates are only supported as a direct argument of `println` in PR scope",
+            ));
+            None
+        }
+        Expr::Unary { span, .. } | Expr::Field { span, .. } | Expr::If { span, .. } => {
+            diags.push(Diagnostic::error(
+                *span,
+                "this expression form is not yet lowered to MIR",
             ));
             let _ = (DefId::Error, name_to_func);
             None
         }
+    }
+}
+
+/// Lower one template part — a literal text run, an `$ident`
+/// reference, or an embedded `${expr}` — to a local that holds the
+/// part's value. The local's type drives backend dispatch (e.g. the
+/// LLVM backend picks `%s` vs `%d` based on it).
+#[allow(clippy::too_many_arguments)]
+fn lower_template_part(
+    part: &skotch_syntax::TemplatePart,
+    mf: &mut MirFunction,
+    out: &mut Vec<MStmt>,
+    scope: &mut [(Symbol, LocalId)],
+    module: &mut MirModule,
+    name_to_func: &FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+) -> Option<LocalId> {
+    use skotch_syntax::TemplatePart;
+    match part {
+        TemplatePart::Text(s, _) => {
+            let sid = module.intern_string(s);
+            let dest = mf.new_local(Ty::String);
+            out.push(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::String(sid)),
+            });
+            Some(dest)
+        }
+        TemplatePart::IdentRef(name, span) => {
+            // Forward to the standard `Expr::Ident` lookup so we get
+            // local/parameter/top-level-val resolution for free.
+            let synthetic = Expr::Ident(*name, *span);
+            lower_expr(
+                &synthetic,
+                mf,
+                out,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            )
+        }
+        TemplatePart::Expr(inner) => lower_expr(
+            inner,
+            mf,
+            out,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+        ),
     }
 }
 
@@ -495,9 +758,78 @@ mod tests {
         )));
     }
 
+    #[test]
+    fn lower_top_level_val_string_inlines_constant() {
+        // The val should be inlined as a `Const(String)` at the
+        // reference site inside `main`. The MIR should NOT contain
+        // any synthetic global field — vals are pure inlined
+        // constants in skotch's lowering.
+        let (m, d) = lower(r#"val GREETING = "hi"; fun main() { println(GREETING) }"#);
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(m.functions.len(), 1, "no synthetic <clinit> generated");
+        // The string pool has "hi" once (deduped between the val
+        // initializer and any other use).
+        assert_eq!(m.strings, vec!["hi".to_string()]);
+        let main = &m.functions[0];
+        // The body must contain a Const(String) load for "hi" — that
+        // came from the inlined global.
+        assert!(main.blocks[0].stmts.iter().any(|s| matches!(
+            s,
+            MStmt::Assign {
+                value: Rvalue::Const(MirConst::String(_)),
+                ..
+            }
+        )));
+        // …followed by a Println call.
+        assert!(main.blocks[0].stmts.iter().any(|s| matches!(
+            s,
+            MStmt::Assign {
+                value: Rvalue::Call {
+                    kind: CallKind::Println,
+                    ..
+                },
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn lower_top_level_val_int_inlines_constant() {
+        let (m, d) = lower(r#"val ANSWER = 42; fun main() { println(ANSWER) }"#);
+        assert!(d.is_empty(), "{:?}", d);
+        let main = &m.functions[0];
+        assert!(main.blocks[0].stmts.iter().any(|s| matches!(
+            s,
+            MStmt::Assign {
+                value: Rvalue::Const(MirConst::Int(42)),
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn lower_local_shadows_top_level_val() {
+        // A local with the same name as a top-level val must shadow
+        // the global. The local's value (`"local"`) should be the
+        // one that reaches `println`, not the global's value
+        // (`"global"`).
+        let src = r#"
+            val X = "global"
+            fun main() {
+                val X = "local"
+                println(X)
+            }
+        "#;
+        let (m, d) = lower(src);
+        assert!(d.is_empty(), "{:?}", d);
+        // The string pool contains BOTH strings — the global is
+        // interned at module-init time even though it's never read.
+        assert!(m.strings.contains(&"local".to_string()));
+        assert!(m.strings.contains(&"global".to_string()));
+    }
+
     // ─── future stubs ────────────────────────────────────────────────────
     // TODO: lower_if_expression          — once Branch terminator lands
     // TODO: lower_string_template        — once Concat intrinsic lands
-    // TODO: lower_top_level_val          — once <clinit> emission lands
     // TODO: lower_local_var_reassign     — `var x = 1; x = 2`
 }

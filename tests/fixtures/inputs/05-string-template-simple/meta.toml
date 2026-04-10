@@ -1,4 +1,18 @@
 name     = "05-string-template-simple"
-status   = "stub"
+status   = "supported"
 features = ["fun", "println", "val", "string-template", "ident-interpolation"]
-reason   = "String templates require a Concat intrinsic backed by StringBuilder; planned for PR #1.5."
+notes    = """
+String templates with `$ident` interpolation are fused with their
+enclosing `println` at MIR-lower time as `CallKind::PrintlnConcat`.
+Each backend implements PrintlnConcat natively:
+  - JVM/DEX: build a `StringBuilder`, append each part with the
+    type-appropriate `append(...)` overload, call `toString()`,
+    then route through `PrintStream.println(String)`.
+  - LLVM: build a printf format string at codegen time, folding
+    constant text parts inline (escaping `%` as `%%`) and using
+    `%s`/`%d` for runtime values. The PR's local-val constant
+    folding lets the LLVM backend collapse `\"Hello, $name!\"`
+    with a constant `name` into a single fully-folded format
+    string with no runtime args.
+"""
+

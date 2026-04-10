@@ -183,21 +183,31 @@ pub fn serialize_insns(insns: &[u16]) -> Vec<u8> {
     out
 }
 
-/// How many scratch registers does this block need? PR #3 only needs
-/// 1 (for `System.out` when calling `println`); arithmetic and
-/// `invoke-static` get by with the registers MIR already allocated.
+/// How many scratch registers does this block need?
+///
+/// - `Println` needs 1 (for `System.out`).
+/// - `PrintlnConcat` needs 2 — one for the running `StringBuilder`
+///   (which becomes the resulting `String` after `toString()`), and
+///   one for `System.out` to receive the final `println`.
+/// - Arithmetic and `invoke-static` need 0 — every operand already
+///   has a MIR-assigned register.
+///
+/// We take the **maximum** across all calls in the block, not the
+/// sum, because scratch registers are reused across statements.
 fn compute_scratch(block: &BasicBlock) -> u16 {
+    let mut needed: u16 = 0;
     for stmt in &block.stmts {
         let Stmt::Assign { value, .. } = stmt;
-        if let Rvalue::Call {
-            kind: CallKind::Println,
-            ..
-        } = value
-        {
-            return 1;
+        if let Rvalue::Call { kind, .. } = value {
+            let n = match kind {
+                CallKind::Println => 1,
+                CallKind::PrintlnConcat => 2,
+                CallKind::Static(_) => 0,
+            };
+            needed = needed.max(n);
         }
     }
-    0
+    needed
 }
 
 // ─── instruction emission ────────────────────────────────────────────────
@@ -447,6 +457,136 @@ fn emit_call(
             }
             code.push(packed);
             n
+        }
+        CallKind::PrintlnConcat => {
+            // Layout (matching `compute_scratch`'s reservation):
+            //
+            //   v0 — `StringBuilder`, then the resulting `String`
+            //         after `toString()`
+            //   v1 — `System.out` (loaded just before the final
+            //         println call)
+            //
+            // The bytecode shape:
+            //
+            //   new-instance v0, Ljava/lang/StringBuilder;
+            //   invoke-direct {v0}, <init>:()V
+            //   for each part:
+            //     invoke-virtual {v0, vPart}, append:(Ty)StringBuilder;
+            //     move-result-object v0
+            //   invoke-virtual {v0}, toString:()Ljava/lang/String;
+            //   move-result-object v0
+            //   sget-object v1, System.out
+            //   invoke-virtual {v1, v0}, println:(String)V
+            debug_assert!(
+                scratch_base >= 2,
+                "PrintlnConcat requires 2 scratch registers"
+            );
+            let sb_reg: u16 = 0;
+            let print_reg: u16 = 1;
+
+            // new-instance v0, Ljava/lang/StringBuilder;  (op 0x22, fmt 21c)
+            let sb_type_idx = pools.intern_type("Ljava/lang/StringBuilder;");
+            code.push(opcode_aa(0x22, sb_reg as u8));
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Type,
+                old_idx: sb_type_idx,
+            });
+            code.push(0);
+
+            // invoke-direct {v0}, <init>:()V  (op 0x70, fmt 35c)
+            let init_method = pools.intern_method("Ljava/lang/StringBuilder;", "<init>", "V", &[]);
+            let high: u16 = 1 << 4; // A=1
+            code.push((high << 8) | 0x70);
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Method,
+                old_idx: init_method,
+            });
+            code.push(0);
+            code.push(sb_reg & 0x0F); // packed: just C=v0
+
+            // For each part: invoke-virtual + move-result-object.
+            for &arg in args {
+                let arg_reg = slot[&arg.0];
+                let arg_ty = &locals[arg.0 as usize];
+                let param_desc = match arg_ty {
+                    Ty::String => "Ljava/lang/String;",
+                    Ty::Int | Ty::Bool => "I",
+                    Ty::Long => "J",
+                    Ty::Double => "D",
+                    _ => "Ljava/lang/Object;",
+                };
+                let append_method = pools.intern_method(
+                    "Ljava/lang/StringBuilder;",
+                    "append",
+                    "Ljava/lang/StringBuilder;",
+                    &[param_desc],
+                );
+                // invoke-virtual {v_sb, v_arg}, append:(...)Ljava/lang/StringBuilder;
+                let high: u16 = 2 << 4; // A=2
+                code.push((high << 8) | 0x6E);
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Method,
+                    old_idx: append_method,
+                });
+                code.push(0);
+                let lo = (sb_reg & 0x0F) | ((arg_reg & 0x0F) << 4);
+                code.push(lo);
+                // move-result-object v_sb  (op 0x0C, fmt 11x)
+                code.push(opcode_aa(0x0C, sb_reg as u8));
+            }
+
+            // invoke-virtual {v_sb}, toString:()Ljava/lang/String;
+            let to_string = pools.intern_method(
+                "Ljava/lang/StringBuilder;",
+                "toString",
+                "Ljava/lang/String;",
+                &[],
+            );
+            let high: u16 = 1 << 4; // A=1
+            code.push((high << 8) | 0x6E);
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Method,
+                old_idx: to_string,
+            });
+            code.push(0);
+            code.push(sb_reg & 0x0F);
+            // move-result-object v_sb (now holds the String)
+            code.push(opcode_aa(0x0C, sb_reg as u8));
+
+            // sget-object v_print, System.out
+            let field_idx =
+                pools.intern_field("Ljava/lang/System;", "out", "Ljava/io/PrintStream;");
+            code.push(opcode_aa(0x62, print_reg as u8));
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Field,
+                old_idx: field_idx,
+            });
+            code.push(0);
+
+            // invoke-virtual {v_print, v_sb}, println:(Ljava/lang/String;)V
+            let println_method = pools.intern_method(
+                "Ljava/io/PrintStream;",
+                "println",
+                "V",
+                &["Ljava/lang/String;"],
+            );
+            let high: u16 = 2 << 4;
+            code.push((high << 8) | 0x6E);
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Method,
+                old_idx: println_method,
+            });
+            code.push(0);
+            let lo = (print_reg & 0x0F) | ((sb_reg & 0x0F) << 4);
+            code.push(lo);
+
+            2 // outs_size — every invoke-virtual passes ≤ 2 registers
         }
     }
 }

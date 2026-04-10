@@ -1,0 +1,29 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=5
+    0000 ldc "sum: "
+    0002 astore 1
+    0004 iconst_1
+    0005 istore 2
+    0007 iconst_2
+    0008 istore 3
+    0010 iload 2
+    0012 iload 3
+    0014 iadd
+    0015 istore 4
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 op_0xBB
+    0021 nop
+    0022 ldc_w #22967
+    0025 nop
+    0026 op_0x17
+    0027 aload 1
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 iload 4
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0037 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0043 return
