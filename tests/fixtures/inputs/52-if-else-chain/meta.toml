@@ -1,4 +1,3 @@
 name   = "52-if-else-chain"
-status = "stub"
+status = "supported"
 features = ["if-expression", "comparison", "string-return", "branch"]
-reason = "Requires if-as-expression with branches and StackMapTable."

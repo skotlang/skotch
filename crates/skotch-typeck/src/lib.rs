@@ -262,6 +262,13 @@ impl<'a> TypeChecker<'a> {
                         self.synth_expr(v, scope, expr_tys);
                     }
                 }
+                Stmt::While { cond, body, .. } => {
+                    let _ = self.synth_expr(cond, scope, expr_tys);
+                    self.check_block(body, scope, expr_tys, local_tys);
+                }
+                Stmt::Assign { value, .. } => {
+                    let _ = self.synth_expr(value, scope, expr_tys);
+                }
             }
         }
         scope.truncate(saved);

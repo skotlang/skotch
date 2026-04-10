@@ -447,8 +447,44 @@ impl<'a> Parser<'a> {
                 };
                 Stmt::Return { value, span }
             }
-            _ => Stmt::Expr(self.parse_expr()),
+            TokenKind::KwWhile => self.parse_while(),
+            _ => {
+                let expr = self.parse_expr();
+                // Check for `ident = expr` (var reassignment).
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Eq {
+                    if let Expr::Ident(name, name_span) = &expr {
+                        let name = *name;
+                        let start = *name_span;
+                        self.bump(); // consume `=`
+                        self.skip_trivia();
+                        let value = self.parse_expr();
+                        let span = start.merge(value.span());
+                        return Stmt::Assign {
+                            target: name,
+                            value,
+                            span,
+                        };
+                    }
+                }
+                Stmt::Expr(expr)
+            }
         }
+    }
+
+    fn parse_while(&mut self) -> Stmt {
+        let start = self.peek_span();
+        self.bump(); // consume `while`
+        self.skip_trivia();
+        self.expect(TokenKind::LParen, "'(' after 'while'");
+        self.skip_trivia();
+        let cond = self.parse_expr();
+        self.skip_trivia();
+        self.expect(TokenKind::RParen, "')' after while condition");
+        self.skip_trivia();
+        let body = self.parse_block();
+        let span = start.merge(body.span);
+        Stmt::While { cond, body, span }
     }
 
     // ─── expression precedence climbing ──────────────────────────────────
