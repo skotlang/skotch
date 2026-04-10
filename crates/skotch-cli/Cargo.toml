@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 skotch-driver = { workspace = true }
+skotch-build  = { workspace = true }
 skotch-repl   = { workspace = true }
 clap          = { workspace = true }
 anyhow        = { workspace = true }

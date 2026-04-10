@@ -1,0 +1,23 @@
+[package]
+name         = "skotch-build"
+description  = "Project-level build pipeline: discover sources, compile, package"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-buildscript = { workspace = true }
+skotch-driver      = { workspace = true }
+skotch-jar         = { workspace = true }
+skotch-axml        = { workspace = true }
+skotch-apk         = { workspace = true }
+skotch-mir         = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-span        = { workspace = true }
+skotch-diagnostics = { workspace = true }
+skotch-config      = { workspace = true }
+skotch-backend-jvm = { workspace = true }
+skotch-backend-dex = { workspace = true }
+anyhow             = { workspace = true }
+walkdir            = { workspace = true }

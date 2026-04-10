@@ -34,7 +34,15 @@ members = [
     "crates/skotch-dex-norm",
     "crates/skotch-llvm-norm",
 
-    # Layer 7 — driver + CLI
+    # Layer 6 — packaging + build file parsing
+    "crates/skotch-jar",
+    "crates/skotch-axml",
+    "crates/skotch-apk",
+    "crates/skotch-sign",
+    "crates/skotch-buildscript",
+
+    # Layer 7 — build orchestration + driver + CLI
+    "crates/skotch-build",
     "crates/skotch-driver",
     "crates/skotch-cli",
     "crates/skotch-repl",
@@ -63,6 +71,16 @@ anyhow       = "1"
 
 # binary IO
 byteorder    = "1"
+
+# APK signing (PR D): SHA-256 digests, RSA/ECDSA signing, keystore reading.
+sha2         = { version = "0.10", features = ["oid"] }
+rsa          = "0.9"
+pkcs8        = { version = "0.10", features = ["pem"] }
+x509-cert    = "0.2"
+der          = { version = "0.7", features = ["pem"] }
+p256         = { version = "0.13", features = ["ecdsa"] }
+pkcs12       = "0.1"
+signature_crate = { package = "signature", version = "2" }
 
 # DEX backend (PR #3): Adler32 checksum + SHA-1 signature for the
 # DEX header. Both crates are tiny and dependency-free.
@@ -116,6 +134,12 @@ skotch-backend-klib    = { path = "crates/skotch-backend-klib" }
 skotch-classfile-norm  = { path = "crates/skotch-classfile-norm" }
 skotch-dex-norm        = { path = "crates/skotch-dex-norm" }
 skotch-llvm-norm       = { path = "crates/skotch-llvm-norm" }
+skotch-jar             = { path = "crates/skotch-jar" }
+skotch-axml            = { path = "crates/skotch-axml" }
+skotch-apk             = { path = "crates/skotch-apk" }
+skotch-sign            = { path = "crates/skotch-sign" }
+skotch-buildscript     = { path = "crates/skotch-buildscript" }
+skotch-build           = { path = "crates/skotch-build" }
 skotch-driver          = { path = "crates/skotch-driver" }
 skotch-repl            = { path = "crates/skotch-repl" }
 skotch-jvm             = { path = "crates/skotch-jvm" }

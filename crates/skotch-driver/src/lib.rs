@@ -56,6 +56,25 @@ impl Target {
     }
 }
 
+/// Compile a single Kotlin source string to a [`MirModule`].
+///
+/// This is the shared front-end pipeline used by both `emit` (single-file)
+/// and `skotch-build` (project-level builds). Returns the MIR plus the
+/// interner so backends can look up strings.
+pub fn compile_source(
+    source: &str,
+    file_id: skotch_span::FileId,
+    wrapper_class: &str,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+) -> skotch_mir::MirModule {
+    let lexed = lex(file_id, source, diags);
+    let ast = parse_file(&lexed, interner, diags);
+    let resolved = resolve_file(&ast, interner, diags);
+    let typed = type_check(&ast, &resolved, interner, diags);
+    lower_file(&ast, &resolved, &typed, interner, diags, wrapper_class)
+}
+
 /// Options accepted by [`emit`].
 #[derive(Clone, Debug)]
 pub struct EmitOptions {

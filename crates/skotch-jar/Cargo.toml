@@ -1,0 +1,10 @@
+[package]
+name         = "skotch-jar"
+description  = "JAR (ZIP + MANIFEST.MF) assembly"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+zip = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name         = "skotch-sign"
+description  = "APK Signature Scheme v2 signing + PKCS#12 keystore reading"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+sha2         = { workspace = true }
+rsa          = { workspace = true }
+pkcs8        = { workspace = true }
+der          = { workspace = true }
+byteorder    = { workspace = true }
+anyhow       = { workspace = true }
