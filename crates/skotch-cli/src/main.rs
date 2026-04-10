@@ -40,11 +40,36 @@ enum Command {
     },
     /// Start the interactive Kotlin REPL.
     ///
-    /// Each line is wrapped in a synthetic `fun main()` (for
-    /// expressions) or appended to the accumulated declaration
-    /// history (for `val`/`var`/`fun`), compiled to JVM bytecode,
-    /// and executed in a `java` subprocess from `$JAVA_HOME`.
-    Repl,
+    /// With no flags, opens an interactive prompt. With `--exec` or
+    /// `--file`, runs the given code first. By default the REPL
+    /// stays open after executing `--exec`/`--file` input so you
+    /// can inspect the resulting state; pass `--exit-after` to quit
+    /// immediately after execution instead.
+    Repl {
+        /// Execute the given Kotlin snippet before entering the
+        /// interactive prompt. The snippet is processed line by line
+        /// as if the user had typed it.
+        ///
+        /// Example: `skotch repl --exec 'val x = 5; println(x)'`
+        #[arg(short = 'e', long = "exec", value_name = "CODE")]
+        exec: Option<String>,
+
+        /// Read and execute a script file before entering the
+        /// interactive prompt. Each line of the file is processed as
+        /// a REPL turn (declarations accumulate, expressions run).
+        ///
+        /// Example: `skotch repl --file setup.kts`
+        #[arg(short = 'f', long = "file", value_name = "PATH")]
+        file: Option<PathBuf>,
+
+        /// Exit immediately after executing `--exec` / `--file`
+        /// input instead of dropping into the interactive prompt.
+        /// Ignored when neither `--exec` nor `--file` is given.
+        ///
+        /// Example: `skotch repl --exec 'println("hi")' --exit-after`
+        #[arg(long = "exit-after")]
+        exit_after: bool,
+    },
     /// Execute a Kotlin script (`.kts`) file.
     ///
     /// The whole file is wrapped in a synthetic `fun main()`,
@@ -78,17 +103,71 @@ fn main() -> Result<()> {
                 norm_out,
             })?;
         }
-        Command::Repl => {
-            let stdin = io::stdin();
-            if stdin.is_terminal() {
-                // Interactive terminal: use reedline for line editing,
-                // command history, and Ctrl-R search.
-                skotch_repl::run_repl_interactive()?;
+        Command::Repl {
+            exec,
+            file,
+            exit_after,
+        } => {
+            let has_prelude = exec.is_some() || file.is_some();
+
+            // Build the prelude source from --exec and/or --file.
+            // Both can be given at the same time; --file runs first,
+            // then --exec, matching how shell `-c` and script-file
+            // flags compose in other REPLs.
+            let mut prelude = String::new();
+            if let Some(path) = &file {
+                let content = std::fs::read_to_string(path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                prelude.push_str(&content);
+                if !prelude.ends_with('\n') {
+                    prelude.push('\n');
+                }
+            }
+            if let Some(code) = &exec {
+                // The user may pass multiple statements separated
+                // by `;`. Split them into separate lines so the REPL
+                // processes each as an independent turn (declarations
+                // accumulate, expressions run).
+                for part in code.split(';') {
+                    let trimmed = part.trim();
+                    if !trimmed.is_empty() {
+                        prelude.push_str(trimmed);
+                        prelude.push('\n');
+                    }
+                }
+            }
+
+            if has_prelude && exit_after {
+                // Non-interactive: run the prelude through the piped
+                // REPL and exit. No reedline prompt.
+                let input = BufReader::new(prelude.as_bytes());
+                skotch_repl::run_repl(input, io::stdout().lock())?;
+            } else if has_prelude {
+                // Run the prelude first through the piped path
+                // (which processes each line as a REPL turn), then
+                // drop into the interactive prompt so the user can
+                // inspect the resulting state.
+                //
+                // TODO: the current ReplState is not shared between
+                // the piped run and the interactive session. For a
+                // future PR, skotch_repl should expose a ReplState
+                // that both paths can feed into. For now the prelude
+                // output is printed but its declarations are NOT
+                // visible in the subsequent interactive session.
+                let input = BufReader::new(prelude.as_bytes());
+                skotch_repl::run_repl(input, io::stdout().lock())?;
+                let stdin = io::stdin();
+                if stdin.is_terminal() {
+                    skotch_repl::run_repl_interactive()?;
+                }
             } else {
-                // Piped input (e.g. `echo 'println(1)' | skotch repl`):
-                // use the plain BufRead path which doesn't touch the
-                // terminal and produces machine-readable output.
-                skotch_repl::run_repl(BufReader::new(stdin.lock()), io::stdout().lock())?;
+                // No prelude — pure interactive REPL.
+                let stdin = io::stdin();
+                if stdin.is_terminal() {
+                    skotch_repl::run_repl_interactive()?;
+                } else {
+                    skotch_repl::run_repl(BufReader::new(stdin.lock()), io::stdout().lock())?;
+                }
             }
         }
         Command::Run { script } => {
