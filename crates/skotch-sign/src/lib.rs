@@ -169,15 +169,15 @@ fn digest_section(section: &[u8]) -> Vec<u8> {
     let mut chunk_digests = Vec::new();
     for chunk in &chunks {
         let mut h = Sha256::new();
-        h.update(&[0xa5]); // chunk prefix byte
-        h.update(&(chunk.len() as u32).to_le_bytes());
+        h.update([0xa5]); // chunk prefix byte
+        h.update((chunk.len() as u32).to_le_bytes());
         h.update(chunk);
         chunk_digests.extend_from_slice(&h.finalize());
     }
 
     let mut top = Sha256::new();
-    top.update(&[0x5a]); // top-level prefix byte
-    top.update(&(chunks.len() as u32).to_le_bytes());
+    top.update([0x5a]); // top-level prefix byte
+    top.update((chunks.len() as u32).to_le_bytes());
     top.update(&chunk_digests);
     top.finalize().to_vec()
 }
