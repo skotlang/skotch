@@ -60,8 +60,13 @@ fn skotch_native_binaries_match_committed_stdout() {
         .unwrap_or_else(|e| panic!("emit failed for {name}: {e}"));
 
         let out = Command::new(&bin).output().expect("running native binary");
-        let expected = std::fs::read_to_string(&stdout_file).unwrap();
-        let actual = String::from_utf8_lossy(&out.stdout).to_string();
+        // Strip CR from both sides — on Windows, libc's stdout
+        // translates `\n` to `\r\n` in text mode, while the
+        // committed `run.stdout` is pinned to LF by `.gitattributes`.
+        let expected = std::fs::read_to_string(&stdout_file)
+            .unwrap()
+            .replace('\r', "");
+        let actual = String::from_utf8_lossy(&out.stdout).replace('\r', "");
         if !out.status.success() {
             failures.push(format!(
                 "{name}: native binary exited {}: stderr={}",
@@ -101,8 +106,8 @@ fn skotch_native_matches_kotlinc_native_observable_behavior() {
         if !skotch.exists() || !kn.exists() {
             continue;
         }
-        let skotch_text = std::fs::read_to_string(&skotch).unwrap();
-        let kn_text = std::fs::read_to_string(&kn).unwrap();
+        let skotch_text = std::fs::read_to_string(&skotch).unwrap().replace('\r', "");
+        let kn_text = std::fs::read_to_string(&kn).unwrap().replace('\r', "");
         if skotch_text != kn_text {
             failures.push(format!(
                 "{name}: skotch vs kotlinc-native stdout differ\n  skotch: {skotch_text:?}\n  kn:   {kn_text:?}"

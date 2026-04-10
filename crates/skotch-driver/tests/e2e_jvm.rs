@@ -70,8 +70,14 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
             .arg("InputKt")
             .output()
             .expect("running java");
-        let expected = std::fs::read_to_string(&stdout_file).unwrap();
-        let actual = String::from_utf8_lossy(&out.stdout).to_string();
+        // Compare modulo CR. Java's `println` on Windows prints
+        // `\r\n` (System.lineSeparator()), while the committed
+        // `run.stdout` is pinned to LF by `.gitattributes`. Stripping
+        // `\r` on both sides keeps the test platform-agnostic.
+        let expected = std::fs::read_to_string(&stdout_file)
+            .unwrap()
+            .replace('\r', "");
+        let actual = String::from_utf8_lossy(&out.stdout).replace('\r', "");
         if !out.status.success() {
             failures.push(format!(
                 "{name}: java exited {}: stderr={}",

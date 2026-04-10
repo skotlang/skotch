@@ -102,6 +102,15 @@ fn skotch_norm_matches_committed_skotch_norm() {
     // class bytes match, the normalized text should match too. This
     // catches drift in `skotch-classfile-norm` separately from drift
     // in the JVM backend.
+    //
+    // We strip carriage returns from the committed text before
+    // comparing because git on Windows can convert LF to CRLF on
+    // checkout when `core.autocrlf=true`. The normalizer itself
+    // always emits LF (Rust's `writeln!`), so without this strip
+    // every line on Windows would look "different" and the test
+    // would spuriously fail. The repository ships a `.gitattributes`
+    // that pins `*.norm.txt` to LF, but we strip defensively in
+    // case a contributor's local checkout missed it.
     let mut failures: Vec<String> = Vec::new();
     for &name in SUPPORTED {
         let golden_class = expected_dir(name).join("skotch.class");
@@ -112,9 +121,10 @@ fn skotch_norm_matches_committed_skotch_norm() {
         let bytes = std::fs::read(&golden_class).unwrap();
         let normalized =
             skotch_classfile_norm::normalize_default(&bytes).expect("normalize golden bytes");
-        let golden_text = std::fs::read_to_string(&golden_norm).unwrap();
-        if normalized.as_text() != golden_text {
-            let diff = pretty_diff(&golden_text, normalized.as_text());
+        let golden_text = strip_cr(&std::fs::read_to_string(&golden_norm).unwrap());
+        let normalized_text = strip_cr(normalized.as_text());
+        if normalized_text != golden_text {
+            let diff = pretty_diff(&golden_text, &normalized_text);
             failures.push(format!("{name}:\n{diff}"));
         }
     }
@@ -125,6 +135,13 @@ fn skotch_norm_matches_committed_skotch_norm() {
             failures.join("\n")
         );
     }
+}
+
+/// Strip `\r` from a string. Used by every committed-text comparison
+/// in this file to defend against `core.autocrlf=true` checkouts on
+/// Windows. See `.gitattributes` for the structural fix.
+fn strip_cr(s: &str) -> String {
+    s.replace('\r', "")
 }
 
 /// Compare `skotch.norm.txt` against `kotlinc.norm.txt`. The bar is

@@ -108,7 +108,13 @@ fn skotch_dex_norm_matches_committed_skotch_norm() {
         let bytes = std::fs::read(&golden_dex).unwrap();
         let normalized =
             skotch_dex_norm::normalize_default(&bytes).expect("normalize golden bytes");
-        let golden_text = std::fs::read_to_string(&golden_norm).unwrap();
+        // Strip carriage returns from both sides — see the
+        // comment in `fixture_compare.rs::skotch_norm_matches_*`
+        // for the rationale (Windows + git autocrlf).
+        let golden_text = std::fs::read_to_string(&golden_norm)
+            .unwrap()
+            .replace('\r', "");
+        let normalized = normalized.replace('\r', "");
         if normalized != golden_text {
             failures.push(format!("{name}: dex normalizer output drifted"));
         }
