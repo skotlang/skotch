@@ -35,8 +35,6 @@ install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
 
-[dist.bin-aliases]
-skotch-cli = ["skotch"]
-
-
+#[dist.bin-aliases]
+#skotch-cli = ["skotch"]
 
