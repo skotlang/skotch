@@ -1,0 +1,9 @@
+[package]
+name        = "skot-intern"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "String interner producing cheap Symbol handles"
+
+[dependencies]
+lasso = { workspace = true }

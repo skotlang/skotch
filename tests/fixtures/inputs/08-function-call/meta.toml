@@ -1,0 +1,4 @@
+name     = "08-function-call"
+status   = "supported"
+features = ["fun", "println", "string-literal", "function-call", "function-parameter"]
+notes    = "Inter-function call. Tests invokestatic + parameter slot 0 reference."

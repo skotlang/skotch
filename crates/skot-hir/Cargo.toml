@@ -1,0 +1,10 @@
+[package]
+name        = "skot-hir"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Sugar-free typed IR for skot (placeholder for PR #1)"
+
+[dependencies]
+skot-types  = { workspace = true }
+skot-intern = { workspace = true }

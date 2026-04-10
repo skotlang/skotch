@@ -1,0 +1,10 @@
+[package]
+name        = "skot-backend-wasm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "WebAssembly emitter for skot — STUB, see PR #9"
+
+[dependencies]
+skot-mir   = { workspace = true }
+skot-types = { workspace = true }

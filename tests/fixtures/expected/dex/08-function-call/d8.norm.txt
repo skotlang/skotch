@@ -1,0 +1,60 @@
+dex_version   035
+strings       27
+types         9
+methods       5
+classes       1
+
+--- strings ---
+  ""
+  "Kotlin"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "greet"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{e}\n��\n\u{2}\u{10}\u{2}\n��\n\u{2}\u{10}\u{e}\n��\u{1a}\u{e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{1a}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{1}"
+
+--- types ---
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.greet(Ljava/lang/String;)V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       greet(Ljava/lang/String;)V flags=0x0019 regs=2 ins=1 outs=2 insns=11
+  method       main()V flags=0x0019 regs=1 ins=0 outs=1 insns=6
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

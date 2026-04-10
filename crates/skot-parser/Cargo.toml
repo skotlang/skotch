@@ -1,0 +1,13 @@
+[package]
+name        = "skot-parser"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Recursive-descent parser for the Kotlin 2 subset that skot accepts"
+
+[dependencies]
+skot-span        = { workspace = true }
+skot-intern      = { workspace = true }
+skot-syntax      = { workspace = true }
+skot-lexer       = { workspace = true }
+skot-diagnostics = { workspace = true }

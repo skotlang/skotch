@@ -1,0 +1,3 @@
+name   = "21-data-class"
+status = "stub"
+reason = "Data classes need synthesized equals/hashCode/toString/copy/componentN."

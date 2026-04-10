@@ -1,0 +1,4 @@
+name     = "10-top-level-val"
+status   = "stub"
+features = ["top-level-val", "static-final-field", "clinit"]
+reason   = "Top-level vals need <clinit> emission; planned for PR #1.5."

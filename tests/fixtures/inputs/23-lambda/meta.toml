@@ -1,0 +1,3 @@
+name   = "23-lambda"
+status = "stub"
+reason = "Lambdas need invokedynamic + LambdaMetafactory bootstrap."

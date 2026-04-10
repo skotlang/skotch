@@ -1,0 +1,27 @@
+[package]
+name        = "xtask"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+publish     = false
+description = "Fixture generation helper for skot — runs reference tools (kotlinc, d8, kotlinc-native) so test goldens can be regenerated"
+
+# xtask is a workspace-internal helper that should never be published
+# or distributed. The `publish = false` and missing repository key tell
+# cargo-dist to skip it; only `skot` from `skot-cli` is distributed.
+[package.metadata.dist]
+dist = false
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+skot-driver         = { workspace = true }
+skot-classfile-norm = { workspace = true }
+skot-dex-norm       = { workspace = true }
+skot-llvm-norm      = { workspace = true }
+clap                = { workspace = true }
+which               = { workspace = true }
+walkdir             = { workspace = true }
+anyhow              = { workspace = true }

@@ -1,0 +1,19 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=2
+    0000 aload 0
+    0002 astore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 return
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=1 max_locals=2
+    0000 ldc "Kotlin"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.greet:(Ljava/lang/String;)V)
+    0009 return

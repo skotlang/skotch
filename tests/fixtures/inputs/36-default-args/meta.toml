@@ -1,0 +1,3 @@
+name = "36-default-args"
+status = "stub"
+reason = "Default arguments synthesize a $default trampoline overload."

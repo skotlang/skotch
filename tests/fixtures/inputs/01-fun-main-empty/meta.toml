@@ -1,0 +1,4 @@
+name     = "01-fun-main-empty"
+status   = "supported"
+features = ["fun", "empty-body"]
+notes    = "The smallest possible Kotlin program. Sanity-checks the class header, the empty Code attribute, and the `return` opcode."

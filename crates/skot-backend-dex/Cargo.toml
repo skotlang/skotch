@@ -1,0 +1,25 @@
+[package]
+name        = "skot-backend-dex"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "DEX (.dex v035) emitter for skot"
+
+[dependencies]
+skot-mir   = { workspace = true }
+skot-types = { workspace = true }
+byteorder  = { workspace = true }
+rustc-hash = { workspace = true }
+adler      = { workspace = true }
+sha1_smol  = { workspace = true }
+
+[dev-dependencies]
+skot-intern    = { workspace = true }
+skot-lexer     = { workspace = true }
+skot-parser    = { workspace = true }
+skot-resolve   = { workspace = true }
+skot-typeck    = { workspace = true }
+skot-mir-lower = { workspace = true }
+skot-syntax    = { workspace = true }
+skot-span      = { workspace = true }
+skot-diagnostics = { workspace = true }

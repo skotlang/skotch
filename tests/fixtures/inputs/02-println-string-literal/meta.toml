@@ -1,0 +1,4 @@
+name     = "02-println-string-literal"
+status   = "supported"
+features = ["fun", "println", "string-literal"]
+notes    = "Canonical hello-world. Tests getstatic + ldc + invokevirtual."

@@ -1,0 +1,24 @@
+[package]
+name        = "skot-backend-jvm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "JVM .class file emitter (target: Java 17 / class file v61)"
+
+[dependencies]
+skot-mir         = { workspace = true }
+skot-types       = { workspace = true }
+skot-intern      = { workspace = true }
+skot-config      = { workspace = true }
+skot-diagnostics = { workspace = true }
+byteorder        = { workspace = true }
+rustc-hash       = { workspace = true }
+
+[dev-dependencies]
+skot-lexer     = { workspace = true }
+skot-parser    = { workspace = true }
+skot-resolve   = { workspace = true }
+skot-typeck    = { workspace = true }
+skot-mir-lower = { workspace = true }
+skot-span      = { workspace = true }
+skot-syntax    = { workspace = true }

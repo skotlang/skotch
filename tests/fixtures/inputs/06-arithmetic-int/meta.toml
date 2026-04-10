@@ -1,0 +1,4 @@
+name     = "06-arithmetic-int"
+status   = "supported"
+features = ["fun", "println", "int-literal", "arithmetic", "operator-precedence"]
+notes    = "Verifies iadd / imul precedence."

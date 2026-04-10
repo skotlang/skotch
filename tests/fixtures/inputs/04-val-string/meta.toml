@@ -1,0 +1,4 @@
+name     = "04-val-string"
+status   = "supported"
+features = ["fun", "println", "string-literal", "val", "local-var"]
+notes    = "Local val. Exercises astore + aload."

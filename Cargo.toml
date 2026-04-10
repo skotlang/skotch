@@ -1,0 +1,125 @@
+[workspace]
+resolver = "2"
+members = [
+    # Layer 0 — primitives
+    "crates/skot-span",
+    "crates/skot-intern",
+    "crates/skot-config",
+    "crates/skot-diagnostics",
+
+    # Layer 1 — front-end
+    "crates/skot-syntax",
+    "crates/skot-lexer",
+    "crates/skot-parser",
+
+    # Layer 2 — semantic analysis
+    "crates/skot-resolve",
+    "crates/skot-types",
+    "crates/skot-typeck",
+
+    # Layer 3 — IRs
+    "crates/skot-hir",
+    "crates/skot-mir",
+    "crates/skot-mir-lower",
+
+    # Layer 4 — backends
+    "crates/skot-backend-jvm",
+    "crates/skot-backend-dex",
+    "crates/skot-backend-llvm",
+    "crates/skot-backend-wasm",
+    "crates/skot-backend-klib",
+
+    # Layer 5 — normalizers (centerpiece of the validation system)
+    "crates/skot-classfile-norm",
+    "crates/skot-dex-norm",
+    "crates/skot-llvm-norm",
+
+    # Layer 7 — driver + CLI
+    "crates/skot-driver",
+    "crates/skot-cli",
+
+    # Fixture generation tooling (cargo-xtask pattern)
+    "xtask",
+]
+
+[workspace.package]
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+version      = "0.1.0"
+repository   = "https://github.com/skotlang/skot"
+
+[workspace.dependencies]
+# foundational
+rustc-hash   = "2"
+lasso        = { version = "0.7", features = ["inline-more"] }
+
+# diagnostics
+ariadne      = "0.5"
+thiserror    = "2"
+anyhow       = "1"
+
+# binary IO
+byteorder    = "1"
+
+# DEX backend (PR #3): Adler32 checksum + SHA-1 signature for the
+# DEX header. Both crates are tiny and dependency-free.
+adler        = "1.0"
+sha1_smol    = "1.0"
+
+# Native backend (PR #4): zip for klib packaging, serde + serde_json
+# for round-tripping MIR through the multi-stage Kotlin Native-style
+# pipeline (kt → MIR → klib → LLVM IR → clang → native).
+zip          = { version = "2", default-features = false, features = ["deflate"] }
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+
+# CLI
+clap         = { version = "4", features = ["derive"] }
+
+# tests
+insta        = { version = "1.40", features = ["yaml"] }
+similar      = "2"
+which        = "7"
+
+# xtask
+walkdir      = "2"
+
+# internal aliases
+skot-span            = { path = "crates/skot-span" }
+skot-intern          = { path = "crates/skot-intern" }
+skot-config          = { path = "crates/skot-config" }
+skot-diagnostics     = { path = "crates/skot-diagnostics" }
+skot-syntax          = { path = "crates/skot-syntax" }
+skot-lexer           = { path = "crates/skot-lexer" }
+skot-parser          = { path = "crates/skot-parser" }
+skot-resolve         = { path = "crates/skot-resolve" }
+skot-types           = { path = "crates/skot-types" }
+skot-typeck          = { path = "crates/skot-typeck" }
+skot-hir             = { path = "crates/skot-hir" }
+skot-mir             = { path = "crates/skot-mir" }
+skot-mir-lower       = { path = "crates/skot-mir-lower" }
+skot-backend-jvm     = { path = "crates/skot-backend-jvm" }
+skot-backend-dex     = { path = "crates/skot-backend-dex" }
+skot-backend-llvm    = { path = "crates/skot-backend-llvm" }
+skot-backend-wasm    = { path = "crates/skot-backend-wasm" }
+skot-backend-klib    = { path = "crates/skot-backend-klib" }
+skot-classfile-norm  = { path = "crates/skot-classfile-norm" }
+skot-dex-norm        = { path = "crates/skot-dex-norm" }
+skot-llvm-norm       = { path = "crates/skot-llvm-norm" }
+skot-driver          = { path = "crates/skot-driver" }
+
+[profile.dev]
+debug            = "line-tables-only"
+incremental      = true
+opt-level        = 0
+
+[profile.release]
+lto           = "thin"
+codegen-units = 16
+debug         = false
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

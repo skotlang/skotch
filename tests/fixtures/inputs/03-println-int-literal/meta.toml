@@ -1,0 +1,4 @@
+name     = "03-println-int-literal"
+status   = "supported"
+features = ["fun", "println", "int-literal"]
+notes    = "Tests bipush and the (I)V println descriptor."

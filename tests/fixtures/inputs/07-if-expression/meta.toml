@@ -1,0 +1,4 @@
+name     = "07-if-expression"
+status   = "stub"
+features = ["fun", "println", "val", "if-expression", "branch"]
+reason   = "Branches need StackMapTable; planned for PR #1.5."

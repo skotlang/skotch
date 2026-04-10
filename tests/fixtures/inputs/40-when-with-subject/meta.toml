@@ -1,0 +1,3 @@
+name = "40-when-with-subject"
+status = "stub"
+reason = "Range expressions and `when` subjects."

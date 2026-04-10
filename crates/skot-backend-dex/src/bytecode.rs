@@ -1,0 +1,478 @@
+//! DEX bytecode emitter for skot's MIR.
+//!
+//! Walks one [`MirFunction`] at a time and emits the corresponding
+//! `code_item` bytes plus the metadata that the writer needs to lay
+//! out the surrounding `class_data_item` (registers_size, ins_size,
+//! outs_size, instruction stream, etc.).
+//!
+//! ## Register allocation
+//!
+//! DEX is register-based (unlike JVM's stack machine). The DEX spec
+//! puts incoming parameters at the **end** of the register file, so
+//! we partition the registers into three contiguous groups:
+//!
+//! ```text
+//!   v0 .. v(S-1)        scratch (e.g., System.out for println)
+//!   v(S) .. v(S+N-1)    non-parameter locals
+//!   v(S+N) .. v(S+N+P-1) parameters (in declaration order)
+//! ```
+//!
+//! `N` is the number of MIR locals that are not parameters and not
+//! `Ty::Unit` (Unit-typed call results don't need a register). `P` is
+//! the number of MIR parameters. `S` is the maximum scratch needed by
+//! any single instruction in the function — for PR #3 that's `1` if
+//! the function makes a `println` call (to hold `System.out`),
+//! otherwise `0`.
+//!
+//! All MIR registers are at most 16 (v0..v15) so the small
+//! `format 35c` invoke instructions suffice. PR #3 fixtures stay
+//! comfortably under that limit.
+//!
+//! ## Two-pass emission
+//!
+//! Like the rest of the DEX backend, this is a two-pass affair: we
+//! emit instructions using *pre-finalization* indices into the
+//! [`Pools`], then the writer patches the instruction stream with the
+//! final post-sort indices via the `Remap` returned from
+//! `Pools::finalize`. The patch points are recorded in
+//! [`MethodCode::patches`].
+
+use crate::pools::{Pools, Remap};
+use byteorder::{LittleEndian, WriteBytesExt};
+use rustc_hash::FxHashMap;
+use skot_mir::{
+    BasicBlock, BinOp as MBinOp, CallKind, LocalId, MirConst, MirFunction, MirModule, Rvalue, Stmt,
+    Terminator,
+};
+use skot_types::Ty;
+
+/// One emitted method's compiled body, ready to be embedded in a
+/// `code_item` after the writer has remapped the patches.
+pub struct MethodCode {
+    pub registers_size: u16,
+    pub ins_size: u16,
+    pub outs_size: u16,
+    pub insns: Vec<u16>, // 16-bit code units
+    /// Patch points: `(insn_offset, kind, old_pool_index)`. The writer
+    /// applies the appropriate `Remap` and rewrites the 16-bit slot
+    /// in `insns`.
+    pub patches: Vec<Patch>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Patch {
+    pub insn_offset: usize,
+    pub kind: PatchKind,
+    pub old_idx: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub enum PatchKind {
+    String,
+    /// Reserved for future use (e.g. `check-cast`, `new-instance`).
+    Type,
+    Field,
+    Method,
+}
+
+/// Lower a single MIR function to a DEX `code_item` body.
+///
+/// `pools` is mutated as the function references new strings/types/
+/// methods. `class_descriptor` is the wrapper class (e.g.
+/// `LInputKt;`) and is needed to resolve `Static` calls between two
+/// top-level functions in the same source file.
+pub fn lower_function(
+    func: &MirFunction,
+    module: &MirModule,
+    class_descriptor: &str,
+    pools: &mut Pools,
+) -> MethodCode {
+    let block: &BasicBlock = &func.blocks[0];
+    let scratch_needed = compute_scratch(block);
+
+    // Build a slot map: MIR LocalId → DEX register number.
+    //
+    // - Non-Unit non-param locals are allocated v(S)..v(S+N-1).
+    // - Parameters are allocated v(S+N)..v(S+N+P-1).
+    // - Unit-typed locals get a sentinel and are never actually
+    //   referenced by load/store opcodes.
+    let num_params = func.params.len() as u16;
+    let mut slot: FxHashMap<u32, u16> = FxHashMap::default();
+    // Phase 1: assign non-param non-Unit locals.
+    let mut next_local: u16 = scratch_needed;
+    for (i, ty) in func.locals.iter().enumerate() {
+        // Skip parameters here — handled in phase 2.
+        if (i as u16) < num_params {
+            continue;
+        }
+        if matches!(ty, Ty::Unit) {
+            // Unit locals don't need a register slot.
+            continue;
+        }
+        slot.insert(i as u32, next_local);
+        next_local += 1;
+    }
+    let num_locals = next_local - scratch_needed;
+    // Phase 2: assign parameter slots.
+    let param_base = scratch_needed + num_locals;
+    for (pi, _) in func.params.iter().enumerate() {
+        slot.insert(pi as u32, param_base + pi as u16);
+    }
+
+    let registers_size = (scratch_needed + num_locals + num_params).max(1);
+
+    let mut code = Vec::<u16>::new();
+    let mut patches: Vec<Patch> = Vec::new();
+    let mut max_outs: u16 = 0;
+
+    walk_block(
+        block,
+        module,
+        class_descriptor,
+        pools,
+        &slot,
+        &func.locals,
+        scratch_needed,
+        &mut code,
+        &mut patches,
+        &mut max_outs,
+    );
+
+    match &block.terminator {
+        Terminator::Return | Terminator::ReturnValue(_) => {
+            code.push(opcode_10x(0x0E)); // return-void
+        }
+    }
+
+    MethodCode {
+        registers_size,
+        ins_size: num_params,
+        outs_size: max_outs,
+        insns: code,
+        patches,
+    }
+}
+
+/// Apply a `Remap` to a `MethodCode`'s patch list, rewriting the
+/// 16-bit pool index in each instruction. Called by the writer after
+/// `Pools::finalize`.
+pub fn apply_remap(code: &mut MethodCode, remap: &Remap) {
+    for patch in &code.patches {
+        let new_idx = match patch.kind {
+            PatchKind::String => remap.string[patch.old_idx as usize],
+            PatchKind::Type => remap.r#type[patch.old_idx as usize],
+            PatchKind::Field => remap.field[patch.old_idx as usize],
+            PatchKind::Method => remap.method[patch.old_idx as usize],
+        };
+        assert!(
+            new_idx < 0x1_0000,
+            "PR #3 only supports indices that fit in 16 bits (got {new_idx})"
+        );
+        code.insns[patch.insn_offset] = new_idx as u16;
+    }
+}
+
+/// Serialize a slice of 16-bit code units to a little-endian byte
+/// stream for the `code_item.insns` field.
+pub fn serialize_insns(insns: &[u16]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(insns.len() * 2);
+    for &u in insns {
+        out.write_u16::<LittleEndian>(u).unwrap();
+    }
+    out
+}
+
+/// How many scratch registers does this block need? PR #3 only needs
+/// 1 (for `System.out` when calling `println`); arithmetic and
+/// `invoke-static` get by with the registers MIR already allocated.
+fn compute_scratch(block: &BasicBlock) -> u16 {
+    for stmt in &block.stmts {
+        let Stmt::Assign { value, .. } = stmt;
+        if let Rvalue::Call {
+            kind: CallKind::Println,
+            ..
+        } = value
+        {
+            return 1;
+        }
+    }
+    0
+}
+
+// ─── instruction emission ────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+fn walk_block(
+    block: &BasicBlock,
+    module: &MirModule,
+    class_descriptor: &str,
+    pools: &mut Pools,
+    slot: &FxHashMap<u32, u16>,
+    locals: &[Ty],
+    scratch_base: u16,
+    code: &mut Vec<u16>,
+    patches: &mut Vec<Patch>,
+    max_outs: &mut u16,
+) {
+    for stmt in &block.stmts {
+        let Stmt::Assign { dest, value } = stmt;
+        match value {
+            Rvalue::Const(c) => {
+                emit_const(c, *dest, slot, locals, module, pools, code, patches);
+            }
+            Rvalue::Local(src) => {
+                emit_move(*src, *dest, slot, locals, code);
+            }
+            Rvalue::BinOp { op, lhs, rhs } => {
+                emit_binop(*op, *lhs, *rhs, *dest, slot, code);
+            }
+            Rvalue::Call { kind, args } => {
+                let used = emit_call(
+                    kind,
+                    args,
+                    *dest,
+                    slot,
+                    locals,
+                    module,
+                    class_descriptor,
+                    pools,
+                    scratch_base,
+                    code,
+                    patches,
+                );
+                if used > *max_outs {
+                    *max_outs = used;
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_const(
+    c: &MirConst,
+    dest: LocalId,
+    slot: &FxHashMap<u32, u16>,
+    locals: &[Ty],
+    module: &MirModule,
+    pools: &mut Pools,
+    code: &mut Vec<u16>,
+    patches: &mut Vec<Patch>,
+) {
+    if matches!(locals[dest.0 as usize], Ty::Unit) {
+        return;
+    }
+    let dest_reg = slot[&dest.0];
+    match c {
+        MirConst::Unit => {}
+        MirConst::Bool(b) => {
+            emit_const_4(code, dest_reg, if *b { 1 } else { 0 });
+        }
+        MirConst::Int(v) => {
+            if (-8..=7).contains(v) {
+                emit_const_4(code, dest_reg, *v as i8);
+            } else if (i16::MIN as i32..=i16::MAX as i32).contains(v) {
+                // const/16 vAA, #+BBBB  (op 0x13, format 21s)
+                code.push(opcode_aa(0x13, dest_reg as u8));
+                code.push(*v as u16);
+            } else {
+                // const vAA, #+BBBBBBBB  (op 0x14, format 31i)
+                code.push(opcode_aa(0x14, dest_reg as u8));
+                code.push((*v as u32 & 0xFFFF) as u16);
+                code.push(((*v as u32 >> 16) & 0xFFFF) as u16);
+            }
+        }
+        MirConst::String(sid) => {
+            let s = module.lookup_string(*sid);
+            let str_idx = pools.intern_string(s);
+            // const-string vAA, string@BBBB  (op 0x1A, format 21c)
+            code.push(opcode_aa(0x1A, dest_reg as u8));
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::String,
+                old_idx: str_idx,
+            });
+            code.push(0); // placeholder
+        }
+    }
+}
+
+/// Emit `const/4 vA, #+B` (op 0x12, format 11n).
+///
+/// Note: format 11n's literal is a 4-bit signed value (-8..=7) packed
+/// into the high nibble of byte 1, with the destination register in
+/// the low nibble.
+fn emit_const_4(code: &mut Vec<u16>, dest_reg: u16, val: i8) {
+    debug_assert!(dest_reg < 16);
+    debug_assert!((-8..=7).contains(&val));
+    let a = dest_reg & 0x0F;
+    let b = (val as u16) & 0x0F;
+    code.push(((b << 12) | (a << 8)) | 0x12);
+}
+
+fn emit_move(
+    src: LocalId,
+    dest: LocalId,
+    slot: &FxHashMap<u32, u16>,
+    locals: &[Ty],
+    code: &mut Vec<u16>,
+) {
+    if matches!(locals[dest.0 as usize], Ty::Unit) {
+        return;
+    }
+    let src_reg = slot[&src.0];
+    let dest_reg = slot[&dest.0];
+    let dest_ty = &locals[dest.0 as usize];
+    let is_obj = matches!(dest_ty, Ty::String | Ty::Any | Ty::Nullable(_));
+    // Format 12x: B|A|op  (op 0x01 = move, 0x07 = move-object).
+    let opcode: u8 = if is_obj { 0x07 } else { 0x01 };
+    let high = ((src_reg & 0x0F) << 4) | (dest_reg & 0x0F);
+    code.push((high << 8) | opcode as u16);
+}
+
+fn emit_binop(
+    op: MBinOp,
+    lhs: LocalId,
+    rhs: LocalId,
+    dest: LocalId,
+    slot: &FxHashMap<u32, u16>,
+    code: &mut Vec<u16>,
+) {
+    let l = slot[&lhs.0] as u8;
+    let r = slot[&rhs.0] as u8;
+    let d = slot[&dest.0] as u8;
+    // Format 23x: AA|op | CC|BB ; vAA = vBB op vCC.
+    let opcode: u8 = match op {
+        MBinOp::AddI => 0x90,
+        MBinOp::SubI => 0x91,
+        MBinOp::MulI => 0x92,
+        MBinOp::DivI => 0x93,
+        MBinOp::ModI => 0x94,
+    };
+    code.push(((d as u16) << 8) | opcode as u16);
+    code.push(((r as u16) << 8) | (l as u16));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_call(
+    kind: &CallKind,
+    args: &[LocalId],
+    _dest: LocalId,
+    slot: &FxHashMap<u32, u16>,
+    locals: &[Ty],
+    module: &MirModule,
+    class_descriptor: &str,
+    pools: &mut Pools,
+    scratch_base: u16,
+    code: &mut Vec<u16>,
+    patches: &mut Vec<Patch>,
+) -> u16 {
+    match kind {
+        CallKind::Println => {
+            // Use scratch register 0 for System.out. The slot map
+            // already reserves the lowest `scratch_needed` registers
+            // for this.
+            let sysout_reg: u16 = 0;
+            debug_assert!(scratch_base >= 1, "println requires scratch reservation");
+
+            let arg = args[0];
+            let arg_reg = slot[&arg.0];
+
+            // sget-object v0, Ljava/lang/System;->out:Ljava/io/PrintStream;
+            // (op 0x62, format 21c)
+            let field_idx =
+                pools.intern_field("Ljava/lang/System;", "out", "Ljava/io/PrintStream;");
+            code.push(opcode_aa(0x62, sysout_reg as u8));
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Field,
+                old_idx: field_idx,
+            });
+            code.push(0);
+
+            // invoke-virtual {sysout, arg}, println(<argTy>)V
+            // (op 0x6E, format 35c)
+            let arg_ty = &locals[arg.0 as usize];
+            let param_desc = match arg_ty {
+                Ty::Int | Ty::Bool => "I",
+                Ty::String => "Ljava/lang/String;",
+                _ => "Ljava/lang/Object;",
+            };
+            let method_idx =
+                pools.intern_method("Ljava/io/PrintStream;", "println", "V", &[param_desc]);
+            // Format 35c: A|G|op | BBBB | F|E|D|C
+            // A = 2 args (receiver + 1), G = 0
+            let high: u16 = 2 << 4;
+            code.push((high << 8) | 0x6E);
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Method,
+                old_idx: method_idx,
+            });
+            code.push(0);
+            // C = sysout_reg, D = arg_reg, E = F = 0
+            let lo = (sysout_reg & 0x0F) | ((arg_reg & 0x0F) << 4);
+            code.push(lo);
+            2
+        }
+        CallKind::Static(target_id) => {
+            let target = &module.functions[target_id.0 as usize];
+            let params: Vec<&str> = target
+                .params
+                .iter()
+                .map(|p| type_descriptor(&target.locals[p.0 as usize]))
+                .collect();
+            let ret_desc = type_descriptor(&target.return_ty);
+            let method_idx = pools.intern_method(class_descriptor, &target.name, ret_desc, &params);
+
+            let n = args.len() as u16;
+            assert!(
+                n <= 5,
+                "PR #3 supports at most 5 args to a static call (got {n})"
+            );
+            // Format 35c: A|G|op | BBBB | F|E|D|C
+            let high: u16 = n << 4;
+            code.push((high << 8) | 0x71); // invoke-static
+            patches.push(Patch {
+                insn_offset: code.len(),
+                kind: PatchKind::Method,
+                old_idx: method_idx,
+            });
+            code.push(0);
+            let mut packed = 0u16;
+            for (i, a) in args.iter().enumerate().take(4) {
+                let r = slot[&a.0] & 0x0F;
+                packed |= r << (4 * i);
+            }
+            code.push(packed);
+            n
+        }
+    }
+}
+
+fn type_descriptor(ty: &Ty) -> &'static str {
+    match ty {
+        Ty::Unit => "V",
+        Ty::Bool => "Z",
+        Ty::Int => "I",
+        Ty::Long => "J",
+        Ty::Double => "D",
+        Ty::String => "Ljava/lang/String;",
+        Ty::Any | Ty::Nullable(_) => "Ljava/lang/Object;",
+        Ty::Error => "V",
+    }
+}
+
+// ─── opcode helpers ──────────────────────────────────────────────────────
+
+/// Pack `vAA` into the high byte and `op` into the low byte of a
+/// 16-bit code unit. Used by formats 21c, 21s, 31i, 22x, etc.
+fn opcode_aa(op: u8, aa: u8) -> u16 {
+    ((aa as u16) << 8) | op as u16
+}
+
+/// Format 10x: `00|op` — instructions with no register or literal.
+fn opcode_10x(op: u8) -> u16 {
+    op as u16
+}

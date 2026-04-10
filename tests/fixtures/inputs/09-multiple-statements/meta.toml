@@ -1,0 +1,4 @@
+name     = "09-multiple-statements"
+status   = "supported"
+features = ["fun", "println", "string-literal", "multiple-statements"]
+notes    = "Sequential statements; ensures the codegen doesn't accidentally collapse them."

@@ -1,0 +1,16 @@
+[package]
+name        = "skot-cli"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Command-line interface for skot — produces the `skot` binary"
+
+[[bin]]
+name = "skot"
+path = "src/main.rs"
+
+[dependencies]
+skot-driver = { workspace = true }
+clap        = { workspace = true }
+anyhow      = { workspace = true }

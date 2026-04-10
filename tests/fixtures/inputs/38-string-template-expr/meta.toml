@@ -1,0 +1,3 @@
+name = "38-string-template-expr"
+status = "stub"
+reason = "Templates with embedded expressions need the same Concat path as 05."

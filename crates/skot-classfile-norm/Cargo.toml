@@ -1,0 +1,9 @@
+[package]
+name        = "skot-classfile-norm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Normalize JVM .class files into a stable text form for diffing"
+
+[dependencies]
+byteorder = { workspace = true }

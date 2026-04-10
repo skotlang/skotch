@@ -1,0 +1,10 @@
+[package]
+name        = "skot-syntax"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Token kinds and AST node types for skot"
+
+[dependencies]
+skot-span   = { workspace = true }
+skot-intern = { workspace = true }

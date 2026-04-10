@@ -1,0 +1,6 @@
+[package]
+name        = "skot-llvm-norm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Normalize LLVM IR text into a stable form for diffing — STUB, see PR #2"

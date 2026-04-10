@@ -1,0 +1,4 @@
+name     = "05-string-template-simple"
+status   = "stub"
+features = ["fun", "println", "val", "string-template", "ident-interpolation"]
+reason   = "String templates require a Concat intrinsic backed by StringBuilder; planned for PR #1.5."

@@ -1,0 +1,11 @@
+[package]
+name        = "skot-mir"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Backend-neutral mid-level IR for skot"
+
+[dependencies]
+skot-span  = { workspace = true }
+skot-types = { workspace = true }
+serde      = { workspace = true }
