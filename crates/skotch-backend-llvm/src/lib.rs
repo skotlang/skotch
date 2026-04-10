@@ -300,15 +300,40 @@ impl<'a> Emitter<'a> {
         .unwrap();
         writeln!(self.out, "entry:").unwrap();
 
-        let block: &BasicBlock = &func.blocks[0];
-        // Split-borrow self into the four fields the walker needs;
-        // this lets the walker hold a `&mut out` alongside a
-        // `&concat_format_lookup` without the borrow checker
-        // complaining about overlapping borrows of `self`.
+        // Detect locals that are assigned in multiple blocks (merge
+        // targets). These need `alloca` in LLVM to avoid SSA
+        // domination issues — both branches write to the same local,
+        // and the merge block reads it.
+        let mut assigned_in_block: Vec<Option<usize>> = vec![None; func.locals.len()];
+        let mut needs_alloca: Vec<bool> = vec![false; func.locals.len()];
+        for (bi, blk) in func.blocks.iter().enumerate() {
+            for stmt in &blk.stmts {
+                let Stmt::Assign { dest, .. } = stmt;
+                if let Some(prev) = assigned_in_block[dest.0 as usize] {
+                    if prev != bi {
+                        needs_alloca[dest.0 as usize] = true;
+                    }
+                } else {
+                    assigned_in_block[dest.0 as usize] = Some(bi);
+                }
+            }
+        }
+
         let module = self.module;
         let string_globals: &[String] = &self.string_globals;
         let concat_format_lookup = &self.concat_format_lookup;
         let out: &mut String = &mut self.out;
+
+        // Emit `alloca` for merge locals at the top of the entry block.
+        let mut alloca_names: Vec<Option<String>> = vec![None; func.locals.len()];
+        for (i, &na) in needs_alloca.iter().enumerate() {
+            if na {
+                let name = format!("%merge_{i}");
+                writeln!(out, "  {name} = alloca i32").unwrap();
+                alloca_names[i] = Some(name);
+            }
+        }
+
         let mut walker = BlockWalker {
             module,
             func,
@@ -317,25 +342,20 @@ impl<'a> Emitter<'a> {
             out,
             ssa_for_local: vec![None; func.locals.len()],
             constant_text: vec![None; func.locals.len()],
+            needs_alloca,
+            alloca_names,
             next_tmp: 0,
         };
-        // Bind parameters: each parameter local needs an SSA name.
-        // We pre-populate ssa_for_local for parameters with the
-        // arg-named SSA value.
         for &p in &func.params {
             walker.ssa_for_local[p.0 as usize] = Some(format!("%arg{}", p.0));
         }
-        walker.walk_block(block);
 
-        // Terminator. Main always returns 0.
-        match &block.terminator {
-            Terminator::Return | Terminator::ReturnValue(_) => {
-                if is_main {
-                    writeln!(self.out, "  ret i32 0").unwrap();
-                } else {
-                    writeln!(self.out, "  ret void").unwrap();
-                }
+        for (bi, blk) in func.blocks.iter().enumerate() {
+            if bi > 0 {
+                writeln!(walker.out, "bb{bi}:").unwrap();
             }
+            walker.walk_block(blk);
+            walker.emit_terminator(&blk.terminator, is_main);
         }
         writeln!(self.out, "}}").unwrap();
     }
@@ -348,22 +368,14 @@ struct BlockWalker<'a> {
     module: &'a MirModule,
     func: &'a MirFunction,
     string_globals: &'a [String],
-    /// `text → global name` lookup for `PrintlnConcat` format strings.
-    /// Populated by `Emitter::scan_concat_formats` before any function
-    /// body is walked.
     concat_format_lookup: &'a HashMap<String, String>,
     out: &'a mut String,
-    /// For each MIR LocalId, the LLVM SSA value name that holds its
-    /// current value (e.g. `%tmp3`, `%arg1`, or a literal). `None`
-    /// means the local hasn't been materialized yet.
     ssa_for_local: Vec<Option<String>>,
-    /// For each MIR LocalId, the literal text if it was assigned a
-    /// constant string. Used by `lower_println_concat` to decide
-    /// whether each arg should be inlined into the format string or
-    /// referenced via `%s`/`%d`. Mirrors the same field used by
-    /// `Emitter::scan_concat_formats` so the format string built at
-    /// codegen time matches what was interned during the pre-scan.
     constant_text: Vec<Option<String>>,
+    /// Which locals use alloca (assigned in multiple blocks).
+    needs_alloca: Vec<bool>,
+    /// The alloca SSA name for each local that needs it.
+    alloca_names: Vec<Option<String>>,
     next_tmp: u32,
 }
 
@@ -387,42 +399,135 @@ impl<'a> BlockWalker<'a> {
         }
     }
 
+    fn emit_terminator(&mut self, term: &Terminator, is_main: bool) {
+        match term {
+            Terminator::Return | Terminator::ReturnValue(_) => {
+                if is_main {
+                    writeln!(self.out, "  ret i32 0").unwrap();
+                } else {
+                    writeln!(self.out, "  ret void").unwrap();
+                }
+            }
+            Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                let cond_ssa = self.ssa_of(*cond);
+                // MIR bools are i32 (0/1); LLVM `br` needs i1.
+                // Emit a truncation if the source is i32.
+                let cond_i1 = {
+                    let ty = &self.func.locals[cond.0 as usize];
+                    if matches!(ty, Ty::Bool | Ty::Int) {
+                        let t = self.fresh();
+                        writeln!(self.out, "  {t} = trunc i32 {cond_ssa} to i1").unwrap();
+                        t
+                    } else {
+                        cond_ssa
+                    }
+                };
+                let cond_ssa = cond_i1;
+                let then_label = block_label(*then_block);
+                let else_label = block_label(*else_block);
+                writeln!(
+                    self.out,
+                    "  br i1 {cond_ssa}, label %{then_label}, label %{else_label}"
+                )
+                .unwrap();
+            }
+            Terminator::Goto(target) => {
+                let label = block_label(*target);
+                writeln!(self.out, "  br label %{label}").unwrap();
+            }
+        }
+    }
+
+    /// Read a local that might be backed by alloca.
+    fn ssa_of_maybe_alloca(&mut self, local: LocalId) -> String {
+        if self.needs_alloca[local.0 as usize] {
+            let ptr = self.alloca_names[local.0 as usize]
+                .clone()
+                .expect("alloca name");
+            let dst = self.fresh();
+            writeln!(self.out, "  {dst} = load i32, ptr {ptr}").unwrap();
+            dst
+        } else {
+            self.ssa_of(local)
+        }
+    }
+
     fn lower_assign(&mut self, dest: LocalId, rvalue: &Rvalue) {
         let dest_ty = &self.func.locals[dest.0 as usize];
         if matches!(dest_ty, Ty::Unit) {
-            // Unit-typed assignments still need to issue the call,
-            // because the call has side effects. We just don't bind
-            // an SSA name.
             if let Rvalue::Call { .. } = rvalue {
                 self.lower_call_void(rvalue);
             }
             return;
         }
+
+        // For alloca'd locals, the Rvalue::Local case just stores.
+        if self.needs_alloca[dest.0 as usize] {
+            if let Rvalue::Local(src) = rvalue {
+                let val = self.ssa_of(*src);
+                let ptr = self.alloca_names[dest.0 as usize]
+                    .as_ref()
+                    .expect("alloca name");
+                writeln!(self.out, "  store i32 {val}, ptr {ptr}").unwrap();
+                return;
+            }
+            if let Rvalue::Const(MirConst::Int(v)) = rvalue {
+                let ptr = self.alloca_names[dest.0 as usize]
+                    .as_ref()
+                    .expect("alloca name");
+                writeln!(self.out, "  store i32 {v}, ptr {ptr}").unwrap();
+                return;
+            }
+        }
         match rvalue {
             Rvalue::Const(c) => self.lower_const(dest, c),
             Rvalue::Local(src) => {
-                // SSA copy: bind dest to the same SSA name as src.
-                // Also propagate the literal-string status so a
-                // chain like `val a = "hi"; val b = a;` keeps `b`
-                // recognizable as a constant for `PrintlnConcat`
-                // format-string folding.
-                let s = self.ssa_of(*src);
+                // If the source is alloca'd, load from its alloca ptr.
+                let s = self.ssa_of_maybe_alloca(*src);
                 self.ssa_for_local[dest.0 as usize] = Some(s);
                 self.constant_text[dest.0 as usize] = self.constant_text[src.0 as usize].clone();
             }
             Rvalue::BinOp { op, lhs, rhs } => {
                 let l = self.ssa_of(*lhs);
                 let r = self.ssa_of(*rhs);
-                let opcode = match op {
-                    MBinOp::AddI => "add",
-                    MBinOp::SubI => "sub",
-                    MBinOp::MulI => "mul",
-                    MBinOp::DivI => "sdiv",
-                    MBinOp::ModI => "srem",
-                };
-                let dst = self.fresh();
-                writeln!(self.out, "  {dst} = {opcode} i32 {l}, {r}").unwrap();
-                self.ssa_for_local[dest.0 as usize] = Some(dst);
+                match op {
+                    MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
+                        let opcode = match op {
+                            MBinOp::AddI => "add",
+                            MBinOp::SubI => "sub",
+                            MBinOp::MulI => "mul",
+                            MBinOp::DivI => "sdiv",
+                            MBinOp::ModI => "srem",
+                            _ => unreachable!(),
+                        };
+                        let dst = self.fresh();
+                        writeln!(self.out, "  {dst} = {opcode} i32 {l}, {r}").unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(dst);
+                    }
+                    MBinOp::CmpEq
+                    | MBinOp::CmpNe
+                    | MBinOp::CmpLt
+                    | MBinOp::CmpGt
+                    | MBinOp::CmpLe
+                    | MBinOp::CmpGe => {
+                        let pred = match op {
+                            MBinOp::CmpEq => "eq",
+                            MBinOp::CmpNe => "ne",
+                            MBinOp::CmpLt => "slt",
+                            MBinOp::CmpGt => "sgt",
+                            MBinOp::CmpLe => "sle",
+                            MBinOp::CmpGe => "sge",
+                            _ => unreachable!(),
+                        };
+                        let dst = self.fresh();
+                        writeln!(self.out, "  {dst} = icmp {pred} i32 {l}, {r}").unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(dst);
+                    }
+                }
             }
             Rvalue::Call { .. } => {
                 // Non-Unit calls aren't produced by PR #4 lowering.
@@ -517,7 +622,7 @@ impl<'a> BlockWalker<'a> {
             return;
         };
         let arg_ty = &self.func.locals[arg.0 as usize];
-        let arg_ssa = self.ssa_of(arg);
+        let arg_ssa = self.ssa_of_maybe_alloca(arg);
         let _ = self.fresh();
         match arg_ty {
             Ty::String => {
@@ -545,7 +650,7 @@ impl<'a> BlockWalker<'a> {
                 arg_text.push_str(", ");
             }
             let ty = &self.func.locals[a.0 as usize];
-            let ssa = self.ssa_of(*a);
+            let ssa = self.ssa_of_maybe_alloca(*a);
             arg_text.push_str(llvm_type(ty));
             arg_text.push(' ');
             arg_text.push_str(&ssa);
@@ -597,6 +702,14 @@ fn build_concat_format(
     }
     format.push('\n');
     format
+}
+
+fn block_label(idx: u32) -> String {
+    if idx == 0 {
+        "entry".to_string()
+    } else {
+        format!("bb{idx}")
+    }
 }
 
 fn llvm_type(ty: &Ty) -> &'static str {

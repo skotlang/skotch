@@ -79,6 +79,13 @@ pub enum BinOp {
     MulI,
     DivI,
     ModI,
+    /// Integer comparisons — produce a `Bool` local.
+    CmpEq,
+    CmpNe,
+    CmpLt,
+    CmpGt,
+    CmpLe,
+    CmpGe,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -118,6 +125,16 @@ pub enum Stmt {
 pub enum Terminator {
     Return,
     ReturnValue(LocalId),
+    /// Conditional branch. `cond` must be a `Bool`-typed local.
+    /// Jumps to `then_block` if true, `else_block` if false.
+    /// Block indices are positions in `MirFunction::blocks`.
+    Branch {
+        cond: LocalId,
+        then_block: u32,
+        else_block: u32,
+    },
+    /// Unconditional jump to another block.
+    Goto(u32),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

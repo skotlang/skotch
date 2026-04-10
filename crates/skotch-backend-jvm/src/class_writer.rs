@@ -109,8 +109,6 @@ fn emit_method(
     let mut slots: FxHashMap<u32, u8> = FxHashMap::default();
     let mut next_slot: u8 = 0;
 
-    // Slot 0 of `main` is reserved for `String[] args` whether or not
-    // we read it. We don't model `args` in the MIR.
     if func.name == "main" {
         next_slot = 1;
     } else {
@@ -120,27 +118,294 @@ fn emit_method(
         }
     }
 
-    let block: &BasicBlock = &func.blocks[0];
-    walk_block(
-        block,
-        cp,
-        module,
-        func,
-        class_name,
-        &mut code,
-        &mut stack,
-        &mut max_stack,
-        &mut slots,
-        &mut next_slot,
-    );
+    // ── Two-pass multi-block codegen ─────────────────────────────────
+    //
+    // Pass 1: emit each block's statements + terminator into `code`.
+    //   Record the byte offset of each block's start and the positions
+    //   of branch/goto instructions that need forward-patching.
+    //
+    // Pass 2: patch all branch/goto offsets to their target block's
+    //   byte offset. JVM branch offsets are relative to the branch
+    //   instruction itself.
+    //
+    // Then build a StackMapTable for every block that's the target of
+    // a forward branch.
+    struct JumpPatch {
+        /// Byte offset in `code` of the u16 branch-offset field.
+        offset_pos: usize,
+        /// The byte offset of the branch instruction itself.
+        insn_pos: usize,
+        /// Index of the target block.
+        target_block: u32,
+    }
 
-    match &block.terminator {
-        Terminator::Return => code.push(0xB1),
-        Terminator::ReturnValue(_) => code.push(0xB1), // PR #1 only voids
+    let mut block_offsets: Vec<usize> = Vec::with_capacity(func.blocks.len());
+    let mut patches: Vec<JumpPatch> = Vec::new();
+    // Which blocks are branch/goto targets (need a StackMapTable entry).
+    let mut is_target = vec![false; func.blocks.len()];
+
+    for (bi, block) in func.blocks.iter().enumerate() {
+        block_offsets.push(code.len());
+
+        walk_block(
+            block,
+            cp,
+            module,
+            func,
+            class_name,
+            &mut code,
+            &mut stack,
+            &mut max_stack,
+            &mut slots,
+            &mut next_slot,
+        );
+
+        match &block.terminator {
+            Terminator::Return => code.push(0xB1), // return
+            Terminator::ReturnValue(_) => code.push(0xB1),
+            Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                // Load cond, branch to else if false, fall through to then.
+                load_local(
+                    code.as_mut(),
+                    &mut stack,
+                    &mut max_stack,
+                    &mut slots,
+                    *cond,
+                    &func.locals,
+                );
+                // ifeq <else_offset> — jump to else block if cond == 0
+                let insn_pos = code.len();
+                code.push(0x99); // ifeq
+                let offset_pos = code.len();
+                code.write_i16::<BigEndian>(0).unwrap(); // placeholder
+                bump(&mut stack, &mut max_stack, -1);
+                patches.push(JumpPatch {
+                    offset_pos,
+                    insn_pos,
+                    target_block: *else_block,
+                });
+                is_target[*else_block as usize] = true;
+                // Fall through to then_block. If then_block isn't the
+                // next sequential block, emit a goto.
+                if *then_block as usize != bi + 1 {
+                    let insn2 = code.len();
+                    code.push(0xA7); // goto
+                    let off2 = code.len();
+                    code.write_i16::<BigEndian>(0).unwrap();
+                    patches.push(JumpPatch {
+                        offset_pos: off2,
+                        insn_pos: insn2,
+                        target_block: *then_block,
+                    });
+                    is_target[*then_block as usize] = true;
+                }
+            }
+            Terminator::Goto(target) => {
+                let insn_pos = code.len();
+                code.push(0xA7); // goto
+                let offset_pos = code.len();
+                code.write_i16::<BigEndian>(0).unwrap();
+                patches.push(JumpPatch {
+                    offset_pos,
+                    insn_pos,
+                    target_block: *target,
+                });
+                is_target[*target as usize] = true;
+            }
+        }
+    }
+
+    // Pass 2: patch jump offsets.
+    for patch in &patches {
+        let target_off = block_offsets[patch.target_block as usize];
+        let relative = (target_off as i32) - (patch.insn_pos as i32);
+        let bytes = (relative as i16).to_be_bytes();
+        code[patch.offset_pos] = bytes[0];
+        code[patch.offset_pos + 1] = bytes[1];
     }
 
     let max_locals = next_slot as u16;
 
+    // ── StackMapTable ────────────────────────────────────────────────
+    //
+    // Build entries for every block that is a branch/goto target.
+    // For simplicity, emit `same_frame` (tag 0-63) or
+    // `same_frame_extended` (tag 251, u16 delta) for targets where
+    // the stack is empty and locals haven't grown beyond the initial
+    // set. For targets where locals have grown (e.g. after both
+    // branches assigned a new local), emit `append_frame`.
+    //
+    // The initial frame is: locals = [String[] for main, or params],
+    // stack = [].
+    let initial_locals_count: u16 = if func.name == "main" {
+        1
+    } else {
+        func.params.len() as u16
+    };
+    let mut stack_map_entries: Vec<u8> = Vec::new();
+    let mut smt_count: u16 = 0;
+    let mut prev_offset: i32 = -1; // delta is relative to previous entry (or -1 for first)
+
+    // Collect target offsets in order.
+    let mut target_offsets: Vec<usize> = Vec::new();
+    for (bi, &is_tgt) in is_target.iter().enumerate() {
+        if is_tgt && bi < block_offsets.len() {
+            target_offsets.push(block_offsets[bi]);
+        }
+    }
+    target_offsets.sort();
+    target_offsets.dedup();
+
+    // ── Per-block slot sets for StackMapTable ──────────────────────
+    //
+    // Track WHICH JVM slots are stored in each block. At merge
+    // targets, the verifier expects the intersection of all
+    // predecessor paths: slots assigned on ALL paths → Integer,
+    // slots assigned on SOME paths → Top.
+    let max_slots = next_slot as usize;
+    // Cumulative slot set per block: includes slots from all
+    // dominating blocks on any reachable path. We build this
+    // conservatively with a simple forward pass since blocks are
+    // laid out in program order and our CFG is acyclic.
+    let mut live_at_end: Vec<Vec<bool>> = vec![vec![false; max_slots]; func.blocks.len()];
+    // Seed: initial locals are live at the start.
+    for s in 0..(initial_locals_count as usize) {
+        if !live_at_end.is_empty() {
+            live_at_end[0][s] = true;
+        }
+    }
+    for (bi, _) in func.blocks.iter().enumerate() {
+        // Inherit from predecessors (intersection for merge, copy for single-pred).
+        let mut inherited = vec![true; max_slots]; // start with all-true, intersect
+        let mut has_pred = false;
+        for (pi, pblk) in func.blocks.iter().enumerate() {
+            let is_pred = match &pblk.terminator {
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => *then_block as usize == bi || *else_block as usize == bi,
+                Terminator::Goto(t) => *t as usize == bi,
+                _ => false,
+            };
+            if is_pred {
+                has_pred = true;
+                for s in 0..max_slots {
+                    inherited[s] = inherited[s] && live_at_end[pi][s];
+                }
+            }
+        }
+        if !has_pred && bi == 0 {
+            // Entry block has no predecessors; seed with initial locals.
+            for (s, val) in inherited.iter_mut().enumerate() {
+                *val = s < (initial_locals_count as usize);
+            }
+        } else if !has_pred {
+            inherited = vec![false; max_slots];
+        }
+
+        // Scan this block's bytecode for istore/astore.
+        let start = block_offsets[bi];
+        let end = if bi + 1 < block_offsets.len() {
+            block_offsets[bi + 1]
+        } else {
+            code.len()
+        };
+        let mut assigned = inherited.clone();
+        let mut i = start;
+        while i < end {
+            let op = code[i];
+            if (op == 0x36 || op == 0x3A) && i + 1 < end {
+                let slot = code[i + 1] as usize;
+                if slot < max_slots {
+                    assigned[slot] = true;
+                }
+                i += 2;
+            } else {
+                i += 1;
+                #[allow(clippy::match_overlapping_arm)]
+                match op {
+                    0x10 | 0x12 | 0x15 | 0x19 => i += 1,
+                    0x11 | 0x13 | 0x14 | 0x99 | 0x9A | 0xA7 | 0xB2 | 0xB6 | 0xB7 | 0xB8 | 0xBB => {
+                        i += 2
+                    }
+                    0x9F..=0xA4 => i += 2,
+                    _ => {}
+                }
+            }
+        }
+        live_at_end[bi] = assigned;
+    }
+
+    for &off in &target_offsets {
+        let delta = if prev_offset < 0 {
+            off as i32
+        } else {
+            (off as i32) - prev_offset - 1
+        };
+        prev_offset = off as i32;
+        smt_count += 1;
+
+        let target_bi = block_offsets.iter().position(|&o| o == off).unwrap_or(0);
+
+        // Compute the merged slot set at the target from its predecessors.
+        let mut merged = vec![true; max_slots];
+        let mut any_pred = false;
+        for (pi, pblk) in func.blocks.iter().enumerate() {
+            let is_pred = match &pblk.terminator {
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => *then_block as usize == target_bi || *else_block as usize == target_bi,
+                Terminator::Goto(t) => *t as usize == target_bi,
+                _ => false,
+            };
+            if is_pred {
+                any_pred = true;
+                for s in 0..max_slots {
+                    merged[s] = merged[s] && live_at_end[pi][s];
+                }
+            }
+        }
+        if !any_pred {
+            merged = vec![false; max_slots];
+        }
+
+        // Find the highest slot that is live → that's num_locals.
+        let num_locals = merged
+            .iter()
+            .rposition(|&live| live)
+            .map(|i| (i + 1) as u16)
+            .unwrap_or(initial_locals_count);
+
+        // Emit full_frame (tag 255).
+        stack_map_entries.push(255);
+        stack_map_entries
+            .write_u16::<BigEndian>(delta as u16)
+            .unwrap();
+        stack_map_entries
+            .write_u16::<BigEndian>(num_locals)
+            .unwrap();
+        for (slot, &live) in merged.iter().enumerate().take(num_locals as usize) {
+            if slot == 0 && func.name == "main" {
+                stack_map_entries.push(7); // Object_variable_info
+                let class_idx = cp.class("[Ljava/lang/String;");
+                stack_map_entries.write_u16::<BigEndian>(class_idx).unwrap();
+            } else if live {
+                stack_map_entries.push(1); // Integer_variable_info
+            } else {
+                stack_map_entries.push(0); // Top_variable_info
+            }
+        }
+        stack_map_entries.write_u16::<BigEndian>(0).unwrap(); // empty stack
+    }
+
+    // Build the Code attribute.
     let mut code_attr = Vec::<u8>::new();
     code_attr
         .write_u16::<BigEndian>(max_stack.max(0) as u16)
@@ -149,7 +414,19 @@ fn emit_method(
     code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
     code_attr.write_all(&code).unwrap();
     code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
-    code_attr.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+
+    // Sub-attributes: StackMapTable if we have branch targets.
+    if smt_count > 0 {
+        let smt_name_idx = cp.utf8("StackMapTable");
+        code_attr.write_u16::<BigEndian>(1).unwrap(); // attributes_count = 1
+        code_attr.write_u16::<BigEndian>(smt_name_idx).unwrap();
+        let smt_len = 2 + stack_map_entries.len();
+        code_attr.write_u32::<BigEndian>(smt_len as u32).unwrap();
+        code_attr.write_u16::<BigEndian>(smt_count).unwrap();
+        code_attr.write_all(&stack_map_entries).unwrap();
+    } else {
+        code_attr.write_u16::<BigEndian>(0).unwrap(); // attributes_count = 0
+    }
 
     let mut method = Vec::<u8>::new();
     method.write_u16::<BigEndian>(access_flags).unwrap();
@@ -219,15 +496,55 @@ fn walk_block(
             Rvalue::BinOp { op, lhs, rhs } => {
                 load_local(code, stack, max_stack, slots, *lhs, &func.locals);
                 load_local(code, stack, max_stack, slots, *rhs, &func.locals);
-                let opcode: u8 = match op {
-                    MBinOp::AddI => 0x60,
-                    MBinOp::SubI => 0x64,
-                    MBinOp::MulI => 0x68,
-                    MBinOp::DivI => 0x6C,
-                    MBinOp::ModI => 0x70,
-                };
-                code.push(opcode);
-                bump(stack, max_stack, -1);
+                match op {
+                    MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
+                        let opcode: u8 = match op {
+                            MBinOp::AddI => 0x60,
+                            MBinOp::SubI => 0x64,
+                            MBinOp::MulI => 0x68,
+                            MBinOp::DivI => 0x6C,
+                            MBinOp::ModI => 0x70,
+                            _ => unreachable!(),
+                        };
+                        code.push(opcode);
+                        bump(stack, max_stack, -1); // two ints in, one int out
+                    }
+                    MBinOp::CmpEq
+                    | MBinOp::CmpNe
+                    | MBinOp::CmpLt
+                    | MBinOp::CmpGt
+                    | MBinOp::CmpLe
+                    | MBinOp::CmpGe => {
+                        // Integer comparison → push 0 or 1 (bool).
+                        // JVM doesn't have a direct "compare and push
+                        // bool" instruction; we use if_icmp + iconst.
+                        //   if_icmp<op> L_true
+                        //   iconst_0
+                        //   goto L_end
+                        // L_true:
+                        //   iconst_1
+                        // L_end:
+                        let branch_op: u8 = match op {
+                            MBinOp::CmpEq => 0x9F, // if_icmpeq
+                            MBinOp::CmpNe => 0xA0, // if_icmpne
+                            MBinOp::CmpLt => 0xA1, // if_icmplt
+                            MBinOp::CmpGe => 0xA2, // if_icmpge
+                            MBinOp::CmpGt => 0xA3, // if_icmpgt
+                            MBinOp::CmpLe => 0xA4, // if_icmple
+                            _ => unreachable!(),
+                        };
+                        code.push(branch_op);
+                        code.write_i16::<BigEndian>(7).unwrap(); // skip to L_true (3+1+3=7)
+                        bump(stack, max_stack, -2); // pops both operands
+                        code.push(0x03); // iconst_0 (false)
+                        bump(stack, max_stack, 1);
+                        code.push(0xA7); // goto L_end
+                        code.write_i16::<BigEndian>(4).unwrap(); // skip 1+3=4
+                                                                 // L_true:
+                        code.push(0x04); // iconst_1 (true)
+                                         // L_end: (stack has one int)
+                    }
+                }
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::Call { kind, args } => match kind {

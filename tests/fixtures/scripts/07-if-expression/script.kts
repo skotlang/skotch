@@ -1,0 +1,2 @@
+val x = if (true) 1 else 2
+println(x)

@@ -88,33 +88,26 @@ pub fn lower_function(
     class_descriptor: &str,
     pools: &mut Pools,
 ) -> MethodCode {
-    let block: &BasicBlock = &func.blocks[0];
-    let scratch_needed = compute_scratch(block);
+    // Compute scratch across ALL blocks (not just block[0]).
+    let mut scratch_needed: u16 = 0;
+    for block in &func.blocks {
+        scratch_needed = scratch_needed.max(compute_scratch(block));
+    }
 
-    // Build a slot map: MIR LocalId → DEX register number.
-    //
-    // - Non-Unit non-param locals are allocated v(S)..v(S+N-1).
-    // - Parameters are allocated v(S+N)..v(S+N+P-1).
-    // - Unit-typed locals get a sentinel and are never actually
-    //   referenced by load/store opcodes.
     let num_params = func.params.len() as u16;
     let mut slot: FxHashMap<u32, u16> = FxHashMap::default();
-    // Phase 1: assign non-param non-Unit locals.
     let mut next_local: u16 = scratch_needed;
     for (i, ty) in func.locals.iter().enumerate() {
-        // Skip parameters here — handled in phase 2.
         if (i as u16) < num_params {
             continue;
         }
         if matches!(ty, Ty::Unit) {
-            // Unit locals don't need a register slot.
             continue;
         }
         slot.insert(i as u32, next_local);
         next_local += 1;
     }
     let num_locals = next_local - scratch_needed;
-    // Phase 2: assign parameter slots.
     let param_base = scratch_needed + num_locals;
     for (pi, _) in func.params.iter().enumerate() {
         slot.insert(pi as u32, param_base + pi as u16);
@@ -126,22 +119,89 @@ pub fn lower_function(
     let mut patches: Vec<Patch> = Vec::new();
     let mut max_outs: u16 = 0;
 
-    walk_block(
-        block,
-        module,
-        class_descriptor,
-        pools,
-        &slot,
-        &func.locals,
-        scratch_needed,
-        &mut code,
-        &mut patches,
-        &mut max_outs,
-    );
+    // ── Multi-block codegen with jump patching ───────────────────────
+    struct DexJumpPatch {
+        offset_idx: usize,
+        insn_idx: usize,
+        target_block: u32,
+        is_goto: bool,
+    }
+    let mut block_offsets: Vec<usize> = Vec::with_capacity(func.blocks.len());
+    let mut jump_patches: Vec<DexJumpPatch> = Vec::new();
 
-    match &block.terminator {
-        Terminator::Return | Terminator::ReturnValue(_) => {
-            code.push(opcode_10x(0x0E)); // return-void
+    for block in &func.blocks {
+        block_offsets.push(code.len());
+
+        walk_block(
+            block,
+            module,
+            class_descriptor,
+            pools,
+            &slot,
+            &func.locals,
+            scratch_needed,
+            &mut code,
+            &mut patches,
+            &mut max_outs,
+        );
+
+        match &block.terminator {
+            Terminator::Return | Terminator::ReturnValue(_) => {
+                code.push(opcode_10x(0x0E)); // return-void
+            }
+            Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                // if-eqz vAA, +offset  → jump to else if cond == 0
+                let cond_reg = slot[&cond.0];
+                let insn_idx = code.len();
+                code.push(opcode_aa(0x38, cond_reg as u8));
+                let off_idx = code.len();
+                code.push(0); // placeholder
+                jump_patches.push(DexJumpPatch {
+                    offset_idx: off_idx,
+                    insn_idx,
+                    target_block: *else_block,
+                    is_goto: false,
+                });
+                // Fall through to then. If not sequential, emit goto.
+                let cur_bi = block_offsets.len() - 1;
+                if *then_block as usize != cur_bi + 1 {
+                    let gi = code.len();
+                    code.push(opcode_10x(0x28)); // goto placeholder
+                    jump_patches.push(DexJumpPatch {
+                        offset_idx: gi,
+                        insn_idx: gi,
+                        target_block: *then_block,
+                        is_goto: true,
+                    });
+                }
+            }
+            Terminator::Goto(target) => {
+                let gi = code.len();
+                code.push(opcode_10x(0x28)); // goto placeholder
+                jump_patches.push(DexJumpPatch {
+                    offset_idx: gi,
+                    insn_idx: gi,
+                    target_block: *target,
+                    is_goto: true,
+                });
+            }
+        }
+    }
+
+    // Patch jump offsets (code-unit-relative).
+    for patch in &jump_patches {
+        let target_off = block_offsets[patch.target_block as usize];
+        let relative = (target_off as i32) - (patch.insn_idx as i32);
+        if patch.is_goto {
+            // goto: format 10t, offset in high byte (i8)
+            code[patch.offset_idx] = opcode_aa(0x28, relative as i8 as u8);
+        } else {
+            // if-eqz: offset in next code unit (i16)
+            code[patch.offset_idx] = relative as i16 as u16;
         }
     }
 
@@ -308,6 +368,14 @@ fn emit_const(
     }
 }
 
+/// Emit `const/4` inline without debug assertions (for codegen
+/// helpers like comparison lowering that use known-good registers).
+fn emit_const_4_inline(code: &mut Vec<u16>, dest_reg: u16, val: i8) {
+    let a = dest_reg & 0x0F;
+    let b = (val as u16) & 0x0F;
+    code.push(((b << 12) | (a << 8)) | 0x12);
+}
+
 /// Emit `const/4 vA, #+B` (op 0x12, format 11n).
 ///
 /// Note: format 11n's literal is a 4-bit signed value (-8..=7) packed
@@ -352,16 +420,59 @@ fn emit_binop(
     let l = slot[&lhs.0] as u8;
     let r = slot[&rhs.0] as u8;
     let d = slot[&dest.0] as u8;
-    // Format 23x: AA|op | CC|BB ; vAA = vBB op vCC.
-    let opcode: u8 = match op {
-        MBinOp::AddI => 0x90,
-        MBinOp::SubI => 0x91,
-        MBinOp::MulI => 0x92,
-        MBinOp::DivI => 0x93,
-        MBinOp::ModI => 0x94,
-    };
-    code.push(((d as u16) << 8) | opcode as u16);
-    code.push(((r as u16) << 8) | (l as u16));
+    match op {
+        MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
+            // Format 23x: AA|op | CC|BB ; vAA = vBB op vCC.
+            let opcode: u8 = match op {
+                MBinOp::AddI => 0x90,
+                MBinOp::SubI => 0x91,
+                MBinOp::MulI => 0x92,
+                MBinOp::DivI => 0x93,
+                MBinOp::ModI => 0x94,
+                _ => unreachable!(),
+            };
+            code.push(((d as u16) << 8) | opcode as u16);
+            code.push(((r as u16) << 8) | (l as u16));
+        }
+        MBinOp::CmpEq
+        | MBinOp::CmpNe
+        | MBinOp::CmpLt
+        | MBinOp::CmpGt
+        | MBinOp::CmpLe
+        | MBinOp::CmpGe => {
+            // DEX integer comparison: if-<op> vA, vB, +offset
+            // If true → set dest=1; else dest=0.
+            // We emit:
+            //   const/4 vD, 0         (assume false)
+            //   if-<op> vL, vR, +4    (skip the next 2 insns if true... wait)
+            //
+            // Simpler: just set dest=1, then conditionally set to 0.
+            //   const/4 vD, 1
+            //   if-<op> vL, vR, +3    (skip the const/4 0 below)
+            //   const/4 vD, 0
+            //
+            // if-eq is "jump if equal". We want dest=1 when the
+            // comparison is true, so for CmpEq we use if-eq.
+            let cond_op: u8 = match op {
+                MBinOp::CmpEq => 0x32, // if-eq
+                MBinOp::CmpNe => 0x33, // if-ne
+                MBinOp::CmpLt => 0x34, // if-lt
+                MBinOp::CmpGe => 0x35, // if-ge
+                MBinOp::CmpGt => 0x36, // if-gt
+                MBinOp::CmpLe => 0x37, // if-le
+                _ => unreachable!(),
+            };
+            // const/4 vD, 1  (optimistic: true)
+            emit_const_4_inline(code, d as u16, 1);
+            // if-<op> vL, vR, +3  (skip the const/4 0 that follows)
+            // Format 22t: B|A|op | CCCC
+            let ab = ((r as u16 & 0xF) << 4) | (l as u16 & 0xF);
+            code.push((ab << 8) | cond_op as u16);
+            code.push(3i16 as u16); // offset +3 code units
+                                    // const/4 vD, 0  (correction: false)
+            emit_const_4_inline(code, d as u16, 0);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
