@@ -31,7 +31,7 @@
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fmt::Write as _;
-use std::io::{Cursor, Read, Seek};
+use std::io::Cursor;
 
 /// Normalize a DEX file's bytes into a diff-friendly text blob.
 pub fn normalize_default(bytes: &[u8]) -> Result<String, String> {
@@ -432,8 +432,3 @@ mod tests {
         assert_eq!(read_uleb128(&[0xac, 0x02]).unwrap(), (300, 2));
     }
 }
-
-// Suppress unused warnings on the `Seek` import (only used for
-// hypothetical future code paths).
-#[allow(dead_code)]
-fn _force_seek<R: Seek + Read>(_: R) {}

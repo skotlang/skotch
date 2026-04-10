@@ -46,13 +46,26 @@ fn skot_binary_contains_no_external_compiler_names() {
         .expect("invoke cargo build");
     assert!(status.success(), "cargo build --release failed");
 
-    // CARGO_MANIFEST_DIR for skot-cli is `crates/skot-cli`. Walk up
-    // two levels to the workspace root, then descend into target/.
+    // Locate the just-built `skot` binary. We respect `CARGO_TARGET_DIR`
+    // if set (CI sometimes overrides it) and fall back to the workspace's
+    // `target/` directory. The binary name has the platform-specific
+    // executable suffix appended (`.exe` on Windows, empty elsewhere).
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace = here.parent().unwrap().parent().unwrap();
-    let exe = workspace.join("target/release/skot");
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace.join("target"));
+    let exe = target_dir
+        .join("release")
+        .join(format!("skot{}", std::env::consts::EXE_SUFFIX));
     let bytes = std::fs::read(&exe).unwrap_or_else(|e| {
-        panic!("could not read {} : {e}", exe.display());
+        panic!(
+            "could not read {} : {e}\n  CARGO_MANIFEST_DIR={}\n  workspace={}\n  target_dir={}",
+            exe.display(),
+            here.display(),
+            workspace.display(),
+            target_dir.display(),
+        );
     });
 
     let mut hits: Vec<(String, usize)> = Vec::new();
