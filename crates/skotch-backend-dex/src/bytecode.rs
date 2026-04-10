@@ -146,8 +146,20 @@ pub fn lower_function(
         );
 
         match &block.terminator {
-            Terminator::Return | Terminator::ReturnValue(_) => {
+            Terminator::Return => {
                 code.push(opcode_10x(0x0E)); // return-void
+            }
+            Terminator::ReturnValue(local) => {
+                let ty = &func.locals[local.0 as usize];
+                let reg = slot.get(&local.0).copied().unwrap_or(0);
+                match ty {
+                    Ty::Int | Ty::Bool => {
+                        code.push(opcode_aa(0x0F, reg as u8)); // return vAA
+                    }
+                    _ => {
+                        code.push(opcode_aa(0x11, reg as u8)); // return-object vAA
+                    }
+                }
             }
             Terminator::Branch {
                 cond,
@@ -479,7 +491,7 @@ fn emit_binop(
 fn emit_call(
     kind: &CallKind,
     args: &[LocalId],
-    _dest: LocalId,
+    dest: LocalId,
     slot: &FxHashMap<u32, u16>,
     locals: &[Ty],
     module: &MirModule,
@@ -567,6 +579,15 @@ fn emit_call(
                 packed |= r << (4 * i);
             }
             code.push(packed);
+            // For non-void returns, capture the result.
+            if target.return_ty != Ty::Unit {
+                let dest_reg = slot[&dest.0];
+                let move_op = match &target.return_ty {
+                    Ty::Int | Ty::Bool => 0x0A, // move-result
+                    _ => 0x0C,                   // move-result-object
+                };
+                code.push(opcode_aa(move_op, dest_reg as u8));
+            }
             n
         }
         CallKind::PrintlnConcat => {

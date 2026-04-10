@@ -326,16 +326,11 @@ fn lower_stmt(
         ),
         Stmt::Return { value, .. } => {
             if let Some(v) = value {
-                let _ = lower_expr(
-                    v,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                );
+                if let Some(local) = lower_expr(
+                    v, fb, scope, module, name_to_func, name_to_global, interner, diags,
+                ) {
+                    fb.set_terminator(Terminator::ReturnValue(local));
+                }
             }
             true
         }
@@ -539,10 +534,11 @@ fn lower_expr(
             let else_blk = fb.new_block();
             let merge_blk = fb.new_block();
 
-            // Pre-allocate the result local. Type: Int for now (the
-            // only if-as-expression type we support). A future PR
-            // should infer the type from the branches.
-            let result = fb.new_local(Ty::Int);
+            // The result local's type is inferred from the then-branch
+            // after lowering it. We use a placeholder here that gets
+            // replaced once the then-branch produces a value.
+            // For now, start with Ty::Int as default (overridden below).
+            let result = fb.new_local(Ty::Int); // type may be patched
 
             fb.terminate_and_switch(
                 Terminator::Branch {
@@ -554,10 +550,11 @@ fn lower_expr(
             );
 
             // Then branch.
+            let mut then_val: Option<LocalId> = None;
             for s in &then_block.stmts {
                 match s {
                     skotch_syntax::Stmt::Expr(e) => {
-                        if let Some(val) = lower_expr(
+                        then_val = lower_expr(
                             e,
                             fb,
                             scope,
@@ -566,12 +563,7 @@ fn lower_expr(
                             name_to_global,
                             interner,
                             diags,
-                        ) {
-                            fb.push_stmt(MStmt::Assign {
-                                dest: result,
-                                value: Rvalue::Local(val),
-                            });
-                        }
+                        );
                     }
                     _ => {
                         let _ = lower_stmt(
@@ -586,6 +578,16 @@ fn lower_expr(
                         );
                     }
                 }
+            }
+            // Patch the result local's type to match the then-branch
+            // (which may be String, not Int).
+            if let Some(val) = then_val {
+                let inferred_ty = fb.mf.locals[val.0 as usize].clone();
+                fb.mf.locals[result.0 as usize] = inferred_ty;
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Local(val),
+                });
             }
             fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
 
@@ -700,7 +702,12 @@ fn lower_expr(
                 return None;
             };
 
-            let dest = fb.new_local(Ty::Unit);
+            // Use the target function's return type for static calls.
+            let dest_ty = match &kind {
+                CallKind::Static(fid) => module.functions[fid.0 as usize].return_ty.clone(),
+                _ => Ty::Unit,
+            };
+            let dest = fb.new_local(dest_ty);
             fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Call {
@@ -717,10 +724,67 @@ fn lower_expr(
             ));
             None
         }
-        Expr::Unary { span, .. } | Expr::Field { span, .. } => {
+        Expr::Unary { op, operand, .. } => {
+            // For negation of an integer literal, fold to a negative
+            // constant directly. For general expressions, emit a sub.
+            match op {
+                skotch_syntax::UnaryOp::Neg => {
+                    // Check for constant folding: -<intlit>
+                    if let Expr::IntLit(v, _) = operand.as_ref() {
+                        let dest = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Int(-(*v as i32))),
+                        });
+                        return Some(dest);
+                    }
+                    // General: 0 - operand
+                    let val = lower_expr(
+                        operand, fb, scope, module, name_to_func, name_to_global, interner, diags,
+                    )?;
+                    let zero = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: zero,
+                        value: Rvalue::Const(MirConst::Int(0)),
+                    });
+                    let dest = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::SubI,
+                            lhs: zero,
+                            rhs: val,
+                        },
+                    });
+                    Some(dest)
+                }
+                skotch_syntax::UnaryOp::Not => {
+                    // !bool → 1 - bool (since bools are 0/1 ints)
+                    let val = lower_expr(
+                        operand, fb, scope, module, name_to_func, name_to_global, interner, diags,
+                    )?;
+                    let one = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: one,
+                        value: Rvalue::Const(MirConst::Int(1)),
+                    });
+                    let dest = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::SubI,
+                            lhs: one,
+                            rhs: val,
+                        },
+                    });
+                    Some(dest)
+                }
+            }
+        }
+        Expr::Field { span, .. } => {
             diags.push(Diagnostic::error(
                 *span,
-                "this expression form is not yet lowered to MIR",
+                "field access is not yet lowered to MIR",
             ));
             let _ = (DefId::Error, name_to_func);
             None
