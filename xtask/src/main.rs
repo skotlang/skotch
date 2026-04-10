@@ -9,7 +9,7 @@
 //! `tests/fixtures/expected/<target>/<fixture>/`. Those bytes are
 //! committed to git so that **CI never needs any of those tools**.
 //!
-//! The shipping `skot` binary must contain none of the strings
+//! The shipping `skotch` binary must contain none of the strings
 //! `kotlinc`, `javac`, `d8`, or `dx`. A test in
 //! `tests/no_external_compiler.rs` enforces this.
 //!
@@ -18,17 +18,17 @@
 //! - `cargo xtask gen-fixtures --target jvm` — for each fixture
 //!   directory under `tests/fixtures/inputs/` whose `meta.toml` says
 //!   `status = "supported"`:
-//!     1. Run `skot emit --target jvm` and write `expected/jvm/<f>/skot.class`
-//!        + `expected/jvm/<f>/skot.norm.txt`.
+//!     1. Run `skotch emit --target jvm` and write `expected/jvm/<f>/skotch.class`
+//!        + `expected/jvm/<f>/skotch.norm.txt`.
 //!     2. If `kotlinc` is on `PATH`, run it and write
 //!        `expected/jvm/<f>/kotlinc.class` + `kotlinc.norm.txt`.
 //!     3. If `java` is on `PATH`, execute the kotlinc-compiled class
 //!        and capture its stdout as `expected/jvm/<f>/run.stdout`.
 //!
-//! - `cargo xtask refresh-skot-goldens` — same as above but skip
-//!   reference tools entirely; just refresh skot's own outputs.
+//! - `cargo xtask refresh-skotch-goldens` — same as above but skip
+//!   reference tools entirely; just refresh skotch's own outputs.
 //!
-//! - `cargo xtask verify` — re-run skot on each fixture and assert
+//! - `cargo xtask verify` — re-run skotch on each fixture and assert
 //!   the output is byte-equal to the committed goldens. This is what
 //!   the workspace tests do too, but `xtask verify` is convenient
 //!   when you've just edited the JVM backend and want a quick check.
@@ -38,7 +38,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use skot_driver::{emit, EmitOptions, Target as SkotTarget};
+use skotch_driver::{emit, EmitOptions, Target as SkotchTarget};
 
 #[derive(Parser, Debug)]
 #[command(name = "xtask", version)]
@@ -49,7 +49,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Sub {
-    /// Regenerate committed fixture outputs (skot's + reference tools').
+    /// Regenerate committed fixture outputs (skotch's + reference tools').
     GenFixtures {
         #[arg(long, value_enum, default_value_t = TargetArg::Jvm)]
         target: TargetArg,
@@ -58,14 +58,14 @@ enum Sub {
         fixture: Option<String>,
         /// Skip running reference tools (kotlinc/d8/kotlinc-native).
         #[arg(long)]
-        skot_only: bool,
+        skotch_only: bool,
     },
-    /// Regenerate skot's own goldens without invoking reference tools.
-    RefreshSkotGoldens {
+    /// Regenerate skotch's own goldens without invoking reference tools.
+    RefreshSkotchGoldens {
         #[arg(long, value_enum, default_value_t = TargetArg::Jvm)]
         target: TargetArg,
     },
-    /// Re-run skot on each fixture and verify output matches committed goldens.
+    /// Re-run skotch on each fixture and verify output matches committed goldens.
     Verify {
         #[arg(long, value_enum, default_value_t = TargetArg::Jvm)]
         target: TargetArg,
@@ -81,14 +81,14 @@ enum TargetArg {
     Native,
 }
 
-impl From<TargetArg> for SkotTarget {
+impl From<TargetArg> for SkotchTarget {
     fn from(t: TargetArg) -> Self {
         match t {
-            TargetArg::Jvm => SkotTarget::Jvm,
-            TargetArg::Dex => SkotTarget::Dex,
-            TargetArg::Llvm => SkotTarget::Llvm,
-            TargetArg::Klib => SkotTarget::Klib,
-            TargetArg::Native => SkotTarget::Native,
+            TargetArg::Jvm => SkotchTarget::Jvm,
+            TargetArg::Dex => SkotchTarget::Dex,
+            TargetArg::Llvm => SkotchTarget::Llvm,
+            TargetArg::Klib => SkotchTarget::Klib,
+            TargetArg::Native => SkotchTarget::Native,
         }
     }
 }
@@ -100,9 +100,9 @@ fn main() -> Result<()> {
         Sub::GenFixtures {
             target,
             fixture,
-            skot_only,
-        } => gen_fixtures(&workspace, target, fixture.as_deref(), skot_only),
-        Sub::RefreshSkotGoldens { target } => gen_fixtures(&workspace, target, None, true),
+            skotch_only,
+        } => gen_fixtures(&workspace, target, fixture.as_deref(), skotch_only),
+        Sub::RefreshSkotchGoldens { target } => gen_fixtures(&workspace, target, None, true),
         Sub::Verify { target } => verify(&workspace, target),
     }
 }
@@ -119,7 +119,7 @@ fn gen_fixtures(
     workspace: &Path,
     target: TargetArg,
     only: Option<&str>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let inputs = workspace.join("tests/fixtures/inputs");
     if !inputs.exists() {
@@ -131,7 +131,7 @@ fn gen_fixtures(
     let d8 = locate_d8();
     let kotlinc_native = which::which("kotlinc-native").ok();
     let clang = which::which("clang").ok();
-    if !skot_only {
+    if !skotch_only {
         if kotlinc.is_none() {
             eprintln!("warning: kotlinc not found on PATH; skipping reference outputs");
         }
@@ -162,11 +162,11 @@ fn gen_fixtures(
             }
         }
         match target {
-            TargetArg::Jvm => gen_one_jvm(&f, workspace, &kotlinc, &java, skot_only)?,
-            TargetArg::Dex => gen_one_dex(&f, workspace, &kotlinc, &d8, skot_only)?,
-            TargetArg::Klib => gen_one_klib(&f, workspace, &kotlinc_native, skot_only)?,
-            TargetArg::Llvm => gen_one_llvm(&f, workspace, &kotlinc_native, &clang, skot_only)?,
-            TargetArg::Native => gen_one_native(&f, workspace, &kotlinc_native, skot_only)?,
+            TargetArg::Jvm => gen_one_jvm(&f, workspace, &kotlinc, &java, skotch_only)?,
+            TargetArg::Dex => gen_one_dex(&f, workspace, &kotlinc, &d8, skotch_only)?,
+            TargetArg::Klib => gen_one_klib(&f, workspace, &kotlinc_native, skotch_only)?,
+            TargetArg::Llvm => gen_one_llvm(&f, workspace, &kotlinc_native, &clang, skotch_only)?,
+            TargetArg::Native => gen_one_native(&f, workspace, &kotlinc_native, skotch_only)?,
         }
     }
     Ok(())
@@ -250,26 +250,26 @@ fn gen_one_jvm(
     workspace: &Path,
     kotlinc: &Option<PathBuf>,
     java: &Option<PathBuf>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let expected = workspace
         .join("tests/fixtures/expected/jvm")
         .join(&f.dir_name);
     std::fs::create_dir_all(&expected).ok();
 
-    // 1) skot's own outputs (skot.class + skot.norm.txt).
-    println!("[skot]   {}", f.dir_name);
-    let skot_class = expected.join("skot.class");
-    let skot_norm = expected.join("skot.norm.txt");
+    // 1) skotch's own outputs (skotch.class + skotch.norm.txt).
+    println!("[skotch]   {}", f.dir_name);
+    let skotch_class = expected.join("skotch.class");
+    let skotch_norm = expected.join("skotch.norm.txt");
     emit(&EmitOptions {
         input: f.input.clone(),
-        output: skot_class.clone(),
-        target: SkotTarget::Jvm,
-        norm_out: Some(skot_norm.clone()),
+        output: skotch_class.clone(),
+        target: SkotchTarget::Jvm,
+        norm_out: Some(skotch_norm.clone()),
     })
-    .with_context(|| format!("skot emit on {}", f.dir_name))?;
+    .with_context(|| format!("skotch emit on {}", f.dir_name))?;
 
-    if skot_only {
+    if skotch_only {
         return Ok(());
     }
 
@@ -300,7 +300,7 @@ fn gen_one_jvm(
             if let Some(cp) = class_path {
                 let bytes = std::fs::read(&cp)?;
                 std::fs::write(expected.join("kotlinc.class"), &bytes)?;
-                let normalized = skot_classfile_norm::normalize_default(&bytes)
+                let normalized = skotch_classfile_norm::normalize_default(&bytes)
                     .map_err(|e| anyhow!("normalizing kotlinc output: {e}"))?;
                 std::fs::write(expected.join("kotlinc.norm.txt"), normalized.as_text())?;
 
@@ -312,7 +312,7 @@ fn gen_one_jvm(
                     // `kotlin/jvm/internal/Intrinsics` for null checks
                     // on parameters, so we add `kotlin-stdlib.jar`
                     // (next to the kotlinc binary) to the classpath
-                    // when running the reference. The skot binary
+                    // when running the reference. The skotch binary
                     // never does this — only this xtask does, and
                     // only when capturing reference run.stdout.
                     let mut cp_arg = class_dir.as_os_str().to_os_string();
@@ -344,36 +344,36 @@ fn gen_one_jvm(
 
 /// Generate one fixture's `--target dex` outputs:
 ///
-/// 1. Run `skot emit --target dex` to produce `skot.dex` + `skot.norm.txt`.
+/// 1. Run `skotch emit --target dex` to produce `skotch.dex` + `skotch.norm.txt`.
 /// 2. If `kotlinc` is available, run it on the input to produce a
 ///    `.class`, then run `d8` on that `.class` to produce a reference
 ///    `d8.dex` + `d8.norm.txt`. The d8 reference is committed alongside
-///    skot's so test failures can show both.
+///    skotch's so test failures can show both.
 fn gen_one_dex(
     f: &Fixture,
     workspace: &Path,
     kotlinc: &Option<PathBuf>,
     d8: &Option<PathBuf>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let expected = workspace
         .join("tests/fixtures/expected/dex")
         .join(&f.dir_name);
     std::fs::create_dir_all(&expected).ok();
 
-    // 1) skot's outputs.
-    println!("[skot]   {}", f.dir_name);
-    let skot_dex = expected.join("skot.dex");
-    let skot_norm = expected.join("skot.norm.txt");
+    // 1) skotch's outputs.
+    println!("[skotch]   {}", f.dir_name);
+    let skotch_dex = expected.join("skotch.dex");
+    let skotch_norm = expected.join("skotch.norm.txt");
     emit(&EmitOptions {
         input: f.input.clone(),
-        output: skot_dex.clone(),
-        target: SkotTarget::Dex,
-        norm_out: Some(skot_norm.clone()),
+        output: skotch_dex.clone(),
+        target: SkotchTarget::Dex,
+        norm_out: Some(skotch_norm.clone()),
     })
-    .with_context(|| format!("skot emit --target dex on {}", f.dir_name))?;
+    .with_context(|| format!("skotch emit --target dex on {}", f.dir_name))?;
 
-    if skot_only {
+    if skotch_only {
         return Ok(());
     }
 
@@ -436,7 +436,7 @@ fn gen_one_dex(
     }
     let bytes = std::fs::read(&d8_classes_dex)?;
     std::fs::write(expected.join("d8.dex"), &bytes)?;
-    let normalized = skot_dex_norm::normalize_default(&bytes)
+    let normalized = skotch_dex_norm::normalize_default(&bytes)
         .map_err(|e| anyhow!("normalizing d8 output: {e}"))?;
     std::fs::write(expected.join("d8.norm.txt"), &normalized)?;
     Ok(())
@@ -444,7 +444,7 @@ fn gen_one_dex(
 
 /// Generate one fixture's `--target klib` outputs:
 ///
-/// 1. `skot emit --target klib` → `expected/klib/<f>/skot.klib` and
+/// 1. `skotch emit --target klib` → `expected/klib/<f>/skotch.klib` and
 ///    its normalized text form (manifest + MIR JSON).
 /// 2. If `kotlinc-native` is available, run it with `-p library` to
 ///    produce a reference `kotlinc-native.klib`. We do **not**
@@ -456,25 +456,25 @@ fn gen_one_klib(
     f: &Fixture,
     workspace: &Path,
     kotlinc_native: &Option<PathBuf>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let expected = workspace
         .join("tests/fixtures/expected/klib")
         .join(&f.dir_name);
     std::fs::create_dir_all(&expected).ok();
 
-    println!("[skot]   {}", f.dir_name);
-    let skot_klib = expected.join("skot.klib");
-    let skot_norm = expected.join("skot.norm.txt");
+    println!("[skotch]   {}", f.dir_name);
+    let skotch_klib = expected.join("skotch.klib");
+    let skotch_norm = expected.join("skotch.norm.txt");
     emit(&EmitOptions {
         input: f.input.clone(),
-        output: skot_klib.clone(),
-        target: SkotTarget::Klib,
-        norm_out: Some(skot_norm),
+        output: skotch_klib.clone(),
+        target: SkotchTarget::Klib,
+        norm_out: Some(skotch_norm),
     })
-    .with_context(|| format!("skot emit --target klib on {}", f.dir_name))?;
+    .with_context(|| format!("skotch emit --target klib on {}", f.dir_name))?;
 
-    if skot_only {
+    if skotch_only {
         return Ok(());
     }
     let Some(kn) = kotlinc_native else {
@@ -511,8 +511,8 @@ fn gen_one_klib(
 
 /// Generate one fixture's `--target llvm` outputs:
 ///
-/// 1. `skot emit --target llvm` → `expected/llvm/<f>/skot.ll` and
-///    `skot.norm.txt`.
+/// 1. `skotch emit --target llvm` → `expected/llvm/<f>/skotch.ll` and
+///    `skotch.norm.txt`.
 /// 2. If `kotlinc-native` and `clang` are both available, run
 ///    kotlinc-native with `-p program` and `-Xtemporary-files-dir` to
 ///    capture the intermediate `out.bc`, then run `clang -S -emit-llvm`
@@ -525,25 +525,25 @@ fn gen_one_llvm(
     workspace: &Path,
     kotlinc_native: &Option<PathBuf>,
     clang: &Option<PathBuf>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let expected = workspace
         .join("tests/fixtures/expected/llvm")
         .join(&f.dir_name);
     std::fs::create_dir_all(&expected).ok();
 
-    println!("[skot]   {}", f.dir_name);
-    let skot_ll = expected.join("skot.ll");
-    let skot_norm = expected.join("skot.norm.txt");
+    println!("[skotch]   {}", f.dir_name);
+    let skotch_ll = expected.join("skotch.ll");
+    let skotch_norm = expected.join("skotch.norm.txt");
     emit(&EmitOptions {
         input: f.input.clone(),
-        output: skot_ll.clone(),
-        target: SkotTarget::Llvm,
-        norm_out: Some(skot_norm),
+        output: skotch_ll.clone(),
+        target: SkotchTarget::Llvm,
+        norm_out: Some(skotch_norm),
     })
-    .with_context(|| format!("skot emit --target llvm on {}", f.dir_name))?;
+    .with_context(|| format!("skotch emit --target llvm on {}", f.dir_name))?;
 
-    if skot_only {
+    if skotch_only {
         return Ok(());
     }
     let (Some(kn), Some(clang_bin)) = (kotlinc_native, clang) else {
@@ -644,9 +644,9 @@ fn summarize_kotlinc_native_ll(text: &str, fixture_name: &str) -> String {
 
 /// Generate one fixture's `--target native` outputs:
 ///
-/// 1. `skot emit --target native` → `expected/native/<f>/skot` (the
-///    binary) and `expected/native/<f>/skot.ll` (the IR that fed it).
-/// 2. Run skot's binary and capture stdout into
+/// 1. `skotch emit --target native` → `expected/native/<f>/skotch` (the
+///    binary) and `expected/native/<f>/skotch.ll` (the IR that fed it).
+/// 2. Run skotch's binary and capture stdout into
 ///    `expected/native/<f>/run.stdout`. This is what the
 ///    behavioral test diffs against.
 /// 3. If `kotlinc-native` is available, run it with `-p program` to
@@ -656,31 +656,31 @@ fn gen_one_native(
     f: &Fixture,
     workspace: &Path,
     kotlinc_native: &Option<PathBuf>,
-    skot_only: bool,
+    skotch_only: bool,
 ) -> Result<()> {
     let expected = workspace
         .join("tests/fixtures/expected/native")
         .join(&f.dir_name);
     std::fs::create_dir_all(&expected).ok();
 
-    println!("[skot]   {}", f.dir_name);
-    let skot_bin = expected.join("skot");
+    println!("[skotch]   {}", f.dir_name);
+    let skotch_bin = expected.join("skotch");
     emit(&EmitOptions {
         input: f.input.clone(),
-        output: skot_bin.clone(),
-        target: SkotTarget::Native,
+        output: skotch_bin.clone(),
+        target: SkotchTarget::Native,
         norm_out: None,
     })
-    .with_context(|| format!("skot emit --target native on {}", f.dir_name))?;
+    .with_context(|| format!("skotch emit --target native on {}", f.dir_name))?;
 
-    let out = Command::new(&skot_bin)
+    let out = Command::new(&skotch_bin)
         .output()
-        .with_context(|| format!("running skot binary {}", skot_bin.display()))?;
+        .with_context(|| format!("running skotch binary {}", skotch_bin.display()))?;
     if out.status.success() {
         std::fs::write(expected.join("run.stdout"), &out.stdout)?;
     }
 
-    if skot_only {
+    if skotch_only {
         return Ok(());
     }
     let Some(kn) = kotlinc_native else {
@@ -729,7 +729,7 @@ fn verify(workspace: &Path, target: TargetArg) -> Result<()> {
             bail!("--target native verifies via behavioral run, not byte equality")
         }
     };
-    let skot_target = SkotTarget::from(target);
+    let skotch_target = SkotchTarget::from(target);
     let inputs = workspace.join("tests/fixtures/inputs");
     let fixtures = list_supported_fixtures(&inputs)?;
     let mut bad = 0;
@@ -738,19 +738,19 @@ fn verify(workspace: &Path, target: TargetArg) -> Result<()> {
             .join("tests/fixtures/expected")
             .join(subdir)
             .join(&f.dir_name);
-        let golden = expected_dir.join(format!("skot.{ext}"));
+        let golden = expected_dir.join(format!("skotch.{ext}"));
         if !golden.exists() {
             eprintln!("MISSING: {}", f.dir_name);
             bad += 1;
             continue;
         }
-        // Re-run skot, write to a temp path, byte-compare.
+        // Re-run skotch, write to a temp path, byte-compare.
         let tmp_dir = tempdir(&f.dir_name)?;
         let out = tmp_dir.join(format!("out.{ext}"));
         emit(&EmitOptions {
             input: f.input.clone(),
             output: out.clone(),
-            target: skot_target,
+            target: skotch_target,
             norm_out: None,
         })?;
         let new_bytes = std::fs::read(&out)?;
@@ -790,7 +790,7 @@ fn locate_kotlin_stdlib(kotlinc: &Path) -> Option<PathBuf> {
 
 fn tempdir(label: &str) -> Result<PathBuf> {
     let mut path = std::env::temp_dir();
-    path.push(format!("skot-xtask-{}-{}", label, std::process::id()));
+    path.push(format!("skotch-xtask-{}-{}", label, std::process::id()));
     std::fs::create_dir_all(&path)?;
     Ok(path)
 }

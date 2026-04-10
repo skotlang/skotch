@@ -1,0 +1,10 @@
+[package]
+name        = "skotch-backend-wasm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "WebAssembly emitter for skotch — STUB, see PR #9"
+
+[dependencies]
+skotch-mir   = { workspace = true }
+skotch-types = { workspace = true }

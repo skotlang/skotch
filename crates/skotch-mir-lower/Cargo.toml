@@ -1,0 +1,21 @@
+[package]
+name        = "skotch-mir-lower"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "AST + ResolvedFile + TypedFile → MIR lowering for skotch"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-types       = { workspace = true }
+skotch-resolve     = { workspace = true }
+skotch-typeck      = { workspace = true }
+skotch-mir         = { workspace = true }
+skotch-diagnostics = { workspace = true }
+rustc-hash       = { workspace = true }
+
+[dev-dependencies]
+skotch-lexer  = { workspace = true }
+skotch-parser = { workspace = true }

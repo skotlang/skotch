@@ -46,7 +46,7 @@ jobs:
 
   # ─── Build + test matrix ─────────────────────────────────────────────
   # The interesting one. Builds the full workspace and runs every test
-  # on Linux, macOS (arm64), and Windows. The skot front-end and all
+  # on Linux, macOS (arm64), and Windows. The skotch front-end and all
   # backends are pure Rust with no host dependencies, so the matrix
   # should be uniformly green.
   test:
@@ -64,7 +64,7 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: cargo test
         run: cargo test --workspace
-      - name: skot emit smoke test
+      - name: skotch emit smoke test
         # End-to-end smoke: emit a hello-world for every backend that
         # doesn't need an external toolchain. The native target is
         # gated on `clang` being on PATH, which all three runners have.
@@ -73,17 +73,17 @@ jobs:
           set -euo pipefail
           INPUT=tests/fixtures/inputs/02-println-string-literal/input.kt
           mkdir -p smoke
-          cargo run --quiet -p skot-cli -- emit --target jvm "$INPUT" -o smoke/InputKt.class
-          cargo run --quiet -p skot-cli -- emit --target dex "$INPUT" -o smoke/classes.dex
-          cargo run --quiet -p skot-cli -- emit --target klib "$INPUT" -o smoke/hello.klib
-          cargo run --quiet -p skot-cli -- emit --target llvm "$INPUT" -o smoke/hello.ll
+          cargo run --quiet -p skotch-cli -- emit --target jvm "$INPUT" -o smoke/InputKt.class
+          cargo run --quiet -p skotch-cli -- emit --target dex "$INPUT" -o smoke/classes.dex
+          cargo run --quiet -p skotch-cli -- emit --target klib "$INPUT" -o smoke/hello.klib
+          cargo run --quiet -p skotch-cli -- emit --target llvm "$INPUT" -o smoke/hello.ll
           test -s smoke/InputKt.class
           test -s smoke/classes.dex
           test -s smoke/hello.klib
           test -s smoke/hello.ll
 
   # ─── Release-mode test ───────────────────────────────────────────────
-  # The shipping `skot` binary is built in release mode, and the
+  # The shipping `skotch` binary is built in release mode, and the
   # `tests/no_external_compiler.rs` test only meaningfully greps a
   # release binary (debug builds are full of panic strings that may
   # contain forbidden substrings). Run that test specifically against

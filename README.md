@@ -1,4 +1,4 @@
-# skot
+# skotch
 
 A from-scratch Rust toolchain that replaces the Kotlin compiler, Gradle, and
 Android SDK build tools with a single fast, parallel CLI. Compiles **Kotlin 2**
@@ -13,7 +13,7 @@ sources to four target formats:
 | **Native** | host executable | MIR → klib → LLVM IR → clang |
 
 …with **no dependency** on `kotlinc`, `kotlinc-native`, `javac`, `d8`, `dx`,
-`gradle`, `aapt2`, or `apksigner`. The shipping `skot` binary depends only
+`gradle`, `aapt2`, or `apksigner`. The shipping `skotch` binary depends only
 on `clang` for the native target's link step (and that's the only external
 toolchain it ever invokes).
 
@@ -21,12 +21,12 @@ toolchain it ever invokes).
 
 1. **Replace the entire Kotlin build toolchain with one fast Rust binary.**
    No JVM warm-up tax for `kotlinc`. No Gradle daemon. No 1+ GB Android SDK.
-   `skot emit hello.kt -o hello.class` should be instant.
+   `skotch emit hello.kt -o hello.class` should be instant.
 2. **Multi-target from a single front-end.** One lex/parse/typeck/MIR
    pipeline; pluggable backends for JVM, DEX, native, wasm. Adding a new
    target means writing one backend crate.
 3. **Validate every output against the real toolchains.** Every supported
-   fixture is built by skot *and* by the corresponding reference tool
+   fixture is built by skotch *and* by the corresponding reference tool
    (`kotlinc`, `d8`, `kotlinc-native`); their outputs are committed to git
    so CI never needs the JDK or Android SDK.
 4. **Strict parallelism.** Modules in parallel × files in parallel ×
@@ -35,8 +35,8 @@ toolchain it ever invokes).
    no crate knows about anything in a higher layer.
 
 > **Status:** PR #4 — JVM, DEX, klib, LLVM IR, and native targets all green.
-> Build orchestration (`skot build`), test runner (`skot test`), REPL
-> (`skot repl`), and Android APK packaging follow in subsequent PRs.
+> Build orchestration (`skotch build`), test runner (`skotch test`), REPL
+> (`skotch repl`), and Android APK packaging follow in subsequent PRs.
 
 ## Installation
 
@@ -46,7 +46,7 @@ From source:
 git clone https://github.com/<user>/skotlang.git
 cd skotlang
 cargo build --release
-# The binary lives at target/release/skot
+# The binary lives at target/release/skotch
 ```
 
 Pre-built binaries for Linux, macOS, and Windows are published with each
@@ -64,23 +64,23 @@ fun main() {
 EOF
 
 # JVM:
-skot emit --target jvm hello.kt -o HelloKt.class
+skotch emit --target jvm hello.kt -o HelloKt.class
 java -cp . HelloKt                     # → Hello, world!
 
 # DEX (drop into an APK; verify with Android dexdump):
-skot emit --target dex hello.kt -o classes.dex
+skotch emit --target dex hello.kt -o classes.dex
 dexdump -d classes.dex                 # disassembles cleanly
 
 # klib (the multi-stage pipeline waist):
-skot emit --target klib hello.kt -o hello.klib
+skotch emit --target klib hello.kt -o hello.klib
 unzip -l hello.klib                    # default/manifest, default/ir/, ...
 
 # LLVM IR (consumes the klib internally):
-skot emit --target llvm hello.kt -o hello.ll
+skotch emit --target llvm hello.kt -o hello.ll
 cat hello.ll                           # 13 lines of textual LLVM IR
 
 # Native binary (clang link step):
-skot emit --target native hello.kt -o hello
+skotch emit --target native hello.kt -o hello
 ./hello                                # → Hello, world!
 ```
 
@@ -88,19 +88,19 @@ skot emit --target native hello.kt -o hello
 
 | Command | What it does | Status |
 |---|---|---|
-| `skot emit --target T <input.kt> -o <out>` | Compile a single Kotlin file directly to target T. | **shipping** |
-| `skot build` | Discover `build.gradle.kts`, build the project. | stub (PR #5) |
-| `skot test` | Discover `@Test` annotations, run the tests. | stub (PR #6) |
-| `skot repl` | Interactive REPL backed by the JVM target. | stub (PR #7) |
+| `skotch emit --target T <input.kt> -o <out>` | Compile a single Kotlin file directly to target T. | **shipping** |
+| `skotch build` | Discover `build.gradle.kts`, build the project. | stub (PR #5) |
+| `skotch test` | Discover `@Test` annotations, run the tests. | stub (PR #6) |
+| `skotch repl` | Interactive REPL backed by the JVM target. | stub (PR #7) |
 
-`skot emit` is the testing surface: it bypasses build orchestration so
+`skotch emit` is the testing surface: it bypasses build orchestration so
 the lexer/parser/typeck/MIR/backend pipeline can be exercised directly
 on a single source file. Build orchestration follows once the format
 emitters are stable.
 
 ## Architectural rules
 
-1. **The shipping `skot` binary never invokes `kotlinc`, `kotlinc-native`,
+1. **The shipping `skotch` binary never invokes `kotlinc`, `kotlinc-native`,
    `javac`, `d8`, or `dx`.** Reference outputs for the validation tests are
    produced by `cargo xtask gen-fixtures` (which *does* shell out to those
    tools) and committed to git, so CI needs no JDK or Android SDK. A
@@ -119,41 +119,41 @@ emitters are stable.
 
 ## Fixture-driven validation
 
-Tests under `tests/fixtures/inputs/<name>/input.kt` are compiled by skot
+Tests under `tests/fixtures/inputs/<name>/input.kt` are compiled by skotch
 *and* by the corresponding reference tool. Both outputs are committed to
 `tests/fixtures/expected/<target>/<name>/`:
 
 ```
 tests/fixtures/expected/
     jvm/<f>/
-        skot.class               # skot's bytes
-        skot.norm.txt            # normalized text
+        skotch.class               # skotch's bytes
+        skotch.norm.txt            # normalized text
         kotlinc.class            # reference from kotlinc
         kotlinc.norm.txt
         run.stdout               # expected program output
     dex/<f>/
-        skot.dex
-        skot.norm.txt
+        skotch.dex
+        skotch.norm.txt
         d8.dex                   # reference from kotlinc → d8
         d8.norm.txt
     klib/<f>/
-        skot.klib
-        skot.norm.txt
+        skotch.klib
+        skotch.norm.txt
         kotlinc-native.klib      # reference from kotlinc-native
     llvm/<f>/
-        skot.ll
-        skot.norm.txt
+        skotch.ll
+        skotch.norm.txt
         kotlinc-native.summary.txt   # tiny extract from kotlinc-native's IR
     native/<f>/
-        run.stdout               # skot binary's stdout
+        run.stdout               # skotch binary's stdout
         kotlinc-native.run.stdout    # cross-compiler agreement check
 ```
 
-The "normalized" text forms (produced by `skot-classfile-norm`,
-`skot-dex-norm`, `skot-llvm-norm`) strip cosmetic differences (constant
+The "normalized" text forms (produced by `skotch-classfile-norm`,
+`skotch-dex-norm`, `skotch-llvm-norm`) strip cosmetic differences (constant
 pool ordering, debug attributes, kotlin metadata, target triples) so
 two compilers can be diffed without false positives. Byte-exact "self
-golden" tests still catch regressions in skot's own emitter.
+golden" tests still catch regressions in skotch's own emitter.
 
 ## Running the tests
 
@@ -164,7 +164,7 @@ cargo test --workspace
 # Lint check (treat warnings as errors).
 cargo clippy --workspace -- -D warnings
 
-# Verify skot's output against committed goldens for one target.
+# Verify skotch's output against committed goldens for one target.
 cargo xtask verify --target jvm
 cargo xtask verify --target dex
 cargo xtask verify --target klib
@@ -193,8 +193,8 @@ cargo xtask gen-fixtures --target llvm
 # Native binaries + run.stdout (needs kotlinc-native + clang):
 cargo xtask gen-fixtures --target native
 
-# Skip reference tools, regenerate just skot's own goldens:
-cargo xtask gen-fixtures --target jvm --skot-only
+# Skip reference tools, regenerate just skotch's own goldens:
+cargo xtask gen-fixtures --target jvm --skotch-only
 ```
 
 xtask auto-locates `d8` under `~/Library/Android/sdk/build-tools/<version>/`
@@ -216,7 +216,7 @@ Layer 4 — backends:      backend-jvm, backend-dex, backend-llvm,
                          backend-klib, backend-wasm
 Layer 5 — normalizers:   classfile-norm, dex-norm, llvm-norm
 Layer 6 — orchestration: driver
-Layer 7 — CLI:           cli (binary `skot`)
+Layer 7 — CLI:           cli (binary `skotch`)
 
 xtask                    fixture-generation helper (only crate
                          allowed to invoke external compilers)

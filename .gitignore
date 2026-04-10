@@ -22,8 +22,8 @@ desktop.ini
 # We commit `run.stdout` (the expected program output) but NOT the
 # platform-specific binaries themselves, which would bloat the repo
 # and only run on the OS+architecture they were built for.
-tests/fixtures/expected/native/*/skot
-tests/fixtures/expected/native/*/skot.ll
+tests/fixtures/expected/native/*/skotch
+tests/fixtures/expected/native/*/skotch.ll
 
 # ─── Per-fixture generated `build/` directories ──────────────────────────
 # Multi-module Gradle projects under examples/ produce these.

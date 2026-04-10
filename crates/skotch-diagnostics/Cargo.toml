@@ -1,0 +1,11 @@
+[package]
+name        = "skotch-diagnostics"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Diagnostic types and ariadne renderer wrapper for skotch"
+
+[dependencies]
+skotch-span = { workspace = true }
+ariadne   = { workspace = true }
+thiserror = { workspace = true }

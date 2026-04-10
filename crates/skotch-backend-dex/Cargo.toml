@@ -1,0 +1,25 @@
+[package]
+name        = "skotch-backend-dex"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "DEX (.dex v035) emitter for skotch"
+
+[dependencies]
+skotch-mir   = { workspace = true }
+skotch-types = { workspace = true }
+byteorder  = { workspace = true }
+rustc-hash = { workspace = true }
+adler      = { workspace = true }
+sha1_smol  = { workspace = true }
+
+[dev-dependencies]
+skotch-intern    = { workspace = true }
+skotch-lexer     = { workspace = true }
+skotch-parser    = { workspace = true }
+skotch-resolve   = { workspace = true }
+skotch-typeck    = { workspace = true }
+skotch-mir-lower = { workspace = true }
+skotch-syntax    = { workspace = true }
+skotch-span      = { workspace = true }
+skotch-diagnostics = { workspace = true }

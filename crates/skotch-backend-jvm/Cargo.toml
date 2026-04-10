@@ -1,0 +1,24 @@
+[package]
+name        = "skotch-backend-jvm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "JVM .class file emitter (target: Java 17 / class file v61)"
+
+[dependencies]
+skotch-mir         = { workspace = true }
+skotch-types       = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-config      = { workspace = true }
+skotch-diagnostics = { workspace = true }
+byteorder        = { workspace = true }
+rustc-hash       = { workspace = true }
+
+[dev-dependencies]
+skotch-lexer     = { workspace = true }
+skotch-parser    = { workspace = true }
+skotch-resolve   = { workspace = true }
+skotch-typeck    = { workspace = true }
+skotch-mir-lower = { workspace = true }
+skotch-span      = { workspace = true }
+skotch-syntax    = { workspace = true }

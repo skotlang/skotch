@@ -1,0 +1,19 @@
+[package]
+name        = "skotch-typeck"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Type checker for the Kotlin subset skotch accepts"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-types       = { workspace = true }
+skotch-resolve     = { workspace = true }
+skotch-diagnostics = { workspace = true }
+rustc-hash       = { workspace = true }
+
+[dev-dependencies]
+skotch-lexer  = { workspace = true }
+skotch-parser = { workspace = true }

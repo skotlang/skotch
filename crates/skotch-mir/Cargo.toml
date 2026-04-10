@@ -1,0 +1,11 @@
+[package]
+name        = "skotch-mir"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Backend-neutral mid-level IR for skotch"
+
+[dependencies]
+skotch-span  = { workspace = true }
+skotch-types = { workspace = true }
+serde      = { workspace = true }

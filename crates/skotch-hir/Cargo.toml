@@ -1,0 +1,10 @@
+[package]
+name        = "skotch-hir"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Sugar-free typed IR for skotch (placeholder for PR #1)"
+
+[dependencies]
+skotch-types  = { workspace = true }
+skotch-intern = { workspace = true }

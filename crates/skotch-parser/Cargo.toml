@@ -1,0 +1,13 @@
+[package]
+name        = "skotch-parser"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Recursive-descent parser for the Kotlin 2 subset that skotch accepts"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-diagnostics = { workspace = true }

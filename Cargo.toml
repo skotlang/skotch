@@ -2,41 +2,41 @@
 resolver = "2"
 members = [
     # Layer 0 — primitives
-    "crates/skot-span",
-    "crates/skot-intern",
-    "crates/skot-config",
-    "crates/skot-diagnostics",
+    "crates/skotch-span",
+    "crates/skotch-intern",
+    "crates/skotch-config",
+    "crates/skotch-diagnostics",
 
     # Layer 1 — front-end
-    "crates/skot-syntax",
-    "crates/skot-lexer",
-    "crates/skot-parser",
+    "crates/skotch-syntax",
+    "crates/skotch-lexer",
+    "crates/skotch-parser",
 
     # Layer 2 — semantic analysis
-    "crates/skot-resolve",
-    "crates/skot-types",
-    "crates/skot-typeck",
+    "crates/skotch-resolve",
+    "crates/skotch-types",
+    "crates/skotch-typeck",
 
     # Layer 3 — IRs
-    "crates/skot-hir",
-    "crates/skot-mir",
-    "crates/skot-mir-lower",
+    "crates/skotch-hir",
+    "crates/skotch-mir",
+    "crates/skotch-mir-lower",
 
     # Layer 4 — backends
-    "crates/skot-backend-jvm",
-    "crates/skot-backend-dex",
-    "crates/skot-backend-llvm",
-    "crates/skot-backend-wasm",
-    "crates/skot-backend-klib",
+    "crates/skotch-backend-jvm",
+    "crates/skotch-backend-dex",
+    "crates/skotch-backend-llvm",
+    "crates/skotch-backend-wasm",
+    "crates/skotch-backend-klib",
 
     # Layer 5 — normalizers (centerpiece of the validation system)
-    "crates/skot-classfile-norm",
-    "crates/skot-dex-norm",
-    "crates/skot-llvm-norm",
+    "crates/skotch-classfile-norm",
+    "crates/skotch-dex-norm",
+    "crates/skotch-llvm-norm",
 
     # Layer 7 — driver + CLI
-    "crates/skot-driver",
-    "crates/skot-cli",
+    "crates/skotch-driver",
+    "crates/skotch-cli",
 
     # Fixture generation tooling (cargo-xtask pattern)
     "xtask",
@@ -47,7 +47,7 @@ edition      = "2021"
 rust-version = "1.75"
 license      = "Apache-2.0"
 version      = "0.1.0"
-repository   = "https://github.com/skotlang/skot"
+repository   = "https://github.com/skotlang/skotch"
 
 [workspace.dependencies]
 # foundational
@@ -86,28 +86,28 @@ which        = "7"
 walkdir      = "2"
 
 # internal aliases
-skot-span            = { path = "crates/skot-span" }
-skot-intern          = { path = "crates/skot-intern" }
-skot-config          = { path = "crates/skot-config" }
-skot-diagnostics     = { path = "crates/skot-diagnostics" }
-skot-syntax          = { path = "crates/skot-syntax" }
-skot-lexer           = { path = "crates/skot-lexer" }
-skot-parser          = { path = "crates/skot-parser" }
-skot-resolve         = { path = "crates/skot-resolve" }
-skot-types           = { path = "crates/skot-types" }
-skot-typeck          = { path = "crates/skot-typeck" }
-skot-hir             = { path = "crates/skot-hir" }
-skot-mir             = { path = "crates/skot-mir" }
-skot-mir-lower       = { path = "crates/skot-mir-lower" }
-skot-backend-jvm     = { path = "crates/skot-backend-jvm" }
-skot-backend-dex     = { path = "crates/skot-backend-dex" }
-skot-backend-llvm    = { path = "crates/skot-backend-llvm" }
-skot-backend-wasm    = { path = "crates/skot-backend-wasm" }
-skot-backend-klib    = { path = "crates/skot-backend-klib" }
-skot-classfile-norm  = { path = "crates/skot-classfile-norm" }
-skot-dex-norm        = { path = "crates/skot-dex-norm" }
-skot-llvm-norm       = { path = "crates/skot-llvm-norm" }
-skot-driver          = { path = "crates/skot-driver" }
+skotch-span            = { path = "crates/skotch-span" }
+skotch-intern          = { path = "crates/skotch-intern" }
+skotch-config          = { path = "crates/skotch-config" }
+skotch-diagnostics     = { path = "crates/skotch-diagnostics" }
+skotch-syntax          = { path = "crates/skotch-syntax" }
+skotch-lexer           = { path = "crates/skotch-lexer" }
+skotch-parser          = { path = "crates/skotch-parser" }
+skotch-resolve         = { path = "crates/skotch-resolve" }
+skotch-types           = { path = "crates/skotch-types" }
+skotch-typeck          = { path = "crates/skotch-typeck" }
+skotch-hir             = { path = "crates/skotch-hir" }
+skotch-mir             = { path = "crates/skotch-mir" }
+skotch-mir-lower       = { path = "crates/skotch-mir-lower" }
+skotch-backend-jvm     = { path = "crates/skotch-backend-jvm" }
+skotch-backend-dex     = { path = "crates/skotch-backend-dex" }
+skotch-backend-llvm    = { path = "crates/skotch-backend-llvm" }
+skotch-backend-wasm    = { path = "crates/skotch-backend-wasm" }
+skotch-backend-klib    = { path = "crates/skotch-backend-klib" }
+skotch-classfile-norm  = { path = "crates/skotch-classfile-norm" }
+skotch-dex-norm        = { path = "crates/skotch-dex-norm" }
+skotch-llvm-norm       = { path = "crates/skotch-llvm-norm" }
+skotch-driver          = { path = "crates/skotch-driver" }
 
 [profile.dev]
 debug            = "line-tables-only"

@@ -1,0 +1,36 @@
+[package]
+name        = "skotch-driver"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Library entry points for skotch's CLI subcommands"
+
+[dependencies]
+skotch-span           = { workspace = true }
+skotch-intern         = { workspace = true }
+skotch-syntax         = { workspace = true }
+skotch-lexer          = { workspace = true }
+skotch-parser         = { workspace = true }
+skotch-resolve        = { workspace = true }
+skotch-typeck         = { workspace = true }
+skotch-mir            = { workspace = true }
+skotch-mir-lower      = { workspace = true }
+skotch-backend-jvm    = { workspace = true }
+skotch-backend-dex    = { workspace = true }
+skotch-backend-llvm   = { workspace = true }
+skotch-backend-klib   = { workspace = true }
+skotch-classfile-norm = { workspace = true }
+skotch-dex-norm       = { workspace = true }
+skotch-llvm-norm      = { workspace = true }
+skotch-diagnostics    = { workspace = true }
+anyhow              = { workspace = true }
+which               = { workspace = true }
+serde_json          = { workspace = true }
+
+[dev-dependencies]
+similar           = { workspace = true }
+which             = { workspace = true }
+skotch-dex-norm     = { workspace = true }
+skotch-llvm-norm    = { workspace = true }
+skotch-backend-klib = { workspace = true }
+skotch-backend-llvm = { workspace = true }

@@ -1,0 +1,25 @@
+[package]
+name        = "skotch-backend-klib"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "skotch Kotlin Library (.klib) writer and reader — the multi-stage pipeline waist between MIR and the LLVM backend"
+
+[dependencies]
+skotch-mir   = { workspace = true }
+skotch-types = { workspace = true }
+zip        = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+anyhow     = { workspace = true }
+
+[dev-dependencies]
+skotch-intern    = { workspace = true }
+skotch-lexer     = { workspace = true }
+skotch-parser    = { workspace = true }
+skotch-resolve   = { workspace = true }
+skotch-typeck    = { workspace = true }
+skotch-mir-lower = { workspace = true }
+skotch-syntax    = { workspace = true }
+skotch-span      = { workspace = true }
+skotch-diagnostics = { workspace = true }

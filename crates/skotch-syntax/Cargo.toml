@@ -1,0 +1,10 @@
+[package]
+name        = "skotch-syntax"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Token kinds and AST node types for skotch"
+
+[dependencies]
+skotch-span   = { workspace = true }
+skotch-intern = { workspace = true }

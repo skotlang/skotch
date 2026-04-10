@@ -459,272 +459,272 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
-name = "skot-backend-dex"
+name = "skotch-backend-dex"
 version = "0.1.0"
 dependencies = [
  "adler",
  "byteorder",
  "rustc-hash",
  "sha1_smol",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-mir",
- "skot-mir-lower",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
- "skot-types",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-mir",
+ "skotch-mir-lower",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-backend-jvm"
+name = "skotch-backend-jvm"
 version = "0.1.0"
 dependencies = [
  "byteorder",
  "rustc-hash",
- "skot-config",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-mir",
- "skot-mir-lower",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
- "skot-types",
+ "skotch-config",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-mir",
+ "skotch-mir-lower",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-backend-klib"
+name = "skotch-backend-klib"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-mir",
- "skot-mir-lower",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
- "skot-types",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-mir",
+ "skotch-mir-lower",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
+ "skotch-types",
  "zip",
 ]
 
 [[package]]
-name = "skot-backend-llvm"
+name = "skotch-backend-llvm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "skot-backend-klib",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-mir",
- "skot-mir-lower",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
- "skot-types",
+ "skotch-backend-klib",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-mir",
+ "skotch-mir-lower",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-backend-wasm"
+name = "skotch-backend-wasm"
 version = "0.1.0"
 dependencies = [
- "skot-mir",
- "skot-types",
+ "skotch-mir",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-classfile-norm"
+name = "skotch-classfile-norm"
 version = "0.1.0"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
-name = "skot-cli"
+name = "skotch-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "skot-driver",
+ "skotch-driver",
 ]
 
 [[package]]
-name = "skot-config"
+name = "skotch-config"
 version = "0.1.0"
 
 [[package]]
-name = "skot-dex-norm"
+name = "skotch-dex-norm"
 version = "0.1.0"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
-name = "skot-diagnostics"
+name = "skotch-diagnostics"
 version = "0.1.0"
 dependencies = [
  "ariadne",
- "skot-span",
+ "skotch-span",
  "thiserror",
 ]
 
 [[package]]
-name = "skot-driver"
+name = "skotch-driver"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde_json",
  "similar",
- "skot-backend-dex",
- "skot-backend-jvm",
- "skot-backend-klib",
- "skot-backend-llvm",
- "skot-classfile-norm",
- "skot-dex-norm",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-llvm-norm",
- "skot-mir",
- "skot-mir-lower",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
+ "skotch-backend-dex",
+ "skotch-backend-jvm",
+ "skotch-backend-klib",
+ "skotch-backend-llvm",
+ "skotch-classfile-norm",
+ "skotch-dex-norm",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-llvm-norm",
+ "skotch-mir",
+ "skotch-mir-lower",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
  "which",
 ]
 
 [[package]]
-name = "skot-hir"
+name = "skotch-hir"
 version = "0.1.0"
 dependencies = [
- "skot-intern",
- "skot-types",
+ "skotch-intern",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-intern"
+name = "skotch-intern"
 version = "0.1.0"
 dependencies = [
  "lasso",
 ]
 
 [[package]]
-name = "skot-lexer"
+name = "skotch-lexer"
 version = "0.1.0"
 dependencies = [
- "skot-diagnostics",
- "skot-intern",
- "skot-span",
- "skot-syntax",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-span",
+ "skotch-syntax",
 ]
 
 [[package]]
-name = "skot-llvm-norm"
+name = "skotch-llvm-norm"
 version = "0.1.0"
 
 [[package]]
-name = "skot-mir"
+name = "skotch-mir"
 version = "0.1.0"
 dependencies = [
  "serde",
- "skot-span",
- "skot-types",
+ "skotch-span",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-mir-lower"
+name = "skotch-mir-lower"
 version = "0.1.0"
 dependencies = [
  "rustc-hash",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-mir",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-typeck",
- "skot-types",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-mir",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-typeck",
+ "skotch-types",
 ]
 
 [[package]]
-name = "skot-parser"
+name = "skotch-parser"
 version = "0.1.0"
 dependencies = [
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-span",
- "skot-syntax",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-span",
+ "skotch-syntax",
 ]
 
 [[package]]
-name = "skot-resolve"
-version = "0.1.0"
-dependencies = [
- "rustc-hash",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-parser",
- "skot-span",
- "skot-syntax",
-]
-
-[[package]]
-name = "skot-span"
+name = "skotch-resolve"
 version = "0.1.0"
 dependencies = [
  "rustc-hash",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-parser",
+ "skotch-span",
+ "skotch-syntax",
 ]
 
 [[package]]
-name = "skot-syntax"
-version = "0.1.0"
-dependencies = [
- "skot-intern",
- "skot-span",
-]
-
-[[package]]
-name = "skot-typeck"
+name = "skotch-span"
 version = "0.1.0"
 dependencies = [
  "rustc-hash",
- "skot-diagnostics",
- "skot-intern",
- "skot-lexer",
- "skot-parser",
- "skot-resolve",
- "skot-span",
- "skot-syntax",
- "skot-types",
 ]
 
 [[package]]
-name = "skot-types"
+name = "skotch-syntax"
+version = "0.1.0"
+dependencies = [
+ "skotch-intern",
+ "skotch-span",
+]
+
+[[package]]
+name = "skotch-typeck"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+ "skotch-diagnostics",
+ "skotch-intern",
+ "skotch-lexer",
+ "skotch-parser",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
+ "skotch-types",
+]
+
+[[package]]
+name = "skotch-types"
 version = "0.1.0"
 dependencies = [
  "serde",
- "skot-intern",
+ "skotch-intern",
 ]
 
 [[package]]
@@ -846,10 +846,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "skot-classfile-norm",
- "skot-dex-norm",
- "skot-driver",
- "skot-llvm-norm",
+ "skotch-classfile-norm",
+ "skotch-dex-norm",
+ "skotch-driver",
+ "skotch-llvm-norm",
  "walkdir",
  "which",
 ]

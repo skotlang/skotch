@@ -1,9 +1,0 @@
-[package]
-name        = "skot-span"
-version     = { workspace = true }
-edition     = { workspace = true }
-license     = { workspace = true }
-description = "Source spans, file ids, and source maps for skot"
-
-[dependencies]
-rustc-hash = { workspace = true }

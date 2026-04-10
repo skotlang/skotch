@@ -1,0 +1,23 @@
+[package]
+name        = "skotch-backend-llvm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "LLVM textual IR emitter for skotch, consuming a skotch .klib"
+
+[dependencies]
+skotch-mir          = { workspace = true }
+skotch-types        = { workspace = true }
+skotch-backend-klib = { workspace = true }
+anyhow            = { workspace = true }
+
+[dev-dependencies]
+skotch-intern    = { workspace = true }
+skotch-lexer     = { workspace = true }
+skotch-parser    = { workspace = true }
+skotch-resolve   = { workspace = true }
+skotch-typeck    = { workspace = true }
+skotch-mir-lower = { workspace = true }
+skotch-syntax    = { workspace = true }
+skotch-span      = { workspace = true }
+skotch-diagnostics = { workspace = true }

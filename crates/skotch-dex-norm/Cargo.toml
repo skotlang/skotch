@@ -1,0 +1,9 @@
+[package]
+name        = "skotch-dex-norm"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Normalize .dex files into a stable text form for diffing"
+
+[dependencies]
+byteorder = { workspace = true }
