@@ -149,8 +149,9 @@ fn llvm_self_consistent_with_committed_goldens() {
         })
         .unwrap_or_else(|e| panic!("emit failed for {name}: {e}"));
 
-        let new = std::fs::read_to_string(&out).unwrap();
-        let golden_text = std::fs::read_to_string(&golden).unwrap();
+        // Strip CR from both sides — see `strip_cr` below.
+        let new = strip_cr(&std::fs::read_to_string(&out).unwrap());
+        let golden_text = strip_cr(&std::fs::read_to_string(&golden).unwrap());
         if new != golden_text {
             failures.push(format!("{name}: skotch.ll drift"));
         }
@@ -174,8 +175,8 @@ fn skotch_llvm_norm_matches_committed_skotch_norm() {
             continue;
         }
         let text = std::fs::read_to_string(&golden_ll).unwrap();
-        let normalized = skotch_llvm_norm::normalize(&text);
-        let golden_norm_text = std::fs::read_to_string(&golden_norm).unwrap();
+        let normalized = strip_cr(&skotch_llvm_norm::normalize(&text));
+        let golden_norm_text = strip_cr(&std::fs::read_to_string(&golden_norm).unwrap());
         if normalized != golden_norm_text {
             failures.push(format!("{name}: llvm normalizer output drifted"));
         }
@@ -252,7 +253,7 @@ fn llvm_emission_routes_through_klib_pipeline() {
             norm_out: None,
         })
         .unwrap();
-        let a = std::fs::read_to_string(&a_path).unwrap();
+        let a = strip_cr(&std::fs::read_to_string(&a_path).unwrap());
 
         // Path B: read the committed skotch.klib + run compile_klib
         // directly. If the driver is honoring the multi-stage
@@ -262,10 +263,18 @@ fn llvm_emission_routes_through_klib_pipeline() {
             continue;
         }
         let klib_bytes = std::fs::read(&golden_klib).unwrap();
-        let b = skotch_backend_llvm::compile_klib(&klib_bytes).unwrap();
+        let b = strip_cr(&skotch_backend_llvm::compile_klib(&klib_bytes).unwrap());
         assert_eq!(
             a, b,
             "{name}: --target llvm output does not match compile_klib() of the committed klib"
         );
     }
+}
+
+/// Strip `\r` from a string. Defends against `core.autocrlf=true`
+/// checkouts on Windows that turn the committed LF text fixtures
+/// into CRLF on disk. The repository's `.gitattributes` is the
+/// structural fix; this helper is belt-and-suspenders.
+fn strip_cr(s: &str) -> String {
+    s.replace('\r', "")
 }

@@ -1,0 +1,41 @@
+# Stabilize line endings across platforms.
+#
+# Without this file, git's core.autocrlf default on Windows checks out text
+# files with CRLF endings, which breaks any test that compares an
+# in-memory `\n`-only string against a file read from disk. The skotch
+# fixture comparison tests have exactly that shape, so we pin every text
+# file in the workspace to LF and explicitly mark every binary fixture
+# format as binary so git never touches it.
+
+# ─── default: text files use LF on disk ──────────────────────────────────
+*               text=auto eol=lf
+
+# ─── source code and configuration ───────────────────────────────────────
+*.rs            text eol=lf
+*.toml          text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.txt           text eol=lf
+*.kt            text eol=lf
+*.kts           text eol=lf
+*.json          text eol=lf
+*.sh            text eol=lf
+
+# ─── normalized text fixtures (the ones the failing test reads) ──────────
+*.norm.txt      text eol=lf
+*.summary.txt   text eol=lf
+*.stdout        text eol=lf
+*.ll            text eol=lf
+
+# ─── binary fixture formats — never CRLF-convert ─────────────────────────
+*.class         binary
+*.dex           binary
+*.klib          binary
+*.jar           binary
+*.apk           binary
+*.bin           binary
+*.bc            binary
+*.png           binary
+*.jpg           binary
+*.ico           binary
