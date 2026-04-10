@@ -159,6 +159,14 @@ pub const DEFAULT_TARGET: &str = "macos_arm64";
 /// Serialize a [`MirModule`] into a `.klib` zip archive's bytes.
 pub fn write_klib(module: &MirModule, target: &str) -> Result<Vec<u8>> {
     let manifest = KlibManifest::for_module(module, target);
+    write_klib_with_manifest(module, &manifest)
+}
+
+/// Serialize a [`MirModule`] into a `.klib` using an explicit manifest.
+/// Useful for round-trip tests where you want to preserve the original
+/// manifest (including compiler_version) rather than re-deriving it.
+pub fn write_klib_with_manifest(module: &MirModule, manifest: &KlibManifest) -> Result<Vec<u8>> {
+    let target = &manifest.native_targets;
     let mir_json =
         serde_json::to_vec_pretty(module).with_context(|| "serializing MirModule to JSON")?;
 

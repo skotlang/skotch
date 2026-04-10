@@ -65,7 +65,7 @@ rustc-hash   = "2"
 lasso        = { version = "0.7", features = ["inline-more"] }
 
 # diagnostics
-ariadne      = "0.5"
+ariadne      = "0.6"
 thiserror    = "2"
 anyhow       = "1"
 
@@ -90,7 +90,7 @@ sha1_smol    = "1.0"
 # Native backend (PR #4): zip for klib packaging, serde + serde_json
 # for round-tripping MIR through the multi-stage Kotlin Native-style
 # pipeline (kt → MIR → klib → LLVM IR → clang → native).
-zip          = { version = "2", default-features = false, features = ["deflate"] }
+zip          = { version = "4", default-features = false, features = ["deflate"] }
 serde        = { version = "1", features = ["derive"] }
 serde_json   = "1"
 
@@ -98,9 +98,9 @@ serde_json   = "1"
 clap         = { version = "4", features = ["derive"] }
 
 # tests
-insta        = { version = "1.40", features = ["yaml"] }
+insta        = { version = "1.47", features = ["yaml"] }
 similar      = "2"
-which        = "7"
+which        = "8"
 
 # JVM embedding (JNI Invocation API)
 jni          = { version = "0.21", features = ["invocation"] }

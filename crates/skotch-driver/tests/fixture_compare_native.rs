@@ -61,6 +61,12 @@ fn llvm_dir(name: &str) -> PathBuf {
 
 #[test]
 fn klib_self_consistent_with_committed_goldens() {
+    // Compare the *semantic content* of klib archives rather than raw
+    // bytes. The klib manifest embeds `compiler_version` from
+    // Cargo.toml, so every version bump would invalidate committed
+    // goldens if we compared bytes. Instead we compare:
+    //   1. MIR JSON (the payload that actually matters)
+    //   2. Manifest fields minus compiler_version
     let mut failures: Vec<String> = Vec::new();
     for &name in SUPPORTED {
         let input = fixture_input(name);
@@ -86,11 +92,29 @@ fn klib_self_consistent_with_committed_goldens() {
 
         let new_bytes = std::fs::read(&out).unwrap();
         let golden_bytes = std::fs::read(&golden).unwrap();
-        if new_bytes != golden_bytes {
+
+        let (new_mir, new_manifest) = skotch_backend_klib::read_klib(&new_bytes)
+            .unwrap_or_else(|e| panic!("{name}: read new klib: {e}"));
+        let (golden_mir, golden_manifest) = skotch_backend_klib::read_klib(&golden_bytes)
+            .unwrap_or_else(|e| panic!("{name}: read golden klib: {e}"));
+
+        // Compare MIR JSON (re-serialize for stable comparison).
+        let new_json = serde_json::to_string_pretty(&new_mir).unwrap();
+        let golden_json = serde_json::to_string_pretty(&golden_mir).unwrap();
+        if new_json != golden_json {
+            failures.push(format!("{name}: MIR JSON content differs"));
+            continue;
+        }
+
+        // Compare manifest fields that should be stable.
+        if new_manifest.abi_version != golden_manifest.abi_version
+            || new_manifest.compiler != golden_manifest.compiler
+            || new_manifest.unique_name != golden_manifest.unique_name
+            || new_manifest.native_targets != golden_manifest.native_targets
+            || new_manifest.depends != golden_manifest.depends
+        {
             failures.push(format!(
-                "{name}: skotch.klib drift ({} new bytes vs {} golden bytes)",
-                new_bytes.len(),
-                golden_bytes.len()
+                "{name}: manifest fields (excluding compiler_version) differ"
             ));
         }
     }
@@ -105,10 +129,11 @@ fn klib_self_consistent_with_committed_goldens() {
 
 #[test]
 fn klib_round_trip_preserves_module() {
-    // Direct round-trip: build MIR, write klib, read it back, compare
-    // wrapper class + string pool. We don't compare the structs
-    // directly because Rvalue/Stmt aren't PartialEq. The functional
-    // shape is what matters.
+    // Direct round-trip: read a klib, re-write it with the *same*
+    // manifest, and verify byte-equality. This catches any
+    // non-determinism in the writer. We use `write_klib_with_manifest`
+    // to preserve the original manifest (including compiler_version)
+    // so the bytes match regardless of the current workspace version.
     for &name in SUPPORTED {
         let golden = klib_dir(name).join("skotch.klib");
         if !golden.exists() {
@@ -119,9 +144,8 @@ fn klib_round_trip_preserves_module() {
             .unwrap_or_else(|e| panic!("read_klib failed for {name}: {e}"));
         assert_eq!(manifest.compiler, "skotch", "{name}");
         assert_eq!(m.wrapper_class, "InputKt", "{name}");
-        // Re-emit and verify byte-equality. This catches any
-        // non-determinism in the writer.
-        let bytes2 = skotch_backend_klib::write_klib(&m, &manifest.native_targets).unwrap();
+        // Re-emit with the exact same manifest for byte-stable output.
+        let bytes2 = skotch_backend_klib::write_klib_with_manifest(&m, &manifest).unwrap();
         assert_eq!(
             bytes, bytes2,
             "{name}: klib round-trip is non-deterministic"
