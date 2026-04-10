@@ -1,0 +1,4 @@
+name   = "95-delegation-by"
+status = "stub"
+features = ["class-delegation", "by", "interface"]
+reason = "Requires class delegation (by keyword) generating forwarding methods."

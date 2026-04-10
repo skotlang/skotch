@@ -1,0 +1,4 @@
+name   = "107-abstract-class"
+status = "stub"
+features = ["abstract-class", "abstract-method", "override", "double"]
+reason = "Requires abstract class with ACC_ABSTRACT + concrete subclass."

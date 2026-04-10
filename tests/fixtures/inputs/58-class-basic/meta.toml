@@ -1,0 +1,4 @@
+name   = "58-class-basic"
+status = "stub"
+features = ["class", "constructor", "property", "method", "string-template"]
+reason = "Requires class declaration lowering with constructor, fields, and methods."

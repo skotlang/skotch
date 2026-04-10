@@ -1,0 +1,4 @@
+name   = "66-enum-with-members"
+status = "stub"
+features = ["enum", "constructor", "method", "double", "arithmetic"]
+reason = "Requires enum with constructor parameters and instance methods."

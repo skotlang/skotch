@@ -1,0 +1,4 @@
+name   = "71-interface-basic"
+status = "stub"
+features = ["interface", "implementation", "invokeinterface"]
+reason = "Requires interface declaration and invokeinterface dispatch."

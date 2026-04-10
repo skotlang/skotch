@@ -1,0 +1,4 @@
+name   = "74-extension-property"
+status = "stub"
+features = ["extension-property", "char", "index-access"]
+reason = "Requires extension property with custom getter."

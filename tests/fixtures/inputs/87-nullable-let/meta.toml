@@ -1,0 +1,4 @@
+name   = "87-nullable-let"
+status = "stub"
+features = ["nullable", "safe-call", "let", "lambda", "it"]
+reason = "Requires safe-call + scope function (let) + lambda."

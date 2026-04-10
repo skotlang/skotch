@@ -1,0 +1,4 @@
+name   = "73-extension-function-basic"
+status = "stub"
+features = ["extension-function", "this-receiver", "string", "boolean"]
+reason = "Requires extension function lowering (static method with receiver as first param)."

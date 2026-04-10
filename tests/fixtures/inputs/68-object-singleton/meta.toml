@@ -1,0 +1,4 @@
+name   = "68-object-singleton"
+status = "stub"
+features = ["object", "singleton", "mutableList", "stdlib"]
+reason = "Requires object declaration with INSTANCE field + static accessor bridge."

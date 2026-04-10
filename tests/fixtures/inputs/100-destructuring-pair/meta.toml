@@ -1,0 +1,4 @@
+name   = "100-destructuring-pair"
+status = "stub"
+features = ["destructuring", "Pair", "Triple", "componentN", "stdlib"]
+reason = "Requires destructuring via componentN() on Pair and Triple."

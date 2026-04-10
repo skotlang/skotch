@@ -1,0 +1,4 @@
+name   = "93-generic-class"
+status = "stub"
+features = ["generic-class", "type-parameter", "type-erasure"]
+reason = "Requires generic class with type-erased fields and methods."

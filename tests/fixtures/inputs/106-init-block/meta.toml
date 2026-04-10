@@ -1,0 +1,4 @@
+name   = "106-init-block"
+status = "stub"
+features = ["init-block", "require", "class"]
+reason = "Requires init block emission inside <init> method body."

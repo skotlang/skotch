@@ -1,0 +1,4 @@
+name   = "63-data-class-copy"
+status = "stub"
+features = ["data-class", "copy", "named-arguments"]
+reason = "Requires data class copy() with named arguments."

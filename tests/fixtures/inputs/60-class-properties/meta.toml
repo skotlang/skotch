@@ -1,0 +1,4 @@
+name   = "60-class-properties"
+status = "stub"
+features = ["class", "var-property", "method", "increment"]
+reason = "Requires mutable instance properties and postfix increment."

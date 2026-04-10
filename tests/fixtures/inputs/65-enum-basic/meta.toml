@@ -1,0 +1,4 @@
+name   = "65-enum-basic"
+status = "stub"
+features = ["enum", "name", "ordinal"]
+reason = "Requires enum class declaration with synthetic name/ordinal/values."

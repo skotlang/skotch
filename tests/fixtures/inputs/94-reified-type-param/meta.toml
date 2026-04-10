@@ -1,0 +1,4 @@
+name   = "94-reified-type-param"
+status = "stub"
+features = ["reified", "inline", "type-check", "is"]
+reason = "Requires inline function with reified type parameter (instanceof at call site)."

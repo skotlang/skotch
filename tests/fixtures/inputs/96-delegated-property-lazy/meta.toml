@@ -1,0 +1,4 @@
+name   = "96-delegated-property-lazy"
+status = "stub"
+features = ["delegated-property", "lazy", "by", "stdlib"]
+reason = "Requires delegated property (by lazy) with getValue operator convention."

@@ -1,0 +1,4 @@
+name   = "108-nested-class"
+status = "stub"
+features = ["nested-class", "static-inner"]
+reason = "Requires nested (static) inner class emission."

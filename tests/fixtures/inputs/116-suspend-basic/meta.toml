@@ -1,0 +1,4 @@
+name   = "116-suspend-basic"
+status = "stub"
+features = ["suspend", "coroutine", "runBlocking", "delay"]
+reason = "Requires suspend function CPS transform + kotlinx.coroutines runtime."

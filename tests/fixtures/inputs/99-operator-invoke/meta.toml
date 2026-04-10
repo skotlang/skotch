@@ -1,0 +1,4 @@
+name   = "99-operator-invoke"
+status = "stub"
+features = ["operator", "invoke", "class"]
+reason = "Requires invoke operator overloading (obj() desugars to obj.invoke())."

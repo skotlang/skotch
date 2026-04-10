@@ -1,0 +1,4 @@
+name   = "101-lateinit-var"
+status = "stub"
+features = ["lateinit", "var", "class", "UninitializedPropertyAccessException"]
+reason = "Requires lateinit modifier + null-backed field + access check."

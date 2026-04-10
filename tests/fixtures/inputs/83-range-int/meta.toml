@@ -1,0 +1,4 @@
+name   = "83-range-int"
+status = "stub"
+features = ["range", "in-operator", "IntRange", "property"]
+reason = "Requires IntRange creation and `in` operator (contains)."

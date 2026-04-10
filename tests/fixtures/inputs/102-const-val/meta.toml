@@ -1,0 +1,4 @@
+name   = "102-const-val"
+status = "stub"
+features = ["const", "val", "double", "string", "int"]
+reason = "Requires const val (compile-time constant, inlined at call site)."

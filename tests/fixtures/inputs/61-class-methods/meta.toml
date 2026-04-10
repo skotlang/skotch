@@ -1,0 +1,4 @@
+name   = "61-class-methods"
+status = "stub"
+features = ["class", "method", "int-return", "invokevirtual"]
+reason = "Requires class with multiple methods returning non-Unit."

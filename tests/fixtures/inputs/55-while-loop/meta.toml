@@ -1,0 +1,4 @@
+name   = "55-while-loop"
+status = "stub"
+features = ["while-loop", "var", "comparison", "branch"]
+reason = "Requires while-loop lowering with back-edge branches."

@@ -1,0 +1,4 @@
+name   = "53-for-range"
+status = "stub"
+features = ["for-loop", "range", "int"]
+reason = "Requires for-in loop lowering and IntRange iteration."
