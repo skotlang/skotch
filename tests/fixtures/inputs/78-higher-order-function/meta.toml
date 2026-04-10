@@ -1,0 +1,4 @@
+name   = "78-higher-order-function"
+status = "stub"
+features = ["higher-order", "generic", "extension-function", "lambda", "it"]
+reason = "Requires generic extension + higher-order function + implicit `it` parameter."

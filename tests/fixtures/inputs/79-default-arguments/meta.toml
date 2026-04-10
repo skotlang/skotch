@@ -1,0 +1,4 @@
+name   = "79-default-arguments"
+status = "stub"
+features = ["default-arguments", "function", "string-template"]
+reason = "Requires synthetic $default trampoline method."

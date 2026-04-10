@@ -1,0 +1,4 @@
+name   = "110-local-function"
+status = "stub"
+features = ["local-function", "recursion", "if-expression"]
+reason = "Requires local function declaration inside a block (private synthetic method)."

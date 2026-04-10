@@ -1,0 +1,4 @@
+name   = "111-return-when"
+status = "stub"
+features = ["when", "multiple-conditions", "string-equality"]
+reason = "Requires when with multiple comma-separated values per branch."

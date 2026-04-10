@@ -1,0 +1,4 @@
+name   = "88-smart-cast-is"
+status = "stub"
+features = ["smart-cast", "is-check", "when", "Any"]
+reason = "Requires type-check (instanceof) + smart cast to narrowed type."

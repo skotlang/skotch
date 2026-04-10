@@ -1,0 +1,4 @@
+name   = "117-coroutine-launch"
+status = "stub"
+features = ["coroutine", "launch", "join", "runBlocking"]
+reason = "Requires coroutine builder (launch) + Job.join()."

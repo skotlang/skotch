@@ -1,0 +1,4 @@
+name   = "64-data-class-destructuring"
+status = "stub"
+features = ["data-class", "destructuring", "componentN"]
+reason = "Requires destructuring declarations via component1()/component2()."

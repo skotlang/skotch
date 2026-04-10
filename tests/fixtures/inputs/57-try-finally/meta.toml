@@ -1,0 +1,4 @@
+name   = "57-try-finally"
+status = "stub"
+features = ["try-finally", "exception"]
+reason = "Requires finally block lowering (JSR/RET or duplication strategy)."

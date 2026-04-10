@@ -1,0 +1,4 @@
+name   = "115-collections-fold"
+status = "stub"
+features = ["list", "fold", "lambda", "accumulator", "stdlib"]
+reason = "Requires stdlib fold extension + two-parameter lambda."

@@ -1,0 +1,4 @@
+name   = "118-sequence-yield"
+status = "stub"
+features = ["sequence", "yield", "coroutine", "while", "stdlib"]
+reason = "Requires sequence builder (restricted suspend) + yield."

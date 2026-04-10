@@ -1,0 +1,4 @@
+name   = "82-vararg-spread"
+status = "stub"
+features = ["vararg", "spread-operator", "arrayOf"]
+reason = "Requires spread operator (*) lowering for passing arrays to vararg."

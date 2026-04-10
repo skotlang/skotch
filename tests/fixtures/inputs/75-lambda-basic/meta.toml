@@ -1,0 +1,4 @@
+name   = "75-lambda-basic"
+status = "stub"
+features = ["lambda", "function-type", "invoke"]
+reason = "Requires lambda synthesis (invokedynamic on JVM, or inner class)."

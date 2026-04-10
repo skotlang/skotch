@@ -1,0 +1,4 @@
+name   = "90-type-alias"
+status = "stub"
+features = ["typealias", "generic", "lambda", "filter", "stdlib"]
+reason = "Requires typealias resolution (erased to underlying type at use site)."

@@ -1,0 +1,4 @@
+name   = "120-nothing-type"
+status = "stub"
+features = ["Nothing", "throw", "exception", "try-catch"]
+reason = "Requires Nothing return type + throw expression + exception handling."

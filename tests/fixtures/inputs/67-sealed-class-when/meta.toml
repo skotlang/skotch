@@ -1,0 +1,4 @@
+name   = "67-sealed-class-when"
+status = "stub"
+features = ["sealed-class", "data-class", "when", "recursion", "smart-cast"]
+reason = "Requires sealed class hierarchy with recursive when-expression evaluation."

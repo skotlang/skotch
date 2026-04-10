@@ -1,0 +1,4 @@
+name   = "72-interface-default-method"
+status = "stub"
+features = ["interface", "default-method", "override"]
+reason = "Requires interface default methods (DefaultImpls on JVM)."

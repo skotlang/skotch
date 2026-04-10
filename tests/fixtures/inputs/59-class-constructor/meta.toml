@@ -1,0 +1,4 @@
+name   = "59-class-constructor"
+status = "stub"
+features = ["class", "constructor", "override", "toString"]
+reason = "Requires class with primary constructor and toString override."

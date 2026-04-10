@@ -1,0 +1,4 @@
+name   = "56-try-catch"
+status = "stub"
+features = ["try-catch", "exception", "division"]
+reason = "Requires exception table in Code attribute and catch-block branching."

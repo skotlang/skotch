@@ -1,0 +1,4 @@
+name   = "92-generic-function"
+status = "stub"
+features = ["generic-function", "type-parameter", "upper-bound", "Comparable"]
+reason = "Requires generic function + type erasure + upper bound constraint."

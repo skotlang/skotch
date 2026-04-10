@@ -1,0 +1,4 @@
+name   = "54-for-list"
+status = "stub"
+features = ["for-loop", "list", "listOf", "stdlib"]
+reason = "Requires for-in loop, Iterator interface, and stdlib listOf."
