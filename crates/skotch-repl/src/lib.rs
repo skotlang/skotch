@@ -55,9 +55,9 @@
 //! 3. `None` — caller falls back to a clear error
 
 use anyhow::{anyhow, Context, Result};
+use skotch_jvm::EmbeddedJvm;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use skotch_driver::{emit, EmitOptions, Target};
 
@@ -80,8 +80,7 @@ pub fn run_repl_interactive() -> Result<()> {
         KeyCode, KeyModifiers, Reedline, ReedlineEvent, Signal,
     };
 
-    let java =
-        locate_java().ok_or_else(|| anyhow!("`java` is not on PATH and JAVA_HOME is unset"))?;
+    let jvm = EmbeddedJvm::new()?;
 
     // ── reedline setup ──────────────────────────────────────────────
     //
@@ -165,7 +164,7 @@ pub fn run_repl_interactive() -> Result<()> {
                     continue;
                 }
 
-                match state.process(&line, &java) {
+                match state.process(&line, &jvm) {
                     Ok(stdout) => {
                         if !stdout.is_empty() {
                             print!("{stdout}");
@@ -207,8 +206,7 @@ pub fn run_repl_interactive() -> Result<()> {
 /// test suite which drives the REPL with canned input and asserts
 /// against canned output.
 pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
-    let java =
-        locate_java().ok_or_else(|| anyhow!("`java` is not on PATH and JAVA_HOME is unset"))?;
+    let jvm = EmbeddedJvm::new()?;
 
     writeln!(
         output,
@@ -246,7 +244,7 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
         // terminal user would have typed).
         writeln!(output, "{line}")?;
 
-        match state.process(&line, &java) {
+        match state.process(&line, &jvm) {
             Ok(stdout) => {
                 if !stdout.is_empty() {
                     output.write_all(stdout.as_bytes())?;
@@ -271,22 +269,33 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
 /// Returns the subprocess's captured stdout on success, or an error
 /// containing the compiler diagnostic / JVM stderr on failure.
 pub fn run_script(path: &Path) -> Result<String> {
-    let java =
-        locate_java().ok_or_else(|| anyhow!("`java` is not on PATH and JAVA_HOME is unset"))?;
+    let jvm = EmbeddedJvm::new()?;
     let source =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let wrapped = wrap_script(&source);
-    compile_and_run(&wrapped, &java, "ScriptKt")
+    let class_name = unique_class_name("Script");
+    compile_and_run_jni(&wrapped, &jvm, &class_name)
 }
 
 /// Same as [`run_script`] but takes the raw script text instead of
 /// a path. Useful for tests that don't want to round-trip through
 /// the filesystem.
 pub fn run_script_str(source: &str) -> Result<String> {
-    let java =
-        locate_java().ok_or_else(|| anyhow!("`java` is not on PATH and JAVA_HOME is unset"))?;
+    let jvm = EmbeddedJvm::new()?;
     let wrapped = wrap_script(source);
-    compile_and_run(&wrapped, &java, "ScriptKt")
+    let class_name = unique_class_name("Script");
+    compile_and_run_jni(&wrapped, &jvm, &class_name)
+}
+
+/// Generate a unique class name per invocation. The JNI
+/// `DefineClass` call only works once per class name per
+/// ClassLoader, so reusing "ScriptKt" across REPL turns or
+/// test invocations fails. A monotonic counter ensures each
+/// call gets a fresh name.
+fn unique_class_name(prefix: &str) -> String {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{prefix}{n}Kt")
 }
 
 // ─── REPL state ──────────────────────────────────────────────────────────
@@ -315,7 +324,7 @@ impl ReplState {
 
     /// Process one REPL turn. Returns the captured stdout (empty for
     /// declaration-only turns) or a compile/run error.
-    fn process(&mut self, line: &str, java: &Path) -> Result<String> {
+    fn process(&mut self, line: &str, jvm: &EmbeddedJvm) -> Result<String> {
         self.turn += 1;
         let trimmed = line.trim_start();
         if is_top_level_decl(trimmed) {
@@ -335,7 +344,7 @@ impl ReplState {
             let body = line.trim_end();
             let source = format!("{preamble}\nfun main() {{\n    {body}\n}}\n");
             let class_name = format!("ReplTurn{}Kt", self.turn);
-            compile_and_run(&source, java, &class_name)
+            compile_and_run_jni(&source, jvm, &class_name)
         }
     }
 }
@@ -386,50 +395,25 @@ fn compile_only(source: &str, class_name: &str) -> Result<PathBuf> {
     Ok(out_class)
 }
 
-/// Compile + run. Returns the JVM subprocess's stdout on exit code 0,
-/// or an error containing both the exit code and the captured
-/// stderr on failure.
-fn compile_and_run(source: &str, java: &Path, class_name: &str) -> Result<String> {
+/// Compile a synthetic source, then run its `main` method inside
+/// the in-process JVM via JNI. Returns captured stdout.
+fn compile_and_run_jni(source: &str, jvm: &EmbeddedJvm, class_name: &str) -> Result<String> {
     let class_path = compile_only(source, class_name)?;
-    let class_dir = class_path
-        .parent()
-        .ok_or_else(|| anyhow!("compiled class has no parent dir"))?;
+    let class_bytes = std::fs::read(&class_path)
+        .with_context(|| format!("reading compiled class {}", class_path.display()))?;
     let class_stem = class_path
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow!("compiled class has no UTF-8 stem"))?;
-    let out = Command::new(java)
-        .arg("-cp")
-        .arg(class_dir)
-        .arg(class_stem)
-        .output()
-        .with_context(|| format!("invoking `{}`", java.display()))?;
-    if !out.status.success() {
-        return Err(anyhow!(
-            "java exited with status {}: {}",
-            out.status,
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    jvm.run_class_main(class_stem, &class_bytes)
 }
 
-/// Locate the `java` binary. Resolution order:
-///
-/// 1. `$JAVA_HOME/bin/java[.exe]` if `JAVA_HOME` is set and the file exists
-/// 2. `which java` on `PATH`
-///
-/// Returns `None` if neither yields a `java` binary.
+/// Check whether the JVM can be initialized. Returns `Ok(())` if
+/// `JAVA_HOME` is set and a JDK is found; `Err` with a clear
+/// message otherwise. Called by test gating.
 pub fn locate_java() -> Option<PathBuf> {
-    if let Some(home) = std::env::var_os("JAVA_HOME") {
-        let candidate = PathBuf::from(home)
-            .join("bin")
-            .join(format!("java{}", std::env::consts::EXE_SUFFIX));
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-    which::which("java").ok()
+    // Delegate to the EmbeddedJvm's locator so both paths agree.
+    skotch_jvm::locate::find_libjvm().ok()
 }
 
 fn unique_tempdir(label: &str) -> PathBuf {
