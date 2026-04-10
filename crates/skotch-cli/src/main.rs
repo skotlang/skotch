@@ -1,14 +1,16 @@
 //! `skotch` command-line entry point.
 //!
-//! PR #1 ships exactly one fully-implemented subcommand: `skotch emit`,
-//! which compiles a single Kotlin source file directly to one of the
-//! supported target formats. The `build`, `test`, and `repl`
-//! subcommands are scaffolded so the help text reflects the long-term
-//! roadmap, but their bodies print "not yet implemented" and exit
-//! cleanly.
+//! Subcommands:
+//!
+//! - `emit`  — compile one `.kt` file to a target format
+//! - `repl`  — interactive Kotlin REPL backed by `skotch-repl`
+//! - `run`   — execute a `.kts` script via the same backend
+//! - `build` — full project build (stub, lands later)
+//! - `test`  — test runner (stub, lands later)
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::io::{self, BufReader, IsTerminal};
 use std::path::PathBuf;
 
 use skotch_driver::{emit, EmitOptions, Target};
@@ -36,12 +38,27 @@ enum Command {
         /// Input `.kt` source file.
         input: PathBuf,
     },
-    /// Build a project (orchestration; lands in PR #4).
-    Build,
-    /// Run tests (lands in PR #6).
-    Test,
-    /// Start the interactive REPL (lands in PR #7).
+    /// Start the interactive Kotlin REPL.
+    ///
+    /// Each line is wrapped in a synthetic `fun main()` (for
+    /// expressions) or appended to the accumulated declaration
+    /// history (for `val`/`var`/`fun`), compiled to JVM bytecode,
+    /// and executed in a `java` subprocess from `$JAVA_HOME`.
     Repl,
+    /// Execute a Kotlin script (`.kts`) file.
+    ///
+    /// The whole file is wrapped in a synthetic `fun main()`,
+    /// compiled to JVM bytecode, and run via `java`. Top-level
+    /// `val`/`var` become locals; top-level `fun` is not yet
+    /// supported in `.kts` files.
+    Run {
+        /// Path to the `.kts` script file.
+        script: PathBuf,
+    },
+    /// Build a project (orchestration; lands in a later PR).
+    Build,
+    /// Run tests (lands in a later PR).
+    Test,
 }
 
 fn main() -> Result<()> {
@@ -61,14 +78,32 @@ fn main() -> Result<()> {
                 norm_out,
             })?;
         }
+        Command::Repl => {
+            let stdin = io::stdin();
+            if stdin.is_terminal() {
+                // Interactive terminal: use reedline for line editing,
+                // command history, and Ctrl-R search.
+                skotch_repl::run_repl_interactive()?;
+            } else {
+                // Piped input (e.g. `echo 'println(1)' | skotch repl`):
+                // use the plain BufRead path which doesn't touch the
+                // terminal and produces machine-readable output.
+                skotch_repl::run_repl(BufReader::new(stdin.lock()), io::stdout().lock())?;
+            }
+        }
+        Command::Run { script } => {
+            let captured = skotch_repl::run_script(&script)?;
+            // Print the captured stdout straight through to ours.
+            // We don't add a trailing newline; if the script's
+            // last println already produced one, the user gets
+            // exactly what `java` printed.
+            print!("{captured}");
+        }
         Command::Build => {
-            eprintln!("`skotch build` is not yet implemented (planned for PR #4).");
+            eprintln!("`skotch build` is not yet implemented.");
         }
         Command::Test => {
-            eprintln!("`skotch test` is not yet implemented (planned for PR #6).");
-        }
-        Command::Repl => {
-            eprintln!("`skotch repl` is not yet implemented (planned for PR #7).");
+            eprintln!("`skotch test` is not yet implemented.");
         }
     }
     Ok(())

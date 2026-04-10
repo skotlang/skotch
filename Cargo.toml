@@ -37,6 +37,7 @@ members = [
     # Layer 7 — driver + CLI
     "crates/skotch-driver",
     "crates/skotch-cli",
+    "crates/skotch-repl",
 
     # Fixture generation tooling (cargo-xtask pattern)
     "xtask",
@@ -82,6 +83,9 @@ insta        = { version = "1.40", features = ["yaml"] }
 similar      = "2"
 which        = "7"
 
+# REPL line editing
+reedline     = "0.46"
+
 # xtask
 walkdir      = "2"
 
@@ -108,6 +112,7 @@ skotch-classfile-norm  = { path = "crates/skotch-classfile-norm" }
 skotch-dex-norm        = { path = "crates/skotch-dex-norm" }
 skotch-llvm-norm       = { path = "crates/skotch-llvm-norm" }
 skotch-driver          = { path = "crates/skotch-driver" }
+skotch-repl            = { path = "crates/skotch-repl" }
 
 [profile.dev]
 debug            = "line-tables-only"
