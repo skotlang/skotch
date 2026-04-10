@@ -1,4 +1,14 @@
 name     = "07-if-expression"
-status   = "stub"
+status   = "supported"
 features = ["fun", "println", "val", "if-expression", "branch"]
-reason   = "Branches need StackMapTable; planned for PR #1.5."
+notes    = """
+If-as-expression with integer branches. The MIR lowering creates
+4 basic blocks (entry→branch→then/else→merge). Both branches write
+to a shared result local; the merge block reads it.
+  - JVM: ifeq/goto + StackMapTable with full_frame entries tracking
+    per-block slot liveness via CFG predecessor intersection.
+  - DEX: if-eqz/goto with code-unit-relative offset patching.
+  - LLVM: alloca for the merge local; both branches store to it;
+    the merge block loads from it. The br instruction uses i1
+    (truncated from the MIR's i32 bool representation).
+"""
