@@ -1,0 +1,277 @@
+; --- globals ---
+@.fmt.concat.sd = private unnamed_addr constant [5 x i8] c"%s%d\00", align 1
+@.fmt.concat.ss = private unnamed_addr constant [5 x i8] c"%s%s\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [1 x i8] c"\00", align 1
+@.str.1 = private unnamed_addr constant [2 x i8] c"M\00", align 1
+@.str.10 = private unnamed_addr constant [3 x i8] c"IX\00", align 1
+@.str.11 = private unnamed_addr constant [2 x i8] c"V\00", align 1
+@.str.12 = private unnamed_addr constant [3 x i8] c"IV\00", align 1
+@.str.13 = private unnamed_addr constant [2 x i8] c"I\00", align 1
+@.str.2 = private unnamed_addr constant [3 x i8] c"CM\00", align 1
+@.str.3 = private unnamed_addr constant [2 x i8] c"D\00", align 1
+@.str.4 = private unnamed_addr constant [3 x i8] c"CD\00", align 1
+@.str.5 = private unnamed_addr constant [2 x i8] c"C\00", align 1
+@.str.6 = private unnamed_addr constant [3 x i8] c"XC\00", align 1
+@.str.7 = private unnamed_addr constant [2 x i8] c"L\00", align 1
+@.str.8 = private unnamed_addr constant [3 x i8] c"XL\00", align 1
+@.str.9 = private unnamed_addr constant [2 x i8] c"X\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+declare i32 @snprintf(ptr, i32, ptr, ...)
+
+; --- definitions ---
+; @InputKt_toRoman
+define ptr @InputKt_toRoman(i32 %arg0) {
+entry:
+  %merge_2 = alloca ptr
+  %merge_4 = alloca i32
+  store ptr @.str.0, ptr %merge_2
+  store i32 %arg0, ptr %merge_4
+  br label %bb1
+bb1:
+  %t0 = load i32, ptr %merge_4
+  %t1 = add i32 0, 1000
+  %t2 = icmp sge i32 %t0, %t1
+  br i1 %t2, label %bb2, label %bb3
+bb2:
+  %t3 = load ptr, ptr %merge_2
+  %t4 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t4, i32 256, ptr @.fmt.concat.ss, ptr %t3, ptr @.str.1)
+  store ptr %t4, ptr %merge_2
+  %t6 = load i32, ptr %merge_4
+  %t7 = add i32 0, 1000
+  %t8 = sub i32 %t6, %t7
+  store i32 %t8, ptr %merge_4
+  br label %bb1
+bb3:
+  br label %bb4
+bb4:
+  %t9 = load i32, ptr %merge_4
+  %t10 = add i32 0, 900
+  %t11 = icmp sge i32 %t9, %t10
+  br i1 %t11, label %bb5, label %bb6
+bb5:
+  %t12 = load ptr, ptr %merge_2
+  %t13 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t13, i32 256, ptr @.fmt.concat.ss, ptr %t12, ptr @.str.2)
+  store ptr %t13, ptr %merge_2
+  %t15 = load i32, ptr %merge_4
+  %t16 = add i32 0, 900
+  %t17 = sub i32 %t15, %t16
+  store i32 %t17, ptr %merge_4
+  br label %bb4
+bb6:
+  br label %bb7
+bb7:
+  %t18 = load i32, ptr %merge_4
+  %t19 = add i32 0, 500
+  %t20 = icmp sge i32 %t18, %t19
+  br i1 %t20, label %bb8, label %bb9
+bb8:
+  %t21 = load ptr, ptr %merge_2
+  %t22 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t22, i32 256, ptr @.fmt.concat.ss, ptr %t21, ptr @.str.3)
+  store ptr %t22, ptr %merge_2
+  %t24 = load i32, ptr %merge_4
+  %t25 = add i32 0, 500
+  %t26 = sub i32 %t24, %t25
+  store i32 %t26, ptr %merge_4
+  br label %bb7
+bb9:
+  br label %bb10
+bb10:
+  %t27 = load i32, ptr %merge_4
+  %t28 = add i32 0, 400
+  %t29 = icmp sge i32 %t27, %t28
+  br i1 %t29, label %bb11, label %bb12
+bb11:
+  %t30 = load ptr, ptr %merge_2
+  %t31 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t31, i32 256, ptr @.fmt.concat.ss, ptr %t30, ptr @.str.4)
+  store ptr %t31, ptr %merge_2
+  %t33 = load i32, ptr %merge_4
+  %t34 = add i32 0, 400
+  %t35 = sub i32 %t33, %t34
+  store i32 %t35, ptr %merge_4
+  br label %bb10
+bb12:
+  br label %bb13
+bb13:
+  %t36 = load i32, ptr %merge_4
+  %t37 = add i32 0, 100
+  %t38 = icmp sge i32 %t36, %t37
+  br i1 %t38, label %bb14, label %bb15
+bb14:
+  %t39 = load ptr, ptr %merge_2
+  %t40 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t40, i32 256, ptr @.fmt.concat.ss, ptr %t39, ptr @.str.5)
+  store ptr %t40, ptr %merge_2
+  %t42 = load i32, ptr %merge_4
+  %t43 = add i32 0, 100
+  %t44 = sub i32 %t42, %t43
+  store i32 %t44, ptr %merge_4
+  br label %bb13
+bb15:
+  br label %bb16
+bb16:
+  %t45 = load i32, ptr %merge_4
+  %t46 = add i32 0, 90
+  %t47 = icmp sge i32 %t45, %t46
+  br i1 %t47, label %bb17, label %bb18
+bb17:
+  %t48 = load ptr, ptr %merge_2
+  %t49 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t49, i32 256, ptr @.fmt.concat.ss, ptr %t48, ptr @.str.6)
+  store ptr %t49, ptr %merge_2
+  %t51 = load i32, ptr %merge_4
+  %t52 = add i32 0, 90
+  %t53 = sub i32 %t51, %t52
+  store i32 %t53, ptr %merge_4
+  br label %bb16
+bb18:
+  br label %bb19
+bb19:
+  %t54 = load i32, ptr %merge_4
+  %t55 = add i32 0, 50
+  %t56 = icmp sge i32 %t54, %t55
+  br i1 %t56, label %bb20, label %bb21
+bb20:
+  %t57 = load ptr, ptr %merge_2
+  %t58 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t58, i32 256, ptr @.fmt.concat.ss, ptr %t57, ptr @.str.7)
+  store ptr %t58, ptr %merge_2
+  %t60 = load i32, ptr %merge_4
+  %t61 = add i32 0, 50
+  %t62 = sub i32 %t60, %t61
+  store i32 %t62, ptr %merge_4
+  br label %bb19
+bb21:
+  br label %bb22
+bb22:
+  %t63 = load i32, ptr %merge_4
+  %t64 = add i32 0, 40
+  %t65 = icmp sge i32 %t63, %t64
+  br i1 %t65, label %bb23, label %bb24
+bb23:
+  %t66 = load ptr, ptr %merge_2
+  %t67 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t67, i32 256, ptr @.fmt.concat.ss, ptr %t66, ptr @.str.8)
+  store ptr %t67, ptr %merge_2
+  %t69 = load i32, ptr %merge_4
+  %t70 = add i32 0, 40
+  %t71 = sub i32 %t69, %t70
+  store i32 %t71, ptr %merge_4
+  br label %bb22
+bb24:
+  br label %bb25
+bb25:
+  %t72 = load i32, ptr %merge_4
+  %t73 = add i32 0, 10
+  %t74 = icmp sge i32 %t72, %t73
+  br i1 %t74, label %bb26, label %bb27
+bb26:
+  %t75 = load ptr, ptr %merge_2
+  %t76 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t76, i32 256, ptr @.fmt.concat.ss, ptr %t75, ptr @.str.9)
+  store ptr %t76, ptr %merge_2
+  %t78 = load i32, ptr %merge_4
+  %t79 = add i32 0, 10
+  %t80 = sub i32 %t78, %t79
+  store i32 %t80, ptr %merge_4
+  br label %bb25
+bb27:
+  br label %bb28
+bb28:
+  %t81 = load i32, ptr %merge_4
+  %t82 = add i32 0, 9
+  %t83 = icmp sge i32 %t81, %t82
+  br i1 %t83, label %bb29, label %bb30
+bb29:
+  %t84 = load ptr, ptr %merge_2
+  %t85 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t85, i32 256, ptr @.fmt.concat.ss, ptr %t84, ptr @.str.10)
+  store ptr %t85, ptr %merge_2
+  %t87 = load i32, ptr %merge_4
+  %t88 = add i32 0, 9
+  %t89 = sub i32 %t87, %t88
+  store i32 %t89, ptr %merge_4
+  br label %bb28
+bb30:
+  br label %bb31
+bb31:
+  %t90 = load i32, ptr %merge_4
+  %t91 = add i32 0, 5
+  %t92 = icmp sge i32 %t90, %t91
+  br i1 %t92, label %bb32, label %bb33
+bb32:
+  %t93 = load ptr, ptr %merge_2
+  %t94 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t94, i32 256, ptr @.fmt.concat.ss, ptr %t93, ptr @.str.11)
+  store ptr %t94, ptr %merge_2
+  %t96 = load i32, ptr %merge_4
+  %t97 = add i32 0, 5
+  %t98 = sub i32 %t96, %t97
+  store i32 %t98, ptr %merge_4
+  br label %bb31
+bb33:
+  br label %bb34
+bb34:
+  %t99 = load i32, ptr %merge_4
+  %t100 = add i32 0, 4
+  %t101 = icmp sge i32 %t99, %t100
+  br i1 %t101, label %bb35, label %bb36
+bb35:
+  %t102 = load ptr, ptr %merge_2
+  %t103 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t103, i32 256, ptr @.fmt.concat.ss, ptr %t102, ptr @.str.12)
+  store ptr %t103, ptr %merge_2
+  %t105 = load i32, ptr %merge_4
+  %t106 = add i32 0, 4
+  %t107 = sub i32 %t105, %t106
+  store i32 %t107, ptr %merge_4
+  br label %bb34
+bb36:
+  br label %bb37
+bb37:
+  %t108 = load i32, ptr %merge_4
+  %t109 = add i32 0, 1
+  %t110 = icmp sge i32 %t108, %t109
+  br i1 %t110, label %bb38, label %bb39
+bb38:
+  %t111 = load ptr, ptr %merge_2
+  %t112 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t112, i32 256, ptr @.fmt.concat.ss, ptr %t111, ptr @.str.13)
+  store ptr %t112, ptr %merge_2
+  %t114 = load i32, ptr %merge_4
+  %t115 = add i32 0, 1
+  %t116 = sub i32 %t114, %t115
+  store i32 %t116, ptr %merge_4
+  br label %bb37
+bb39:
+  %t117 = load ptr, ptr %merge_2
+  ret ptr %t117
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 1
+  %t1 = call ptr @InputKt_toRoman(i32 %t0)
+  call i32 @puts(ptr %t1)
+  %t3 = add i32 0, 4
+  %t4 = call ptr @InputKt_toRoman(i32 %t3)
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 9
+  %t7 = call ptr @InputKt_toRoman(i32 %t6)
+  call i32 @puts(ptr %t7)
+  %t9 = add i32 0, 42
+  %t10 = call ptr @InputKt_toRoman(i32 %t9)
+  call i32 @puts(ptr %t10)
+  %t12 = add i32 0, 1999
+  %t13 = call ptr @InputKt_toRoman(i32 %t12)
+  call i32 @puts(ptr %t13)
+  ret i32 0
+}
+

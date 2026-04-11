@@ -1,0 +1,3 @@
+name   = "213-complex-boolean"
+status = "supported"
+features = ["logical-and", "logical-or", "unary-not", "chained-comparison"]

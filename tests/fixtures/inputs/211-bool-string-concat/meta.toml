@@ -1,0 +1,4 @@
+name   = "211-bool-string-concat"
+status = "supported"
+features = ["string-concat", "bool-to-string", "int-to-string"]
+skip_dex = true
