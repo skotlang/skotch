@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.1.7
+compiler_version=0.1.9
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -103,7 +103,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 6,
               "then_block": 2,
-              "else_block": 3
+              "else_block": 4
             }
           }
         },
@@ -144,7 +144,14 @@ unique_name=inputkt
                   "Local": 9
                 }
               }
-            },
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
             {
               "Assign": {
                 "dest": 10,
@@ -296,5 +303,6 @@ unique_name=inputkt
       "return_ty": "Unit"
     }
   ],
+  "classes": [],
   "strings": []
 }

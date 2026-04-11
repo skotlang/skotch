@@ -47,8 +47,9 @@ pub struct ImportDecl {
 pub enum Decl {
     Fun(FunDecl),
     Val(ValDecl),
+    Class(ClassDecl),
     /// Recognised but not implemented. The parser may attach this for
-    /// e.g. `class Foo`. Carries the original span for diagnostics.
+    /// e.g. `object Foo`. Carries the original span for diagnostics.
     Unsupported {
         what: &'static str,
         span: Span,
@@ -82,6 +83,41 @@ pub struct ValDecl {
     pub name_span: Span,
     pub ty: Option<TypeRef>,
     pub init: Expr,
+    pub span: Span,
+}
+
+/// A class declaration.
+#[derive(Clone, Debug)]
+pub struct ClassDecl {
+    pub name: Symbol,
+    pub name_span: Span,
+    /// Primary constructor parameters (may include `val`/`var` properties).
+    pub constructor_params: Vec<ConstructorParam>,
+    /// Properties declared in the class body.
+    pub properties: Vec<PropertyDecl>,
+    /// Methods declared in the class body.
+    pub methods: Vec<FunDecl>,
+    pub span: Span,
+}
+
+/// A primary constructor parameter, optionally a property (`val`/`var`).
+#[derive(Clone, Debug)]
+pub struct ConstructorParam {
+    pub is_val: bool,
+    pub is_var: bool,
+    pub name: Symbol,
+    pub ty: TypeRef,
+    pub span: Span,
+}
+
+/// A property declaration inside a class body.
+#[derive(Clone, Debug)]
+pub struct PropertyDecl {
+    pub is_var: bool,
+    pub name: Symbol,
+    pub name_span: Span,
+    pub ty: Option<TypeRef>,
+    pub init: Option<Expr>,
     pub span: Span,
 }
 

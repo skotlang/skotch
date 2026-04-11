@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.1.7
+compiler_version=0.1.9
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -95,6 +95,7 @@ unique_name=inputkt
       "return_ty": "Unit"
     }
   ],
+  "classes": [],
   "strings": [
     "Kotlin"
   ]

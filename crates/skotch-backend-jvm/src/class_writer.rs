@@ -49,8 +49,16 @@ struct CmpBranchTarget {
 /// Compile a [`MirModule`] to one (or more) `(internal_name, bytes)`
 /// pairs ready to write to disk.
 pub fn compile_module(module: &MirModule, _interner: &Interner) -> Vec<(String, Vec<u8>)> {
+    let mut result = Vec::new();
+    // Wrapper class for top-level functions.
     let bytes = compile_class(&module.wrapper_class, module);
-    vec![(module.wrapper_class.clone(), bytes)]
+    result.push((module.wrapper_class.clone(), bytes));
+    // User-defined classes.
+    for class in &module.classes {
+        let bytes = compile_user_class(class, module);
+        result.push((class.name.clone(), bytes));
+    }
+    result
 }
 
 fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
@@ -103,6 +111,263 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     out.write_u16::<BigEndian>(source_file_value_idx).unwrap();
 
     out
+}
+
+fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u8> {
+    let mut cp = ConstantPool::new();
+    let this_class_idx = cp.class(&class.name);
+    let super_class_idx = cp.class("java/lang/Object");
+    let code_attr_name_idx = cp.utf8("Code");
+    let _source_file_attr_name_idx = cp.utf8("SourceFile");
+    let _source_file_value_idx = cp.utf8(&format!("{}.kt", class.name));
+
+    // Compile methods.
+    let mut method_blobs: Vec<Vec<u8>> = Vec::new();
+
+    // <init> constructor.
+    let init_blob = emit_user_method(
+        &class.constructor,
+        module,
+        &class.name,
+        &mut cp,
+        code_attr_name_idx,
+        true,
+    );
+    method_blobs.push(init_blob);
+
+    // Instance methods.
+    for method in &class.methods {
+        let blob = emit_user_method(
+            method,
+            module,
+            &class.name,
+            &mut cp,
+            code_attr_name_idx,
+            false,
+        );
+        method_blobs.push(blob);
+    }
+
+    let mut out: Vec<u8> = Vec::with_capacity(1024);
+    out.write_u32::<BigEndian>(skotch_config::jvm::CLASS_FILE_MAGIC)
+        .unwrap();
+    out.write_u16::<BigEndian>(skotch_config::jvm::CLASS_FILE_MINOR)
+        .unwrap();
+    out.write_u16::<BigEndian>(skotch_config::jvm::DEFAULT_CLASS_FILE_MAJOR)
+        .unwrap();
+    out.write_u16::<BigEndian>(cp.count()).unwrap();
+    cp.write_to(&mut out);
+    out.write_u16::<BigEndian>(ACC_PUBLIC | ACC_SUPER).unwrap();
+    out.write_u16::<BigEndian>(this_class_idx).unwrap();
+    out.write_u16::<BigEndian>(super_class_idx).unwrap();
+    out.write_u16::<BigEndian>(0).unwrap(); // interfaces
+                                            // Fields.
+    out.write_u16::<BigEndian>(class.fields.len() as u16)
+        .unwrap();
+    for field in &class.fields {
+        let name_idx = cp.utf8(&field.name);
+        let desc_idx = cp.utf8(&jvm_type_string(&field.ty));
+        out.write_u16::<BigEndian>(ACC_PUBLIC).unwrap(); // access flags
+        out.write_u16::<BigEndian>(name_idx).unwrap();
+        out.write_u16::<BigEndian>(desc_idx).unwrap();
+        out.write_u16::<BigEndian>(0).unwrap(); // attributes count
+    }
+    // Rebuild CP since fields may have added entries.
+    // Actually, we need to write CP AFTER all references. Let me restructure.
+    // For now, pre-register field names in CP before writing.
+    // The issue: CP is written before fields. Let me rebuild the output.
+    // Simpler: collect fields first, then build CP, then write everything.
+    // Actually the current code registers field entries in the CP via cp.utf8()
+    // AFTER cp.write_to(). This is wrong. Let me fix by registering first.
+
+    // REBUILD: Register all CP entries first, then write.
+    let mut cp2 = ConstantPool::new();
+    let this2 = cp2.class(&class.name);
+    let super2 = cp2.class("java/lang/Object");
+    let code2 = cp2.utf8("Code");
+    let sf_name2 = cp2.utf8("SourceFile");
+    let sf_val2 = cp2.utf8(&format!("{}.kt", class.name));
+    // Pre-register field entries.
+    let mut field_infos = Vec::new();
+    for field in &class.fields {
+        let n = cp2.utf8(&field.name);
+        let d = cp2.utf8(&jvm_type_string(&field.ty));
+        field_infos.push((n, d));
+    }
+    // Re-compile methods with new CP.
+    let mut method_blobs2 = Vec::new();
+    let init2 = emit_user_method(
+        &class.constructor,
+        module,
+        &class.name,
+        &mut cp2,
+        code2,
+        true,
+    );
+    method_blobs2.push(init2);
+    for method in &class.methods {
+        let blob = emit_user_method(method, module, &class.name, &mut cp2, code2, false);
+        method_blobs2.push(blob);
+    }
+
+    let mut out2: Vec<u8> = Vec::with_capacity(1024);
+    out2.write_u32::<BigEndian>(skotch_config::jvm::CLASS_FILE_MAGIC)
+        .unwrap();
+    out2.write_u16::<BigEndian>(skotch_config::jvm::CLASS_FILE_MINOR)
+        .unwrap();
+    out2.write_u16::<BigEndian>(skotch_config::jvm::DEFAULT_CLASS_FILE_MAJOR)
+        .unwrap();
+    out2.write_u16::<BigEndian>(cp2.count()).unwrap();
+    cp2.write_to(&mut out2);
+    out2.write_u16::<BigEndian>(ACC_PUBLIC | ACC_SUPER).unwrap();
+    out2.write_u16::<BigEndian>(this2).unwrap();
+    out2.write_u16::<BigEndian>(super2).unwrap();
+    out2.write_u16::<BigEndian>(0).unwrap(); // interfaces
+    out2.write_u16::<BigEndian>(field_infos.len() as u16)
+        .unwrap();
+    for (n, d) in &field_infos {
+        out2.write_u16::<BigEndian>(ACC_PUBLIC).unwrap();
+        out2.write_u16::<BigEndian>(*n).unwrap();
+        out2.write_u16::<BigEndian>(*d).unwrap();
+        out2.write_u16::<BigEndian>(0).unwrap();
+    }
+    out2.write_u16::<BigEndian>(method_blobs2.len() as u16)
+        .unwrap();
+    for blob in &method_blobs2 {
+        out2.extend_from_slice(blob);
+    }
+    out2.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+    out2.write_u16::<BigEndian>(sf_name2).unwrap();
+    out2.write_u32::<BigEndian>(2).unwrap();
+    out2.write_u16::<BigEndian>(sf_val2).unwrap();
+    out2
+}
+
+fn emit_user_method(
+    func: &MirFunction,
+    module: &MirModule,
+    class_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+    is_init: bool,
+) -> Vec<u8> {
+    // For <init>: call super <init> first, then field assignments.
+    // For regular methods: ACC_PUBLIC (not static), slot 0 = this.
+    let descriptor = if is_init {
+        // Build init descriptor from params (skip this at index 0).
+        let mut d = String::from("(");
+        for &p in func.params.iter().skip(1) {
+            let ty = &func.locals[p.0 as usize];
+            d.push_str(&jvm_type_string(ty));
+        }
+        d.push_str(")V");
+        d
+    } else {
+        // Instance method descriptor.
+        let mut d = String::from("(");
+        for &p in func.params.iter().skip(1) {
+            let ty = &func.locals[p.0 as usize];
+            d.push_str(&jvm_type_string(ty));
+        }
+        d.push(')');
+        d.push_str(&jvm_type_string(&func.return_ty));
+        d
+    };
+
+    let access = ACC_PUBLIC;
+    let name_idx = cp.utf8(&func.name);
+    let desc_idx = cp.utf8(&descriptor);
+
+    // Emit bytecode.
+    let mut code = Vec::<u8>::new();
+    let mut stack: i32 = 0;
+    let mut max_stack: i32 = 0;
+    let mut slots: FxHashMap<u32, u8> = FxHashMap::default();
+    let mut next_slot: u8 = 0;
+
+    // Slot 0 = this for all instance methods.
+    if !func.params.is_empty() {
+        slots.insert(func.params[0].0, 0);
+        next_slot = 1;
+    }
+    // Assign slots for remaining params.
+    for &p in func.params.iter().skip(1) {
+        slots.insert(p.0, next_slot);
+        next_slot += 1;
+    }
+
+    if is_init {
+        // Call super.<init>()
+        code.push(0x19); // aload
+        code.push(0); // slot 0 = this
+        bump(&mut stack, &mut max_stack, 1);
+        let super_init = cp.methodref("java/lang/Object", "<init>", "()V");
+        code.push(0xB7); // invokespecial
+        code.write_u16::<BigEndian>(super_init).unwrap();
+        bump(&mut stack, &mut max_stack, -1);
+    }
+
+    // Emit block statements.
+    let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+    for (bi, block) in func.blocks.iter().enumerate() {
+        walk_block(
+            block,
+            bi,
+            cp,
+            module,
+            func,
+            class_name,
+            &mut code,
+            &mut stack,
+            &mut max_stack,
+            &mut slots,
+            &mut next_slot,
+            &mut cmp_targets,
+        );
+        // Emit terminator.
+        match &block.terminator {
+            Terminator::Return => code.push(0xB1),
+            Terminator::ReturnValue(local) => {
+                load_local(
+                    &mut code,
+                    &mut stack,
+                    &mut max_stack,
+                    &mut slots,
+                    *local,
+                    &func.locals,
+                );
+                let ty = &func.locals[local.0 as usize];
+                match ty {
+                    Ty::Int | Ty::Bool => code.push(0xAC),
+                    _ => code.push(0xB0),
+                }
+            }
+            _ => code.push(0xB1), // default return
+        }
+    }
+
+    let max_locals = next_slot as u16;
+    let mut code_attr = Vec::<u8>::new();
+    code_attr
+        .write_u16::<BigEndian>(max_stack.max(1) as u16)
+        .unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals.max(1)).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // code attributes
+
+    let mut method = Vec::<u8>::new();
+    method.write_u16::<BigEndian>(access).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(desc_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap(); // attributes_count = 1
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    method
 }
 
 fn emit_method(
@@ -526,8 +791,17 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
         Ty::Any => "Ljava/lang/Object;",
+        Ty::Class(_) => "Ljava/lang/Object;", // TODO: proper class descriptor
         Ty::Nullable(inner) => jvm_type(inner),
         Ty::Error => "V",
+    }
+}
+
+/// Get JVM type descriptor for a type, supporting class types.
+fn jvm_type_string(ty: &Ty) -> String {
+    match ty {
+        Ty::Class(name) => format!("L{name};"),
+        other => jvm_type(other).to_string(),
     }
 }
 
@@ -698,6 +972,48 @@ fn walk_block(
                 }
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
+            Rvalue::NewInstance(class_name) => {
+                let class_idx = cp.class(class_name);
+                code.push(0xBB); // new
+                code.write_u16::<BigEndian>(class_idx).unwrap();
+                bump(stack, max_stack, 1);
+                code.push(0x59); // dup
+                bump(stack, max_stack, 1);
+                // Don't store yet — the Constructor call will consume one copy
+                // and the remaining copy is stored after invokespecial.
+                // Pre-assign the slot so load_local works later.
+                let _ = slot_for(slots, next_slot, *dest);
+            }
+            Rvalue::GetField {
+                receiver,
+                class_name,
+                field_name,
+                ..
+            } => {
+                load_local(code, stack, max_stack, slots, *receiver, &func.locals);
+                let field_ty = &func.locals[dest.0 as usize];
+                let descriptor = jvm_type_string(field_ty);
+                let fr = cp.fieldref(class_name, field_name, &descriptor);
+                code.push(0xB4); // getfield
+                code.write_u16::<BigEndian>(fr).unwrap();
+                // getfield pops receiver, pushes value → net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::PutField {
+                receiver,
+                class_name,
+                field_name,
+                value,
+            } => {
+                load_local(code, stack, max_stack, slots, *receiver, &func.locals);
+                load_local(code, stack, max_stack, slots, *value, &func.locals);
+                let value_ty = &func.locals[value.0 as usize];
+                let descriptor = jvm_type_string(value_ty);
+                let fr = cp.fieldref(class_name, field_name, &descriptor);
+                code.push(0xB5); // putfield
+                code.write_u16::<BigEndian>(fr).unwrap();
+                bump(stack, max_stack, -2);
+            }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println => {
                     let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
@@ -812,6 +1128,55 @@ fn walk_block(
                     code.write_u16::<BigEndian>(println).unwrap();
                     bump(stack, max_stack, -2); // pops [PS, String]
                     let _ = dest;
+                }
+                CallKind::Constructor(class_name) => {
+                    // Stack has [ref, ref] from NewInstance+dup.
+                    // Load constructor args on top: [ref, ref, arg1, ...]
+                    let mut descriptor = String::from("(");
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        let ty = &func.locals[a.0 as usize];
+                        descriptor.push_str(&jvm_type_string(ty));
+                    }
+                    descriptor.push_str(")V");
+                    let mref = cp.methodref(class_name, "<init>", &descriptor);
+                    code.push(0xB7); // invokespecial
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    // invokespecial consumes [ref, args...], leaving [ref] from dup
+                    bump(stack, max_stack, -(args.len() as i32) - 1);
+                    // Store the remaining reference.
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                }
+                CallKind::Virtual {
+                    class_name,
+                    method_name,
+                } => {
+                    // Load receiver (first arg) then remaining args
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    let dest_ty = &func.locals[dest.0 as usize];
+                    let ret_desc = jvm_type_string(dest_ty);
+                    let mut descriptor = String::from("(");
+                    // Skip first arg (receiver) in descriptor
+                    for a in args.iter().skip(1) {
+                        let ty = &func.locals[a.0 as usize];
+                        descriptor.push_str(&jvm_type_string(ty));
+                    }
+                    descriptor.push(')');
+                    descriptor.push_str(&ret_desc);
+                    let mref = cp.methodref(class_name, method_name, &descriptor);
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    let net = if dest_ty == &Ty::Unit {
+                        -(args.len() as i32)
+                    } else {
+                        -(args.len() as i32) + 1
+                    };
+                    bump(stack, max_stack, net);
+                    if *dest_ty != Ty::Unit {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
                 }
             },
         }

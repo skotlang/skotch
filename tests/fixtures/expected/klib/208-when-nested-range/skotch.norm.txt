@@ -825,6 +825,7 @@ unique_name=inputkt
       "return_ty": "Unit"
     }
   ],
+  "classes": [],
   "strings": [
     "A",
     "B",

@@ -35,8 +35,9 @@ use skotch_intern::{Interner, Symbol};
 use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
-    BinOp, Block, Decl, Expr, FunDecl, ImportDecl, KtFile, PackageDecl, Param, Stmt, TemplatePart,
-    Token, TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
+    BinOp, Block, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, ImportDecl, KtFile,
+    PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind, TypeRef, UnaryOp,
+    ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -173,16 +174,7 @@ impl<'a> Parser<'a> {
                     decls.push(Decl::Val(v));
                 }
                 TokenKind::KwClass => {
-                    let span = self.peek_span();
-                    self.diags.push(Diagnostic::error(
-                        span,
-                        "class declarations are not yet supported",
-                    ));
-                    decls.push(Decl::Unsupported {
-                        what: "class",
-                        span,
-                    });
-                    self.recover_to_top_level();
+                    decls.push(Decl::Class(self.parse_class_decl()));
                 }
                 TokenKind::KwObject => {
                     let span = self.peek_span();
@@ -279,6 +271,144 @@ impl<'a> Parser<'a> {
         ImportDecl {
             path,
             span: kw.merge(end_span),
+        }
+    }
+
+    fn parse_class_decl(&mut self) -> ClassDecl {
+        let kw = self.expect(TokenKind::KwClass, "class");
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(name_span, "expected class name"));
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+
+        // Primary constructor parameters.
+        let mut constructor_params = Vec::new();
+        if self.peek_kind() == TokenKind::LParen {
+            self.bump();
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    let param_start = self.peek_span();
+                    // Check for val/var prefix.
+                    let is_val = self.peek_kind() == TokenKind::KwVal;
+                    let is_var = self.peek_kind() == TokenKind::KwVar;
+                    if is_val || is_var {
+                        self.bump();
+                        self.skip_trivia();
+                    }
+                    let p = self.parse_param();
+                    constructor_params.push(ConstructorParam {
+                        is_val,
+                        is_var,
+                        name: p.name,
+                        ty: p.ty,
+                        span: param_start.merge(p.span),
+                    });
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+        }
+
+        // Class body.
+        let mut properties = Vec::new();
+        let mut methods = Vec::new();
+        if self.peek_kind() == TokenKind::LBrace {
+            self.bump();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                match self.peek_kind() {
+                    TokenKind::KwFun => {
+                        methods.push(self.parse_fun_decl());
+                    }
+                    TokenKind::KwVal | TokenKind::KwVar => {
+                        let prop = self.parse_property_decl();
+                        properties.push(prop);
+                    }
+                    TokenKind::Ident => {
+                        // Could be "override fun ..."
+                        let saved = self.pos;
+                        let override_sym = self.interner.intern("override");
+                        self.bump();
+                        let sym = self.intern_ident_at(saved);
+                        if sym == override_sym {
+                            self.bump(); // consume "override"
+                            self.skip_trivia();
+                            if self.peek_kind() == TokenKind::KwFun {
+                                methods.push(self.parse_fun_decl());
+                            }
+                        } else {
+                            self.bump(); // skip unknown
+                        }
+                    }
+                    _ => {
+                        self.bump(); // skip unknown token
+                    }
+                }
+            }
+            self.expect(TokenKind::RBrace, "}");
+        }
+
+        ClassDecl {
+            name,
+            name_span,
+            constructor_params,
+            properties,
+            methods,
+            span: kw.merge(name_span),
+        }
+    }
+
+    fn parse_property_decl(&mut self) -> PropertyDecl {
+        let start = self.peek_span();
+        let is_var = self.peek_kind() == TokenKind::KwVar;
+        self.bump(); // consume val/var
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+        let ty = if self.eat(TokenKind::Colon) {
+            self.skip_trivia();
+            Some(self.parse_type_ref())
+        } else {
+            None
+        };
+        self.skip_trivia();
+        let init = if self.eat(TokenKind::Eq) {
+            self.skip_trivia();
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+        PropertyDecl {
+            is_var,
+            name,
+            name_span,
+            ty,
+            init,
+            span: start.merge(name_span),
         }
     }
 

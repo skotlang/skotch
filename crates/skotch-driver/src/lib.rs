@@ -239,6 +239,15 @@ fn emit_jvm(mir: &skotch_mir::MirModule, interner: &Interner, opts: &EmitOptions
     std::fs::write(&opts.output, bytes)
         .with_context(|| format!("writing {}", opts.output.display()))?;
 
+    // Write additional class files (user-defined classes) next to the main output.
+    if let Some(parent) = opts.output.parent() {
+        for (name, class_bytes) in bytes_list.iter().skip(1) {
+            let path = parent.join(format!("{name}.class"));
+            std::fs::write(&path, class_bytes)
+                .with_context(|| format!("writing {}", path.display()))?;
+        }
+    }
+
     if let Some(norm_path) = &opts.norm_out {
         let normalized = skotch_classfile_norm::normalize_default(bytes)
             .map_err(|e| anyhow!("normalizing emitted .class: {e}"))?;

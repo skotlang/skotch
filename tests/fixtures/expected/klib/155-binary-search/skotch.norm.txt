@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.1.8
+compiler_version=0.1.9
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -243,16 +243,6 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 20,
-                "value": {
-                  "Const": {
-                    "Int": 0
-                  }
-                }
-              }
             }
           ],
           "terminator": {
@@ -327,16 +317,6 @@ unique_name=inputkt
                     "op": "CmpLt",
                     "lhs": 22,
                     "rhs": 23
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 25,
-                "value": {
-                  "Const": {
-                    "Int": 0
                   }
                 }
               }
@@ -677,5 +657,6 @@ unique_name=inputkt
       "return_ty": "Unit"
     }
   ],
+  "classes": [],
   "strings": []
 }
