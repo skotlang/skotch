@@ -1,0 +1,4 @@
+name   = "134-string-template-val"
+status = "supported"
+features = ["string-template", "val-assignment", "expression-interpolation"]
+skip_dex = true
