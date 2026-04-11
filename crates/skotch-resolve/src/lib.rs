@@ -393,30 +393,18 @@ fn lookup(scope: &[(Symbol, DefId)], name: Symbol) -> Option<DefId> {
     None
 }
 /// Check if a name matches a known Java class or package prefix.
+/// Check if a name could be a Java class or package prefix.
+/// Accepts any capitalized name (potential class) or known package prefix.
 fn is_known_java_class(name: &str) -> bool {
-    matches!(
+    // Known Java/Kotlin package prefixes.
+    if matches!(
         name,
-        // Java classes
-        "System"
-            | "Math"
-            | "Integer"
-            | "Long"
-            | "Double"
-            | "Boolean"
-            | "String"
-            | "Thread"
-            | "Runtime"
-            | "Arrays"
-            | "Collections"
-            // Java package prefixes (for qualified names like java.lang.System)
-            | "java"
-            | "javax"
-            | "kotlin"
-            | "org"
-            | "com"
-            | "io"
-            | "net"
-    )
+        "java" | "javax" | "kotlin" | "org" | "com" | "io" | "net"
+    ) {
+        return true;
+    }
+    // Any capitalized name could be a Java class (e.g. System, Math, Integer).
+    name.starts_with(|c: char| c.is_uppercase())
 }
 
 #[cfg(test)]

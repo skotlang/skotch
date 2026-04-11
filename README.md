@@ -192,7 +192,7 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
 | [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access (`obj.field`), instance methods, `invokevirtual` dispatch |
-| [Java interop](https://kotlinlang.org/spec/platform-specific-parts.html) | §18 | Real JDK class file parsing, FQN, `import`, any `java.lang.*` static method |
+| [Java interop](https://kotlinlang.org/spec/platform-specific-parts.html) | §18 | Real `.class` file parsing from JDK jmods + CLASSPATH; any public static method callable |
 | [Import declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.2 | `import java.lang.Math`, implicit `java.lang.*` |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
 | [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal, hex (`0xFF`), binary (`0b1010`), underscores (`1_000`), `L` suffix |
