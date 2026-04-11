@@ -1,0 +1,271 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.8
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "double",
+      "params": [
+        0
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 1,
+                    "rhs": 2
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 3
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 1,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "String",
+        "Int",
+        "String",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "String",
+        "Int",
+        "String",
+        "Int",
+        "Int",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "PrintlnConcat",
+                    "args": [
+                      2,
+                      3,
+                      4,
+                      6
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 12,
+                    "rhs": 13
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Call": {
+                    "kind": "PrintlnConcat",
+                    "args": [
+                      8,
+                      9,
+                      10,
+                      11,
+                      14
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "strings": [
+    "double(",
+    ") = ",
+    " * ",
+    " = "
+  ]
+}

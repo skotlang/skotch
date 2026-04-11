@@ -1,0 +1,47 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [6 x i8] c"Hello\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_clamp(i32 %arg0) {
+entry:
+  %t0 = add i32 0, 100
+  %t1 = icmp sgt i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 100
+  ret i32 %t2
+bb2:
+  br label %bb3
+bb3:
+  %t3 = add i32 0, 0
+  %t4 = icmp slt i32 %arg0, %t3
+  br i1 %t4, label %bb4, label %bb5
+bb4:
+  %t5 = add i32 0, 0
+  ret i32 %t5
+bb5:
+  br label %bb6
+bb6:
+  ret i32 %arg0
+}
+
+define i32 @main() {
+entry:
+  call i32 @puts(ptr @.str.0)
+  %t1 = add i32 0, 50
+  %t2 = call i32 @InputKt_clamp(i32 %t1)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t2)
+  %t4 = add i32 0, 200
+  %t5 = call i32 @InputKt_clamp(i32 %t4)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t5)
+  %t7 = add i32 0, -5
+  %t8 = call i32 @InputKt_clamp(i32 %t7)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t8)
+  ret i32 0
+}
+

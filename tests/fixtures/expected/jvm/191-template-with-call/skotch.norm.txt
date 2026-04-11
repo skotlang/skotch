@@ -1,0 +1,82 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        double (I)I 0x0009
+  code        max_stack=2 max_locals=4
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_2
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 imul
+    0012 istore 3
+    0014 iload 3
+    0016 op_0xAC
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=15
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 istore 2
+    0007 ldc "double("
+    0009 astore 3
+    0011 iload 2
+    0013 istore 4
+    0015 ldc ") = "
+    0017 astore 5
+    0019 iload 2
+    0021 istore 6
+    0023 iload 6
+    0025 invokestatic Method(InputKt.double:(I)I)
+    0028 istore 7
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 op_0xBB
+    0034 nop
+    0035 aload 89
+    0037 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0040 aload 3
+    0042 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0045 iload 4
+    0047 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0050 aload 5
+    0052 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0055 iload 7
+    0057 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0060 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0066 iload 2
+    0068 istore 8
+    0070 ldc " * "
+    0072 astore 9
+    0074 iload 2
+    0076 istore 10
+    0078 ldc " = "
+    0080 astore 11
+    0082 iload 2
+    0084 istore 12
+    0086 iload 2
+    0088 istore 13
+    0090 iload 12
+    0092 iload 13
+    0094 imul
+    0095 istore 14
+    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0100 op_0xBB
+    0101 nop
+    0102 aload 89
+    0104 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0107 iload 8
+    0109 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0112 aload 9
+    0114 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0117 iload 10
+    0119 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0122 aload 11
+    0124 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0127 iload 14
+    0129 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0132 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0135 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0138 return

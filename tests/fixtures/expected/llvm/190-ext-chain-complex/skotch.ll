@@ -1,0 +1,71 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.true = private unnamed_addr constant [5 x i8] c"true\00", align 1
+@.str.false = private unnamed_addr constant [6 x i8] c"false\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_isEven(i32 %arg0) {
+entry:
+  %t0 = add i32 0, 2
+  %t1 = srem i32 %arg0, %t0
+  %t2 = add i32 0, 0
+  %t3 = icmp eq i32 %t1, %t2
+  %t4 = zext i1 %t3 to i32
+  ret i32 %t4
+}
+
+define i32 @InputKt_isOdd(i32 %arg0) {
+entry:
+  %t0 = call i32 @InputKt_isEven(i32 %arg0)
+  %t1 = add i32 0, 1
+  %t2 = sub i32 %t1, %t0
+  ret i32 %t2
+}
+
+define i32 @InputKt_abs(i32 %arg0) {
+entry:
+  %merge_4 = alloca i32
+  %t0 = add i32 0, 0
+  %t1 = icmp slt i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 0
+  %t3 = sub i32 %t2, %arg0
+  store i32 %t3, ptr %merge_4
+  br label %bb3
+bb2:
+  store i32 %arg0, ptr %merge_4
+  br label %bb3
+bb3:
+  %t4 = load i32, ptr %merge_4
+  ret i32 %t4
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, -7
+  %t1 = call i32 @InputKt_abs(i32 %t0)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t1)
+  %t3 = add i32 0, 4
+  %t4 = call i32 @InputKt_isEven(i32 %t3)
+  %t6 = trunc i32 %t4 to i1
+  %t7 = select i1 %t6, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t7)
+  %t9 = add i32 0, 5
+  %t10 = call i32 @InputKt_isOdd(i32 %t9)
+  %t12 = trunc i32 %t10 to i1
+  %t13 = select i1 %t12, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t13)
+  %t15 = add i32 0, -4
+  %t16 = call i32 @InputKt_abs(i32 %t15)
+  %t17 = call i32 @InputKt_isEven(i32 %t16)
+  %t19 = trunc i32 %t17 to i1
+  %t20 = select i1 %t19, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t20)
+  ret i32 0
+}
+

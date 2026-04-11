@@ -1,0 +1,239 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        dayName (I)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=25
+    0000 iload 0
+    0002 istore 1
+    0004 op_0xA7
+    0005 nop
+    0006 iconst_0
+    0007 iconst_1
+    0008 istore 2
+    0010 iload 1
+    0012 iload 2
+    0014 op_0x9F
+    0015 nop
+    0016 iconst_4
+    0017 iconst_0
+    0018 op_0xA7
+    0019 nop
+    0020 iconst_1
+    0021 iconst_1
+    0022 istore 3
+    0024 iload 3
+    0026 op_0x99
+    0027 nop
+    0028 op_0x0E
+    0029 ldc "Monday"
+    0031 astore 4
+    0033 aload 4
+    0035 astore 5
+    0037 op_0xA7
+    0038 nop
+    0039 op_0xD6
+    0040 iconst_2
+    0041 istore 6
+    0043 iload 1
+    0045 iload 6
+    0047 op_0x9F
+    0048 nop
+    0049 iconst_4
+    0050 iconst_0
+    0051 op_0xA7
+    0052 nop
+    0053 iconst_1
+    0054 iconst_1
+    0055 istore 7
+    0057 iload 7
+    0059 op_0x99
+    0060 nop
+    0061 op_0x0E
+    0062 ldc "Tuesday"
+    0064 astore 8
+    0066 aload 8
+    0068 astore 5
+    0070 op_0xA7
+    0071 nop
+    0072 op_0xB5
+    0073 iconst_3
+    0074 istore 9
+    0076 iload 1
+    0078 iload 9
+    0080 op_0x9F
+    0081 nop
+    0082 iconst_4
+    0083 iconst_0
+    0084 op_0xA7
+    0085 nop
+    0086 iconst_1
+    0087 iconst_1
+    0088 istore 10
+    0090 iload 10
+    0092 op_0x99
+    0093 nop
+    0094 op_0x0E
+    0095 ldc "Wednesday"
+    0097 astore 11
+    0099 aload 11
+    0101 astore 5
+    0103 op_0xA7
+    0104 nop
+    0105 op_0x94
+    0106 iconst_4
+    0107 istore 12
+    0109 iload 1
+    0111 iload 12
+    0113 op_0x9F
+    0114 nop
+    0115 iconst_4
+    0116 iconst_0
+    0117 op_0xA7
+    0118 nop
+    0119 iconst_1
+    0120 iconst_1
+    0121 istore 13
+    0123 iload 13
+    0125 op_0x99
+    0126 nop
+    0127 op_0x0E
+    0128 ldc "Thursday"
+    0130 astore 14
+    0132 aload 14
+    0134 astore 5
+    0136 op_0xA7
+    0137 nop
+    0138 op_0x73
+    0139 iconst_5
+    0140 istore 15
+    0142 iload 1
+    0144 iload 15
+    0146 op_0x9F
+    0147 nop
+    0148 iconst_4
+    0149 iconst_0
+    0150 op_0xA7
+    0151 nop
+    0152 iconst_1
+    0153 iconst_1
+    0154 istore 16
+    0156 iload 16
+    0158 op_0x99
+    0159 nop
+    0160 op_0x0E
+    0161 ldc "Friday"
+    0163 astore 17
+    0165 aload 17
+    0167 astore 5
+    0169 op_0xA7
+    0170 nop
+    0171 op_0x52
+    0172 bipush 6
+    0174 istore 18
+    0176 iload 1
+    0178 iload 18
+    0180 op_0x9F
+    0181 nop
+    0182 iconst_4
+    0183 iconst_0
+    0184 op_0xA7
+    0185 nop
+    0186 iconst_1
+    0187 iconst_1
+    0188 istore 19
+    0190 iload 19
+    0192 op_0x99
+    0193 nop
+    0194 op_0x0E
+    0195 ldc "Weekend"
+    0197 astore 20
+    0199 aload 20
+    0201 astore 5
+    0203 op_0xA7
+    0204 nop
+    0205 op_0x30
+    0206 bipush 7
+    0208 istore 21
+    0210 iload 1
+    0212 iload 21
+    0214 op_0x9F
+    0215 nop
+    0216 iconst_4
+    0217 iconst_0
+    0218 op_0xA7
+    0219 nop
+    0220 iconst_1
+    0221 iconst_1
+    0222 istore 22
+    0224 iload 22
+    0226 op_0x99
+    0227 nop
+    0228 op_0x0E
+    0229 ldc "Weekend"
+    0231 astore 23
+    0233 aload 23
+    0235 astore 5
+    0237 op_0xA7
+    0238 nop
+    0239 op_0x0E
+    0240 ldc "Unknown"
+    0242 astore 24
+    0244 aload 24
+    0246 astore 5
+    0248 op_0xA7
+    0249 nop
+    0250 iconst_0
+    0251 aload 5
+    0253 op_0xB0
+    sub_attr  StackMapTable (457 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 iconst_1
+    0001 istore 1
+    0003 bipush 8
+    0005 istore 2
+    0007 iload 1
+    0009 istore 3
+    0011 op_0xA7
+    0012 nop
+    0013 iconst_0
+    0014 iload 3
+    0016 iload 2
+    0018 op_0xA4
+    0019 nop
+    0020 iconst_4
+    0021 iconst_0
+    0022 op_0xA7
+    0023 nop
+    0024 iconst_1
+    0025 iconst_1
+    0026 istore 4
+    0028 iload 4
+    0030 op_0x99
+    0031 nop
+    0032 op_0x2A
+    0033 iload 3
+    0035 istore 5
+    0037 iload 5
+    0039 invokestatic Method(InputKt.dayName:(I)Ljava/lang/String;)
+    0042 astore 6
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 aload 6
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0052 op_0xA7
+    0053 nop
+    0054 iconst_0
+    0055 iconst_1
+    0056 istore 7
+    0058 iload 3
+    0060 iload 7
+    0062 iadd
+    0063 istore 8
+    0065 iload 8
+    0067 istore 3
+    0069 op_0xA7
+    0070 op_0xFF
+    0071 op_0xC9
+    0072 return
+    sub_attr  StackMapTable (74 bytes)

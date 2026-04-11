@@ -1,0 +1,4 @@
+name   = "191-template-with-call"
+status = "supported"
+features = ["string-template", "function-call-in-interpolation"]
+skip_dex = true
