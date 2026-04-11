@@ -1,0 +1,8 @@
+# Summary of kotlinc-native LLVM IR for fixture: 141-break-continue-practical
+declarations: 194
+definitions:  1362
+globals:      3145
+
+# define lines mentioning `main`:
+define internal void @"kfun:#main(){}"() local_unnamed_addr #5 personality ptr @__gxx_personality_v0 !dbg !9420 {
+define noundef i32 @Konan_main(i32 noundef %0, ptr noundef readonly captures(none) %1) #16 {

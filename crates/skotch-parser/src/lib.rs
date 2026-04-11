@@ -462,6 +462,16 @@ impl<'a> Parser<'a> {
                 };
                 Stmt::Return { value, span }
             }
+            TokenKind::KwBreak => {
+                let span = self.peek_span();
+                self.bump();
+                Stmt::Break(span)
+            }
+            TokenKind::KwContinue => {
+                let span = self.peek_span();
+                self.bump();
+                Stmt::Continue(span)
+            }
             TokenKind::KwWhile => self.parse_while(),
             TokenKind::KwDo => self.parse_do_while(),
             TokenKind::KwFor => self.parse_for(),

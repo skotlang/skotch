@@ -273,6 +273,7 @@ impl<'a> TypeChecker<'a> {
                 Stmt::Assign { value, .. } => {
                     let _ = self.synth_expr(value, scope, expr_tys);
                 }
+                Stmt::Break(_) | Stmt::Continue(_) => {}
                 Stmt::For {
                     var_name,
                     start: range_start,

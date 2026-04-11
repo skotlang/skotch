@@ -275,6 +275,7 @@ fn lower_function(
             name_to_global,
             interner,
             diags,
+            None, // no loop context at function body level
         ) {
             ok = false;
             break;
@@ -300,6 +301,9 @@ fn lower_function(
     }
 }
 
+/// Loop context for `break` and `continue`: (continue_target, break_target).
+type LoopCtx = Option<(u32, u32)>;
+
 #[allow(clippy::too_many_arguments)]
 fn lower_stmt(
     stmt: &Stmt,
@@ -310,6 +314,7 @@ fn lower_stmt(
     name_to_global: &FxHashMap<Symbol, MirConst>,
     interner: &mut Interner,
     diags: &mut Diagnostics,
+    loop_ctx: LoopCtx,
 ) -> bool {
     match stmt {
         Stmt::Expr(e) => lower_expr(
@@ -321,6 +326,7 @@ fn lower_stmt(
             name_to_global,
             interner,
             diags,
+            loop_ctx,
         )
         .is_some(),
         Stmt::Val(v) => lower_val_stmt(
@@ -344,6 +350,7 @@ fn lower_stmt(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 ) {
                     fb.set_terminator(Terminator::ReturnValue(local));
                 }
@@ -369,6 +376,7 @@ fn lower_stmt(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             ) {
                 fb.terminate_and_switch(
                     Terminator::Branch {
@@ -379,6 +387,7 @@ fn lower_stmt(
                     body_block,
                 );
             }
+            let lctx = Some((cond_block, exit_block));
             for s in &body.stmts {
                 lower_stmt(
                     s,
@@ -389,6 +398,7 @@ fn lower_stmt(
                     name_to_global,
                     interner,
                     diags,
+                    lctx,
                 );
             }
             fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
@@ -401,6 +411,7 @@ fn lower_stmt(
             let cond_block = fb.new_block();
             let exit_block = fb.new_block();
             fb.terminate_and_switch(Terminator::Goto(body_block), body_block);
+            let lctx = Some((cond_block, exit_block));
             for s in &body.stmts {
                 lower_stmt(
                     s,
@@ -411,6 +422,7 @@ fn lower_stmt(
                     name_to_global,
                     interner,
                     diags,
+                    lctx,
                 );
             }
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
@@ -423,6 +435,7 @@ fn lower_stmt(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             ) {
                 fb.terminate_and_switch(
                     Terminator::Branch {
@@ -447,6 +460,7 @@ fn lower_stmt(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             ) {
                 // Find the local for this variable in scope.
                 if let Some((_name, local_id)) =
@@ -481,6 +495,7 @@ fn lower_stmt(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             ) else {
                 return false;
             };
@@ -493,6 +508,7 @@ fn lower_stmt(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             ) else {
                 return false;
             };
@@ -508,6 +524,7 @@ fn lower_stmt(
             // while (loop_var <= end_val)
             let cond_block = fb.new_block();
             let body_block = fb.new_block();
+            let incr_block = fb.new_block(); // increment step (continue target)
             let exit_block = fb.new_block();
 
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
@@ -531,7 +548,8 @@ fn lower_stmt(
                 body_block,
             );
 
-            // Body
+            // Body — continue goes to incr_block, break goes to exit_block
+            let lctx = Some((incr_block, exit_block));
             for s in &body.stmts {
                 lower_stmt(
                     s,
@@ -542,10 +560,14 @@ fn lower_stmt(
                     name_to_global,
                     interner,
                     diags,
+                    lctx,
                 );
             }
 
-            // Increment: i = i + 1
+            // After body: goto increment block
+            fb.terminate_and_switch(Terminator::Goto(incr_block), incr_block);
+
+            // Increment block: i = i + 1, then goto condition
             let one = fb.new_local(Ty::Int);
             fb.push_stmt(MStmt::Assign {
                 dest: one,
@@ -566,6 +588,18 @@ fn lower_stmt(
             });
 
             fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            true
+        }
+        Stmt::Break(_) => {
+            if let Some((_continue_blk, break_blk)) = loop_ctx {
+                fb.set_terminator(Terminator::Goto(break_blk));
+            }
+            true
+        }
+        Stmt::Continue(_) => {
+            if let Some((continue_blk, _break_blk)) = loop_ctx {
+                fb.set_terminator(Terminator::Goto(continue_blk));
+            }
             true
         }
     }
@@ -591,6 +625,7 @@ fn lower_val_stmt(
         name_to_global,
         interner,
         diags,
+        None,
     ) else {
         return false;
     };
@@ -616,6 +651,7 @@ fn lower_expr(
     name_to_global: &FxHashMap<Symbol, MirConst>,
     interner: &mut Interner,
     diags: &mut Diagnostics,
+    loop_ctx: LoopCtx,
 ) -> Option<LocalId> {
     match e {
         Expr::IntLit(v, _) => {
@@ -681,6 +717,7 @@ fn lower_expr(
             name_to_global,
             interner,
             diags,
+            loop_ctx,
         ),
         Expr::Binary {
             op,
@@ -702,6 +739,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 )?;
                 if *op == BinOp::And {
                     // lhs && rhs: if lhs is false, result = false; else eval rhs
@@ -741,6 +779,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 )?;
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
@@ -759,6 +798,7 @@ fn lower_expr(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             )?;
             let r = lower_expr(
                 rhs,
@@ -769,6 +809,7 @@ fn lower_expr(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             )?;
             let lhs_ty = &fb.mf.locals[l.0 as usize];
             let (mop, result_ty) = match op {
@@ -825,6 +866,7 @@ fn lower_expr(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             )?;
 
             let then_blk = fb.new_block();
@@ -848,7 +890,7 @@ fn lower_expr(
 
             // Then branch.
             let mut then_val: Option<LocalId> = None;
-            let mut then_has_return = false;
+            let mut then_terminates = false;
             for s in &then_block.stmts {
                 match s {
                     skotch_syntax::Stmt::Expr(e) => {
@@ -861,6 +903,7 @@ fn lower_expr(
                             name_to_global,
                             interner,
                             diags,
+                            loop_ctx,
                         );
                     }
                     skotch_syntax::Stmt::Return { .. } => {
@@ -873,8 +916,23 @@ fn lower_expr(
                             name_to_global,
                             interner,
                             diags,
+                            loop_ctx,
                         );
-                        then_has_return = true;
+                        then_terminates = true;
+                    }
+                    skotch_syntax::Stmt::Break(_) | skotch_syntax::Stmt::Continue(_) => {
+                        let _ = lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                        then_terminates = true;
                     }
                     _ => {
                         let _ = lower_stmt(
@@ -886,6 +944,7 @@ fn lower_expr(
                             name_to_global,
                             interner,
                             diags,
+                            loop_ctx,
                         );
                     }
                 }
@@ -901,14 +960,14 @@ fn lower_expr(
             }
             // Only emit Goto(merge) if the then-block didn't contain
             // an explicit return statement.
-            if then_has_return {
+            if then_terminates {
                 fb.cur_block = else_blk;
             } else {
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
             }
 
             // Else branch.
-            let mut else_has_return = false;
+            let mut else_terminates = false;
             if let Some(eb) = else_block {
                 for s in &eb.stmts {
                     match s {
@@ -922,6 +981,7 @@ fn lower_expr(
                                 name_to_global,
                                 interner,
                                 diags,
+                                loop_ctx,
                             ) {
                                 fb.push_stmt(MStmt::Assign {
                                     dest: result,
@@ -929,7 +989,9 @@ fn lower_expr(
                                 });
                             }
                         }
-                        skotch_syntax::Stmt::Return { .. } => {
+                        skotch_syntax::Stmt::Return { .. }
+                        | skotch_syntax::Stmt::Break(_)
+                        | skotch_syntax::Stmt::Continue(_) => {
                             let _ = lower_stmt(
                                 s,
                                 fb,
@@ -939,8 +1001,9 @@ fn lower_expr(
                                 name_to_global,
                                 interner,
                                 diags,
+                                loop_ctx,
                             );
-                            else_has_return = true;
+                            else_terminates = true;
                         }
                         _ => {
                             let _ = lower_stmt(
@@ -952,12 +1015,13 @@ fn lower_expr(
                                 name_to_global,
                                 interner,
                                 diags,
+                                loop_ctx,
                             );
                         }
                     }
                 }
             }
-            if else_has_return {
+            if else_terminates {
                 fb.cur_block = merge_blk;
             } else {
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
@@ -1020,6 +1084,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 )?;
                 arg_locals.push(id);
             }
@@ -1108,6 +1173,7 @@ fn lower_expr(
                         name_to_global,
                         interner,
                         diags,
+                        loop_ctx,
                     )?;
                     let zero = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
@@ -1136,6 +1202,7 @@ fn lower_expr(
                         name_to_global,
                         interner,
                         diags,
+                        loop_ctx,
                     )?;
                     let one = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
@@ -1178,6 +1245,7 @@ fn lower_expr(
                 name_to_global,
                 interner,
                 diags,
+                loop_ctx,
             )?;
 
             let result = fb.new_local(Ty::String); // type patched below
@@ -1216,6 +1284,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 )?;
 
                 // For subjectless when, the pattern IS the boolean
@@ -1262,6 +1331,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 ) {
                     if i == 0 {
                         let ty = fb.mf.locals[val.0 as usize].clone();
@@ -1295,6 +1365,7 @@ fn lower_expr(
                     name_to_global,
                     interner,
                     diags,
+                    loop_ctx,
                 ) {
                     fb.push_stmt(MStmt::Assign {
                         dest: result,
@@ -1353,6 +1424,7 @@ fn lower_template_part(
                 name_to_global,
                 interner,
                 diags,
+                None,
             )
         }
         TemplatePart::Expr(inner) => lower_expr(
@@ -1364,6 +1436,7 @@ fn lower_template_part(
             name_to_global,
             interner,
             diags,
+            None,
         ),
     }
 }

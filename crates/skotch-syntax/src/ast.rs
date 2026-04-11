@@ -104,6 +104,10 @@ pub enum Stmt {
     Val(ValDecl),
     /// `return [expr]`.
     Return { value: Option<Expr>, span: Span },
+    /// `break` — exits the innermost loop.
+    Break(Span),
+    /// `continue` — skips to the next iteration of the innermost loop.
+    Continue(Span),
     /// `while (cond) { body }`.
     While { cond: Expr, body: Block, span: Span },
     /// `do { body } while (cond)`.

@@ -220,6 +220,7 @@ impl<'a> Resolver<'a> {
                 });
                 self.resolve_expr(fn_idx, value, scope, rf);
             }
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 
