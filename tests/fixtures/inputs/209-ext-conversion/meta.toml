@@ -1,0 +1,3 @@
+name   = "209-ext-conversion"
+status = "supported"
+features = ["extension-function", "arithmetic", "temperature-conversion"]

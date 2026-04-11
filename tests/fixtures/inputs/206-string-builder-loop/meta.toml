@@ -1,0 +1,4 @@
+name   = "206-string-builder-loop"
+status = "supported"
+features = ["string-concat", "for-loop", "string-template", "string-building"]
+skip_dex = true

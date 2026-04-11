@@ -1,0 +1,3 @@
+name   = "207-matrix-multiply"
+status = "supported"
+features = ["arithmetic", "matrix-multiplication", "multiple-vals"]

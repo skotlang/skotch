@@ -1,0 +1,277 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        category (I)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=34
+    0000 iload 0
+    0002 istore 1
+    0004 op_0xA7
+    0005 nop
+    0006 iconst_0
+    0007 bipush 90
+    0009 istore 2
+    0011 bipush 100
+    0013 istore 3
+    0015 iload 1
+    0017 iload 2
+    0019 op_0xA2
+    0020 nop
+    0021 iconst_4
+    0022 iconst_0
+    0023 op_0xA7
+    0024 nop
+    0025 iconst_1
+    0026 iconst_1
+    0027 istore 4
+    0029 iload 1
+    0031 iload 3
+    0033 op_0xA4
+    0034 nop
+    0035 iconst_4
+    0036 iconst_0
+    0037 op_0xA7
+    0038 nop
+    0039 iconst_1
+    0040 iconst_1
+    0041 istore 5
+    0043 iload 4
+    0045 iload 5
+    0047 imul
+    0048 istore 6
+    0050 iload 6
+    0052 op_0x99
+    0053 nop
+    0054 op_0x0E
+    0055 ldc "A"
+    0057 astore 7
+    0059 aload 7
+    0061 astore 8
+    0063 op_0xA7
+    0064 nop
+    0065 op_0xF9
+    0066 bipush 80
+    0068 istore 9
+    0070 bipush 89
+    0072 istore 10
+    0074 iload 1
+    0076 iload 9
+    0078 op_0xA2
+    0079 nop
+    0080 iconst_4
+    0081 iconst_0
+    0082 op_0xA7
+    0083 nop
+    0084 iconst_1
+    0085 iconst_1
+    0086 istore 11
+    0088 iload 1
+    0090 iload 10
+    0092 op_0xA4
+    0093 nop
+    0094 iconst_4
+    0095 iconst_0
+    0096 op_0xA7
+    0097 nop
+    0098 iconst_1
+    0099 iconst_1
+    0100 istore 12
+    0102 iload 11
+    0104 iload 12
+    0106 imul
+    0107 istore 13
+    0109 iload 13
+    0111 op_0x99
+    0112 nop
+    0113 op_0x0E
+    0114 ldc "B"
+    0116 astore 14
+    0118 aload 14
+    0120 astore 8
+    0122 op_0xA7
+    0123 nop
+    0124 op_0xBE
+    0125 bipush 70
+    0127 istore 15
+    0129 bipush 79
+    0131 istore 16
+    0133 iload 1
+    0135 iload 15
+    0137 op_0xA2
+    0138 nop
+    0139 iconst_4
+    0140 iconst_0
+    0141 op_0xA7
+    0142 nop
+    0143 iconst_1
+    0144 iconst_1
+    0145 istore 17
+    0147 iload 1
+    0149 iload 16
+    0151 op_0xA4
+    0152 nop
+    0153 iconst_4
+    0154 iconst_0
+    0155 op_0xA7
+    0156 nop
+    0157 iconst_1
+    0158 iconst_1
+    0159 istore 18
+    0161 iload 17
+    0163 iload 18
+    0165 imul
+    0166 istore 19
+    0168 iload 19
+    0170 op_0x99
+    0171 nop
+    0172 op_0x0E
+    0173 ldc "C"
+    0175 astore 20
+    0177 aload 20
+    0179 astore 8
+    0181 op_0xA7
+    0182 nop
+    0183 op_0x83
+    0184 bipush 60
+    0186 istore 21
+    0188 bipush 69
+    0190 istore 22
+    0192 iload 1
+    0194 iload 21
+    0196 op_0xA2
+    0197 nop
+    0198 iconst_4
+    0199 iconst_0
+    0200 op_0xA7
+    0201 nop
+    0202 iconst_1
+    0203 iconst_1
+    0204 istore 23
+    0206 iload 1
+    0208 iload 22
+    0210 op_0xA4
+    0211 nop
+    0212 iconst_4
+    0213 iconst_0
+    0214 op_0xA7
+    0215 nop
+    0216 iconst_1
+    0217 iconst_1
+    0218 istore 24
+    0220 iload 23
+    0222 iload 24
+    0224 imul
+    0225 istore 25
+    0227 iload 25
+    0229 op_0x99
+    0230 nop
+    0231 op_0x0E
+    0232 ldc "D"
+    0234 astore 26
+    0236 aload 26
+    0238 astore 8
+    0240 op_0xA7
+    0241 nop
+    0242 op_0x48
+    0243 iconst_0
+    0244 istore 27
+    0246 bipush 59
+    0248 istore 28
+    0250 iload 1
+    0252 iload 27
+    0254 op_0xA2
+    0255 nop
+    0256 iconst_4
+    0257 iconst_0
+    0258 op_0xA7
+    0259 nop
+    0260 iconst_1
+    0261 iconst_1
+    0262 istore 29
+    0264 iload 1
+    0266 iload 28
+    0268 op_0xA4
+    0269 nop
+    0270 iconst_4
+    0271 iconst_0
+    0272 op_0xA7
+    0273 nop
+    0274 iconst_1
+    0275 iconst_1
+    0276 istore 30
+    0278 iload 29
+    0280 iload 30
+    0282 imul
+    0283 istore 31
+    0285 iload 31
+    0287 op_0x99
+    0288 nop
+    0289 op_0x0E
+    0290 ldc "F"
+    0292 astore 32
+    0294 aload 32
+    0296 astore 8
+    0298 op_0xA7
+    0299 nop
+    0300 op_0x0E
+    0301 ldc "Invalid"
+    0303 astore 33
+    0305 aload 33
+    0307 astore 8
+    0309 op_0xA7
+    0310 nop
+    0311 iconst_0
+    0312 aload 8
+    0314 op_0xB0
+    sub_attr  StackMapTable (659 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=13
+    0000 bipush 95
+    0002 istore 1
+    0004 iload 1
+    0006 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0009 astore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0019 bipush 85
+    0021 istore 3
+    0023 iload 3
+    0025 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0028 astore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 aload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0038 bipush 72
+    0040 istore 5
+    0042 iload 5
+    0044 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0047 astore 6
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 aload 6
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0057 bipush 65
+    0059 istore 7
+    0061 iload 7
+    0063 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0066 astore 8
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 aload 8
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0076 bipush 45
+    0078 istore 9
+    0080 iload 9
+    0082 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0085 astore 10
+    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0090 aload 10
+    0092 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0095 iconst_m1
+    0096 istore 11
+    0098 iload 11
+    0100 invokestatic Method(InputKt.category:(I)Ljava/lang/String;)
+    0103 astore 12
+    0105 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0108 aload 12
+    0110 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0113 return

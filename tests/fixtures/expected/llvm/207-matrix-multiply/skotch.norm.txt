@@ -1,0 +1,37 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 1
+  %t1 = add i32 0, 2
+  %t2 = add i32 0, 3
+  %t3 = add i32 0, 4
+  %t4 = add i32 0, 5
+  %t5 = add i32 0, 6
+  %t6 = add i32 0, 7
+  %t7 = add i32 0, 8
+  %t8 = mul i32 %t0, %t4
+  %t9 = mul i32 %t1, %t6
+  %t10 = add i32 %t8, %t9
+  %t11 = mul i32 %t0, %t5
+  %t12 = mul i32 %t1, %t7
+  %t13 = add i32 %t11, %t12
+  %t14 = mul i32 %t2, %t4
+  %t15 = mul i32 %t3, %t6
+  %t16 = add i32 %t14, %t15
+  %t17 = mul i32 %t2, %t5
+  %t18 = mul i32 %t3, %t7
+  %t19 = add i32 %t17, %t18
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t13)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t16)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t19)
+  ret i32 0
+}
+

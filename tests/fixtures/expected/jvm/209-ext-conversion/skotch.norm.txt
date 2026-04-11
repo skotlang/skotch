@@ -1,0 +1,87 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 iconst_0
+    0001 istore 1
+    0003 iload 1
+    0005 invokestatic Method(InputKt.toFahrenheit:(I)I)
+    0008 istore 2
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload 2
+    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0018 bipush 100
+    0020 istore 3
+    0022 iload 3
+    0024 invokestatic Method(InputKt.toFahrenheit:(I)I)
+    0027 istore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 iload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0037 bipush 32
+    0039 istore 5
+    0041 iload 5
+    0043 invokestatic Method(InputKt.toCelsius:(I)I)
+    0046 istore 6
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 iload 6
+    0053 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0056 sipush 212
+    0059 istore 7
+    0061 iload 7
+    0063 invokestatic Method(InputKt.toCelsius:(I)I)
+    0066 istore 8
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 iload 8
+    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0076 return
+method        toCelsius (I)I 0x0009
+  code        max_stack=2 max_locals=8
+    0000 iload 0
+    0002 istore 1
+    0004 bipush 32
+    0006 istore 2
+    0008 iload 1
+    0010 iload 2
+    0012 isub
+    0013 istore 3
+    0015 iconst_5
+    0016 istore 4
+    0018 iload 3
+    0020 iload 4
+    0022 imul
+    0023 istore 5
+    0025 bipush 9
+    0027 istore 6
+    0029 iload 5
+    0031 iload 6
+    0033 idiv
+    0034 istore 7
+    0036 iload 7
+    0038 op_0xAC
+method        toFahrenheit (I)I 0x0009
+  code        max_stack=2 max_locals=8
+    0000 iload 0
+    0002 istore 1
+    0004 bipush 9
+    0006 istore 2
+    0008 iload 1
+    0010 iload 2
+    0012 imul
+    0013 istore 3
+    0015 iconst_5
+    0016 istore 4
+    0018 iload 3
+    0020 iload 4
+    0022 idiv
+    0023 istore 5
+    0025 bipush 32
+    0027 istore 6
+    0029 iload 5
+    0031 iload 6
+    0033 iadd
+    0034 istore 7
+    0036 iload 7
+    0038 op_0xAC

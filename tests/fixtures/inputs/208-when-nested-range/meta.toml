@@ -1,0 +1,3 @@
+name   = "208-when-nested-range"
+status = "supported"
+features = ["when-in-range", "grade-scale", "many-ranges"]
