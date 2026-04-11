@@ -463,6 +463,7 @@ impl<'a> Parser<'a> {
                 Stmt::Return { value, span }
             }
             TokenKind::KwWhile => self.parse_while(),
+            TokenKind::KwFor => self.parse_for(),
             _ => {
                 let expr = self.parse_expr();
                 // Check for `ident = expr` (var reassignment).
@@ -500,6 +501,45 @@ impl<'a> Parser<'a> {
         let body = self.parse_block();
         let span = start.merge(body.span);
         Stmt::While { cond, body, span }
+    }
+
+    fn parse_for(&mut self) -> Stmt {
+        let start = self.peek_span();
+        self.bump(); // consume `for`
+        self.skip_trivia();
+        self.expect(TokenKind::LParen, "'(' after 'for'");
+        self.skip_trivia();
+        // Parse: varName in start..end
+        let var_name_idx = self.pos;
+        let var_span = self.peek_span();
+        let var_name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(var_name_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(var_span, "expected loop variable name"));
+            self.interner.intern("_")
+        };
+        self.skip_trivia();
+        self.expect(TokenKind::KwIn, "'in' after loop variable");
+        self.skip_trivia();
+        let range_start = self.parse_expr();
+        self.skip_trivia();
+        self.expect(TokenKind::DotDot, "'..' for range");
+        self.skip_trivia();
+        let range_end = self.parse_expr();
+        self.skip_trivia();
+        self.expect(TokenKind::RParen, "')' after for range");
+        self.skip_trivia();
+        let body = self.parse_block();
+        let span = start.merge(body.span);
+        Stmt::For {
+            var_name,
+            start: range_start,
+            end: range_end,
+            body,
+            span,
+        }
     }
 
     // ─── expression precedence climbing ──────────────────────────────────

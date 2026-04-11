@@ -48,6 +48,8 @@ pub enum TokenKind {
     KwNull,
     KwWhile,
     KwWhen,
+    KwFor,
+    KwIn,
     KwClass,
     KwObject,
     KwPackage,
@@ -83,6 +85,7 @@ pub enum TokenKind {
     GtEq,     // >=
     AmpAmp,   // &&
     PipePipe, // ||
+    DotDot,   // .. (range operator)
 
     // ─── trivia / structural ─────────────────────────────────────────────
     /// One or more `\n`s. Kotlin treats newlines as soft statement

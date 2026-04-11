@@ -420,6 +420,113 @@ fn lower_stmt(
             }
             true
         }
+        Stmt::For {
+            var_name,
+            start: range_start,
+            end: range_end,
+            body,
+            ..
+        } => {
+            // Desugar: for (i in a..b) { body }
+            //   → var i = a
+            //     val _end = b
+            //     while (i <= _end) { body; i = i + 1 }
+            let Some(start_val) = lower_expr(
+                range_start,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            ) else {
+                return false;
+            };
+            let Some(end_val) = lower_expr(
+                range_end,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            ) else {
+                return false;
+            };
+
+            // Create the loop variable.
+            let loop_var = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
+                dest: loop_var,
+                value: Rvalue::Local(start_val),
+            });
+            scope.push((*var_name, loop_var));
+
+            // while (loop_var <= end_val)
+            let cond_block = fb.new_block();
+            let body_block = fb.new_block();
+            let exit_block = fb.new_block();
+
+            fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
+
+            // Condition: loop_var <= end_val
+            let cmp = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: cmp,
+                value: Rvalue::BinOp {
+                    op: MBinOp::CmpLe,
+                    lhs: loop_var,
+                    rhs: end_val,
+                },
+            });
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: cmp,
+                    then_block: body_block,
+                    else_block: exit_block,
+                },
+                body_block,
+            );
+
+            // Body
+            for s in &body.stmts {
+                lower_stmt(
+                    s,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                );
+            }
+
+            // Increment: i = i + 1
+            let one = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
+                dest: one,
+                value: Rvalue::Const(MirConst::Int(1)),
+            });
+            let incremented = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
+                dest: incremented,
+                value: Rvalue::BinOp {
+                    op: MBinOp::AddI,
+                    lhs: loop_var,
+                    rhs: one,
+                },
+            });
+            fb.push_stmt(MStmt::Assign {
+                dest: loop_var,
+                value: Rvalue::Local(incremented),
+            });
+
+            fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            true
+        }
     }
 }
 
@@ -622,7 +729,9 @@ fn lower_expr(
                 interner,
                 diags,
             )?;
+            let lhs_ty = &fb.mf.locals[l.0 as usize];
             let (mop, result_ty) = match op {
+                BinOp::Add if matches!(lhs_ty, Ty::String) => (MBinOp::ConcatStr, Ty::String),
                 BinOp::Add => (MBinOp::AddI, Ty::Int),
                 BinOp::Sub => (MBinOp::SubI, Ty::Int),
                 BinOp::Mul => (MBinOp::MulI, Ty::Int),

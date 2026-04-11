@@ -433,6 +433,10 @@ fn emit_binop(
     let r = slot[&rhs.0] as u8;
     let d = slot[&dest.0] as u8;
     match op {
+        MBinOp::ConcatStr => {
+            // TODO: String concat in DEX (needs invoke-virtual StringBuilder)
+            // For now, emit a nop — the fixture should be marked skip_dex.
+        }
         MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
             // Format 23x: AA|op | CC|BB ; vAA = vBB op vCC.
             let opcode: u8 = match op {

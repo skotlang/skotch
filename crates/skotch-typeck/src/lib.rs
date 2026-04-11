@@ -273,6 +273,19 @@ impl<'a> TypeChecker<'a> {
                 Stmt::Assign { value, .. } => {
                     let _ = self.synth_expr(value, scope, expr_tys);
                 }
+                Stmt::For {
+                    var_name,
+                    start: range_start,
+                    end: range_end,
+                    body,
+                    ..
+                } => {
+                    let _ = self.synth_expr(range_start, scope, expr_tys);
+                    let _ = self.synth_expr(range_end, scope, expr_tys);
+                    local_tys.push(Ty::Int);
+                    scope.push((*var_name, Ty::Int));
+                    self.check_block(body, scope, expr_tys, local_tys);
+                }
             }
         }
         scope.truncate(saved);
@@ -309,6 +322,9 @@ impl<'a> TypeChecker<'a> {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
                         if lt == Ty::Int && rt == Ty::Int {
                             Ty::Int
+                        } else if *op == BinOp::Add && lt == Ty::String {
+                            // String + anything → String concatenation
+                            Ty::String
                         } else if lt == Ty::Error || rt == Ty::Error {
                             Ty::Error
                         } else {

@@ -89,6 +89,7 @@ struct Emitter<'a> {
     needs_puts: bool,
     needs_printf: bool,
     needs_strcmp: bool,
+    needs_snprintf: bool,
     needs_bool_strings: bool,
 }
 
@@ -107,6 +108,7 @@ impl<'a> Emitter<'a> {
             needs_puts: false,
             needs_printf: false,
             needs_strcmp: false,
+            needs_snprintf: false,
             needs_bool_strings: false,
         }
     }
@@ -172,6 +174,11 @@ impl<'a> Emitter<'a> {
         if self.needs_strcmp {
             writeln!(self.out, "declare i32 @strcmp(ptr, ptr)").unwrap();
         }
+        if self.needs_snprintf {
+            self.emit_c_string("@.fmt.concat.ss", "%s%s");
+            self.emit_c_string("@.fmt.concat.sd", "%s%d");
+            writeln!(self.out, "declare i32 @snprintf(ptr, i32, ptr, ...)").unwrap();
+        }
         if self.needs_puts || self.needs_printf || self.needs_strcmp {
             writeln!(self.out).unwrap();
         }
@@ -221,6 +228,12 @@ impl<'a> Emitter<'a> {
                             && matches!(func.locals[lhs.0 as usize], Ty::String) =>
                     {
                         self.needs_strcmp = true;
+                    }
+                    Rvalue::BinOp {
+                        op: MBinOp::ConcatStr,
+                        ..
+                    } => {
+                        self.needs_snprintf = true;
                     }
                     _ => {}
                 }
@@ -370,6 +383,7 @@ impl<'a> Emitter<'a> {
             alloca_names,
             is_i1_local: vec![false; func.locals.len()],
             needs_strcmp: false,
+            needs_snprintf: false,
             next_tmp: 0,
         };
         for &p in &func.params {
@@ -384,9 +398,13 @@ impl<'a> Emitter<'a> {
             walker.emit_terminator(&blk.terminator, is_main);
         }
         let walker_needs_strcmp = walker.needs_strcmp;
+        let walker_needs_snprintf = walker.needs_snprintf;
         writeln!(self.out, "}}").unwrap();
         if walker_needs_strcmp {
             self.needs_strcmp = true;
+        }
+        if walker_needs_snprintf {
+            self.needs_snprintf = true;
         }
     }
 }
@@ -404,6 +422,7 @@ struct BlockWalker<'a> {
     constant_text: Vec<Option<String>>,
     /// Which locals use alloca (assigned in multiple blocks).
     needs_alloca: Vec<bool>,
+    needs_snprintf: bool,
     /// Tracks which locals were produced by `icmp` (already `i1`
     /// in LLVM IR) so the `br` emission skips the `trunc`.
     is_i1_local: Vec<bool>,
@@ -575,9 +594,28 @@ impl<'a> BlockWalker<'a> {
                 self.constant_text[dest.0 as usize] = self.constant_text[src.0 as usize].clone();
             }
             Rvalue::BinOp { op, lhs, rhs } => {
-                let l = self.ssa_of(*lhs);
-                let r = self.ssa_of(*rhs);
+                let l = self.ssa_of_maybe_alloca(*lhs);
+                let r = self.ssa_of_maybe_alloca(*rhs);
                 match op {
+                    MBinOp::ConcatStr => {
+                        // String concatenation via snprintf into a
+                        // stack buffer. Sufficient for simple cases.
+                        self.needs_snprintf = true;
+                        let rhs_ty = &self.func.locals[rhs.0 as usize];
+                        let buf = self.fresh();
+                        writeln!(self.out, "  {buf} = alloca [256 x i8]").unwrap();
+                        let (fmt_global, rhs_llvm_ty) = match rhs_ty {
+                            Ty::Int => ("@.fmt.concat.sd", "i32"),
+                            _ => ("@.fmt.concat.ss", "ptr"),
+                        };
+                        let _ = self.fresh(); // snprintf result (unused)
+                        writeln!(
+                            self.out,
+                            "  call i32 (ptr, i32, ptr, ...) @snprintf(ptr {buf}, i32 256, ptr {fmt_global}, ptr {l}, {rhs_llvm_ty} {r})"
+                        )
+                        .unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(buf);
+                    }
                     MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
                         let opcode = match op {
                             MBinOp::AddI => "add",

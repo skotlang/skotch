@@ -558,9 +558,46 @@ fn walk_block(
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::BinOp { op, lhs, rhs } => {
+                if *op == MBinOp::ConcatStr {
+                    // String concatenation: lhs.concat(rhs)
+                    // If rhs is Int/Bool, convert via String.valueOf first.
+                    load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                    let rhs_ty = &func.locals[rhs.0 as usize];
+                    match rhs_ty {
+                        Ty::String => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                        }
+                        Ty::Int | Ty::Bool => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let valueof = cp.methodref(
+                                "java/lang/String",
+                                "valueOf",
+                                "(I)Ljava/lang/String;",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(valueof).unwrap();
+                            // stack: consumed int, pushed String → net 0
+                        }
+                        _ => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                        }
+                    }
+                    let concat = cp.methodref(
+                        "java/lang/String",
+                        "concat",
+                        "(Ljava/lang/String;)Ljava/lang/String;",
+                    );
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(concat).unwrap();
+                    bump(stack, max_stack, -1); // pops receiver + arg, pushes result
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    continue;
+                }
+
                 load_local(code, stack, max_stack, slots, *lhs, &func.locals);
                 load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                 match op {
+                    MBinOp::ConcatStr => unreachable!("handled above"),
                     MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
                         let opcode: u8 = match op {
                             MBinOp::AddI => 0x60,

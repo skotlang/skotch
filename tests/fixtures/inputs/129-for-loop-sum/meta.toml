@@ -1,0 +1,3 @@
+name   = "129-for-loop-sum"
+status = "supported"
+features = ["for-loop", "range", "var", "accumulator"]

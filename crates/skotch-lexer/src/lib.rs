@@ -190,6 +190,7 @@ impl<'a> Lexer<'a> {
             (b'>', Some(b'=')) => Some((TokenKind::GtEq, 2)),
             (b'&', Some(b'&')) => Some((TokenKind::AmpAmp, 2)),
             (b'|', Some(b'|')) => Some((TokenKind::PipePipe, 2)),
+            (b'.', Some(b'.')) => Some((TokenKind::DotDot, 2)),
             _ => None,
         };
         if let Some((k, n)) = kind {
@@ -553,6 +554,8 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "return" => TokenKind::KwReturn,
         "while" => TokenKind::KwWhile,
         "when" => TokenKind::KwWhen,
+        "for" => TokenKind::KwFor,
+        "in" => TokenKind::KwIn,
         "true" => TokenKind::KwTrue,
         "false" => TokenKind::KwFalse,
         "null" => TokenKind::KwNull,

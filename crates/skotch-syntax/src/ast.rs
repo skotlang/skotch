@@ -106,6 +106,14 @@ pub enum Stmt {
     Return { value: Option<Expr>, span: Span },
     /// `while (cond) { body }`.
     While { cond: Expr, body: Block, span: Span },
+    /// `for (name in start..end) { body }`.
+    For {
+        var_name: Symbol,
+        start: Expr,
+        end: Expr,
+        body: Block,
+        span: Span,
+    },
     /// `lhs = rhs` reassignment (for `var` targets).
     Assign {
         target: Symbol,

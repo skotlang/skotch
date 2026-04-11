@@ -79,6 +79,8 @@ pub enum BinOp {
     MulI,
     DivI,
     ModI,
+    /// String concatenation: lhs (String) + rhs (any → toString).
+    ConcatStr,
     /// Integer comparisons — produce a `Bool` local.
     CmpEq,
     CmpNe,

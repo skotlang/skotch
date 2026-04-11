@@ -188,6 +188,23 @@ impl<'a> Resolver<'a> {
                     self.resolve_stmt(fn_idx, s, scope, rf);
                 }
             }
+            Stmt::For {
+                var_name,
+                start: range_start,
+                end: range_end,
+                body,
+                ..
+            } => {
+                self.resolve_expr(fn_idx, range_start, scope, rf);
+                self.resolve_expr(fn_idx, range_end, scope, rf);
+                // The loop variable is a new local.
+                let local_idx = rf.locals.len() as u32;
+                rf.locals.push(*var_name);
+                scope.push((*var_name, DefId::Local(fn_idx, local_idx)));
+                for s in &body.stmts {
+                    self.resolve_stmt(fn_idx, s, scope, rf);
+                }
+            }
             Stmt::Assign {
                 target,
                 value,
