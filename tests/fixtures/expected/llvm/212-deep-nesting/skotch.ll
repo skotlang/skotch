@@ -1,0 +1,40 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_add(i32 %arg0, i32 %arg1) {
+entry:
+  %t0 = add i32 %arg0, %arg1
+  ret i32 %t0
+}
+
+define i32 @InputKt_mul(i32 %arg0, i32 %arg1) {
+entry:
+  %t0 = mul i32 %arg0, %arg1
+  ret i32 %t0
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 2
+  %t1 = add i32 0, 3
+  %t2 = call i32 @InputKt_mul(i32 %t0, i32 %t1)
+  %t3 = add i32 0, 4
+  %t4 = add i32 0, 5
+  %t5 = call i32 @InputKt_mul(i32 %t3, i32 %t4)
+  %t6 = call i32 @InputKt_add(i32 %t2, i32 %t5)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t6)
+  %t8 = add i32 0, 1
+  %t9 = add i32 0, 2
+  %t10 = call i32 @InputKt_add(i32 %t8, i32 %t9)
+  %t11 = add i32 0, 3
+  %t12 = add i32 0, 4
+  %t13 = call i32 @InputKt_add(i32 %t11, i32 %t12)
+  %t14 = call i32 @InputKt_mul(i32 %t10, i32 %t13)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t14)
+  ret i32 0
+}
+

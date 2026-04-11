@@ -1,0 +1,266 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 iconst_1
+    0001 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 op_0x5F
+    0008 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0011 iconst_4
+    0012 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 op_0x5F
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 bipush 9
+    0024 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 op_0x5F
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 bipush 42
+    0036 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 op_0x5F
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 sipush 1999
+    0049 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 op_0x5F
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        toRoman (I)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=3
+    0000 ldc ""
+    0002 op_0x4C
+    0003 op_0x1A
+    0004 op_0x3D
+    0005 op_0x1C
+    0006 sipush 1000
+    0009 op_0xA1
+    0010 nop
+    0011 ldc_w #11194
+    0014 nop
+    0015 iload 0
+    0017 nop
+    0018 op_0x4C
+    0019 op_0x1C
+    0020 sipush 1000
+    0023 isub
+    0024 op_0x3D
+    0025 op_0xA7
+    0026 op_0xFF
+    0027 op_0xEC
+    0028 op_0x1C
+    0029 sipush 900
+    0032 op_0xA1
+    0033 nop
+    0034 ldc_w #11194
+    0037 nop
+    0038 op_0x18
+    0039 nop
+    0040 nop
+    0041 op_0x4C
+    0042 op_0x1C
+    0043 sipush 900
+    0046 isub
+    0047 op_0x3D
+    0048 op_0xA7
+    0049 op_0xFF
+    0050 op_0xEC
+    0051 op_0x1C
+    0052 sipush 500
+    0055 op_0xA1
+    0056 nop
+    0057 ldc_w #11194
+    0060 nop
+    0061 op_0x1B
+    0062 nop
+    0063 nop
+    0064 op_0x4C
+    0065 op_0x1C
+    0066 sipush 500
+    0069 isub
+    0070 op_0x3D
+    0071 op_0xA7
+    0072 op_0xFF
+    0073 op_0xEC
+    0074 op_0x1C
+    0075 sipush 400
+    0078 op_0xA1
+    0079 nop
+    0080 ldc_w #11194
+    0083 nop
+    0084 op_0x1E
+    0085 nop
+    0086 nop
+    0087 op_0x4C
+    0088 op_0x1C
+    0089 sipush 400
+    0092 isub
+    0093 op_0x3D
+    0094 op_0xA7
+    0095 op_0xFF
+    0096 op_0xEC
+    0097 op_0x1C
+    0098 bipush 100
+    0100 op_0xA1
+    0101 nop
+    0102 bipush 43
+    0104 op_0xBA
+    0105 nop
+    0106 op_0x21
+    0107 nop
+    0108 nop
+    0109 op_0x4C
+    0110 op_0x84
+    0111 iconst_m1
+    0112 op_0x9C
+    0113 op_0xA7
+    0114 op_0xFF
+    0115 op_0xF0
+    0116 op_0x1C
+    0117 bipush 90
+    0119 op_0xA1
+    0120 nop
+    0121 bipush 43
+    0123 op_0xBA
+    0124 nop
+    0125 op_0x24
+    0126 nop
+    0127 nop
+    0128 op_0x4C
+    0129 op_0x84
+    0130 iconst_m1
+    0131 op_0xA6
+    0132 op_0xA7
+    0133 op_0xFF
+    0134 op_0xF0
+    0135 op_0x1C
+    0136 bipush 50
+    0138 op_0xA1
+    0139 nop
+    0140 bipush 43
+    0142 op_0xBA
+    0143 nop
+    0144 op_0x27
+    0145 nop
+    0146 nop
+    0147 op_0x4C
+    0148 op_0x84
+    0149 iconst_m1
+    0150 op_0xCE
+    0151 op_0xA7
+    0152 op_0xFF
+    0153 op_0xF0
+    0154 op_0x1C
+    0155 bipush 40
+    0157 op_0xA1
+    0158 nop
+    0159 bipush 43
+    0161 op_0xBA
+    0162 nop
+    0163 op_0x2A
+    0164 nop
+    0165 nop
+    0166 op_0x4C
+    0167 op_0x84
+    0168 iconst_m1
+    0169 op_0xD8
+    0170 op_0xA7
+    0171 op_0xFF
+    0172 op_0xF0
+    0173 op_0x1C
+    0174 bipush 10
+    0176 op_0xA1
+    0177 nop
+    0178 bipush 43
+    0180 op_0xBA
+    0181 nop
+    0182 op_0x2D
+    0183 nop
+    0184 nop
+    0185 op_0x4C
+    0186 op_0x84
+    0187 iconst_m1
+    0188 op_0xF6
+    0189 op_0xA7
+    0190 op_0xFF
+    0191 op_0xF0
+    0192 op_0x1C
+    0193 bipush 9
+    0195 op_0xA1
+    0196 nop
+    0197 bipush 43
+    0199 op_0xBA
+    0200 nop
+    0201 op_0x30
+    0202 nop
+    0203 nop
+    0204 op_0x4C
+    0205 op_0x84
+    0206 iconst_m1
+    0207 op_0xF7
+    0208 op_0xA7
+    0209 op_0xFF
+    0210 op_0xF0
+    0211 op_0x1C
+    0212 iconst_5
+    0213 op_0xA1
+    0214 nop
+    0215 bipush 43
+    0217 op_0xBA
+    0218 nop
+    0219 op_0x33
+    0220 nop
+    0221 nop
+    0222 op_0x4C
+    0223 op_0x84
+    0224 iconst_m1
+    0225 op_0xFB
+    0226 op_0xA7
+    0227 op_0xFF
+    0228 op_0xF1
+    0229 op_0x1C
+    0230 iconst_4
+    0231 op_0xA1
+    0232 nop
+    0233 bipush 43
+    0235 op_0xBA
+    0236 nop
+    0237 istore 0
+    0239 nop
+    0240 op_0x4C
+    0241 op_0x84
+    0242 iconst_m1
+    0243 op_0xFC
+    0244 op_0xA7
+    0245 op_0xFF
+    0246 op_0xF1
+    0247 op_0x1C
+    0248 iconst_1
+    0249 op_0xA1
+    0250 nop
+    0251 bipush 43
+    0253 op_0xBA
+    0254 nop
+    0255 op_0x39
+    0256 nop
+    0257 nop
+    0258 op_0x4C
+    0259 op_0x84
+    0260 iconst_m1
+    0261 op_0xFF
+    0262 op_0xA7
+    0263 op_0xFF
+    0264 op_0xF1
+    0265 op_0x2B
+    0266 op_0xB0
+    sub_attr  StackMapTable (22 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (80 bytes)

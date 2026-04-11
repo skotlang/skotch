@@ -567,7 +567,17 @@ fn walk_block(
                         Ty::String => {
                             load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                         }
-                        Ty::Int | Ty::Bool => {
+                        Ty::Bool => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let valueof = cp.methodref(
+                                "java/lang/String",
+                                "valueOf",
+                                "(Z)Ljava/lang/String;",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(valueof).unwrap();
+                        }
+                        Ty::Int => {
                             load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                             let valueof = cp.methodref(
                                 "java/lang/String",
