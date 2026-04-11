@@ -1,0 +1,62 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [6 x i8] c"small\00", align 1
+@.str.1 = private unnamed_addr constant [7 x i8] c"medium\00", align 1
+@.str.2 = private unnamed_addr constant [6 x i8] c"large\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+
+define ptr @InputKt_describe(i32 %arg0) {
+entry:
+  %merge_2 = alloca ptr
+  br label %bb1
+bb1:
+  %t0 = add i32 0, 0
+  %t1 = add i32 0, 9
+  %t2 = icmp sge i32 %arg0, %t0
+  %t3 = icmp sle i32 %arg0, %t1
+  %t4 = zext i1 %t2 to i32
+  %t5 = zext i1 %t3 to i32
+  %t6 = mul i32 %t4, %t5
+  %t7 = trunc i32 %t6 to i1
+  br i1 %t7, label %bb2, label %bb3
+bb2:
+  store ptr @.str.0, ptr %merge_2
+  br label %bb6
+bb3:
+  %t8 = add i32 0, 10
+  %t9 = add i32 0, 99
+  %t10 = icmp sge i32 %arg0, %t8
+  %t11 = icmp sle i32 %arg0, %t9
+  %t12 = zext i1 %t10 to i32
+  %t13 = zext i1 %t11 to i32
+  %t14 = mul i32 %t12, %t13
+  %t15 = trunc i32 %t14 to i1
+  br i1 %t15, label %bb4, label %bb5
+bb4:
+  store ptr @.str.1, ptr %merge_2
+  br label %bb6
+bb5:
+  store ptr @.str.2, ptr %merge_2
+  br label %bb6
+bb6:
+  %t16 = load ptr, ptr %merge_2
+  ret ptr %t16
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 5
+  %t1 = call ptr @InputKt_describe(i32 %t0)
+  call i32 @puts(ptr %t1)
+  %t3 = add i32 0, 50
+  %t4 = call ptr @InputKt_describe(i32 %t3)
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 500
+  %t7 = call ptr @InputKt_describe(i32 %t6)
+  call i32 @puts(ptr %t7)
+  ret i32 0
+}
+

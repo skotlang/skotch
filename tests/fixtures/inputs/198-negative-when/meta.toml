@@ -1,0 +1,3 @@
+name   = "198-negative-when"
+status = "supported"
+features = ["when-subject", "negative-literal-pattern"]

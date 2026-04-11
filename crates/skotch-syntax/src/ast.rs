@@ -191,6 +191,9 @@ pub enum Expr {
 #[derive(Clone, Debug)]
 pub struct WhenBranch {
     pub pattern: Expr,
+    /// For `in start..end` patterns: the end of the range.
+    /// When `Some`, this is a range check: `subject in pattern..range_end`.
+    pub range_end: Option<Expr>,
     pub body: Expr,
     pub span: Span,
 }

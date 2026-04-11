@@ -1,0 +1,63 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.true = private unnamed_addr constant [5 x i8] c"true\00", align 1
+@.str.false = private unnamed_addr constant [6 x i8] c"false\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+
+define i32 @InputKt_isEven(i32 %arg0) {
+entry:
+  %t0 = add i32 0, 0
+  %t1 = icmp eq i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 1
+  ret i32 %t2
+bb2:
+  br label %bb3
+bb3:
+  %t3 = add i32 0, 1
+  %t4 = sub i32 %arg0, %t3
+  %t5 = call i32 @InputKt_isOdd(i32 %t4)
+  ret i32 %t5
+}
+
+define i32 @InputKt_isOdd(i32 %arg0) {
+entry:
+  %t0 = add i32 0, 0
+  %t1 = icmp eq i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 0
+  ret i32 %t2
+bb2:
+  br label %bb3
+bb3:
+  %t3 = add i32 0, 1
+  %t4 = sub i32 %arg0, %t3
+  %t5 = call i32 @InputKt_isEven(i32 %t4)
+  ret i32 %t5
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 4
+  %t1 = call i32 @InputKt_isEven(i32 %t0)
+  %t3 = trunc i32 %t1 to i1
+  %t4 = select i1 %t3, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 7
+  %t7 = call i32 @InputKt_isOdd(i32 %t6)
+  %t9 = trunc i32 %t7 to i1
+  %t10 = select i1 %t9, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t10)
+  %t12 = add i32 0, 3
+  %t13 = call i32 @InputKt_isEven(i32 %t12)
+  %t15 = trunc i32 %t13 to i1
+  %t16 = select i1 %t15, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t16)
+  ret i32 0
+}
+

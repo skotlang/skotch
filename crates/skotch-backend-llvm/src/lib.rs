@@ -594,8 +594,41 @@ impl<'a> BlockWalker<'a> {
                 self.constant_text[dest.0 as usize] = self.constant_text[src.0 as usize].clone();
             }
             Rvalue::BinOp { op, lhs, rhs } => {
-                let l = self.ssa_of_maybe_alloca(*lhs);
-                let r = self.ssa_of_maybe_alloca(*rhs);
+                let mut l = self.ssa_of_maybe_alloca(*lhs);
+                let mut r = self.ssa_of_maybe_alloca(*rhs);
+                // Extend i1 operands to i32 for arithmetic operations.
+                if self.is_i1_local[lhs.0 as usize]
+                    && !matches!(
+                        op,
+                        MBinOp::ConcatStr
+                            | MBinOp::CmpEq
+                            | MBinOp::CmpNe
+                            | MBinOp::CmpLt
+                            | MBinOp::CmpGt
+                            | MBinOp::CmpLe
+                            | MBinOp::CmpGe
+                    )
+                {
+                    let ext = self.fresh();
+                    writeln!(self.out, "  {ext} = zext i1 {l} to i32").unwrap();
+                    l = ext;
+                }
+                if self.is_i1_local[rhs.0 as usize]
+                    && !matches!(
+                        op,
+                        MBinOp::ConcatStr
+                            | MBinOp::CmpEq
+                            | MBinOp::CmpNe
+                            | MBinOp::CmpLt
+                            | MBinOp::CmpGt
+                            | MBinOp::CmpLe
+                            | MBinOp::CmpGe
+                    )
+                {
+                    let ext = self.fresh();
+                    writeln!(self.out, "  {ext} = zext i1 {r} to i32").unwrap();
+                    r = ext;
+                }
                 match op {
                     MBinOp::ConcatStr => {
                         // String concatenation via snprintf into a
