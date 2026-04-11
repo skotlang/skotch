@@ -1,0 +1,4 @@
+name     = "249-visibility-modifiers"
+status   = "supported"
+features = ["private", "internal", "fun", "visibility-modifier"]
+notes    = "Visibility modifiers are parsed and accepted (not yet enforced at access control)."

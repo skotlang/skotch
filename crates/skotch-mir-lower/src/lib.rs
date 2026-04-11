@@ -705,6 +705,50 @@ fn lower_stmt(
             }
             true
         }
+        Stmt::TryStmt {
+            body, finally_body, ..
+        } => {
+            // Simplified: execute body, then finally (no catch/exception tables yet).
+            for s in &body.stmts {
+                let terminated = lower_stmt(
+                    s,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                );
+                if terminated {
+                    break;
+                }
+            }
+            if let Some(fb_block) = finally_body {
+                for s in &fb_block.stmts {
+                    let terminated = lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
+                    if terminated {
+                        break;
+                    }
+                }
+            }
+            false
+        }
+        Stmt::ThrowStmt { .. } => {
+            // throw is not yet compiled to athrow — just skip for now.
+            false
+        }
     }
 }
 
@@ -1760,6 +1804,256 @@ fn lower_expr(
             // Return None to let the caller handle it.
             let _ = (name_to_func, *span);
             None
+        }
+        Expr::ElvisOp { lhs, rhs, .. } => {
+            // lhs ?: rhs → if (lhs != null) lhs else rhs
+            let l = lower_expr(
+                lhs,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            let then_block = fb.new_block();
+            let else_block = fb.new_block();
+            let merge_block = fb.new_block();
+
+            // null check: compare lhs to null
+            let null_local = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+            fb.push_stmt(MStmt::Assign {
+                dest: null_local,
+                value: Rvalue::Const(MirConst::Null),
+            });
+            let cmp = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: cmp,
+                value: Rvalue::BinOp {
+                    op: MBinOp::CmpNe,
+                    lhs: l,
+                    rhs: null_local,
+                },
+            });
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: cmp,
+                    then_block,
+                    else_block,
+                },
+                then_block,
+            );
+
+            // then: result = lhs
+            let result_ty = fb.mf.locals[l.0 as usize].clone();
+            let result = fb.new_local(result_ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Local(l),
+            });
+            fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
+
+            // else: result = rhs
+            let r = lower_expr(
+                rhs,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Local(r),
+            });
+            fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
+
+            Some(result)
+        }
+        Expr::Throw { expr: thrown, .. } => {
+            // For now, throw is lowered as println("Exception: ...") + return.
+            // Real throw would need athrow opcode support.
+            // We emit a simple diagnostic for now.
+            let _ = (
+                thrown,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+            );
+            diags.push(Diagnostic::error(
+                thrown.span(),
+                "throw expressions are not yet fully compiled (exception tables needed)",
+            ));
+            None
+        }
+        Expr::Try {
+            body,
+            catch_body,
+            finally_body,
+            ..
+        } => {
+            // Simplified try: just execute the body.
+            // Catch/finally are parsed but not compiled (need exception tables).
+            for stmt in &body.stmts {
+                let terminated = lower_stmt(
+                    stmt,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                );
+                if terminated {
+                    break;
+                }
+            }
+            // Execute finally body if present (unconditionally).
+            if let Some(fb_block) = finally_body {
+                for stmt in &fb_block.stmts {
+                    let terminated = lower_stmt(
+                        stmt,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
+                    if terminated {
+                        break;
+                    }
+                }
+            }
+            let _ = catch_body; // catch needs exception tables
+            None
+        }
+        Expr::SafeCall { receiver, name, .. } => {
+            // receiver?.name → if (receiver != null) receiver.name else null
+            let recv = lower_expr(
+                receiver,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            let then_block = fb.new_block();
+            let else_block = fb.new_block();
+            let merge_block = fb.new_block();
+
+            let null_local = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+            fb.push_stmt(MStmt::Assign {
+                dest: null_local,
+                value: Rvalue::Const(MirConst::Null),
+            });
+            let cmp = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: cmp,
+                value: Rvalue::BinOp {
+                    op: MBinOp::CmpNe,
+                    lhs: recv,
+                    rhs: null_local,
+                },
+            });
+            let result = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: cmp,
+                    then_block,
+                    else_block,
+                },
+                then_block,
+            );
+
+            // then: result = receiver.name (field access)
+            let field_name = interner.resolve(*name).to_string();
+            let field_val = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: field_val,
+                value: Rvalue::GetField {
+                    receiver: recv,
+                    class_name: String::new(), // resolved at codegen
+                    field_name,
+                },
+            });
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Local(field_val),
+            });
+            fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
+
+            // else: result = null
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Const(MirConst::Null),
+            });
+            fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
+
+            Some(result)
+        }
+        Expr::IsCheck { expr: checked, .. } => {
+            // For now, `is` always returns true (we don't have runtime type info).
+            let _ = lower_expr(
+                checked,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            );
+            let dest = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Bool(true)),
+            });
+            Some(dest)
+        }
+        Expr::AsCast { expr: casted, .. } => {
+            // For now, `as` is a no-op — just return the expression.
+            lower_expr(
+                casted,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )
+        }
+        Expr::NotNullAssert { expr: asserted, .. } => {
+            // `!!` is a no-op at MIR level (would need null check + throw KotlinNullPointerException).
+            lower_expr(
+                asserted,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )
         }
     }
 }

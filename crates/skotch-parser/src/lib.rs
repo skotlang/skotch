@@ -164,6 +164,21 @@ impl<'a> Parser<'a> {
             if self.peek_kind() == TokenKind::Eof {
                 break;
             }
+            // Skip modifier keywords that we recognize but don't enforce.
+            while matches!(
+                self.peek_kind(),
+                TokenKind::KwConst
+                    | TokenKind::KwOpen
+                    | TokenKind::KwAbstract
+                    | TokenKind::KwPrivate
+                    | TokenKind::KwProtected
+                    | TokenKind::KwInternal
+                    | TokenKind::KwOverride
+                    | TokenKind::KwData
+            ) {
+                self.bump();
+                self.skip_trivia();
+            }
             match self.peek_kind() {
                 TokenKind::KwFun => {
                     let f = self.parse_fun_decl();
@@ -334,12 +349,26 @@ impl<'a> Parser<'a> {
         // Class body.
         let mut properties = Vec::new();
         let mut methods = Vec::new();
+        let mut init_blocks = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
             loop {
                 self.skip_trivia();
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
+                }
+                // Skip modifier keywords before members.
+                while matches!(
+                    self.peek_kind(),
+                    TokenKind::KwOverride
+                        | TokenKind::KwOpen
+                        | TokenKind::KwAbstract
+                        | TokenKind::KwPrivate
+                        | TokenKind::KwProtected
+                        | TokenKind::KwInternal
+                ) {
+                    self.bump();
+                    self.skip_trivia();
                 }
                 match self.peek_kind() {
                     TokenKind::KwFun => {
@@ -349,21 +378,10 @@ impl<'a> Parser<'a> {
                         let prop = self.parse_property_decl();
                         properties.push(prop);
                     }
-                    TokenKind::Ident => {
-                        // Could be "override fun ..."
-                        let saved = self.pos;
-                        let override_sym = self.interner.intern("override");
-                        self.bump();
-                        let sym = self.intern_ident_at(saved);
-                        if sym == override_sym {
-                            self.bump(); // consume "override"
-                            self.skip_trivia();
-                            if self.peek_kind() == TokenKind::KwFun {
-                                methods.push(self.parse_fun_decl());
-                            }
-                        } else {
-                            self.bump(); // skip unknown
-                        }
+                    TokenKind::KwInit => {
+                        self.bump(); // consume 'init'
+                        self.skip_trivia();
+                        init_blocks.push(self.parse_block());
                     }
                     _ => {
                         self.bump(); // skip unknown token
@@ -379,6 +397,7 @@ impl<'a> Parser<'a> {
             constructor_params,
             properties,
             methods,
+            init_blocks,
             span: kw.merge(name_span),
         }
     }
@@ -647,6 +666,36 @@ impl<'a> Parser<'a> {
             TokenKind::KwWhile => self.parse_while(),
             TokenKind::KwDo => self.parse_do_while(),
             TokenKind::KwFor => self.parse_for(),
+            TokenKind::KwTry => {
+                let try_expr = self.parse_try_expr();
+                if let Expr::Try {
+                    body,
+                    catch_param,
+                    catch_type,
+                    catch_body,
+                    finally_body,
+                    span,
+                } = try_expr
+                {
+                    Stmt::TryStmt {
+                        body: *body,
+                        catch_param,
+                        catch_type,
+                        catch_body: catch_body.map(|b| *b),
+                        finally_body: finally_body.map(|b| *b),
+                        span,
+                    }
+                } else {
+                    Stmt::Expr(try_expr)
+                }
+            }
+            TokenKind::KwThrow => {
+                let kw = self.peek_span();
+                self.bump();
+                let expr = self.parse_expr();
+                let span = kw.merge(expr.span());
+                Stmt::ThrowStmt { expr, span }
+            }
             _ => {
                 let expr = self.parse_expr();
                 // Check for `ident = expr` or `ident += expr` etc.
@@ -770,7 +819,27 @@ impl<'a> Parser<'a> {
     // ─── expression precedence climbing ──────────────────────────────────
 
     fn parse_expr(&mut self) -> Expr {
-        self.parse_disjunction()
+        self.parse_elvis()
+    }
+
+    /// Elvis operator `?:` — lowest precedence binary operator.
+    fn parse_elvis(&mut self) -> Expr {
+        let mut lhs = self.parse_disjunction();
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::Elvis {
+                break;
+            }
+            self.bump();
+            let rhs = self.parse_disjunction();
+            let span = lhs.span().merge(rhs.span());
+            lhs = Expr::ElvisOp {
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+                span,
+            };
+        }
+        lhs
     }
 
     fn parse_disjunction(&mut self) -> Expr {
@@ -839,6 +908,63 @@ impl<'a> Parser<'a> {
         let mut lhs = self.parse_additive();
         loop {
             self.skip_trivia();
+            // `is` / `!is` type check
+            if self.peek_kind() == TokenKind::KwIs {
+                let _kw_span = self.peek_span();
+                self.bump();
+                self.skip_trivia();
+                let idx = self.pos;
+                let type_span = self.peek_span();
+                self.expect(TokenKind::Ident, "type name");
+                let type_name = self.intern_ident_at(idx);
+                let span = lhs.span().merge(type_span);
+                lhs = Expr::IsCheck {
+                    expr: Box::new(lhs),
+                    type_name,
+                    negated: false,
+                    span,
+                };
+                continue;
+            }
+            // `!is` type check
+            if self.peek_kind() == TokenKind::Bang {
+                // Peek ahead for `is` after `!`
+                if self.peek_kind_at(1) == TokenKind::KwIs {
+                    self.bump(); // !
+                    self.bump(); // is
+                    self.skip_trivia();
+                    let idx = self.pos;
+                    let type_span = self.peek_span();
+                    self.expect(TokenKind::Ident, "type name");
+                    let type_name = self.intern_ident_at(idx);
+                    let span = lhs.span().merge(type_span);
+                    lhs = Expr::IsCheck {
+                        expr: Box::new(lhs),
+                        type_name,
+                        negated: true,
+                        span,
+                    };
+                    continue;
+                }
+            }
+            // `as` / `as?` type cast
+            if self.peek_kind() == TokenKind::KwAs {
+                self.bump();
+                let safe = self.eat(TokenKind::Question);
+                self.skip_trivia();
+                let idx = self.pos;
+                let type_span = self.peek_span();
+                self.expect(TokenKind::Ident, "type name");
+                let type_name = self.intern_ident_at(idx);
+                let span = lhs.span().merge(type_span);
+                lhs = Expr::AsCast {
+                    expr: Box::new(lhs),
+                    type_name,
+                    safe,
+                    span,
+                };
+                continue;
+            }
             let op = match self.peek_kind() {
                 TokenKind::Lt => BinOp::Lt,
                 TokenKind::Gt => BinOp::Gt,
@@ -958,6 +1084,33 @@ impl<'a> Parser<'a> {
                         span: combined,
                     };
                 }
+                TokenKind::QuestionDot => {
+                    self.bump();
+                    let idx = self.pos;
+                    let span = self.peek_span();
+                    if self.peek_kind() != TokenKind::Ident {
+                        self.diags
+                            .push(Diagnostic::error(span, "expected name after '?.'"));
+                        break;
+                    }
+                    self.bump();
+                    let name = self.intern_ident_at(idx);
+                    let combined = expr.span().merge(span);
+                    expr = Expr::SafeCall {
+                        receiver: Box::new(expr),
+                        name,
+                        span: combined,
+                    };
+                }
+                TokenKind::BangBang => {
+                    let op_span = self.peek_span();
+                    self.bump();
+                    let combined = expr.span().merge(op_span);
+                    expr = Expr::NotNullAssert {
+                        expr: Box::new(expr),
+                        span: combined,
+                    };
+                }
                 TokenKind::LParen => {
                     self.bump();
                     let mut args = Vec::new();
@@ -1031,6 +1184,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::KwIf => self.parse_if_expr(),
             TokenKind::KwWhen => self.parse_when_expr(),
+            TokenKind::KwThrow => self.parse_throw_expr(),
             TokenKind::StringStart => self.parse_string_literal(),
             other => {
                 self.diags.push(Diagnostic::error(
@@ -1179,6 +1333,68 @@ impl<'a> Parser<'a> {
                 stmts: vec![Stmt::Expr(expr)],
                 span,
             }
+        }
+    }
+
+    fn parse_throw_expr(&mut self) -> Expr {
+        let kw = self.peek_span();
+        self.bump(); // 'throw'
+        let expr = self.parse_expr();
+        let span = kw.merge(expr.span());
+        Expr::Throw {
+            expr: Box::new(expr),
+            span,
+        }
+    }
+
+    fn parse_try_expr(&mut self) -> Expr {
+        let kw = self.peek_span();
+        self.bump(); // 'try'
+        self.skip_trivia();
+        let body = self.parse_block();
+        self.skip_trivia();
+
+        let mut catch_param = None;
+        let mut catch_type = None;
+        let mut catch_body = None;
+        let mut finally_body = None;
+
+        if self.eat(TokenKind::KwCatch) {
+            self.expect(TokenKind::LParen, "(");
+            let idx = self.pos;
+            self.expect(TokenKind::Ident, "exception parameter name");
+            catch_param = Some(self.intern_ident_at(idx));
+            self.expect(TokenKind::Colon, ":");
+            self.skip_trivia();
+            let type_idx = self.pos;
+            self.expect(TokenKind::Ident, "exception type");
+            catch_type = Some(self.intern_ident_at(type_idx));
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+            catch_body = Some(Box::new(self.parse_block()));
+            self.skip_trivia();
+        }
+
+        if self.eat(TokenKind::KwFinally) {
+            self.skip_trivia();
+            finally_body = Some(Box::new(self.parse_block()));
+        }
+
+        let end = if let Some(fb) = &finally_body {
+            fb.span
+        } else if let Some(cb) = &catch_body {
+            cb.span
+        } else {
+            body.span
+        };
+
+        Expr::Try {
+            body: Box::new(body),
+            catch_param,
+            catch_type,
+            catch_body,
+            finally_body,
+            span: kw.merge(end),
         }
     }
 

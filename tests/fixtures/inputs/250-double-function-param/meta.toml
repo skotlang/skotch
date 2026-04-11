@@ -1,0 +1,4 @@
+name     = "250-double-local-arithmetic"
+status   = "supported"
+features = ["double", "val", "arithmetic", "println"]
+notes    = "Double local variables with arithmetic operations."

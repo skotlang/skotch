@@ -99,6 +99,8 @@ pub struct ClassDecl {
     pub properties: Vec<PropertyDecl>,
     /// Methods declared in the class body.
     pub methods: Vec<FunDecl>,
+    /// Init blocks (statements run in the constructor).
+    pub init_blocks: Vec<Block>,
     pub span: Span,
 }
 
@@ -169,6 +171,17 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// `try { body } catch (e: Type) { handler } finally { cleanup }`
+    TryStmt {
+        body: Block,
+        catch_param: Option<Symbol>,
+        catch_type: Option<Symbol>,
+        catch_body: Option<Block>,
+        finally_body: Option<Block>,
+        span: Span,
+    },
+    /// `throw expr`
+    ThrowStmt { expr: Expr, span: Span },
 }
 
 /// Expressions exercised by PR #1 fixtures.
@@ -223,6 +236,51 @@ pub enum Expr {
     Field {
         receiver: Box<Expr>,
         name: Symbol,
+        span: Span,
+    },
+    /// `throw expr` — throws an exception.
+    Throw {
+        expr: Box<Expr>,
+        span: Span,
+    },
+    /// `try { body } catch (e: Type) { handler } finally { cleanup }`
+    Try {
+        body: Box<Block>,
+        catch_param: Option<Symbol>,
+        catch_type: Option<Symbol>,
+        catch_body: Option<Box<Block>>,
+        finally_body: Option<Box<Block>>,
+        span: Span,
+    },
+    /// `lhs ?: rhs` — elvis operator.
+    ElvisOp {
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+        span: Span,
+    },
+    /// `expr?.field` or `expr?.method()` — safe call.
+    SafeCall {
+        receiver: Box<Expr>,
+        name: Symbol,
+        span: Span,
+    },
+    /// `expr is Type` — type check.
+    IsCheck {
+        expr: Box<Expr>,
+        type_name: Symbol,
+        negated: bool,
+        span: Span,
+    },
+    /// `expr as Type` — type cast.
+    AsCast {
+        expr: Box<Expr>,
+        type_name: Symbol,
+        safe: bool, // `as?`
+        span: Span,
+    },
+    /// `expr!!` — non-null assertion.
+    NotNullAssert {
+        expr: Box<Expr>,
         span: Span,
     },
 }
@@ -289,7 +347,14 @@ impl Expr {
             | Expr::Unary { span, .. }
             | Expr::If { span, .. }
             | Expr::When { span, .. }
-            | Expr::Field { span, .. } => *span,
+            | Expr::Field { span, .. }
+            | Expr::Throw { span, .. }
+            | Expr::Try { span, .. }
+            | Expr::ElvisOp { span, .. }
+            | Expr::SafeCall { span, .. }
+            | Expr::IsCheck { span, .. }
+            | Expr::AsCast { span, .. }
+            | Expr::NotNullAssert { span, .. } => *span,
         }
     }
 }

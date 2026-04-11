@@ -254,6 +254,9 @@ impl<'a> Lexer<'a> {
             (b'*', Some(b'=')) => Some((TokenKind::StarEq, 2)),
             (b'/', Some(b'=')) => Some((TokenKind::SlashEq, 2)),
             (b'%', Some(b'=')) => Some((TokenKind::PercentEq, 2)),
+            (b'?', Some(b'.')) => Some((TokenKind::QuestionDot, 2)),
+            (b'?', Some(b':')) => Some((TokenKind::Elvis, 2)),
+            (b'!', Some(b'!')) => Some((TokenKind::BangBang, 2)),
             _ => None,
         };
         if let Some((k, n)) = kind {
@@ -809,6 +812,21 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "object" => TokenKind::KwObject,
         "package" => TokenKind::KwPackage,
         "import" => TokenKind::KwImport,
+        "const" => TokenKind::KwConst,
+        "throw" => TokenKind::KwThrow,
+        "try" => TokenKind::KwTry,
+        "catch" => TokenKind::KwCatch,
+        "finally" => TokenKind::KwFinally,
+        "is" => TokenKind::KwIs,
+        "as" => TokenKind::KwAs,
+        "init" => TokenKind::KwInit,
+        "data" => TokenKind::KwData,
+        "override" => TokenKind::KwOverride,
+        "open" => TokenKind::KwOpen,
+        "abstract" => TokenKind::KwAbstract,
+        "private" => TokenKind::KwPrivate,
+        "protected" => TokenKind::KwProtected,
+        "internal" => TokenKind::KwInternal,
         _ => return None,
     })
 }
