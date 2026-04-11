@@ -1,4 +1,3 @@
-// TODO: `when` expression. Needs Switch terminator + StackMapTable.
 fun describe(n: Int): String {
     return when (n) {
         0 -> "zero"

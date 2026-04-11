@@ -579,6 +579,31 @@ fn walk_block(
                     | MBinOp::CmpGt
                     | MBinOp::CmpLe
                     | MBinOp::CmpGe => {
+                        // Check if we're comparing reference types (String).
+                        let lhs_ty = &func.locals[lhs.0 as usize];
+                        if matches!(lhs_ty, Ty::String)
+                            && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                        {
+                            // String equality: invokevirtual String.equals
+                            //   → returns boolean (0/1)
+                            // For CmpNe, invert the result.
+                            let equals =
+                                cp.methodref("java/lang/String", "equals", "(Ljava/lang/Object;)Z");
+                            code.push(0xB6); // invokevirtual
+                            code.write_u16::<BigEndian>(equals).unwrap();
+                            bump(stack, max_stack, -1); // pops receiver + arg, pushes bool
+                            if *op == MBinOp::CmpNe {
+                                // Invert: 1 - result
+                                code.push(0x04); // iconst_1
+                                bump(stack, max_stack, 1);
+                                code.push(0x5F); // swap
+                                code.push(0x64); // isub
+                                bump(stack, max_stack, -1);
+                            }
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
                         // Integer comparison → push 0 or 1 (bool).
                         // JVM doesn't have a direct "compare and push
                         // bool" instruction; we use if_icmp + iconst.

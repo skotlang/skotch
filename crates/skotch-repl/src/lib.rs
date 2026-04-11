@@ -125,7 +125,10 @@ pub fn run_repl_interactive() -> Result<()> {
         DefaultPromptSegment::Empty,
     );
 
-    println!("skotch repl — type :quit to exit, :help for commands");
+    println!(
+        "skotch {} — type :quit to exit, :help for commands",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let mut state = ReplState::new();
 

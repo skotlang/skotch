@@ -88,6 +88,7 @@ struct Emitter<'a> {
     out: String,
     needs_puts: bool,
     needs_printf: bool,
+    needs_strcmp: bool,
     needs_bool_strings: bool,
 }
 
@@ -105,6 +106,7 @@ impl<'a> Emitter<'a> {
             out: String::new(),
             needs_puts: false,
             needs_printf: false,
+            needs_strcmp: false,
             needs_bool_strings: false,
         }
     }
@@ -167,7 +169,10 @@ impl<'a> Emitter<'a> {
         if self.needs_printf {
             writeln!(self.out, "declare i32 @printf(ptr, ...)").unwrap();
         }
-        if self.needs_puts || self.needs_printf {
+        if self.needs_strcmp {
+            writeln!(self.out, "declare i32 @strcmp(ptr, ptr)").unwrap();
+        }
+        if self.needs_puts || self.needs_printf || self.needs_strcmp {
             writeln!(self.out).unwrap();
         }
 
@@ -210,6 +215,12 @@ impl<'a> Emitter<'a> {
                         // PrintlnConcat always lowers to a single
                         // printf call.
                         self.needs_printf = true;
+                    }
+                    Rvalue::BinOp { op, lhs, .. }
+                        if matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                            && matches!(func.locals[lhs.0 as usize], Ty::String) =>
+                    {
+                        self.needs_strcmp = true;
                     }
                     _ => {}
                 }
@@ -358,6 +369,7 @@ impl<'a> Emitter<'a> {
             needs_alloca,
             alloca_names,
             is_i1_local: vec![false; func.locals.len()],
+            needs_strcmp: false,
             next_tmp: 0,
         };
         for &p in &func.params {
@@ -371,7 +383,11 @@ impl<'a> Emitter<'a> {
             walker.walk_block(blk);
             walker.emit_terminator(&blk.terminator, is_main);
         }
+        let walker_needs_strcmp = walker.needs_strcmp;
         writeln!(self.out, "}}").unwrap();
+        if walker_needs_strcmp {
+            self.needs_strcmp = true;
+        }
     }
 }
 
@@ -393,6 +409,7 @@ struct BlockWalker<'a> {
     is_i1_local: Vec<bool>,
     /// The alloca SSA name for each local that needs it.
     alloca_names: Vec<Option<String>>,
+    needs_strcmp: bool,
     next_tmp: u32,
 }
 
@@ -580,19 +597,39 @@ impl<'a> BlockWalker<'a> {
                     | MBinOp::CmpGt
                     | MBinOp::CmpLe
                     | MBinOp::CmpGe => {
-                        let pred = match op {
-                            MBinOp::CmpEq => "eq",
-                            MBinOp::CmpNe => "ne",
-                            MBinOp::CmpLt => "slt",
-                            MBinOp::CmpGt => "sgt",
-                            MBinOp::CmpLe => "sle",
-                            MBinOp::CmpGe => "sge",
-                            _ => unreachable!(),
-                        };
-                        let dst = self.fresh();
-                        writeln!(self.out, "  {dst} = icmp {pred} i32 {l}, {r}").unwrap();
-                        self.ssa_for_local[dest.0 as usize] = Some(dst);
-                        self.is_i1_local[dest.0 as usize] = true;
+                        let lhs_ty = &self.func.locals[lhs.0 as usize];
+                        if matches!(lhs_ty, Ty::String)
+                            && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                        {
+                            // String comparison via strcmp.
+                            self.needs_strcmp = true;
+                            let cmp_result = self.fresh();
+                            writeln!(
+                                self.out,
+                                "  {cmp_result} = call i32 @strcmp(ptr {l}, ptr {r})"
+                            )
+                            .unwrap();
+                            let dst = self.fresh();
+                            let pred = if *op == MBinOp::CmpEq { "eq" } else { "ne" };
+                            writeln!(self.out, "  {dst} = icmp {pred} i32 {cmp_result}, 0")
+                                .unwrap();
+                            self.ssa_for_local[dest.0 as usize] = Some(dst);
+                            self.is_i1_local[dest.0 as usize] = true;
+                        } else {
+                            let pred = match op {
+                                MBinOp::CmpEq => "eq",
+                                MBinOp::CmpNe => "ne",
+                                MBinOp::CmpLt => "slt",
+                                MBinOp::CmpGt => "sgt",
+                                MBinOp::CmpLe => "sle",
+                                MBinOp::CmpGe => "sge",
+                                _ => unreachable!(),
+                            };
+                            let dst = self.fresh();
+                            writeln!(self.out, "  {dst} = icmp {pred} i32 {l}, {r}").unwrap();
+                            self.ssa_for_local[dest.0 as usize] = Some(dst);
+                            self.is_i1_local[dest.0 as usize] = true;
+                        }
                     }
                 }
             }

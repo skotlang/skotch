@@ -6,4 +6,5 @@ fun dayType(day: String): String = when (day) {
 fun main() {
     println(dayType("Monday"))
     println(dayType("Saturday"))
+    println(dayType("Sunday"))
 }

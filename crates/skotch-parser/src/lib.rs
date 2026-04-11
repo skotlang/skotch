@@ -826,19 +826,28 @@ impl<'a> Parser<'a> {
                 self.skip_trivia();
                 break;
             }
-            // Regular branch: pattern -> body
+            // Regular branch: pattern[, pattern]* -> body
+            // Multiple comma-separated patterns share the same body.
             let start = self.peek_span();
-            let pattern = self.parse_expr();
+            let mut patterns = vec![self.parse_expr()];
             self.skip_trivia();
+            while self.peek_kind() == TokenKind::Comma {
+                self.bump();
+                self.skip_trivia();
+                patterns.push(self.parse_expr());
+                self.skip_trivia();
+            }
             self.expect(TokenKind::Arrow, "'->' in when branch");
             self.skip_trivia();
             let body = self.parse_expr();
             let span = start.merge(body.span());
-            branches.push(WhenBranch {
-                pattern,
-                body,
-                span,
-            });
+            for pattern in patterns {
+                branches.push(WhenBranch {
+                    pattern,
+                    body: body.clone(),
+                    span,
+                });
+            }
         }
 
         let end = self.peek_span();
