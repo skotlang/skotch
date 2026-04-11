@@ -1,0 +1,61 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        classify (I)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=1
+    0000 nop
+    0001 op_0x1A
+    0002 op_0x9C
+    0003 nop
+    0004 iconst_5
+    0005 ldc "negative"
+    0007 op_0xA7
+    0008 nop
+    0009 aload 26
+    0011 op_0x9A
+    0012 nop
+    0013 iconst_5
+    0014 ldc "zero"
+    0016 op_0xA7
+    0017 nop
+    0018 bipush 26
+    0020 bipush 100
+    0022 op_0xA2
+    0023 nop
+    0024 iconst_5
+    0025 ldc "small"
+    0027 op_0xA7
+    0028 nop
+    0029 iconst_2
+    0030 ldc "big"
+    0032 op_0xB0
+    sub_attr  StackMapTable (9 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 bipush -5
+    0002 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 op_0x5F
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 iconst_0
+    0013 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 op_0x5F
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 bipush 42
+    0025 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 op_0x5F
+    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0035 sipush 999
+    0038 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 op_0x5F
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

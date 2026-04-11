@@ -1,0 +1,48 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+  %merge_2 = alloca i32
+  %merge_6 = alloca i32
+  %t0 = add i32 0, 1
+  %t1 = add i32 0, 3
+  store i32 %t0, ptr %merge_2
+  br label %bb1
+bb1:
+  %t2 = load i32, ptr %merge_2
+  %t3 = icmp sle i32 %t2, %t1
+  br i1 %t3, label %bb2, label %bb3
+bb2:
+  %t4 = add i32 0, 1
+  %t5 = add i32 0, 3
+  store i32 %t4, ptr %merge_6
+  br label %bb4
+bb3:
+  ret i32 0
+bb4:
+  %t6 = load i32, ptr %merge_6
+  %t7 = icmp sle i32 %t6, %t5
+  br i1 %t7, label %bb5, label %bb6
+bb5:
+  %t8 = load i32, ptr %merge_2
+  %t9 = load i32, ptr %merge_6
+  %t10 = mul i32 %t8, %t9
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
+  %t12 = add i32 0, 1
+  %t13 = load i32, ptr %merge_6
+  %t14 = add i32 %t13, %t12
+  store i32 %t14, ptr %merge_6
+  br label %bb4
+bb6:
+  %t15 = add i32 0, 1
+  %t16 = load i32, ptr %merge_2
+  %t17 = add i32 %t16, %t15
+  store i32 %t17, ptr %merge_2
+  br label %bb1
+}
+

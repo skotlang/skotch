@@ -394,6 +394,47 @@ fn lower_stmt(
             fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
             true
         }
+        Stmt::DoWhile { body, cond, .. } => {
+            // do { body } while (cond)
+            //   → body_block: body → cond_block: eval cond → Branch(cond, body_block, exit_block)
+            let body_block = fb.new_block();
+            let cond_block = fb.new_block();
+            let exit_block = fb.new_block();
+            fb.terminate_and_switch(Terminator::Goto(body_block), body_block);
+            for s in &body.stmts {
+                lower_stmt(
+                    s,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                );
+            }
+            fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
+            if let Some(cond_local) = lower_expr(
+                cond,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            ) {
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: cond_local,
+                        then_block: body_block,
+                        else_block: exit_block,
+                    },
+                    exit_block,
+                );
+            }
+            true
+        }
         Stmt::Assign { target, value, .. } => {
             // var reassignment: look up the existing local, lower the
             // value, and assign to the same local ID.
@@ -1100,6 +1141,8 @@ fn lower_expr(
             //   if (tmp == v1) e1
             //   else if (tmp == v2) e2
             //   else e3
+            // Detect subjectless when: subject is BoolLit(true).
+            let is_subjectless = matches!(subject.as_ref(), Expr::BoolLit(true, _));
             let subj = lower_expr(
                 subject,
                 fb,
@@ -1148,15 +1191,23 @@ fn lower_expr(
                     interner,
                     diags,
                 )?;
-                let cmp = fb.new_local(Ty::Bool);
-                fb.push_stmt(MStmt::Assign {
-                    dest: cmp,
-                    value: Rvalue::BinOp {
-                        op: MBinOp::CmpEq,
-                        lhs: subj,
-                        rhs: pattern_local,
-                    },
-                });
+
+                // For subjectless when, the pattern IS the boolean
+                // condition. For subject when, compare subject == pattern.
+                let cmp = if is_subjectless {
+                    pattern_local
+                } else {
+                    let c = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::CmpEq,
+                            lhs: subj,
+                            rhs: pattern_local,
+                        },
+                    });
+                    c
+                };
 
                 let fall_through = if i + 1 < branches.len() {
                     cmp_blks[i + 1]

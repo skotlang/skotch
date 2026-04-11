@@ -463,6 +463,7 @@ impl<'a> Parser<'a> {
                 Stmt::Return { value, span }
             }
             TokenKind::KwWhile => self.parse_while(),
+            TokenKind::KwDo => self.parse_do_while(),
             TokenKind::KwFor => self.parse_for(),
             _ => {
                 let expr = self.parse_expr();
@@ -501,6 +502,27 @@ impl<'a> Parser<'a> {
         let body = self.parse_block();
         let span = start.merge(body.span);
         Stmt::While { cond, body, span }
+    }
+
+    fn parse_do_while(&mut self) -> Stmt {
+        let start = self.peek_span();
+        self.bump(); // consume `do`
+        self.skip_trivia();
+        let body = self.parse_block();
+        self.skip_trivia();
+        self.expect(TokenKind::KwWhile, "'while' after do body");
+        self.skip_trivia();
+        self.expect(TokenKind::LParen, "'(' after 'while'");
+        self.skip_trivia();
+        let cond = self.parse_expr();
+        self.skip_trivia();
+        let end = self.peek_span();
+        self.expect(TokenKind::RParen, "')' after do-while condition");
+        Stmt::DoWhile {
+            body,
+            cond,
+            span: start.merge(end),
+        }
     }
 
     fn parse_for(&mut self) -> Stmt {
@@ -837,12 +859,23 @@ impl<'a> Parser<'a> {
         let kw = self.peek_span();
         self.bump(); // 'when'
         self.skip_trivia();
-        self.expect(TokenKind::LParen, "'(' after 'when'");
-        self.skip_trivia();
-        let subject = self.parse_expr();
-        self.skip_trivia();
-        self.expect(TokenKind::RParen, "')' after when subject");
-        self.skip_trivia();
+
+        // Support both `when (subject) { ... }` and `when { ... }`.
+        let subject = if self.peek_kind() == TokenKind::LParen {
+            self.bump();
+            self.skip_trivia();
+            let s = self.parse_expr();
+            self.skip_trivia();
+            self.expect(TokenKind::RParen, "')' after when subject");
+            self.skip_trivia();
+            s
+        } else {
+            // Subjectless when: each branch pattern is a boolean condition.
+            // Use `true` as a sentinel subject — the MIR lowering will
+            // detect this and use the pattern directly as the condition
+            // instead of comparing subject == pattern.
+            Expr::BoolLit(true, kw)
+        };
         self.expect(TokenKind::LBrace, "'{' for when body");
 
         let mut branches: Vec<WhenBranch> = Vec::new();
