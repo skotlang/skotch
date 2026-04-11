@@ -1,0 +1,52 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=11
+    0000 bipush 42
+    0002 istore 1
+    0004 iload 1
+    0006 istore 2
+    0008 iload 2
+    0010 istore 3
+    0012 iload 3
+    0014 istore 4
+    0016 iload 4
+    0018 istore 5
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload 5
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 ldc "The answer is "
+    0030 astore 6
+    0032 iload 2
+    0034 istore 7
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 op_0xBB
+    0040 nop
+    0041 aload 89
+    0043 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0046 aload 6
+    0048 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0051 iload 7
+    0053 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0056 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0059 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0062 iload 2
+    0064 istore 8
+    0066 iconst_1
+    0067 istore 9
+    0069 iload 8
+    0071 iload 9
+    0073 iadd
+    0074 istore 10
+    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0079 op_0xBB
+    0080 nop
+    0081 aload 89
+    0083 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0086 iload 10
+    0088 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0091 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0097 return

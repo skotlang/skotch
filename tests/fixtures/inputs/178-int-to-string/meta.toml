@@ -1,0 +1,4 @@
+name   = "178-int-to-string"
+status = "supported"
+features = ["string-template", "int-interpolation"]
+skip_dex = true

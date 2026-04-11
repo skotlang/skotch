@@ -1,0 +1,36 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 bipush 42
+    0002 op_0x3B
+    0003 op_0x1A
+    0004 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0007 op_0x4C
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 op_0x2B
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 op_0x1A
+    0016 op_0xBA
+    0017 nop
+    0018 op_0x23
+    0019 nop
+    0020 nop
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 op_0x5F
+    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0028 op_0x1A
+    0029 iconst_1
+    0030 iadd
+    0031 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 op_0x5F
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

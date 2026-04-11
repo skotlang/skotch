@@ -1,0 +1,176 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.8
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "String",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 42
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": "PrintlnConcat",
+                    "args": [
+                      6,
+                      7
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "BinOp": {
+                    "op": "AddI",
+                    "lhs": 9,
+                    "rhs": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": "PrintlnConcat",
+                    "args": [
+                      11
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "strings": [
+    "The answer is "
+  ]
+}
