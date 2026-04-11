@@ -92,6 +92,11 @@ enum Command {
         #[arg(long = "target", value_name = "TARGET")]
         target: Option<String>,
     },
+    /// Start the Language Server Protocol server (stdin/stdout).
+    ///
+    /// Used by editors (VS Code, Neovim, etc.) for real-time diagnostics,
+    /// completions, hover, and go-to-definition.
+    Lsp,
     /// Run tests (lands in a later PR).
     Test,
 }
@@ -203,6 +208,11 @@ fn main() -> Result<()> {
                 target_override,
             };
             skotch_build::build_project(&opts)?;
+        }
+        Command::Lsp => {
+            tokio::runtime::Runtime::new()
+                .expect("failed to create tokio runtime")
+                .block_on(skotch_lsp::run_server());
         }
         Command::Test => {
             eprintln!("`skotch test` is not yet implemented.");

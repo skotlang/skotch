@@ -38,6 +38,12 @@ impl Interner {
         self.rodeo.resolve(&sym.0)
     }
 
+    /// Look up the symbol for a string without interning it.
+    /// Returns `None` if the string was never interned.
+    pub fn get(&self, s: &str) -> Option<Symbol> {
+        self.rodeo.get(s).map(Symbol)
+    }
+
     /// Number of distinct strings interned so far.
     pub fn len(&self) -> usize {
         self.rodeo.len()
