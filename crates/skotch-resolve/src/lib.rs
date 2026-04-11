@@ -256,7 +256,11 @@ impl<'a> Resolver<'a> {
         rf: &mut ResolvedFunction,
     ) {
         match expr {
-            Expr::IntLit(_, _) | Expr::BoolLit(_, _) | Expr::StringLit(_, _) => {}
+            Expr::IntLit(_, _)
+            | Expr::DoubleLit(_, _)
+            | Expr::BoolLit(_, _)
+            | Expr::NullLit(_)
+            | Expr::StringLit(_, _) => {}
             Expr::Ident(name, span) => {
                 let def = lookup(scope, *name).unwrap_or_else(|| {
                     self.out.top_level.get(name).copied().unwrap_or_else(|| {
@@ -344,7 +348,11 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expr_in_top(&mut self, expr: &Expr, refs: &mut Vec<ResolvedRef>) {
         match expr {
-            Expr::IntLit(_, _) | Expr::BoolLit(_, _) | Expr::StringLit(_, _) => {}
+            Expr::IntLit(_, _)
+            | Expr::DoubleLit(_, _)
+            | Expr::BoolLit(_, _)
+            | Expr::NullLit(_)
+            | Expr::StringLit(_, _) => {}
             Expr::Ident(name, span) => {
                 let def = self.out.top_level.get(name).copied().unwrap_or_else(|| {
                     self.diags.push(Diagnostic::error(

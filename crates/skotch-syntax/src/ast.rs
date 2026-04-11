@@ -175,7 +175,9 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub enum Expr {
     IntLit(i64, Span),
+    DoubleLit(f64, Span),
     BoolLit(bool, Span),
+    NullLit(Span),
     StringLit(String, Span),
     /// A string literal with interpolation. Each part is either literal
     /// text or an embedded expression.
@@ -275,7 +277,9 @@ impl Expr {
     pub fn span(&self) -> Span {
         match self {
             Expr::IntLit(_, s)
+            | Expr::DoubleLit(_, s)
             | Expr::BoolLit(_, s)
+            | Expr::NullLit(s)
             | Expr::StringLit(_, s)
             | Expr::StringTemplate(_, s)
             | Expr::Ident(_, s)

@@ -896,6 +896,18 @@ fn walk_block(
                         code.push(opcode);
                         bump(stack, max_stack, -1); // two ints in, one int out
                     }
+                    MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD => {
+                        let opcode: u8 = match op {
+                            MBinOp::AddD => 0x63, // dadd
+                            MBinOp::SubD => 0x67, // dsub
+                            MBinOp::MulD => 0x6B, // dmul
+                            MBinOp::DivD => 0x6F, // ddiv
+                            MBinOp::ModD => 0x73, // drem
+                            _ => unreachable!(),
+                        };
+                        code.push(opcode);
+                        bump(stack, max_stack, -2); // two doubles (4 slots) in, one double (2 slots) out
+                    }
                     MBinOp::CmpEq
                     | MBinOp::CmpNe
                     | MBinOp::CmpLt
@@ -1229,6 +1241,16 @@ fn emit_load_const(
             bump(stack, max_stack, 1);
         }
         MirConst::Int(v) => emit_iconst(cp, code, stack, max_stack, *v),
+        MirConst::Double(v) => {
+            let idx = cp.double(*v);
+            code.push(0x14); // ldc2_w
+            code.write_u16::<BigEndian>(idx).unwrap();
+            bump(stack, max_stack, 2); // double takes 2 stack slots
+        }
+        MirConst::Null => {
+            code.push(0x01); // aconst_null
+            bump(stack, max_stack, 1);
+        }
         MirConst::String(sid) => {
             let s = module.lookup_string(*sid);
             let idx = cp.string(s);

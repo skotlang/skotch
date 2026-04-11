@@ -53,6 +53,8 @@ pub enum MirConst {
     Unit,
     Bool(bool),
     Int(i32),
+    Double(f64),
+    Null,
     String(StringId),
 }
 
@@ -94,6 +96,11 @@ pub enum BinOp {
     MulI,
     DivI,
     ModI,
+    AddD,
+    SubD,
+    MulD,
+    DivD,
+    ModD,
     /// String concatenation: lhs (String) + rhs (any → toString).
     ConcatStr,
     /// Integer comparisons — produce a `Bool` local.

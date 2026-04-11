@@ -14,6 +14,8 @@ pub enum TokenKind {
     // ─── identifiers and literals ────────────────────────────────────────
     Ident,
     IntLit,
+    /// A floating-point literal: `3.14`, `2.5e10`, `1.0f`.
+    DoubleLit,
     /// A string literal *with no template interpolations* — content is
     /// already decoded and lives in the payload table. Strings that
     /// contain `$ident` or `${expr}` are emitted as a `String*` sequence

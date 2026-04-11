@@ -202,7 +202,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::StringEnd => Some(1),
 
         // Numbers
-        TokenKind::IntLit => Some(2),
+        TokenKind::IntLit | TokenKind::DoubleLit => Some(2),
 
         // Operators
         TokenKind::Plus
@@ -1105,5 +1105,31 @@ mod tests {
         // greet is at line 1, col 4 (0-based).
         assert_eq!(loc.range.start.line, 0);
         assert_eq!(loc.range.start.character, 4);
+    }
+
+    #[test]
+    fn diagnostics_for_double_literal() {
+        let state = analyze_source("fun main() { val pi = 3.14; println(pi) }");
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_null_literal() {
+        let state = analyze_source("fun main() { val x = null; println(x) }");
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn hover_double_local() {
+        let state = analyze_source("fun main() { val pi = 3.14; println(pi) }");
+        let def = DefId::Local(0, 0);
+        let info = hover_for_def(
+            def,
+            &state.resolved,
+            &state.typed,
+            &state.interner,
+            &state.ast,
+        );
+        assert_eq!(info, Some("val pi: Double".into()));
     }
 }

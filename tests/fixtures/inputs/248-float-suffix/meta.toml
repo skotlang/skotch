@@ -1,0 +1,4 @@
+name     = "248-float-suffix"
+status   = "supported"
+features = ["fun", "println", "float-literal", "f-suffix"]
+notes    = "Verifies Float literal with f suffix (treated as Double)."
