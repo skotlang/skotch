@@ -1,0 +1,150 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        isPalindrome (I)Z 0x0009
+  code        max_stack=3 max_locals=25
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_0
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 op_0xA1
+    0012 nop
+    0013 iconst_4
+    0014 iconst_0
+    0015 op_0xA7
+    0016 nop
+    0017 iconst_1
+    0018 iconst_1
+    0019 istore 3
+    0021 iload 3
+    0023 op_0x99
+    0024 nop
+    0025 op_0x09
+    0026 iconst_0
+    0027 istore 4
+    0029 iload 4
+    0031 op_0xAC
+    0032 op_0xA7
+    0033 nop
+    0034 iconst_0
+    0035 iload 0
+    0037 istore 5
+    0039 iload 5
+    0041 istore 6
+    0043 iconst_0
+    0044 istore 7
+    0046 iload 7
+    0048 istore 8
+    0050 op_0xA7
+    0051 nop
+    0052 iconst_0
+    0053 iload 6
+    0055 istore 9
+    0057 iconst_0
+    0058 istore 10
+    0060 iload 9
+    0062 iload 10
+    0064 op_0xA3
+    0065 nop
+    0066 iconst_4
+    0067 iconst_0
+    0068 op_0xA7
+    0069 nop
+    0070 iconst_1
+    0071 iconst_1
+    0072 istore 11
+    0074 iload 11
+    0076 op_0x99
+    0077 nop
+    0078 op_0x42
+    0079 iload 8
+    0081 istore 12
+    0083 bipush 10
+    0085 istore 13
+    0087 iload 12
+    0089 iload 13
+    0091 imul
+    0092 istore 14
+    0094 iload 6
+    0096 istore 15
+    0098 bipush 10
+    0100 istore 16
+    0102 iload 15
+    0104 iload 16
+    0106 irem
+    0107 istore 17
+    0109 iload 14
+    0111 iload 17
+    0113 iadd
+    0114 istore 18
+    0116 iload 18
+    0118 istore 8
+    0120 iload 6
+    0122 istore 19
+    0124 bipush 10
+    0126 istore 20
+    0128 iload 19
+    0130 iload 20
+    0132 idiv
+    0133 istore 21
+    0135 iload 21
+    0137 istore 6
+    0139 op_0xA7
+    0140 op_0xFF
+    0141 op_0xAA
+    0142 iload 8
+    0144 istore 22
+    0146 iload 0
+    0148 istore 23
+    0150 iload 22
+    0152 iload 23
+    0154 op_0x9F
+    0155 nop
+    0156 iconst_4
+    0157 iconst_0
+    0158 op_0xA7
+    0159 nop
+    0160 iconst_1
+    0161 iconst_1
+    0162 istore 24
+    0164 iload 24
+    0166 op_0xAC
+    sub_attr  StackMapTable (180 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 bipush 121
+    0002 istore 1
+    0004 iload 1
+    0006 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0009 istore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 iload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0019 bipush 123
+    0021 istore 3
+    0023 iload 3
+    0025 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0028 istore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0038 sipush 1221
+    0041 istore 5
+    0043 iload 5
+    0045 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0048 istore 6
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 iload 6
+    0055 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0058 bipush -121
+    0060 istore 7
+    0062 iload 7
+    0064 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0067 istore 8
+    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0072 iload 8
+    0074 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0077 return

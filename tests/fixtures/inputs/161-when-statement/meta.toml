@@ -1,0 +1,3 @@
+name   = "161-when-statement"
+status = "supported"
+features = ["when-no-subject", "when-as-statement", "println-in-branches"]

@@ -1,0 +1,24 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [6 x i8] c"hello\00", align 1
+@.str.false = private unnamed_addr constant [6 x i8] c"false\00", align 1
+@.str.true = private unnamed_addr constant [5 x i8] c"true\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 42
+  %t1 = add i32 0, 1
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t0)
+  call i32 @puts(ptr @.str.0)
+  %t5 = trunc i32 %t1 to i1
+  %t6 = select i1 %t5, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t6)
+  ret i32 0
+}
+

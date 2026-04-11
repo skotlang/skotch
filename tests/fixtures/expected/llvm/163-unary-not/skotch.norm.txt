@@ -1,0 +1,47 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [4 x i8] c"yes\00", align 1
+@.str.false = private unnamed_addr constant [6 x i8] c"false\00", align 1
+@.str.true = private unnamed_addr constant [5 x i8] c"true\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 1
+  %t1 = add i32 0, 1
+  %t2 = sub i32 %t1, %t0
+  %t4 = trunc i32 %t2 to i1
+  %t5 = select i1 %t4, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t5)
+  %t7 = add i32 0, 0
+  %t8 = add i32 0, 1
+  %t9 = sub i32 %t8, %t7
+  %t11 = trunc i32 %t9 to i1
+  %t12 = select i1 %t11, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t12)
+  %t14 = add i32 0, 5
+  %t15 = add i32 0, 3
+  %t16 = icmp sgt i32 %t14, %t15
+  %t17 = add i32 0, 1
+  %t18 = sub i32 %t17, %t16
+  %t20 = trunc i32 %t18 to i1
+  %t21 = select i1 %t20, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t21)
+  %t23 = add i32 0, 0
+  %t24 = add i32 0, 1
+  %t25 = sub i32 %t24, %t23
+  %t26 = trunc i32 %t25 to i1
+  br i1 %t26, label %bb1, label %bb2
+bb1:
+  call i32 @puts(ptr @.str.0)
+  br label %bb3
+bb2:
+  br label %bb3
+bb3:
+  ret i32 0
+}
+

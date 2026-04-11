@@ -1,0 +1,51 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @InputKt_gcd
+define i32 @InputKt_gcd(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_3 = alloca i32
+  %merge_5 = alloca i32
+  store i32 %arg0, ptr %merge_3
+  store i32 %arg1, ptr %merge_5
+  br label %bb1
+bb1:
+  %t0 = load i32, ptr %merge_5
+  %t1 = add i32 0, 0
+  %t2 = icmp ne i32 %t0, %t1
+  br i1 %t2, label %bb2, label %bb3
+bb2:
+  %t3 = load i32, ptr %merge_5
+  %t4 = load i32, ptr %merge_3
+  %t5 = load i32, ptr %merge_5
+  %t6 = srem i32 %t4, %t5
+  store i32 %t6, ptr %merge_5
+  store i32 %t3, ptr %merge_3
+  br label %bb1
+bb3:
+  %t7 = load i32, ptr %merge_3
+  ret i32 %t7
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 12
+  %t1 = add i32 0, 8
+  %t2 = call i32 @InputKt_gcd(i32 %t0, i32 %t1)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t2)
+  %t4 = add i32 0, 100
+  %t5 = add i32 0, 75
+  %t6 = call i32 @InputKt_gcd(i32 %t4, i32 %t5)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t6)
+  %t8 = add i32 0, 17
+  %t9 = add i32 0, 13
+  %t10 = call i32 @InputKt_gcd(i32 %t8, i32 %t9)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
+  ret i32 0
+}
+

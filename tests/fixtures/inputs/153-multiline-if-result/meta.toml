@@ -1,0 +1,4 @@
+name   = "153-multiline-if-result"
+status = "supported"
+features = ["if-expression", "multiline-block", "val-in-block"]
+skip_dex = true

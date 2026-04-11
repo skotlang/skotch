@@ -1,0 +1,62 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 ldc "ab"
+    0002 iconst_3
+    0003 invokestatic Method(InputKt.repeat:(Ljava/lang/String;I)Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 op_0x5F
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 ldc "x"
+    0015 iconst_5
+    0016 invokestatic Method(InputKt.repeat:(Ljava/lang/String;I)Ljava/lang/String;)
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 op_0x5F
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        repeat (Ljava/lang/String;I)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=4
+    0000 op_0x2A
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 ldc ""
+    0008 op_0x4D
+    0009 iconst_1
+    0010 op_0x3E
+    0011 op_0x1D
+    0012 op_0x1B
+    0013 op_0xA3
+    0014 nop
+    0015 op_0x16
+    0016 op_0x2C
+    0017 op_0x2A
+    0018 op_0xBA
+    0019 nop
+    0020 op_0x1D
+    0021 nop
+    0022 nop
+    0023 op_0x4D
+    0024 op_0x1D
+    0025 op_0x1B
+    0026 op_0x9F
+    0027 nop
+    0028 op_0x09
+    0029 op_0x84
+    0030 iconst_0
+    0031 aconst_null
+    0032 op_0xA7
+    0033 op_0xFF
+    0034 op_0xF0
+    0035 op_0x2C
+    0036 op_0xB0
+    sub_attr  StackMapTable (10 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+class_attr    BootstrapMethods (8 bytes)

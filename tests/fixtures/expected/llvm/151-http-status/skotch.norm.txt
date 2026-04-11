@@ -1,0 +1,79 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [3 x i8] c"OK\00", align 1
+@.str.1 = private unnamed_addr constant [8 x i8] c"Created\00", align 1
+@.str.2 = private unnamed_addr constant [12 x i8] c"Bad Request\00", align 1
+@.str.3 = private unnamed_addr constant [10 x i8] c"Not Found\00", align 1
+@.str.4 = private unnamed_addr constant [22 x i8] c"Internal Server Error\00", align 1
+@.str.5 = private unnamed_addr constant [8 x i8] c"Unknown\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @InputKt_httpStatus
+define ptr @InputKt_httpStatus(i32 %arg0) {
+entry:
+  %merge_2 = alloca ptr
+  br label %bb1
+bb1:
+  %t0 = add i32 0, 200
+  %t1 = icmp eq i32 %arg0, %t0
+  br i1 %t1, label %bb2, label %bb3
+bb2:
+  store ptr @.str.0, ptr %merge_2
+  br label %bb12
+bb3:
+  %t2 = add i32 0, 201
+  %t3 = icmp eq i32 %arg0, %t2
+  br i1 %t3, label %bb4, label %bb5
+bb4:
+  store ptr @.str.1, ptr %merge_2
+  br label %bb12
+bb5:
+  %t4 = add i32 0, 400
+  %t5 = icmp eq i32 %arg0, %t4
+  br i1 %t5, label %bb6, label %bb7
+bb6:
+  store ptr @.str.2, ptr %merge_2
+  br label %bb12
+bb7:
+  %t6 = add i32 0, 404
+  %t7 = icmp eq i32 %arg0, %t6
+  br i1 %t7, label %bb8, label %bb9
+bb8:
+  store ptr @.str.3, ptr %merge_2
+  br label %bb12
+bb9:
+  %t8 = add i32 0, 500
+  %t9 = icmp eq i32 %arg0, %t8
+  br i1 %t9, label %bb10, label %bb11
+bb10:
+  store ptr @.str.4, ptr %merge_2
+  br label %bb12
+bb11:
+  store ptr @.str.5, ptr %merge_2
+  br label %bb12
+bb12:
+  %t10 = load ptr, ptr %merge_2
+  ret ptr %t10
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 200
+  %t1 = call ptr @InputKt_httpStatus(i32 %t0)
+  call i32 @puts(ptr %t1)
+  %t3 = add i32 0, 404
+  %t4 = call ptr @InputKt_httpStatus(i32 %t3)
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 500
+  %t7 = call ptr @InputKt_httpStatus(i32 %t6)
+  call i32 @puts(ptr %t7)
+  %t9 = add i32 0, 999
+  %t10 = call ptr @InputKt_httpStatus(i32 %t9)
+  call i32 @puts(ptr %t10)
+  ret i32 0
+}
+

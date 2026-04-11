@@ -1,0 +1,38 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %merge_1 = alloca i32
+  %merge_3 = alloca i32
+  %t0 = add i32 0, 1
+  store i32 %t0, ptr %merge_1
+  %t1 = add i32 0, 1
+  store i32 %t1, ptr %merge_3
+  br label %bb1
+bb1:
+  %t2 = load i32, ptr %merge_1
+  %t3 = load i32, ptr %merge_3
+  %t4 = add i32 %t2, %t3
+  %t5 = add i32 0, 100
+  %t6 = icmp slt i32 %t4, %t5
+  br i1 %t6, label %bb2, label %bb3
+bb2:
+  %t7 = load i32, ptr %merge_1
+  %t8 = load i32, ptr %merge_3
+  %t9 = add i32 %t7, %t8
+  %t10 = load i32, ptr %merge_3
+  store i32 %t10, ptr %merge_1
+  store i32 %t9, ptr %merge_3
+  br label %bb1
+bb3:
+  %t11 = load i32, ptr %merge_3
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t11)
+  ret i32 0
+}
+

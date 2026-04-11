@@ -1,0 +1,107 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+  %merge_1 = alloca i32
+  %merge_3 = alloca i32
+  %merge_5 = alloca i32
+  %merge_7 = alloca i32
+  %merge_9 = alloca i32
+  %merge_12 = alloca i32
+  %t0 = add i32 0, 5
+  store i32 %t0, ptr %merge_1
+  %t1 = add i32 0, 2
+  store i32 %t1, ptr %merge_3
+  %t2 = add i32 0, 8
+  store i32 %t2, ptr %merge_5
+  %t3 = add i32 0, 1
+  store i32 %t3, ptr %merge_7
+  %t4 = add i32 0, 4
+  store i32 %t4, ptr %merge_9
+  %t5 = add i32 0, 1
+  %t6 = add i32 0, 4
+  store i32 %t5, ptr %merge_12
+  br label %bb1
+bb1:
+  %t7 = load i32, ptr %merge_12
+  %t8 = icmp sle i32 %t7, %t6
+  br i1 %t8, label %bb2, label %bb4
+bb2:
+  %t9 = load i32, ptr %merge_1
+  %t10 = load i32, ptr %merge_3
+  %t11 = icmp sgt i32 %t9, %t10
+  br i1 %t11, label %bb5, label %bb6
+bb3:
+  %t12 = add i32 0, 1
+  %t13 = load i32, ptr %merge_12
+  %t14 = add i32 %t13, %t12
+  store i32 %t14, ptr %merge_12
+  br label %bb1
+bb4:
+  %t15 = load i32, ptr %merge_1
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t15)
+  %t17 = load i32, ptr %merge_3
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t17)
+  %t19 = load i32, ptr %merge_5
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t19)
+  %t21 = load i32, ptr %merge_7
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t21)
+  %t23 = load i32, ptr %merge_9
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t23)
+  ret i32 0
+bb5:
+  %t25 = load i32, ptr %merge_1
+  %t26 = load i32, ptr %merge_3
+  store i32 %t26, ptr %merge_1
+  store i32 %t25, ptr %merge_3
+  br label %bb7
+bb6:
+  br label %bb7
+bb7:
+  %t27 = load i32, ptr %merge_3
+  %t28 = load i32, ptr %merge_5
+  %t29 = icmp sgt i32 %t27, %t28
+  br i1 %t29, label %bb8, label %bb9
+bb8:
+  %t30 = load i32, ptr %merge_3
+  %t31 = load i32, ptr %merge_5
+  store i32 %t31, ptr %merge_3
+  store i32 %t30, ptr %merge_5
+  br label %bb10
+bb9:
+  br label %bb10
+bb10:
+  %t32 = load i32, ptr %merge_5
+  %t33 = load i32, ptr %merge_7
+  %t34 = icmp sgt i32 %t32, %t33
+  br i1 %t34, label %bb11, label %bb12
+bb11:
+  %t35 = load i32, ptr %merge_5
+  %t36 = load i32, ptr %merge_7
+  store i32 %t36, ptr %merge_5
+  store i32 %t35, ptr %merge_7
+  br label %bb13
+bb12:
+  br label %bb13
+bb13:
+  %t37 = load i32, ptr %merge_7
+  %t38 = load i32, ptr %merge_9
+  %t39 = icmp sgt i32 %t37, %t38
+  br i1 %t39, label %bb14, label %bb15
+bb14:
+  %t40 = load i32, ptr %merge_7
+  %t41 = load i32, ptr %merge_9
+  store i32 %t41, ptr %merge_7
+  store i32 %t40, ptr %merge_9
+  br label %bb16
+bb15:
+  br label %bb16
+bb16:
+  br label %bb3
+}
+

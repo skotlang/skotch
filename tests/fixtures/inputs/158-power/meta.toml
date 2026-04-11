@@ -1,0 +1,3 @@
+name   = "158-power"
+status = "supported"
+features = ["for-loop", "compound-assignment", "power-function"]

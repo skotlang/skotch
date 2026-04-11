@@ -1,0 +1,120 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=18
+    0000 iconst_1
+    0001 istore 1
+    0003 iconst_4
+    0004 istore 2
+    0006 iload 1
+    0008 istore 3
+    0010 op_0xA7
+    0011 nop
+    0012 iconst_0
+    0013 iload 3
+    0015 iload 2
+    0017 op_0xA4
+    0018 nop
+    0019 iconst_4
+    0020 iconst_0
+    0021 op_0xA7
+    0022 nop
+    0023 iconst_1
+    0024 iconst_1
+    0025 istore 4
+    0027 iload 4
+    0029 op_0x99
+    0030 nop
+    0031 op_0x21
+    0032 iconst_1
+    0033 istore 5
+    0035 iconst_4
+    0036 istore 6
+    0038 iload 5
+    0040 istore 7
+    0042 op_0xA7
+    0043 nop
+    0044 iload 4
+    0046 istore 8
+    0048 iload 3
+    0050 iload 8
+    0052 iadd
+    0053 istore 9
+    0055 iload 9
+    0057 istore 3
+    0059 op_0xA7
+    0060 op_0xFF
+    0061 op_0xD2
+    0062 return
+    0063 iload 7
+    0065 iload 6
+    0067 op_0xA4
+    0068 nop
+    0069 iconst_4
+    0070 iconst_0
+    0071 op_0xA7
+    0072 nop
+    0073 iconst_1
+    0074 iconst_1
+    0075 istore 10
+    0077 iload 10
+    0079 op_0x99
+    0080 nop
+    0081 op_0x32
+    0082 iload 3
+    0084 istore 11
+    0086 iload 7
+    0088 istore 12
+    0090 iload 11
+    0092 iload 12
+    0094 op_0x9F
+    0095 nop
+    0096 iconst_4
+    0097 iconst_0
+    0098 op_0xA7
+    0099 nop
+    0100 iconst_1
+    0101 iconst_1
+    0102 istore 13
+    0104 iload 13
+    0106 op_0x99
+    0107 nop
+    0108 op_0x28
+    0109 op_0xA7
+    0110 nop
+    0111 op_0x17
+    0112 iconst_1
+    0113 istore 14
+    0115 iload 7
+    0117 iload 14
+    0119 iadd
+    0120 istore 15
+    0122 iload 15
+    0124 istore 7
+    0126 op_0xA7
+    0127 op_0xFF
+    0128 op_0xC1
+    0129 op_0xA7
+    0130 op_0xFF
+    0131 op_0xAC
+    0132 iconst_1
+    0133 istore 16
+    0135 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0138 iload 16
+    0140 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0143 op_0xA7
+    0144 nop
+    0145 sipush 822
+    0148 sipush -19968
+    0151 op_0x0F
+    0152 iload 17
+    0154 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0157 op_0xA7
+    0158 nop
+    0159 iconst_0
+    0160 op_0xA7
+    0161 op_0xFF
+    0162 op_0xD0
+    sub_attr  StackMapTable (285 bytes)

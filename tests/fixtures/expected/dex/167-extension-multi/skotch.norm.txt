@@ -1,0 +1,51 @@
+dex_version   035
+strings       18
+types         7
+methods       6
+classes       1
+
+--- strings ---
+  "I"
+  "II"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VZ"
+  "Z"
+  "ZI"
+  "doubled"
+  "input.kt"
+  "isPositive"
+  "main"
+  "negate"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  Z
+
+--- methods ---
+  LInputKt;.doubled(I)I
+  LInputKt;.isPositive(I)Z
+  LInputKt;.main()V
+  LInputKt;.negate(I)I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Z)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       doubled(I)I flags=0x0019 regs=4 ins=1 outs=0 insns=5
+  method       isPositive(I)Z flags=0x0019 regs=4 ins=1 outs=0 insns=7
+  method       main()V flags=0x0019 regs=9 ins=0 outs=2 insns=41
+  method       negate(I)I flags=0x0019 regs=4 ins=1 outs=0 insns=5

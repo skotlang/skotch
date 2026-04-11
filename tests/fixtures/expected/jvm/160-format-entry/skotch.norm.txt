@@ -1,0 +1,85 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        formatEntry (Ljava/lang/String;IZ)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=15
+    0000 aload 0
+    0002 astore 3
+    0004 ldc " (age "
+    0006 astore 4
+    0008 aload 3
+    0010 aload 4
+    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0015 astore 5
+    0017 iload 1
+    0019 istore 6
+    0021 aload 5
+    0023 iload 6
+    0025 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0028 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0031 astore 7
+    0033 ldc ") - "
+    0035 astore 8
+    0037 aload 7
+    0039 aload 8
+    0041 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0044 astore 9
+    0046 iload 2
+    0048 istore 10
+    0050 iload 10
+    0052 op_0x99
+    0053 nop
+    0054 op_0x0E
+    0055 ldc "active"
+    0057 astore 11
+    0059 aload 11
+    0061 astore 12
+    0063 op_0xA7
+    0064 nop
+    0065 op_0x0E
+    0066 ldc "inactive"
+    0068 astore 13
+    0070 aload 13
+    0072 astore 12
+    0074 op_0xA7
+    0075 nop
+    0076 iconst_0
+    0077 aload 9
+    0079 aload 12
+    0081 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0084 astore 14
+    0086 aload 14
+    0088 op_0xB0
+    sub_attr  StackMapTable (70 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=9
+    0000 ldc "Alice"
+    0002 astore 1
+    0004 bipush 30
+    0006 istore 2
+    0008 iconst_1
+    0009 istore 3
+    0011 aload 1
+    0013 iload 2
+    0015 iload 3
+    0017 invokestatic Method(InputKt.formatEntry:(Ljava/lang/String;IZ)Ljava/lang/String;)
+    0020 astore 4
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 4
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 ldc "Bob"
+    0032 astore 5
+    0034 bipush 25
+    0036 istore 6
+    0038 iconst_0
+    0039 istore 7
+    0041 aload 5
+    0043 iload 6
+    0045 iload 7
+    0047 invokestatic Method(InputKt.formatEntry:(Ljava/lang/String;IZ)Ljava/lang/String;)
+    0050 astore 8
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 aload 8
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0060 return

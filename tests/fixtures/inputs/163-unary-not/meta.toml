@@ -1,0 +1,3 @@
+name   = "163-unary-not"
+status = "supported"
+features = ["unary-not", "boolean-negation"]

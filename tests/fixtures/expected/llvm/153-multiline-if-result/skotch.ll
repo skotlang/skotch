@@ -1,0 +1,35 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [10 x i8] c"Doubled: \00", align 1
+@.str.1 = private unnamed_addr constant [9 x i8] c"Result: \00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.fmt.concat.0 = private unnamed_addr constant [13 x i8] c"Doubled: %d\0A\00", align 1
+@.fmt.concat.1 = private unnamed_addr constant [12 x i8] c"Result: %d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+  %merge_5 = alloca i32
+  %t0 = add i32 0, 42
+  %t1 = add i32 0, 0
+  %t2 = icmp sgt i32 %t0, %t1
+  store i32 0, ptr %merge_5
+  br i1 %t2, label %bb1, label %bb2
+bb1:
+  %t3 = add i32 0, 2
+  %t4 = mul i32 %t0, %t3
+  call i32 (ptr, ...) @printf(ptr @.fmt.concat.0, i32 %t4)
+  store i32 %t4, ptr %merge_5
+  br label %bb3
+bb2:
+  %t6 = add i32 0, 0
+  store i32 %t6, ptr %merge_5
+  br label %bb3
+bb3:
+  %t7 = load i32, ptr %merge_5
+  call i32 (ptr, ...) @printf(ptr @.fmt.concat.1, i32 %t7)
+  ret i32 0
+}
+

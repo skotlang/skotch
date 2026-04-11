@@ -1,0 +1,3 @@
+name   = "168-print-times"
+status = "supported"
+features = ["for-loop", "string-param", "multiple-types"]

@@ -1,0 +1,3 @@
+name   = "156-else-if-chain"
+status = "supported"
+features = ["when-no-subject", "expression-body", "classification"]
