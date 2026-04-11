@@ -1399,11 +1399,56 @@ fn lower_expr(
                     loop_ctx,
                 )?;
 
-                // For subjectless when, the pattern IS the boolean
-                // condition. For subject when, compare subject == pattern.
-                let cmp = if is_subjectless {
+                // Determine the comparison for this branch.
+                let cmp = if let Some(ref range_end_expr) = branch.range_end {
+                    // Range pattern: subject >= start && subject <= end
+                    let range_end_local = lower_expr(
+                        range_end_expr,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )?;
+                    let ge = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: ge,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::CmpGe,
+                            lhs: subj,
+                            rhs: pattern_local,
+                        },
+                    });
+                    let le = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: le,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::CmpLe,
+                            lhs: subj,
+                            rhs: range_end_local,
+                        },
+                    });
+                    // AND them together using short-circuit
+                    // For simplicity, use a non-short-circuit AND:
+                    // result = ge * le (both are 0/1 ints)
+                    let both = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: both,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::MulI,
+                            lhs: ge,
+                            rhs: le,
+                        },
+                    });
+                    both
+                } else if is_subjectless {
+                    // Subjectless when: the pattern IS the boolean condition.
                     pattern_local
                 } else {
+                    // Subject when: compare subject == pattern.
                     let c = fb.new_local(Ty::Bool);
                     fb.push_stmt(MStmt::Assign {
                         dest: c,

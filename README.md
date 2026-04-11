@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 96 language-feature fixtures validated (~15% of the Kotlin spec).
+> implemented. 100 language-feature fixtures validated (~15–20% of the Kotlin spec).
 
 ## Installation
 
@@ -49,6 +49,12 @@ brew install skotlang/tap/skotch
 
 ```sh
 curl -fsSL https://github.com/skotlang/skotch/releases/latest/download/skotch-cli-installer.sh | sh
+```
+
+### PowerShell (Windows)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/skotlang/skotch/releases/latest/download/skotch-cli-installer.ps1 | iex"
 ```
 
 ### Pre-built binaries
@@ -170,10 +176,10 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~15% of the Kotlin language specification.** The compiler
+**Estimated coverage: ~15–20% of the Kotlin language specification.** The compiler
 handles the core procedural subset — functions, control flow, basic types, and
 expressions — but does not yet support classes, generics, lambdas, nullable
-types, or the standard library collection APIs. 96 test fixtures validated across
+types, or the standard library collection APIs. 100 test fixtures validated across
 JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
@@ -195,14 +201,14 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Unary operators](https://kotlinlang.org/spec/expressions.html#unary-expressions) | §7.3 | `-` (negation), `!` (not) |
 | [Compound assignment](https://kotlinlang.org/spec/expressions.html#assignments) | §7.12 | `+=`, `-=`, `*=`, `/=`, `%=` |
 | [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
-| [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, string/int matching, nested when |
+| [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, `in range`, string/int matching, nested |
 | [Else-if chains](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | `if {} else if {} else {}` (as statements) |
 | [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end) { }` with `Int` ranges |
 | [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
 | [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
 | [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |
 | [Return](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | Early return from functions (guard clauses) |
-| [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, extension method syntax |
+| [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, mutual recursion, extension method syntax |
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(String)`, `println(Boolean)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
 
@@ -229,7 +235,6 @@ JVM, DEX, LLVM IR, and klib targets.
 | Annotations | [§4.8](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | Medium | Declaration, retention, reflection |
 | Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |
 | `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
-| Range expressions (`in 0..9`) in when | — | Easy | `in` operator in when branch patterns |
 | Float/Double literals | [§7.1.2](https://kotlinlang.org/spec/expressions.html#real-literals) | Easy | `3.14`, `2.5e10` |
 | Char literals | [§7.1.5](https://kotlinlang.org/spec/expressions.html#character-literals) | Easy | `'A'`, escape sequences |
 

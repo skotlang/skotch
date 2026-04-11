@@ -1,0 +1,228 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        ageGroup (I)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=28
+    0000 iload 0
+    0002 istore 1
+    0004 op_0xA7
+    0005 nop
+    0006 iconst_0
+    0007 iconst_0
+    0008 istore 2
+    0010 bipush 12
+    0012 istore 3
+    0014 iload 1
+    0016 iload 2
+    0018 op_0xA2
+    0019 nop
+    0020 iconst_4
+    0021 iconst_0
+    0022 op_0xA7
+    0023 nop
+    0024 iconst_1
+    0025 iconst_1
+    0026 istore 4
+    0028 iload 1
+    0030 iload 3
+    0032 op_0xA4
+    0033 nop
+    0034 iconst_4
+    0035 iconst_0
+    0036 op_0xA7
+    0037 nop
+    0038 iconst_1
+    0039 iconst_1
+    0040 istore 5
+    0042 iload 4
+    0044 iload 5
+    0046 imul
+    0047 istore 6
+    0049 iload 6
+    0051 op_0x99
+    0052 nop
+    0053 op_0x0E
+    0054 ldc "child"
+    0056 astore 7
+    0058 aload 7
+    0060 astore 8
+    0062 op_0xA7
+    0063 nop
+    0064 op_0xBF
+    0065 bipush 13
+    0067 istore 9
+    0069 bipush 17
+    0071 istore 10
+    0073 iload 1
+    0075 iload 9
+    0077 op_0xA2
+    0078 nop
+    0079 iconst_4
+    0080 iconst_0
+    0081 op_0xA7
+    0082 nop
+    0083 iconst_1
+    0084 iconst_1
+    0085 istore 11
+    0087 iload 1
+    0089 iload 10
+    0091 op_0xA4
+    0092 nop
+    0093 iconst_4
+    0094 iconst_0
+    0095 op_0xA7
+    0096 nop
+    0097 iconst_1
+    0098 iconst_1
+    0099 istore 12
+    0101 iload 11
+    0103 iload 12
+    0105 imul
+    0106 istore 13
+    0108 iload 13
+    0110 op_0x99
+    0111 nop
+    0112 op_0x0E
+    0113 ldc "teenager"
+    0115 astore 14
+    0117 aload 14
+    0119 astore 8
+    0121 op_0xA7
+    0122 nop
+    0123 op_0x84
+    0124 bipush 18
+    0126 istore 15
+    0128 bipush 64
+    0130 istore 16
+    0132 iload 1
+    0134 iload 15
+    0136 op_0xA2
+    0137 nop
+    0138 iconst_4
+    0139 iconst_0
+    0140 op_0xA7
+    0141 nop
+    0142 iconst_1
+    0143 iconst_1
+    0144 istore 17
+    0146 iload 1
+    0148 iload 16
+    0150 op_0xA4
+    0151 nop
+    0152 iconst_4
+    0153 iconst_0
+    0154 op_0xA7
+    0155 nop
+    0156 iconst_1
+    0157 iconst_1
+    0158 istore 18
+    0160 iload 17
+    0162 iload 18
+    0164 imul
+    0165 istore 19
+    0167 iload 19
+    0169 op_0x99
+    0170 nop
+    0171 op_0x0E
+    0172 ldc "adult"
+    0174 astore 20
+    0176 aload 20
+    0178 astore 8
+    0180 op_0xA7
+    0181 nop
+    0182 op_0x49
+    0183 bipush 65
+    0185 istore 21
+    0187 bipush 120
+    0189 istore 22
+    0191 iload 1
+    0193 iload 21
+    0195 op_0xA2
+    0196 nop
+    0197 iconst_4
+    0198 iconst_0
+    0199 op_0xA7
+    0200 nop
+    0201 iconst_1
+    0202 iconst_1
+    0203 istore 23
+    0205 iload 1
+    0207 iload 22
+    0209 op_0xA4
+    0210 nop
+    0211 iconst_4
+    0212 iconst_0
+    0213 op_0xA7
+    0214 nop
+    0215 iconst_1
+    0216 iconst_1
+    0217 istore 24
+    0219 iload 23
+    0221 iload 24
+    0223 imul
+    0224 istore 25
+    0226 iload 25
+    0228 op_0x99
+    0229 nop
+    0230 op_0x0E
+    0231 ldc "senior"
+    0233 astore 26
+    0235 aload 26
+    0237 astore 8
+    0239 op_0xA7
+    0240 nop
+    0241 op_0x0E
+    0242 ldc "invalid"
+    0244 astore 27
+    0246 aload 27
+    0248 astore 8
+    0250 op_0xA7
+    0251 nop
+    0252 iconst_0
+    0253 aload 8
+    0255 op_0xB0
+    sub_attr  StackMapTable (472 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=11
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 invokestatic Method(InputKt.ageGroup:(I)Ljava/lang/String;)
+    0008 astore 2
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 aload 2
+    0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0018 bipush 15
+    0020 istore 3
+    0022 iload 3
+    0024 invokestatic Method(InputKt.ageGroup:(I)Ljava/lang/String;)
+    0027 astore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0037 bipush 30
+    0039 istore 5
+    0041 iload 5
+    0043 invokestatic Method(InputKt.ageGroup:(I)Ljava/lang/String;)
+    0046 astore 6
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 aload 6
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0056 bipush 70
+    0058 istore 7
+    0060 iload 7
+    0062 invokestatic Method(InputKt.ageGroup:(I)Ljava/lang/String;)
+    0065 astore 8
+    0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0070 aload 8
+    0072 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0075 iconst_m1
+    0076 istore 9
+    0078 iload 9
+    0080 invokestatic Method(InputKt.ageGroup:(I)Ljava/lang/String;)
+    0083 astore 10
+    0085 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0088 aload 10
+    0090 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0093 return

@@ -965,23 +965,38 @@ impl<'a> Parser<'a> {
                 break;
             }
             // Regular branch: pattern[, pattern]* -> body
-            // Multiple comma-separated patterns share the same body.
+            // Patterns can be: expr, in expr..expr (range test)
             let start = self.peek_span();
-            let mut patterns = vec![self.parse_expr()];
-            self.skip_trivia();
-            while self.peek_kind() == TokenKind::Comma {
-                self.bump();
+            let mut patterns: Vec<(Expr, Option<Expr>)> = Vec::new();
+            loop {
+                // Check for `in expr..expr` range pattern
+                if self.peek_kind() == TokenKind::KwIn {
+                    self.bump(); // consume `in`
+                    self.skip_trivia();
+                    let range_start = self.parse_expr();
+                    self.skip_trivia();
+                    self.expect(TokenKind::DotDot, "'..' in range pattern");
+                    self.skip_trivia();
+                    let range_end = self.parse_expr();
+                    patterns.push((range_start, Some(range_end)));
+                } else {
+                    patterns.push((self.parse_expr(), None));
+                }
                 self.skip_trivia();
-                patterns.push(self.parse_expr());
+                if self.peek_kind() != TokenKind::Comma {
+                    break;
+                }
+                self.bump();
                 self.skip_trivia();
             }
             self.expect(TokenKind::Arrow, "'->' in when branch");
             self.skip_trivia();
             let body = self.parse_expr();
             let span = start.merge(body.span());
-            for pattern in patterns {
+            for (pattern, range_end) in patterns {
                 branches.push(WhenBranch {
                     pattern,
+                    range_end,
                     body: body.clone(),
                     span,
                 });

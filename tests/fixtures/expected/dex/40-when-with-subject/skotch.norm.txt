@@ -1,0 +1,45 @@
+dex_version   035
+strings       17
+types         7
+methods       3
+classes       1
+
+--- strings ---
+  "I"
+  "LI"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "describe"
+  "input.kt"
+  "large"
+  "main"
+  "medium"
+  "out"
+  "println"
+  "small"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+
+--- methods ---
+  LInputKt;.describe(I)Ljava/lang/String;
+  LInputKt;.main()V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       describe(I)Ljava/lang/String; flags=0x0019 regs=16 ins=1 outs=0 insns=46
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=33
