@@ -1,0 +1,3 @@
+name   = "202-power-recursive"
+status = "supported"
+features = ["recursion", "early-return", "fast-exponentiation"]

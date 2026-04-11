@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 100 language-feature fixtures validated (~15–20% of the Kotlin spec).
+> implemented. 107 language-feature fixtures validated (~15–20% of the Kotlin spec).
 
 ## Installation
 
@@ -179,7 +179,7 @@ golden" tests still catch regressions in skotch's own emitter.
 **Estimated coverage: ~15–20% of the Kotlin language specification.** The compiler
 handles the core procedural subset — functions, control flow, basic types, and
 expressions — but does not yet support classes, generics, lambdas, nullable
-types, or the standard library collection APIs. 100 test fixtures validated across
+types, or the standard library collection APIs. 107 test fixtures validated across
 JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
@@ -192,6 +192,7 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
 | [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal, hex (`0xFF`), binary (`0b1010`), underscores (`1_000`), `L` suffix |
+| [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, escape sequences (`'\n'`, `'\t'`, `'\\'`) |
 | [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
 | [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` |
@@ -236,7 +237,6 @@ JVM, DEX, LLVM IR, and klib targets.
 | Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |
 | `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
 | Float/Double literals | [§7.1.2](https://kotlinlang.org/spec/expressions.html#real-literals) | Easy | `3.14`, `2.5e10` |
-| Char literals | [§7.1.5](https://kotlinlang.org/spec/expressions.html#character-literals) | Easy | `'A'`, escape sequences |
 
 ## Running the tests
 

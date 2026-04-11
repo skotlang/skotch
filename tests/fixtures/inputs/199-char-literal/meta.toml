@@ -1,0 +1,3 @@
+name   = "199-char-literal"
+status = "supported"
+features = ["char-literal", "escape-sequence"]

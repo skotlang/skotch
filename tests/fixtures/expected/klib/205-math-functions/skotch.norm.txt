@@ -1,0 +1,976 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "abs",
+      "params": [
+        0
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpLt",
+                    "lhs": 1,
+                    "rhs": 2
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 3,
+              "then_block": 1,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 6,
+                    "rhs": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 7
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 8
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 4
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 1,
+      "name": "min",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpLt",
+                    "lhs": 2,
+                    "rhs": 3
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 4,
+              "then_block": 1,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 6
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 7
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 5
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 2,
+      "name": "max",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpGt",
+                    "lhs": 2,
+                    "rhs": 3
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 4,
+              "then_block": 1,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 6
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 7
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 5
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 3,
+      "name": "gcd",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 6
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpNe",
+                    "lhs": 8,
+                    "rhs": 9
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 10,
+              "then_block": 2,
+              "else_block": 3
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Local": 11
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Local": 4
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "BinOp": {
+                    "op": "ModI",
+                    "lhs": 13,
+                    "rhs": 14
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Local": 12
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 16
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Local": 4
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 17
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 4,
+      "name": "lcm",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 3
+                    },
+                    "args": [
+                      3,
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "BinOp": {
+                    "op": "DivI",
+                    "lhs": 2,
+                    "rhs": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 6,
+                    "rhs": 7
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 8
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 5,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": -42
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 1
+                    },
+                    "args": [
+                      3,
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 2
+                    },
+                    "args": [
+                      7,
+                      8
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      9
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Const": {
+                    "Int": 12
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Const": {
+                    "Int": 8
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 3
+                    },
+                    "args": [
+                      11,
+                      12
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      13
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Const": {
+                    "Int": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 4
+                    },
+                    "args": [
+                      15,
+                      16
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      17
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "strings": []
+}

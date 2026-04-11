@@ -1,0 +1,63 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        digitSum (I)I 0x0019
+  code        max_stack=3 max_locals=3
+    0000 op_0x1A
+    0001 op_0x9C
+    0002 nop
+    0003 iconst_5
+    0004 op_0x1A
+    0005 op_0x74
+    0006 op_0xA7
+    0007 nop
+    0008 iconst_1
+    0009 op_0x1A
+    0010 op_0x3C
+    0011 iconst_0
+    0012 op_0x3D
+    0013 op_0x1B
+    0014 op_0x9E
+    0015 nop
+    0016 ldc NameAndType(main:()V)
+    0018 op_0x1B
+    0019 bipush 10
+    0021 irem
+    0022 iadd
+    0023 op_0x3D
+    0024 op_0x1B
+    0025 bipush 10
+    0027 idiv
+    0028 op_0x3C
+    0029 op_0xA7
+    0030 op_0xFF
+    0031 op_0xF0
+    0032 op_0x1C
+    0033 op_0xAC
+    sub_attr  StackMapTable (11 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 bipush 123
+    0002 invokestatic Method(InputKt.digitSum:(I)I)
+    0005 op_0x3B
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 op_0x1A
+    0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0013 sipush 9999
+    0016 invokestatic Method(InputKt.digitSum:(I)I)
+    0019 op_0x3B
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 op_0x1A
+    0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0027 iconst_0
+    0028 invokestatic Method(InputKt.digitSum:(I)I)
+    0031 op_0x3B
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 op_0x1A
+    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0039 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

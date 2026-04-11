@@ -1,0 +1,3 @@
+name   = "203-max-subarray"
+status = "supported"
+features = ["when-subject", "var", "for-loop", "kadane-algorithm"]

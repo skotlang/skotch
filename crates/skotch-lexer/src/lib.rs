@@ -180,6 +180,62 @@ impl<'a> Lexer<'a> {
             return;
         }
 
+        // Char literals: 'X' or '\n' etc. Treated as Int for now.
+        if b == b'\'' {
+            self.pos += 1; // skip opening quote
+            let ch_val = if self.pos < self.bytes.len() && self.bytes[self.pos] == b'\\' {
+                // Escape sequence
+                self.pos += 1;
+                match self.peek() {
+                    Some(b'n') => {
+                        self.pos += 1;
+                        b'\n'
+                    }
+                    Some(b't') => {
+                        self.pos += 1;
+                        b'\t'
+                    }
+                    Some(b'r') => {
+                        self.pos += 1;
+                        b'\r'
+                    }
+                    Some(b'\\') => {
+                        self.pos += 1;
+                        b'\\'
+                    }
+                    Some(b'\'') => {
+                        self.pos += 1;
+                        b'\''
+                    }
+                    Some(b'0') => {
+                        self.pos += 1;
+                        0u8
+                    }
+                    _ => {
+                        self.pos += 1;
+                        b'?'
+                    }
+                }
+            } else if self.pos < self.bytes.len() {
+                let c = self.bytes[self.pos];
+                self.pos += 1;
+                c
+            } else {
+                0u8
+            };
+            // Consume closing quote
+            if self.pos < self.bytes.len() && self.bytes[self.pos] == b'\'' {
+                self.pos += 1;
+            }
+            self.emit(
+                TokenKind::IntLit,
+                start,
+                self.pos,
+                Some(TokenPayload::Int(ch_val as i64)),
+            );
+            return;
+        }
+
         // Punctuation. Multi-character forms first.
         let two = (b, self.peek_at(1));
         let kind = match two {

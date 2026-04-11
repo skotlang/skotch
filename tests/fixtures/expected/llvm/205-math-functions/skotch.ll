@@ -1,0 +1,117 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_abs(i32 %arg0) {
+entry:
+  %merge_4 = alloca i32
+  %t0 = add i32 0, 0
+  %t1 = icmp slt i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 0
+  %t3 = sub i32 %t2, %arg0
+  store i32 %t3, ptr %merge_4
+  br label %bb3
+bb2:
+  store i32 %arg0, ptr %merge_4
+  br label %bb3
+bb3:
+  %t4 = load i32, ptr %merge_4
+  ret i32 %t4
+}
+
+define i32 @InputKt_min(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_5 = alloca i32
+  %t0 = icmp slt i32 %arg0, %arg1
+  br i1 %t0, label %bb1, label %bb2
+bb1:
+  store i32 %arg0, ptr %merge_5
+  br label %bb3
+bb2:
+  store i32 %arg1, ptr %merge_5
+  br label %bb3
+bb3:
+  %t1 = load i32, ptr %merge_5
+  ret i32 %t1
+}
+
+define i32 @InputKt_max(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_5 = alloca i32
+  %t0 = icmp sgt i32 %arg0, %arg1
+  br i1 %t0, label %bb1, label %bb2
+bb1:
+  store i32 %arg0, ptr %merge_5
+  br label %bb3
+bb2:
+  store i32 %arg1, ptr %merge_5
+  br label %bb3
+bb3:
+  %t1 = load i32, ptr %merge_5
+  ret i32 %t1
+}
+
+define i32 @InputKt_gcd(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_4 = alloca i32
+  %merge_7 = alloca i32
+  %t0 = call i32 @InputKt_abs(i32 %arg0)
+  store i32 %t0, ptr %merge_4
+  %t1 = call i32 @InputKt_abs(i32 %arg1)
+  store i32 %t1, ptr %merge_7
+  br label %bb1
+bb1:
+  %t2 = load i32, ptr %merge_7
+  %t3 = add i32 0, 0
+  %t4 = icmp ne i32 %t2, %t3
+  br i1 %t4, label %bb2, label %bb3
+bb2:
+  %t5 = load i32, ptr %merge_7
+  %t6 = load i32, ptr %merge_4
+  %t7 = load i32, ptr %merge_7
+  %t8 = srem i32 %t6, %t7
+  store i32 %t8, ptr %merge_7
+  store i32 %t5, ptr %merge_4
+  br label %bb1
+bb3:
+  %t9 = load i32, ptr %merge_4
+  ret i32 %t9
+}
+
+define i32 @InputKt_lcm(i32 %arg0, i32 %arg1) {
+entry:
+  %t0 = call i32 @InputKt_gcd(i32 %arg0, i32 %arg1)
+  %t1 = sdiv i32 %arg0, %t0
+  %t2 = mul i32 %t1, %arg1
+  ret i32 %t2
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, -42
+  %t1 = call i32 @InputKt_abs(i32 %t0)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t1)
+  %t3 = add i32 0, 3
+  %t4 = add i32 0, 7
+  %t5 = call i32 @InputKt_min(i32 %t3, i32 %t4)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t5)
+  %t7 = add i32 0, 3
+  %t8 = add i32 0, 7
+  %t9 = call i32 @InputKt_max(i32 %t7, i32 %t8)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t9)
+  %t11 = add i32 0, 12
+  %t12 = add i32 0, 8
+  %t13 = call i32 @InputKt_gcd(i32 %t11, i32 %t12)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t13)
+  %t15 = add i32 0, 4
+  %t16 = add i32 0, 6
+  %t17 = call i32 @InputKt_lcm(i32 %t15, i32 %t16)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t17)
+  ret i32 0
+}
+

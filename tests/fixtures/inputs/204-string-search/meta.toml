@@ -1,0 +1,4 @@
+name   = "204-string-search"
+status = "supported"
+features = ["string-equality", "string-comparison"]
+skip_dex = true

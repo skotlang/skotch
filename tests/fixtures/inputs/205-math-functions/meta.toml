@@ -1,0 +1,3 @@
+name   = "205-math-functions"
+status = "supported"
+features = ["expression-body", "multiple-functions", "gcd-lcm"]
