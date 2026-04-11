@@ -1,0 +1,3 @@
+name   = "183-long-suffix"
+status = "supported"
+features = ["long-literal", "L-suffix"]

@@ -1,0 +1,40 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [4 x i8] c"big\00", align 1
+@.str.1 = private unnamed_addr constant [7 x i8] c"medium\00", align 1
+@.str.2 = private unnamed_addr constant [6 x i8] c"small\00", align 1
+@.str.3 = private unnamed_addr constant [5 x i8] c"done\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %merge_5 = alloca void
+  %merge_11 = alloca void
+  %t0 = add i32 0, 5
+  %t1 = add i32 0, 10
+  %t2 = icmp sgt i32 %t0, %t1
+  br i1 %t2, label %bb1, label %bb2
+bb1:
+  call i32 @puts(ptr @.str.0)
+  br label %bb3
+bb2:
+  %t4 = add i32 0, 3
+  %t5 = icmp sgt i32 %t0, %t4
+  br i1 %t5, label %bb4, label %bb5
+bb3:
+  call i32 @puts(ptr @.str.3)
+  ret i32 0
+bb4:
+  call i32 @puts(ptr @.str.1)
+  br label %bb6
+bb5:
+  call i32 @puts(ptr @.str.2)
+  br label %bb6
+bb6:
+  br label %bb3
+}
+

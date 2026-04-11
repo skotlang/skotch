@@ -1,0 +1,3 @@
+name   = "185-else-if-chain"
+status = "supported"
+features = ["else-if", "statement-if-else-if"]

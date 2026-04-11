@@ -375,20 +375,22 @@ impl<'a> TypeChecker<'a> {
                 }
                 // Look up the callee's return type so function calls
                 // used in expressions get the correct type.
-                if let Expr::Ident(name, _) = callee.as_ref() {
-                    // Check the function name → DefId mapping to find
-                    // the return type from the pre-computed signatures.
+                // Extract the function name from the callee.
+                let callee_name = match callee.as_ref() {
+                    Expr::Ident(name, _) => Some(*name),
+                    Expr::Field { name, .. } => Some(*name), // method call
+                    _ => None,
+                };
+                if let Some(name) = callee_name {
                     for (&def_id, sig) in &self.out.top_signatures {
                         if let DefId::Function(fi) = def_id {
-                            // Match the function name through the
-                            // fn_names list.
-                            if self.fn_names.get(fi as usize).copied() == Some(*name) {
+                            if self.fn_names.get(fi as usize).copied() == Some(name) {
                                 return sig.ret.clone();
                             }
                         }
                         if def_id == DefId::PrintlnIntrinsic {
                             let println_sym = self.interner.intern("println");
-                            if *name == println_sym {
+                            if name == println_sym {
                                 return sig.ret.clone();
                             }
                         }

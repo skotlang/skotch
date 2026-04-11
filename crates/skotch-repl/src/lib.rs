@@ -121,12 +121,17 @@ pub fn run_repl_interactive() -> Result<()> {
     let mut editor = Reedline::create().with_edit_mode(edit_mode);
 
     let prompt = DefaultPrompt::new(
-        DefaultPromptSegment::Basic("skotch".to_string()),
+        DefaultPromptSegment::Basic(if cfg!(debug_assertions) {
+            "\x1b[33mskotch\x1b[0m".to_string()
+        } else {
+            "skotch".to_string()
+        }),
         DefaultPromptSegment::Empty,
     );
 
+    let debug_star = if cfg!(debug_assertions) { "*" } else { "" };
     println!(
-        "skotch {} — type :quit to exit, :help for commands",
+        "skotch {}{debug_star} — type :quit to exit, :help for commands",
         env!("CARGO_PKG_VERSION")
     );
 
@@ -211,9 +216,10 @@ pub fn run_repl_interactive() -> Result<()> {
 pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
     let jvm = EmbeddedJvm::new()?;
 
+    let debug_star = if cfg!(debug_assertions) { "*" } else { "" };
     writeln!(
         output,
-        "skotch repl — type `:quit` to exit, `:help` for commands"
+        "skotch repl{debug_star} — type `:quit` to exit, `:help` for commands"
     )?;
 
     let mut state = ReplState::new();

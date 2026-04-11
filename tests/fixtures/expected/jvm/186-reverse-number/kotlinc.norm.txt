@@ -1,0 +1,56 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 sipush 12345
+    0003 invokestatic Method(InputKt.reverse:(I)I)
+    0006 op_0x3B
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 op_0x1A
+    0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0014 bipush 100
+    0016 invokestatic Method(InputKt.reverse:(I)I)
+    0019 op_0x3B
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 op_0x1A
+    0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0027 bipush 7
+    0029 invokestatic Method(InputKt.reverse:(I)I)
+    0032 op_0x3B
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 op_0x1A
+    0037 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0040 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        reverse (I)I 0x0019
+  code        max_stack=3 max_locals=3
+    0000 op_0x1A
+    0001 op_0x3C
+    0002 iconst_0
+    0003 op_0x3D
+    0004 op_0x1B
+    0005 op_0x9E
+    0006 nop
+    0007 iload 28
+    0009 bipush 10
+    0011 imul
+    0012 op_0x1B
+    0013 bipush 10
+    0015 irem
+    0016 iadd
+    0017 op_0x3D
+    0018 op_0x1B
+    0019 bipush 10
+    0021 idiv
+    0022 op_0x3C
+    0023 op_0xA7
+    0024 op_0xFF
+    0025 op_0xED
+    0026 op_0x1C
+    0027 op_0xAC
+    sub_attr  StackMapTable (8 bytes)

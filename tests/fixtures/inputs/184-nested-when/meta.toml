@@ -1,0 +1,3 @@
+name   = "184-nested-when"
+status = "supported"
+features = ["nested-when", "when-in-when-branch"]

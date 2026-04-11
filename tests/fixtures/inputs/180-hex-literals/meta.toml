@@ -1,0 +1,3 @@
+name   = "180-hex-literals"
+status = "supported"
+features = ["hex-literal", "0x-prefix"]

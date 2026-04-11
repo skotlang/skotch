@@ -1,0 +1,3 @@
+name   = "181-binary-literals"
+status = "supported"
+features = ["binary-literal", "0b-prefix"]

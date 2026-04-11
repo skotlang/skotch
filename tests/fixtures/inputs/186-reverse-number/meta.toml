@@ -1,0 +1,3 @@
+name   = "186-reverse-number"
+status = "supported"
+features = ["while-loop", "modulo", "division", "reverse-digits"]

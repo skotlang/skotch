@@ -265,15 +265,60 @@ impl<'a> Lexer<'a> {
 
     fn scan_int(&mut self) {
         let start = self.pos;
-        while let Some(b) = self.peek() {
-            if b.is_ascii_digit() {
-                self.pos += 1;
+        // Check for hex prefix 0x / 0X
+        let is_hex = self.pos + 1 < self.bytes.len()
+            && self.bytes[self.pos] == b'0'
+            && (self.bytes[self.pos + 1] == b'x' || self.bytes[self.pos + 1] == b'X');
+        if is_hex {
+            self.pos += 2; // skip "0x"
+            while let Some(b) = self.peek() {
+                if b.is_ascii_hexdigit() || b == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // Check for binary prefix 0b / 0B
+            let is_bin = self.pos + 1 < self.bytes.len()
+                && self.bytes[self.pos] == b'0'
+                && (self.bytes[self.pos + 1] == b'b' || self.bytes[self.pos + 1] == b'B');
+            if is_bin {
+                self.pos += 2; // skip "0b"
+                while let Some(b) = self.peek() {
+                    if b == b'0' || b == b'1' || b == b'_' {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
             } else {
-                break;
+                while let Some(b) = self.peek() {
+                    if b.is_ascii_digit() || b == b'_' {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
             }
         }
-        let s = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII digits");
-        match s.parse::<i64>() {
+        // Consume optional `L` suffix for Long literals (treated as Int for now).
+        if self.pos < self.bytes.len() && self.bytes[self.pos] == b'L' {
+            self.pos += 1;
+        }
+        let raw = std::str::from_utf8(&self.bytes[start..self.pos])
+            .expect("ASCII digits")
+            .trim_end_matches('L');
+        // Remove underscores for parsing
+        let s: String = raw.chars().filter(|c| *c != '_').collect();
+        let parsed = if s.starts_with("0x") || s.starts_with("0X") {
+            i64::from_str_radix(&s[2..], 16)
+        } else if s.starts_with("0b") || s.starts_with("0B") {
+            i64::from_str_radix(&s[2..], 2)
+        } else {
+            s.parse::<i64>()
+        };
+        match parsed {
             Ok(v) => self.emit(
                 TokenKind::IntLit,
                 start,

@@ -1,0 +1,22 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=4
+    0000 ldc int(1000000)
+    0002 istore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 iload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0012 ldc int(65535)
+    0014 istore 2
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 iload 2
+    0021 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0024 sipush 240
+    0027 istore 3
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 iload 3
+    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0037 return

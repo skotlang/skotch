@@ -1,57 +1,70 @@
 # skotch
 
-A from-scratch Rust toolchain that replaces the Kotlin compiler, Gradle, and
-Android SDK build tools with a single fast, parallel CLI. Compiles **Kotlin 2**
-sources to four target formats:
+A Rust toolchain that replaces the Kotlin compiler, Gradle, and Android SDK
+build tools with a single CLI. Compiles Kotlin 2 sources to five target
+formats:
 
 | Target | Output | Pipeline |
 |---|---|---|
-| **JVM** | `.class` (Java 17, class file v61) | MIR → JVM bytecode |
-| **DEX** | `.dex` (Dalvik v035) | MIR → DEX bytecode |
-| **klib** | `.klib` (zip with serialized IR) | MIR → JSON IR → zip |
-| **LLVM IR** | `.ll` (textual LLVM 19+) | MIR → klib → LLVM IR |
-| **Native** | host executable | MIR → klib → LLVM IR → clang |
+| JVM | `.class` (Java 17, class file v61) | MIR → JVM bytecode |
+| DEX | `.dex` (Dalvik v035) | MIR → DEX bytecode |
+| klib | `.klib` (zip with serialized IR) | MIR → JSON IR → zip |
+| LLVM IR | `.ll` (textual LLVM 19+) | MIR → klib → LLVM IR |
+| Native | host executable | MIR → klib → LLVM IR → clang |
 
-…with **no dependency** on `kotlinc`, `kotlinc-native`, `javac`, `d8`, `dx`,
-`gradle`, `aapt2`, or `apksigner`. The shipping `skotch` binary depends only
-on `clang` for the native target's link step (and that's the only external
-toolchain it ever invokes).
+The shipping binary has no dependency on `kotlinc`, `kotlinc-native`, `javac`,
+`d8`, `dx`, `gradle`, `aapt2`, or `apksigner`. The only external tool it
+invokes is `clang`, for the native target's link step.
 
 ## Project goals
 
-1. **Replace the entire Kotlin build toolchain with one fast Rust binary.**
-   No JVM warm-up tax for `kotlinc`. No Gradle daemon. No 1+ GB Android SDK.
-   `skotch emit hello.kt -o hello.class` should be instant.
+1. **One binary, fast builds.** Skip the JVM warm-up, Gradle daemon, and
+   multi-GB SDK downloads. `skotch emit hello.kt -o hello.class` should
+   feel instant.
 2. **Multi-target from a single front-end.** One lex/parse/typeck/MIR
    pipeline; pluggable backends for JVM, DEX, native, wasm. Adding a new
    target means writing one backend crate.
-3. **Validate every output against the real toolchains.** Every supported
-   fixture is built by skotch *and* by the corresponding reference tool
-   (`kotlinc`, `d8`, `kotlinc-native`); their outputs are committed to git
-   so CI never needs the JDK or Android SDK.
-4. **Strict parallelism.** Modules in parallel × files in parallel ×
-   functions in parallel via Rayon's nested work-stealing.
+3. **Validate against real toolchains.** Every supported fixture is built
+   by skotch *and* by the corresponding reference tool (`kotlinc`, `d8`,
+   `kotlinc-native`); outputs are committed to git so CI never needs the
+   JDK or Android SDK.
+4. **Parallel by default.** Modules × files × functions via Rayon's nested
+   work-stealing.
 5. **Modular workspace.** ~25 small crates with a strict dependency DAG;
    no crate knows about anything in a higher layer.
 
-> **Status:** JVM, DEX, klib, LLVM IR, and native targets shipping. Build
-> orchestration (`skotch build`), REPL (`skotch repl`), JAR packaging, and
-> unsigned APK assembly are implemented. 80 language feature fixtures validated.
+> **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
+> Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
+> implemented. 80 language-feature fixtures validated.
 
 ## Installation
 
-From source:
+### Homebrew (macOS / Linux)
 
 ```sh
-git clone https://github.com/<user>/skotlang.git
-cd skotlang
+brew install skotlang/tap/skotch
+```
+
+### Shell (Linux / macOS)
+
+```sh
+curl -fsSL https://github.com/skotlang/skotch/releases/latest/download/skotch-cli-installer.sh | sh
+```
+
+### Pre-built binaries
+
+Binaries for Linux, macOS, and Windows are published with each GitHub
+release. Download the latest from the project's
+[Releases](https://github.com/skotlang/skot/releases) page.
+
+### From source
+
+```sh
+git clone https://github.com/skotlang/skot.git
+cd skot
 cargo build --release
 # The binary lives at target/release/skotch
 ```
-
-Pre-built binaries for Linux, macOS, and Windows are published with each
-GitHub release (see `.github/workflows/release.yml`). Download the latest
-from the project's Releases page.
 
 ## Quick start: hello world on every target
 
@@ -88,10 +101,10 @@ skotch emit --target native hello.kt -o hello
 
 | Command | What it does | Status |
 |---|---|---|
-| `skotch emit --target T <input.kt> -o <out>` | Compile a single Kotlin file directly to target T. | **shipping** |
-| `skotch build [-C dir] [--target T]` | Discover `build.gradle.kts`, compile and package (JAR/APK). | **shipping** |
-| `skotch repl [--exec CODE] [--file F]` | Interactive REPL backed by in-process JVM. | **shipping** |
-| `skotch run <script.kts>` | Execute a KotlinScript file. | **shipping** |
+| `skotch emit --target T <input.kt> -o <out>` | Compile a single Kotlin file directly to target T. | shipping |
+| `skotch build [-C dir] [--target T]` | Discover `build.gradle.kts`, compile and package (JAR/APK). | shipping |
+| `skotch repl [--exec CODE] [--file F]` | Interactive REPL backed by in-process JVM. | shipping |
+| `skotch run <script.kts>` | Execute a KotlinScript file. | shipping |
 | `skotch test` | Discover `@Test` annotations, run the tests. | planned |
 
 `skotch emit` is the testing surface: it bypasses build orchestration so
@@ -101,22 +114,21 @@ emitters are stable.
 
 ## Architectural rules
 
-1. **The shipping `skotch` binary never invokes `kotlinc`, `kotlinc-native`,
-   `javac`, `d8`, or `dx`.** Reference outputs for the validation tests are
-   produced by `cargo xtask gen-fixtures` (which *does* shell out to those
-   tools) and committed to git, so CI needs no JDK or Android SDK. A
-   `tests/no_external_compiler.rs` test enforces this by greppping the
-   release binary for forbidden tool names.
-2. **Parsing and format emission first.** Packaging (jar/APK), signing,
-   and the build orchestrator come *after* the front-end and emitters
-   are validated by golden fixtures.
-3. **Hand-rolled bytecode writers.** Constant-pool forward references make
+1. The shipping binary never invokes `kotlinc`, `kotlinc-native`, `javac`,
+   `d8`, or `dx`. Reference outputs are produced by `cargo xtask gen-fixtures`
+   (which *does* shell out to those tools) and committed to git, so CI needs
+   no JDK or Android SDK. A `tests/no_external_compiler.rs` test enforces
+   this by grepping the release binary for forbidden tool names.
+2. Parsing and format emission first. Packaging (JAR/APK), signing, and the
+   build orchestrator come after the front-end and emitters are validated by
+   golden fixtures.
+3. Hand-rolled bytecode writers. Constant-pool forward references make
    `binrw`/`scroll` awkward; `byteorder` is the workhorse for `.class`
    and `.dex`.
-4. **Textual LLVM IR.** No `inkwell`/`llvm-sys` dependency — avoids the
-   `libLLVM` system requirement and the 30+ second build-time hit.
-5. **clang is the *only* external tool the binary ever invokes.** Native
-   linking goes through `clang`; everything else is in-process Rust.
+4. Textual LLVM IR. No `inkwell`/`llvm-sys` dependency — avoids the
+   `libLLVM` system requirement and the long build-time hit.
+5. `clang` is the only external tool the binary invokes. Native linking
+   goes through `clang`; everything else is in-process Rust.
 
 ## Fixture-driven validation
 
@@ -158,7 +170,7 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-80 test fixtures validated across JVM, DEX, LLVM IR, and klib targets.
+88 test fixtures validated across JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
 
@@ -169,7 +181,7 @@ golden" tests still catch regressions in skotch's own emitter.
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
-| [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal `Int` literals |
+| [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal, hex (`0xFF`), binary (`0b1010`), underscores (`1_000`), `L` suffix |
 | [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
 | [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` |
@@ -179,7 +191,8 @@ golden" tests still catch regressions in skotch's own emitter.
 | [Unary operators](https://kotlinlang.org/spec/expressions.html#unary-expressions) | §7.3 | `-` (negation), `!` (not) |
 | [Compound assignment](https://kotlinlang.org/spec/expressions.html#assignments) | §7.12 | `+=`, `-=`, `*=`, `/=`, `%=` |
 | [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
-| [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, string/int matching |
+| [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, string/int matching, nested when |
+| [Else-if chains](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | `if {} else if {} else {}` (as statements) |
 | [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end) { }` with `Int` ranges |
 | [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
 | [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
@@ -214,7 +227,7 @@ golden" tests still catch regressions in skotch's own emitter.
 | `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
 | Range expressions (`in 0..9`) in when | — | Easy | `in` operator in when branch patterns |
 | Float/Double literals | [§7.1.2](https://kotlinlang.org/spec/expressions.html#real-literals) | Easy | `3.14`, `2.5e10` |
-| Long literals | [§7.1.1](https://kotlinlang.org/spec/expressions.html#integer-literals) | Easy | `100L` suffix |
+| Char literals | [§7.1.5](https://kotlinlang.org/spec/expressions.html#character-literals) | Easy | `'A'`, escape sequences |
 
 ## Running the tests
 
