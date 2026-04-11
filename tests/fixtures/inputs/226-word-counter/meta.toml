@@ -1,0 +1,4 @@
+name   = "226-word-counter"
+status = "supported"
+features = ["string-equality", "early-return", "function"]
+skip_dex = true

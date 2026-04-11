@@ -1,0 +1,3 @@
+name   = "223-euclidean-dist"
+status = "supported"
+features = ["multiple-params", "arithmetic", "squared-distance"]

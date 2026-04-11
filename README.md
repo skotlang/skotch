@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 120 language-feature fixtures validated (~15–20% of the Kotlin spec).
+> implemented. 128 language-feature fixtures validated (~15–20% of the Kotlin spec).
 
 ## Installation
 
@@ -179,7 +179,7 @@ golden" tests still catch regressions in skotch's own emitter.
 **Estimated coverage: ~15–20% of the Kotlin language specification.** The compiler
 handles the core procedural subset — functions, control flow, basic types, and
 expressions — but does not yet support classes, generics, lambdas, nullable
-types, or the standard library collection APIs. 120 test fixtures validated across
+types, or the standard library collection APIs. 128 test fixtures validated across
 JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable

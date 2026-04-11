@@ -1,0 +1,84 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=17
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 istore 2
+    0007 iload 2
+    0009 istore 3
+    0011 iconst_0
+    0012 istore 4
+    0014 iload 3
+    0016 iload 4
+    0018 op_0xA3
+    0019 nop
+    0020 iconst_4
+    0021 iconst_0
+    0022 op_0xA7
+    0023 nop
+    0024 iconst_1
+    0025 iconst_1
+    0026 istore 5
+    0028 iload 5
+    0030 istore 6
+    0032 iload 2
+    0034 istore 7
+    0036 iconst_2
+    0037 istore 8
+    0039 iload 7
+    0041 iload 8
+    0043 irem
+    0044 istore 9
+    0046 iconst_0
+    0047 istore 10
+    0049 iload 9
+    0051 iload 10
+    0053 op_0x9F
+    0054 nop
+    0055 iconst_4
+    0056 iconst_0
+    0057 op_0xA7
+    0058 nop
+    0059 iconst_1
+    0060 iconst_1
+    0061 istore 11
+    0063 iload 11
+    0065 istore 12
+    0067 ldc "positive: "
+    0069 astore 13
+    0071 iload 6
+    0073 istore 14
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 op_0xBB
+    0079 nop
+    0080 ldc_w #22967
+    0083 nop
+    0084 op_0x17
+    0085 aload 13
+    0087 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0090 iload 14
+    0092 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
+    0095 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0101 ldc "even: "
+    0103 astore 15
+    0105 iload 12
+    0107 istore 16
+    0109 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0112 op_0xBB
+    0113 nop
+    0114 ldc_w #22967
+    0117 nop
+    0118 op_0x17
+    0119 aload 15
+    0121 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0124 iload 16
+    0126 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
+    0129 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0132 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0135 return
+    sub_attr  StackMapTable (72 bytes)

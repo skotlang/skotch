@@ -1,0 +1,55 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [6 x i8] c"hello\00", align 1
+@.str.1 = private unnamed_addr constant [6 x i8] c"world\00", align 1
+@.str.2 = private unnamed_addr constant [7 x i8] c"kotlin\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+declare i32 @strcmp(ptr, ptr)
+
+define i32 @InputKt_countVowels(ptr %arg0) {
+entry:
+  %t0 = add i32 0, 0
+  %t1 = call i32 @strcmp(ptr %arg0, ptr @.str.0)
+  %t2 = icmp eq i32 %t1, 0
+  br i1 %t2, label %bb1, label %bb2
+bb1:
+  %t3 = add i32 0, 2
+  ret i32 %t3
+bb2:
+  br label %bb3
+bb3:
+  %t4 = call i32 @strcmp(ptr %arg0, ptr @.str.1)
+  %t5 = icmp eq i32 %t4, 0
+  br i1 %t5, label %bb4, label %bb5
+bb4:
+  %t6 = add i32 0, 1
+  ret i32 %t6
+bb5:
+  br label %bb6
+bb6:
+  %t7 = call i32 @strcmp(ptr %arg0, ptr @.str.2)
+  %t8 = icmp eq i32 %t7, 0
+  br i1 %t8, label %bb7, label %bb8
+bb7:
+  %t9 = add i32 0, 2
+  ret i32 %t9
+bb8:
+  br label %bb9
+bb9:
+  ret i32 %t0
+}
+
+define i32 @main() {
+entry:
+  %t0 = call i32 @InputKt_countVowels(ptr @.str.0)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t0)
+  %t2 = call i32 @InputKt_countVowels(ptr @.str.1)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t2)
+  %t4 = call i32 @InputKt_countVowels(ptr @.str.2)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
+  ret i32 0
+}
+

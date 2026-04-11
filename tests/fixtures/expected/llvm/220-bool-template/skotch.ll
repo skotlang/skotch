@@ -1,0 +1,25 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [11 x i8] c"positive: \00", align 1
+@.str.1 = private unnamed_addr constant [7 x i8] c"even: \00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.fmt.concat.0 = private unnamed_addr constant [14 x i8] c"positive: %d\0A\00", align 1
+@.fmt.concat.1 = private unnamed_addr constant [10 x i8] c"even: %d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 5
+  %t1 = add i32 0, 0
+  %t2 = icmp sgt i32 %t0, %t1
+  %t3 = add i32 0, 2
+  %t4 = srem i32 %t0, %t3
+  %t5 = add i32 0, 0
+  %t6 = icmp eq i32 %t4, %t5
+  call i32 (ptr, ...) @printf(ptr @.fmt.concat.0, i32 %t2)
+  call i32 (ptr, ...) @printf(ptr @.fmt.concat.1, i32 %t6)
+  ret i32 0
+}
+
