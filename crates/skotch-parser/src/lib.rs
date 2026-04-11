@@ -36,7 +36,7 @@ use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, Decl, Expr, FunDecl, ImportDecl, KtFile, PackageDecl, Param, Stmt, TemplatePart,
-    Token, TokenKind, TypeRef, UnaryOp, ValDecl,
+    Token, TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -315,7 +315,22 @@ impl<'a> Parser<'a> {
             None
         };
         self.skip_trivia();
-        let body = self.parse_block();
+        // Support both block body `{ ... }` and expression body `= expr`.
+        let body = if self.peek_kind() == TokenKind::Eq {
+            self.bump(); // consume `=`
+            self.skip_trivia();
+            let expr = self.parse_expr();
+            let span = expr.span();
+            Block {
+                stmts: vec![Stmt::Return {
+                    value: Some(expr),
+                    span,
+                }],
+                span,
+            }
+        } else {
+            self.parse_block()
+        };
         FunDecl {
             name,
             name_span,
@@ -738,6 +753,7 @@ impl<'a> Parser<'a> {
                 Expr::Paren(Box::new(inner), span.merge(rp))
             }
             TokenKind::KwIf => self.parse_if_expr(),
+            TokenKind::KwWhen => self.parse_when_expr(),
             TokenKind::StringStart => self.parse_string_literal(),
             other => {
                 self.diags.push(Diagnostic::error(
@@ -774,6 +790,67 @@ impl<'a> Parser<'a> {
             then_block: Box::new(then_block),
             else_block,
             span,
+        }
+    }
+
+    fn parse_when_expr(&mut self) -> Expr {
+        let kw = self.peek_span();
+        self.bump(); // 'when'
+        self.skip_trivia();
+        self.expect(TokenKind::LParen, "'(' after 'when'");
+        self.skip_trivia();
+        let subject = self.parse_expr();
+        self.skip_trivia();
+        self.expect(TokenKind::RParen, "')' after when subject");
+        self.skip_trivia();
+        self.expect(TokenKind::LBrace, "'{' for when body");
+
+        let mut branches: Vec<WhenBranch> = Vec::new();
+        let mut else_body: Option<Box<Expr>> = None;
+
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                break;
+            }
+            // Check for `else -> expr`
+            if self.peek_kind() == TokenKind::KwElse {
+                let start = self.peek_span();
+                self.bump(); // 'else'
+                self.skip_trivia();
+                self.expect(TokenKind::Arrow, "'->' after 'else'");
+                self.skip_trivia();
+                let body = self.parse_expr();
+                let _ = start;
+                else_body = Some(Box::new(body));
+                self.skip_trivia();
+                break;
+            }
+            // Regular branch: pattern -> body
+            let start = self.peek_span();
+            let pattern = self.parse_expr();
+            self.skip_trivia();
+            self.expect(TokenKind::Arrow, "'->' in when branch");
+            self.skip_trivia();
+            let body = self.parse_expr();
+            let span = start.merge(body.span());
+            branches.push(WhenBranch {
+                pattern,
+                body,
+                span,
+            });
+        }
+
+        let end = self.peek_span();
+        if self.peek_kind() == TokenKind::RBrace {
+            self.bump();
+        }
+
+        Expr::When {
+            subject: Box::new(subject),
+            branches,
+            else_body,
+            span: kw.merge(end),
         }
     }
 

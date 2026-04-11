@@ -1,0 +1,3 @@
+name   = "122-expression-body-fun"
+status = "supported"
+features = ["expression-body", "function-return", "boolean-println"]

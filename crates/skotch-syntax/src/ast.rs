@@ -153,12 +153,27 @@ pub enum Expr {
         else_block: Option<Box<Block>>,
         span: Span,
     },
+    /// `when (subject) { value -> expr, ..., else -> expr }`.
+    When {
+        subject: Box<Expr>,
+        branches: Vec<WhenBranch>,
+        else_body: Option<Box<Expr>>,
+        span: Span,
+    },
     /// `obj.field` or `obj.method` (the latter is wrapped in a `Call`).
     Field {
         receiver: Box<Expr>,
         name: Symbol,
         span: Span,
     },
+}
+
+/// A single branch in a `when` expression: `pattern -> body`.
+#[derive(Clone, Debug)]
+pub struct WhenBranch {
+    pub pattern: Expr,
+    pub body: Expr,
+    pub span: Span,
 }
 
 /// One piece of an interpolated string.
@@ -209,6 +224,7 @@ impl Expr {
             | Expr::Binary { span, .. }
             | Expr::Unary { span, .. }
             | Expr::If { span, .. }
+            | Expr::When { span, .. }
             | Expr::Field { span, .. } => *span,
         }
     }

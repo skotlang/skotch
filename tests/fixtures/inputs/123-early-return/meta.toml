@@ -1,0 +1,3 @@
+name   = "123-early-return"
+status = "supported"
+features = ["early-return", "if-statement", "comparison"]

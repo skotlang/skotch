@@ -252,6 +252,21 @@ impl<'a> Resolver<'a> {
                 }
             }
             Expr::Field { receiver, .. } => self.resolve_expr(fn_idx, receiver, scope, rf),
+            Expr::When {
+                subject,
+                branches,
+                else_body,
+                ..
+            } => {
+                self.resolve_expr(fn_idx, subject, scope, rf);
+                for b in branches {
+                    self.resolve_expr(fn_idx, &b.pattern, scope, rf);
+                    self.resolve_expr(fn_idx, &b.body, scope, rf);
+                }
+                if let Some(eb) = else_body {
+                    self.resolve_expr(fn_idx, eb, scope, rf);
+                }
+            }
             Expr::StringTemplate(parts, _) => {
                 for p in parts {
                     match p {
@@ -307,6 +322,7 @@ impl<'a> Resolver<'a> {
             Expr::Unary { operand, .. } => self.resolve_expr_in_top(operand, refs),
             Expr::Paren(inner, _) => self.resolve_expr_in_top(inner, refs),
             Expr::Field { receiver, .. } => self.resolve_expr_in_top(receiver, refs),
+            Expr::When { .. } => {} // not supported in top-level initializers
             Expr::If { .. } => {
                 // PR #1 doesn't lower if-expressions inside top-level
                 // initializers; we'd need to materialize a <clinit>

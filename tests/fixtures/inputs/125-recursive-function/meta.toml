@@ -1,0 +1,3 @@
+name   = "125-recursive-function"
+status = "supported"
+features = ["recursion", "early-return", "arithmetic"]

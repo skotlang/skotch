@@ -1,0 +1,3 @@
+name   = "124-guard-clause"
+status = "supported"
+features = ["early-return", "guard-clause", "multiple-params"]

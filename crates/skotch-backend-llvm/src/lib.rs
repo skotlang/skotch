@@ -426,8 +426,15 @@ impl<'a> BlockWalker<'a> {
                 }
             }
             Terminator::ReturnValue(local) => {
-                let val = self.ssa_of_maybe_alloca(*local);
+                let mut val = self.ssa_of_maybe_alloca(*local);
                 let ty = &self.func.locals[local.0 as usize];
+                // If the value is i1 (from icmp) but the return type
+                // is i32 (Bool), extend it before returning.
+                if self.is_i1_local[local.0 as usize] && matches!(ty, Ty::Bool) {
+                    let ext = self.fresh();
+                    writeln!(self.out, "  {ext} = zext i1 {val} to i32").unwrap();
+                    val = ext;
+                }
                 let llvm_ty = llvm_type(ty);
                 writeln!(self.out, "  ret {llvm_ty} {val}").unwrap();
             }

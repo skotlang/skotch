@@ -13,7 +13,7 @@
 
 use rustc_hash::FxHashMap;
 use skotch_diagnostics::{Diagnostic, Diagnostics};
-use skotch_intern::Interner;
+use skotch_intern::{Interner, Symbol};
 use skotch_resolve::{DefId, ResolvedFile};
 use skotch_syntax::{
     BinOp, Block, Decl, Expr, FunDecl, KtFile, Stmt, TemplatePart, TypeRef, ValDecl,
@@ -67,6 +67,7 @@ pub fn type_check(
         interner,
         diags,
         out: TypedFile::default(),
+        fn_names: Vec::new(),
     };
 
     // Pass 1: collect signatures for every top-level fun and val so call
@@ -92,6 +93,7 @@ pub fn type_check(
                 tc.out
                     .top_signatures
                     .insert(DefId::Function(fn_idx_pass1), sig);
+                tc.fn_names.push(f.name);
                 fn_idx_pass1 += 1;
             }
             Decl::Val(v) => {
@@ -145,6 +147,8 @@ struct TypeChecker<'a> {
     interner: &'a mut Interner,
     diags: &'a mut Diagnostics,
     out: TypedFile,
+    /// Function names indexed by function-only index, populated in pass 1.
+    fn_names: Vec<Symbol>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -329,13 +333,30 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Expr::Unary { operand, .. } => self.synth_expr(operand, scope, out),
-            Expr::Call { args, .. } => {
-                // PR #1 simplification: assume the callee is println /
-                // greet / etc. and trust the resolver. Type-check arg
-                // synthesis but don't enforce param matching beyond
-                // "is the arg a known scalar".
+            Expr::Call { callee, args, .. } => {
                 for a in args {
                     self.synth_expr(a, scope, out);
+                }
+                // Look up the callee's return type so function calls
+                // used in expressions get the correct type.
+                if let Expr::Ident(name, _) = callee.as_ref() {
+                    // Check the function name → DefId mapping to find
+                    // the return type from the pre-computed signatures.
+                    for (&def_id, sig) in &self.out.top_signatures {
+                        if let DefId::Function(fi) = def_id {
+                            // Match the function name through the
+                            // fn_names list.
+                            if self.fn_names.get(fi as usize).copied() == Some(*name) {
+                                return sig.ret.clone();
+                            }
+                        }
+                        if def_id == DefId::PrintlnIntrinsic {
+                            let println_sym = self.interner.intern("println");
+                            if *name == println_sym {
+                                return sig.ret.clone();
+                            }
+                        }
+                    }
                 }
                 Ty::Unit
             }
@@ -355,6 +376,23 @@ impl<'a> TypeChecker<'a> {
                 Ty::Int
             }
             Expr::Field { receiver, .. } => self.synth_expr(receiver, scope, out),
+            Expr::When {
+                subject,
+                branches,
+                else_body,
+                ..
+            } => {
+                self.synth_expr(subject, scope, out);
+                let mut result_ty = Ty::Unit;
+                for b in branches {
+                    self.synth_expr(&b.pattern, scope, out);
+                    result_ty = self.synth_expr(&b.body, scope, out);
+                }
+                if let Some(eb) = else_body {
+                    result_ty = self.synth_expr(eb, scope, out);
+                }
+                result_ty
+            }
             Expr::StringTemplate(parts, _) => {
                 for p in parts {
                     if let TemplatePart::Expr(inner) = p {

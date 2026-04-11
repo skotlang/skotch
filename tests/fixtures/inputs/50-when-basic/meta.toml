@@ -1,4 +1,3 @@
 name   = "50-when-basic"
-status = "stub"
+status = "supported"
 features = ["when", "string-return", "function"]
-reason = "Requires when-expression lowering with Switch terminator."

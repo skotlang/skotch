@@ -53,19 +53,28 @@ pub fn lower_file(
     // so call sites between them resolve consistently regardless of
     // declaration order.
     let mut name_to_func: FxHashMap<Symbol, FuncId> = FxHashMap::default();
+    let mut fn_pass1_idx: usize = 0;
     for decl in &file.decls {
         if let Decl::Fun(f) = decl {
             let id = FuncId(module.functions.len() as u32);
             name_to_func.insert(f.name, id);
             let name_str = interner.resolve(f.name).to_string();
+            // Use the typechecker's return type so recursive calls and
+            // forward references get the correct type, not Ty::Unit.
+            let return_ty = typed
+                .functions
+                .get(fn_pass1_idx)
+                .map(|t| t.return_ty.clone())
+                .unwrap_or(Ty::Unit);
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
                 params: Vec::new(),
                 locals: Vec::new(),
                 blocks: Vec::new(),
-                return_ty: Ty::Unit,
+                return_ty,
             });
+            fn_pass1_idx += 1;
         }
     }
 
@@ -689,6 +698,7 @@ fn lower_expr(
 
             // Then branch.
             let mut then_val: Option<LocalId> = None;
+            let mut then_has_return = false;
             for s in &then_block.stmts {
                 match s {
                     skotch_syntax::Stmt::Expr(e) => {
@@ -702,6 +712,19 @@ fn lower_expr(
                             interner,
                             diags,
                         );
+                    }
+                    skotch_syntax::Stmt::Return { .. } => {
+                        let _ = lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                        );
+                        then_has_return = true;
                     }
                     _ => {
                         let _ = lower_stmt(
@@ -717,8 +740,7 @@ fn lower_expr(
                     }
                 }
             }
-            // Patch the result local's type to match the then-branch
-            // (which may be String, not Int).
+            // Patch the result local's type to match the then-branch.
             if let Some(val) = then_val {
                 let inferred_ty = fb.mf.locals[val.0 as usize].clone();
                 fb.mf.locals[result.0 as usize] = inferred_ty;
@@ -727,9 +749,16 @@ fn lower_expr(
                     value: Rvalue::Local(val),
                 });
             }
-            fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
+            // Only emit Goto(merge) if the then-block didn't contain
+            // an explicit return statement.
+            if then_has_return {
+                fb.cur_block = else_blk;
+            } else {
+                fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
+            }
 
             // Else branch.
+            let mut else_has_return = false;
             if let Some(eb) = else_block {
                 for s in &eb.stmts {
                     match s {
@@ -750,6 +779,19 @@ fn lower_expr(
                                 });
                             }
                         }
+                        skotch_syntax::Stmt::Return { .. } => {
+                            let _ = lower_stmt(
+                                s,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                            );
+                            else_has_return = true;
+                        }
                         _ => {
                             let _ = lower_stmt(
                                 s,
@@ -765,7 +807,11 @@ fn lower_expr(
                     }
                 }
             }
-            fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+            if else_has_return {
+                fb.cur_block = merge_blk;
+            } else {
+                fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+            }
 
             Some(result)
         }
@@ -932,6 +978,149 @@ fn lower_expr(
                     Some(dest)
                 }
             }
+        }
+        Expr::When {
+            subject,
+            branches,
+            else_body,
+            ..
+        } => {
+            // Lower `when (subject) { v1 -> e1; v2 -> e2; else -> e3 }`
+            // as a chain of if-else comparisons:
+            //   val tmp = subject
+            //   if (tmp == v1) e1
+            //   else if (tmp == v2) e2
+            //   else e3
+            let subj = lower_expr(
+                subject,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+            )?;
+
+            let result = fb.new_local(Ty::String); // type patched below
+
+            // Pre-allocate ALL blocks so they're in the right order:
+            // [cmp1_blk, body1_blk, cmp2_blk, body2_blk, ..., else_blk, merge_blk]
+            // This ensures merge_blk has the highest index and is emitted last.
+            let mut cmp_blks = Vec::new();
+            let mut body_blks = Vec::new();
+            for _ in branches {
+                cmp_blks.push(fb.new_block());
+                body_blks.push(fb.new_block());
+            }
+            let else_blk = if else_body.is_some() {
+                fb.new_block()
+            } else {
+                0 // unused
+            };
+            let merge_blk = fb.new_block();
+
+            // First comparison block
+            if !branches.is_empty() {
+                fb.terminate_and_switch(Terminator::Goto(cmp_blks[0]), cmp_blks[0]);
+            } else if else_body.is_some() {
+                fb.terminate_and_switch(Terminator::Goto(else_blk), else_blk);
+            }
+
+            for (i, branch) in branches.iter().enumerate() {
+                // We're now in cmp_blks[i]
+                let pattern_local = lower_expr(
+                    &branch.pattern,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                )?;
+                let cmp = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: cmp,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpEq,
+                        lhs: subj,
+                        rhs: pattern_local,
+                    },
+                });
+
+                let fall_through = if i + 1 < branches.len() {
+                    cmp_blks[i + 1]
+                } else if else_body.is_some() {
+                    else_blk
+                } else {
+                    merge_blk
+                };
+
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: cmp,
+                        then_block: body_blks[i],
+                        else_block: fall_through,
+                    },
+                    body_blks[i],
+                );
+
+                // Lower body in body_blks[i]
+                if let Some(val) = lower_expr(
+                    &branch.body,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                ) {
+                    if i == 0 {
+                        let ty = fb.mf.locals[val.0 as usize].clone();
+                        fb.mf.locals[result.0 as usize] = ty;
+                    }
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(val),
+                    });
+                }
+                // Goto merge, switch to next comparison block
+                let next = if i + 1 < branches.len() {
+                    cmp_blks[i + 1]
+                } else if else_body.is_some() {
+                    else_blk
+                } else {
+                    merge_blk
+                };
+                fb.terminate_and_switch(Terminator::Goto(merge_blk), next);
+            }
+
+            // Else body
+            if let Some(eb) = else_body {
+                // We're in else_blk
+                if let Some(val) = lower_expr(
+                    eb,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                ) {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(val),
+                    });
+                }
+                fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+            } else {
+                fb.cur_block = merge_blk;
+            }
+
+            Some(result)
         }
         Expr::Field { span, .. } => {
             diags.push(Diagnostic::error(
