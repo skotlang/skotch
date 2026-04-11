@@ -1150,6 +1150,21 @@ fn lower_expr(
                     return Some(static_call);
                 }
 
+                // If try_java_static_call returned None, check if the receiver
+                // looks like an unresolvable external class and give a clear error.
+                if let Some(qname) = extract_qualified_name(receiver, interner) {
+                    if qname.starts_with(|c: char| c.is_uppercase()) || qname.contains('.') {
+                        let method_str = interner.resolve(method_name);
+                        diags.push(Diagnostic::error(
+                            *span,
+                            format!(
+                                "unresolved reference: `{qname}.{method_str}` — class `{qname}` not found on the classpath"
+                            ),
+                        ));
+                        return None;
+                    }
+                }
+
                 // Lower the receiver as the first argument (instance method or extension).
                 let recv_local = lower_expr(
                     receiver,

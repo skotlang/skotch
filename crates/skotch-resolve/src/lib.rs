@@ -32,6 +32,11 @@ pub enum DefId {
     Param(u32, u32),
     /// The built-in `println` intrinsic — accepts any single argument.
     PrintlnIntrinsic,
+    /// An identifier used as a method-call receiver that isn't in local
+    /// scope or top-level declarations. Deferred to MIR lowering for
+    /// resolution against the Java class registry. Carries the Symbol
+    /// so the name can be looked up later.
+    PossibleExternal(Symbol),
     /// Marker for an unresolved reference; the resolver has already
     /// emitted a diagnostic and downstream passes should stop.
     Error,
@@ -255,10 +260,12 @@ impl<'a> Resolver<'a> {
             Expr::Ident(name, span) => {
                 let def = lookup(scope, *name).unwrap_or_else(|| {
                     self.out.top_level.get(name).copied().unwrap_or_else(|| {
-                        // Don't error for known Java class names.
                         let name_str = self.interner.resolve(*name);
-                        if is_known_java_class(name_str) {
-                            return DefId::Error; // silently accept
+                        // If the name could be an external class or package
+                        // prefix (capitalized or known prefix), defer resolution
+                        // to MIR lowering where the class registry lives.
+                        if is_possible_external(name_str) {
+                            return DefId::PossibleExternal(*name);
                         }
                         self.diags.push(Diagnostic::error(
                             *span,
@@ -393,17 +400,24 @@ fn lookup(scope: &[(Symbol, DefId)], name: Symbol) -> Option<DefId> {
     None
 }
 /// Check if a name matches a known Java class or package prefix.
-/// Check if a name could be a Java class or package prefix.
-/// Accepts any capitalized name (potential class) or known package prefix.
-fn is_known_java_class(name: &str) -> bool {
-    // Known Java/Kotlin package prefixes.
+/// Check if an unresolved name could be an external class or package.
+///
+/// Returns true for:
+/// - Capitalized names (potential Java/Kotlin class: `System`, `Math`)
+/// - Known package prefixes (for FQN chains: `java.lang.System`)
+///
+/// These are deferred to MIR lowering for resolution against the class
+/// registry. If they don't resolve there either, MIR lowering emits a
+/// clear "class not found on classpath" error.
+fn is_possible_external(name: &str) -> bool {
+    // Known Java/Kotlin package prefixes for fully-qualified names.
     if matches!(
         name,
-        "java" | "javax" | "kotlin" | "org" | "com" | "io" | "net"
+        "java" | "javax" | "kotlin" | "org" | "com" | "io" | "net" | "android"
     ) {
         return true;
     }
-    // Any capitalized name could be a Java class (e.g. System, Math, Integer).
+    // Capitalized names are potential class references.
     name.starts_with(|c: char| c.is_uppercase())
 }
 
