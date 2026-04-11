@@ -236,6 +236,29 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(fn_idx, value, scope, rf);
             }
             Stmt::Break(_) | Stmt::Continue(_) => {}
+            Stmt::TryStmt {
+                body,
+                catch_body,
+                finally_body,
+                ..
+            } => {
+                for s in &body.stmts {
+                    self.resolve_stmt(fn_idx, s, scope, rf);
+                }
+                if let Some(cb) = catch_body {
+                    for s in &cb.stmts {
+                        self.resolve_stmt(fn_idx, s, scope, rf);
+                    }
+                }
+                if let Some(fb) = finally_body {
+                    for s in &fb.stmts {
+                        self.resolve_stmt(fn_idx, s, scope, rf);
+                    }
+                }
+            }
+            Stmt::ThrowStmt { expr, .. } => {
+                self.resolve_expr(fn_idx, expr, scope, rf);
+            }
             Stmt::LocalFun(f) => {
                 // Register the local function name in scope so calls
                 // to it resolve correctly. Use a synthetic Function DefId.
@@ -304,7 +327,33 @@ impl<'a> Resolver<'a> {
                     self.resolve_block(fn_idx, eb, scope, rf);
                 }
             }
-            Expr::Field { receiver, .. } => self.resolve_expr(fn_idx, receiver, scope, rf),
+            Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
+                self.resolve_expr(fn_idx, receiver, scope, rf);
+            }
+            Expr::Throw { expr, .. }
+            | Expr::NotNullAssert { expr, .. }
+            | Expr::IsCheck { expr, .. }
+            | Expr::AsCast { expr, .. } => {
+                self.resolve_expr(fn_idx, expr, scope, rf);
+            }
+            Expr::ElvisOp { lhs, rhs, .. } => {
+                self.resolve_expr(fn_idx, lhs, scope, rf);
+                self.resolve_expr(fn_idx, rhs, scope, rf);
+            }
+            Expr::Try {
+                body,
+                catch_body,
+                finally_body,
+                ..
+            } => {
+                self.resolve_block(fn_idx, body, scope, rf);
+                if let Some(cb) = catch_body {
+                    self.resolve_block(fn_idx, cb, scope, rf);
+                }
+                if let Some(fb) = finally_body {
+                    self.resolve_block(fn_idx, fb, scope, rf);
+                }
+            }
             Expr::When {
                 subject,
                 branches,
@@ -395,6 +444,14 @@ impl<'a> Resolver<'a> {
                     "string templates in top-level val initializers are not yet supported",
                 ));
             }
+            // New expression types — not meaningful at top level, just ignore.
+            Expr::Throw { .. }
+            | Expr::Try { .. }
+            | Expr::ElvisOp { .. }
+            | Expr::SafeCall { .. }
+            | Expr::IsCheck { .. }
+            | Expr::AsCast { .. }
+            | Expr::NotNullAssert { .. } => {}
         }
     }
 }

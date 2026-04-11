@@ -319,6 +319,23 @@ impl<'a> TypeChecker<'a> {
                     let _ = self.synth_expr(value, scope, expr_tys);
                 }
                 Stmt::Break(_) | Stmt::Continue(_) => {}
+                Stmt::TryStmt {
+                    body,
+                    catch_body,
+                    finally_body,
+                    ..
+                } => {
+                    self.check_block(body, scope, local_tys, expr_tys);
+                    if let Some(cb) = catch_body {
+                        self.check_block(cb, scope, local_tys, expr_tys);
+                    }
+                    if let Some(fb) = finally_body {
+                        self.check_block(fb, scope, local_tys, expr_tys);
+                    }
+                }
+                Stmt::ThrowStmt { expr, .. } => {
+                    let _ = self.synth_expr(expr, scope, expr_tys);
+                }
                 Stmt::LocalFun(f) => {
                     // Register the local function's signature so calls
                     // to it get the correct return type.
@@ -492,6 +509,61 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
                 Ty::String
+            }
+            Expr::Throw { expr, .. } => {
+                self.synth_expr(expr, scope, out);
+                Ty::Unit // throw never returns, but we type it as Unit
+            }
+            Expr::Try {
+                body,
+                catch_body,
+                finally_body,
+                ..
+            } => {
+                self.check_block(body, scope, &mut Vec::new(), out);
+                if let Some(cb) = catch_body {
+                    self.check_block(cb, scope, &mut Vec::new(), out);
+                }
+                if let Some(fb) = finally_body {
+                    self.check_block(fb, scope, &mut Vec::new(), out);
+                }
+                Ty::Unit
+            }
+            Expr::ElvisOp { lhs, rhs, .. } => {
+                self.synth_expr(lhs, scope, out);
+                self.synth_expr(rhs, scope, out)
+            }
+            Expr::SafeCall { receiver, .. } => {
+                self.synth_expr(receiver, scope, out);
+                Ty::Nullable(Box::new(Ty::Any))
+            }
+            Expr::IsCheck { expr, .. } => {
+                self.synth_expr(expr, scope, out);
+                Ty::Bool
+            }
+            Expr::AsCast {
+                expr,
+                type_name,
+                safe,
+                ..
+            } => {
+                self.synth_expr(expr, scope, out);
+                let name = self.interner.resolve(*type_name).to_string();
+                let target = skotch_types::ty_from_name(&name).unwrap_or(Ty::Any);
+                if *safe {
+                    Ty::Nullable(Box::new(target))
+                } else {
+                    target
+                }
+            }
+            Expr::NotNullAssert { expr, .. } => {
+                let t = self.synth_expr(expr, scope, out);
+                // Unwrap nullable if present.
+                if let Ty::Nullable(inner) = t {
+                    *inner
+                } else {
+                    t
+                }
             }
         };
         out.push(ty.clone());

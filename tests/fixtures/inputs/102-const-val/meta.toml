@@ -1,4 +1,4 @@
-name   = "102-const-val"
-status = "stub"
+name     = "102-const-val"
+status   = "supported"
 features = ["const", "val", "double", "string", "int"]
-reason = "Requires const val (compile-time constant, inlined at call site)."
+notes    = "Compile-time constants inlined at call site."

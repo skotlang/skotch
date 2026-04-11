@@ -176,14 +176,17 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~25–30% of the Kotlin language specification.** The compiler
+**Estimated coverage: ~30–35% of the Kotlin language specification.** The compiler
 handles functions, control flow, basic types (Int, Double, Boolean, String, Char),
-expressions, classes with constructors/methods/field access, null literals, and
-Java static method interop — but does not yet support inheritance, generics,
-lambdas, nullable type operators (`?.`, `?:`), or the standard library collection
-APIs. 153+ test fixtures validated across JVM, DEX, LLVM IR, and klib targets.
-A Language Server Protocol (LSP) implementation provides real-time diagnostics,
-semantic tokens, hover, go-to-definition, and completions.
+expressions, classes with constructors/methods/field access/init blocks, null
+literals, const val, visibility modifiers, and Java static method interop. The
+parser recognizes nullable operators (`?.`, `?:`, `!!`), type checks (`is`/`!is`),
+type casts (`as`/`as?`), try/catch/finally, and throw — though some of these are
+not yet fully compiled to all backends. Does not yet support inheritance, generics,
+lambdas, or the standard library collection APIs. 160+ test fixtures validated
+across JVM, DEX, LLVM IR, and klib targets. A Language Server Protocol (LSP)
+implementation provides real-time diagnostics, semantic tokens, hover,
+go-to-definition, and completions.
 
 ### Implemented and stable
 
@@ -193,7 +196,9 @@ semantic tokens, hover, go-to-definition, and completions.
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
-| [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access (`obj.field`), instance methods, `invokevirtual` dispatch |
+| [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access, instance methods, `init` blocks, `invokevirtual` dispatch |
+| [Const val](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `const val` compile-time constants inlined at call site |
+| [Visibility modifiers](https://kotlinlang.org/spec/declarations.html#declaration-modifiers) | §4.3 | `private`, `internal`, `protected`, `open`, `abstract` — parsed and accepted (not yet enforced) |
 | [Java interop](https://kotlinlang.org/spec/platform-specific-parts.html) | §18 | Real `.class` parsing from JDK jmods + CLASSPATH; deferred resolution; clear classpath errors |
 | [Import declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.2 | `import java.lang.Math`, implicit `java.lang.*` |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
@@ -234,14 +239,17 @@ semantic tokens, hover, go-to-definition, and completions.
 | Sealed classes | [§4.5.5](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | Hard | Sealed hierarchies, exhaustive when |
 | Generics | [§4.6](https://kotlinlang.org/spec/declarations.html#type-parameters) | Hard | Type parameters, bounds, variance |
 | Lambdas | [§7.2.10](https://kotlinlang.org/spec/expressions.html#lambda-literals) | Hard | Lambda literals, closures, `it` parameter |
-| Nullable types | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | `T?`, safe call `?.`, elvis `?:`, smart casts |
+| Nullable operators | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | `?.`, `?:`, `!!` parsed; need reference-type comparison opcodes for JVM |
+| Type checks (`is`/`!is`) | [§7.6.3](https://kotlinlang.org/spec/expressions.html#type-checking-and-containment-checking-expressions) | Medium | Parsed; MIR lowered as stub (always true) |
+| Type casts (`as`/`as?`) | [§7.6.4](https://kotlinlang.org/spec/expressions.html#cast-expression) | Medium | Parsed; MIR lowered as no-op passthrough |
+| Try/catch/finally | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; needs JVM exception tables for catch |
+| Throw expression | [§7.4.6](https://kotlinlang.org/spec/expressions.html#throw-expressions) | Medium | Parsed; needs `athrow` opcode |
 | Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
 | Default arguments | [§4.1.1](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | Synthetic `$default` overload |
 | Named arguments | [§7.2.2](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | Medium | Call-site argument reordering |
 | Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
 | Type aliases | [§4.7](https://kotlinlang.org/spec/declarations.html#type-alias) | Easy | `typealias` erased at compile time |
 | Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |
-| Try/catch/finally | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Exception handling, exception tables |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
 | Annotations | [§4.8](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | Medium | Declaration, retention, reflection |
 | Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |

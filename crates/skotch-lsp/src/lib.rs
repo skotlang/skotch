@@ -193,7 +193,22 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::KwClass
         | TokenKind::KwObject
         | TokenKind::KwPackage
-        | TokenKind::KwImport => Some(0),
+        | TokenKind::KwImport
+        | TokenKind::KwConst
+        | TokenKind::KwThrow
+        | TokenKind::KwTry
+        | TokenKind::KwCatch
+        | TokenKind::KwFinally
+        | TokenKind::KwIs
+        | TokenKind::KwAs
+        | TokenKind::KwInit
+        | TokenKind::KwData
+        | TokenKind::KwOverride
+        | TokenKind::KwOpen
+        | TokenKind::KwAbstract
+        | TokenKind::KwPrivate
+        | TokenKind::KwProtected
+        | TokenKind::KwInternal => Some(0),
 
         // Strings
         TokenKind::StringLit
@@ -225,7 +240,10 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::SlashEq
         | TokenKind::PercentEq
         | TokenKind::Arrow
-        | TokenKind::Bang => Some(3),
+        | TokenKind::Bang
+        | TokenKind::QuestionDot
+        | TokenKind::Elvis
+        | TokenKind::BangBang => Some(3),
 
         _ => None,
     }

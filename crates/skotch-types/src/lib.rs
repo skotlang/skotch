@@ -46,10 +46,16 @@ impl Ty {
         if matches!(other, Ty::Any) {
             return true;
         }
+        // Non-nullable T is assignable to nullable T?
         if let Ty::Nullable(inner) = other {
             if self == inner.as_ref() {
                 return true;
             }
+        }
+        // Any nullable is assignable to any other nullable
+        // (e.g., null literal typed as Nullable(Any) → Nullable(String))
+        if matches!(self, Ty::Nullable(_)) && matches!(other, Ty::Nullable(_)) {
+            return true;
         }
         false
     }

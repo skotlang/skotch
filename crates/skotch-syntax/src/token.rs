@@ -59,6 +59,21 @@ pub enum TokenKind {
     KwObject,
     KwPackage,
     KwImport,
+    KwConst,
+    KwThrow,
+    KwTry,
+    KwCatch,
+    KwFinally,
+    KwIs,
+    KwAs,
+    KwInit,
+    KwData,
+    KwOverride,
+    KwOpen,
+    KwAbstract,
+    KwPrivate,
+    KwProtected,
+    KwInternal,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,
@@ -81,21 +96,24 @@ pub enum TokenKind {
     Question,
 
     // ─── multi-character punctuation ─────────────────────────────────────
-    Arrow,     // ->
-    EqEq,      // ==
-    NotEq,     // !=
-    Lt,        // <
-    Gt,        // >
-    LtEq,      // <=
-    GtEq,      // >=
-    AmpAmp,    // &&
-    PipePipe,  // ||
-    DotDot,    // .. (range operator)
-    PlusEq,    // +=
-    MinusEq,   // -=
-    StarEq,    // *=
-    SlashEq,   // /=
-    PercentEq, // %=
+    Arrow,       // ->
+    EqEq,        // ==
+    NotEq,       // !=
+    Lt,          // <
+    Gt,          // >
+    LtEq,        // <=
+    GtEq,        // >=
+    AmpAmp,      // &&
+    PipePipe,    // ||
+    DotDot,      // .. (range operator)
+    PlusEq,      // +=
+    MinusEq,     // -=
+    StarEq,      // *=
+    SlashEq,     // /=
+    PercentEq,   // %=
+    QuestionDot, // ?.
+    Elvis,       // ?:
+    BangBang,    // !!
 
     // ─── trivia / structural ─────────────────────────────────────────────
     /// One or more `\n`s. Kotlin treats newlines as soft statement
