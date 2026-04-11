@@ -1,0 +1,53 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [1 x i8] c"\00", align 1
+@.str.1 = private unnamed_addr constant [3 x i8] c"ab\00", align 1
+@.str.2 = private unnamed_addr constant [2 x i8] c"x\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+@.fmt.concat.ss = private unnamed_addr constant [5 x i8] c"%s%s\00", align 1
+@.fmt.concat.sd = private unnamed_addr constant [5 x i8] c"%s%d\00", align 1
+declare i32 @snprintf(ptr, i32, ptr, ...)
+
+define ptr @InputKt_repeat(ptr %arg0, i32 %arg1) {
+entry:
+  %merge_3 = alloca ptr
+  %merge_6 = alloca i32
+  store ptr @.str.0, ptr %merge_3
+  %t0 = add i32 0, 1
+  store i32 %t0, ptr %merge_6
+  br label %bb1
+bb1:
+  %t1 = load i32, ptr %merge_6
+  %t2 = icmp sle i32 %t1, %arg1
+  br i1 %t2, label %bb2, label %bb4
+bb2:
+  %t3 = load ptr, ptr %merge_3
+  %t4 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t4, i32 256, ptr @.fmt.concat.ss, ptr %t3, ptr %arg0)
+  store ptr %t4, ptr %merge_3
+  br label %bb3
+bb3:
+  %t6 = add i32 0, 1
+  %t7 = load i32, ptr %merge_6
+  %t8 = add i32 %t7, %t6
+  store i32 %t8, ptr %merge_6
+  br label %bb1
+bb4:
+  %t9 = load ptr, ptr %merge_3
+  ret ptr %t9
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 3
+  %t1 = call ptr @InputKt_repeat(ptr @.str.1, i32 %t0)
+  call i32 @puts(ptr %t1)
+  %t3 = add i32 0, 5
+  %t4 = call ptr @InputKt_repeat(ptr @.str.2, i32 %t3)
+  call i32 @puts(ptr %t4)
+  ret i32 0
+}
+

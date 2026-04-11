@@ -1,0 +1,77 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.true = private unnamed_addr constant [5 x i8] c"true\00", align 1
+@.str.false = private unnamed_addr constant [6 x i8] c"false\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+
+define i32 @InputKt_isPalindrome(i32 %arg0) {
+entry:
+  %merge_7 = alloca i32
+  %merge_9 = alloca i32
+  %t0 = add i32 0, 0
+  %t1 = icmp slt i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 0
+  ret i32 %t2
+bb2:
+  br label %bb3
+bb3:
+  store i32 %arg0, ptr %merge_7
+  %t3 = add i32 0, 0
+  store i32 %t3, ptr %merge_9
+  br label %bb4
+bb4:
+  %t4 = load i32, ptr %merge_7
+  %t5 = add i32 0, 0
+  %t6 = icmp sgt i32 %t4, %t5
+  br i1 %t6, label %bb5, label %bb6
+bb5:
+  %t7 = load i32, ptr %merge_9
+  %t8 = add i32 0, 10
+  %t9 = mul i32 %t7, %t8
+  %t10 = load i32, ptr %merge_7
+  %t11 = add i32 0, 10
+  %t12 = srem i32 %t10, %t11
+  %t13 = add i32 %t9, %t12
+  store i32 %t13, ptr %merge_9
+  %t14 = load i32, ptr %merge_7
+  %t15 = add i32 0, 10
+  %t16 = sdiv i32 %t14, %t15
+  store i32 %t16, ptr %merge_7
+  br label %bb4
+bb6:
+  %t17 = load i32, ptr %merge_9
+  %t18 = icmp eq i32 %t17, %arg0
+  %t19 = zext i1 %t18 to i32
+  ret i32 %t19
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 121
+  %t1 = call i32 @InputKt_isPalindrome(i32 %t0)
+  %t3 = trunc i32 %t1 to i1
+  %t4 = select i1 %t3, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 123
+  %t7 = call i32 @InputKt_isPalindrome(i32 %t6)
+  %t9 = trunc i32 %t7 to i1
+  %t10 = select i1 %t9, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t10)
+  %t12 = add i32 0, 1221
+  %t13 = call i32 @InputKt_isPalindrome(i32 %t12)
+  %t15 = trunc i32 %t13 to i1
+  %t16 = select i1 %t15, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t16)
+  %t18 = add i32 0, -121
+  %t19 = call i32 @InputKt_isPalindrome(i32 %t18)
+  %t21 = trunc i32 %t19 to i1
+  %t22 = select i1 %t21, ptr @.str.true, ptr @.str.false
+  call i32 @puts(ptr %t22)
+  ret i32 0
+}
+

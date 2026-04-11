@@ -1,0 +1,43 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [6 x i8] c"hello\00", align 1
+@.str.1 = private unnamed_addr constant [6 x i8] c"world\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @InputKt_printTimes
+define void @InputKt_printTimes(ptr %arg0, i32 %arg1) {
+entry:
+  %merge_4 = alloca i32
+  %t0 = add i32 0, 1
+  store i32 %t0, ptr %merge_4
+  br label %bb1
+bb1:
+  %t1 = load i32, ptr %merge_4
+  %t2 = icmp sle i32 %t1, %arg1
+  br i1 %t2, label %bb2, label %bb4
+bb2:
+  call i32 @puts(ptr %arg0)
+  br label %bb3
+bb3:
+  %t4 = add i32 0, 1
+  %t5 = load i32, ptr %merge_4
+  %t6 = add i32 %t5, %t4
+  store i32 %t6, ptr %merge_4
+  br label %bb1
+bb4:
+  ret void
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 3
+  call void @InputKt_printTimes(ptr @.str.0, i32 %t0)
+  %t1 = add i32 0, 2
+  call void @InputKt_printTimes(ptr @.str.1, i32 %t1)
+  ret i32 0
+}
+

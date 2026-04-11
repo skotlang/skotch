@@ -1,0 +1,55 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @main
+define i32 @main() {
+entry:
+  %merge_1 = alloca i32
+  %merge_3 = alloca i32
+  %t0 = add i32 0, 100
+  store i32 %t0, ptr %merge_1
+  %t1 = add i32 0, 0
+  store i32 %t1, ptr %merge_3
+  br label %bb1
+bb1:
+  %t2 = load i32, ptr %merge_1
+  %t3 = add i32 0, 2
+  %t4 = srem i32 %t2, %t3
+  %t5 = add i32 0, 0
+  %t6 = icmp eq i32 %t4, %t5
+  br i1 %t6, label %bb4, label %bb5
+bb2:
+  %t7 = load i32, ptr %merge_1
+  %t8 = add i32 0, 1
+  %t9 = icmp ne i32 %t7, %t8
+  br i1 %t9, label %bb1, label %bb3
+bb3:
+  %t10 = load i32, ptr %merge_3
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
+  ret i32 0
+bb4:
+  %t12 = load i32, ptr %merge_1
+  %t13 = add i32 0, 2
+  %t14 = sdiv i32 %t12, %t13
+  store i32 %t14, ptr %merge_1
+  br label %bb6
+bb5:
+  %t15 = load i32, ptr %merge_1
+  %t16 = add i32 0, 3
+  %t17 = mul i32 %t15, %t16
+  %t18 = add i32 0, 1
+  %t19 = add i32 %t17, %t18
+  store i32 %t19, ptr %merge_1
+  br label %bb6
+bb6:
+  %t20 = load i32, ptr %merge_3
+  %t21 = add i32 0, 1
+  %t22 = add i32 %t20, %t21
+  store i32 %t22, ptr %merge_3
+  br label %bb2
+}
+

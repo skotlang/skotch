@@ -1,0 +1,4 @@
+name   = "159-string-repeat"
+status = "supported"
+features = ["string-concat", "for-loop", "var", "string-building"]
+skip_dex = true

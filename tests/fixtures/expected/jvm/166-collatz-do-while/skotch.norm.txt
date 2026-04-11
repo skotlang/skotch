@@ -1,0 +1,119 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=25
+    0000 bipush 100
+    0002 istore 1
+    0004 iload 1
+    0006 istore 2
+    0008 iconst_0
+    0009 istore 3
+    0011 iload 3
+    0013 istore 4
+    0015 op_0xA7
+    0016 nop
+    0017 iconst_0
+    0018 iload 2
+    0020 istore 5
+    0022 iconst_2
+    0023 istore 6
+    0025 iload 5
+    0027 iload 6
+    0029 irem
+    0030 istore 7
+    0032 iconst_0
+    0033 istore 8
+    0035 iload 7
+    0037 iload 8
+    0039 op_0x9F
+    0040 nop
+    0041 iconst_4
+    0042 iconst_0
+    0043 op_0xA7
+    0044 nop
+    0045 iconst_1
+    0046 iconst_1
+    0047 istore 9
+    0049 iload 9
+    0051 op_0x99
+    0052 nop
+    0053 op_0x45
+    0054 op_0xA7
+    0055 nop
+    0056 op_0x2D
+    0057 iload 2
+    0059 istore 10
+    0061 iconst_1
+    0062 istore 11
+    0064 iload 10
+    0066 iload 11
+    0068 op_0xA0
+    0069 nop
+    0070 iconst_4
+    0071 iconst_0
+    0072 op_0xA7
+    0073 nop
+    0074 iconst_1
+    0075 iconst_1
+    0076 istore 12
+    0078 iload 12
+    0080 op_0x99
+    0081 nop
+    0082 iconst_3
+    0083 op_0xA7
+    0084 op_0xFF
+    0085 op_0xBF
+    0086 iload 4
+    0088 istore 13
+    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0093 iload 13
+    0095 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0098 return
+    0099 iload 2
+    0101 istore 14
+    0103 iconst_2
+    0104 istore 15
+    0106 iload 14
+    0108 iload 15
+    0110 idiv
+    0111 istore 16
+    0113 iload 16
+    0115 istore 2
+    0117 op_0xA7
+    0118 nop
+    0119 op_0x22
+    0120 iload 2
+    0122 istore 17
+    0124 iconst_3
+    0125 istore 18
+    0127 iload 17
+    0129 iload 18
+    0131 imul
+    0132 istore 19
+    0134 iconst_1
+    0135 istore 20
+    0137 iload 19
+    0139 iload 20
+    0141 iadd
+    0142 istore 21
+    0144 iload 21
+    0146 istore 2
+    0148 op_0xA7
+    0149 nop
+    0150 iconst_0
+    0151 iload 4
+    0153 istore 22
+    0155 iconst_1
+    0156 istore 23
+    0158 iload 22
+    0160 iload 23
+    0162 iadd
+    0163 istore 24
+    0165 iload 24
+    0167 istore 4
+    0169 op_0xA7
+    0170 op_0xFF
+    0171 op_0x90
+    sub_attr  StackMapTable (247 bytes)

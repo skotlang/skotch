@@ -1,0 +1,3 @@
+name   = "154-complex-when"
+status = "supported"
+features = ["when-no-subject", "string-template", "for-loop", "fizzbuzz"]

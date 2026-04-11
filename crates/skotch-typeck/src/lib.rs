@@ -285,7 +285,14 @@ impl<'a> TypeChecker<'a> {
                     let _ = self.synth_expr(value, scope, expr_tys);
                 }
                 Stmt::Break(_) | Stmt::Continue(_) => {}
-                Stmt::LocalFun(_) => {} // handled in MIR lowering
+                Stmt::LocalFun(f) => {
+                    // Register the local function's signature so calls
+                    // to it get the correct return type.
+                    let sig = self.signature_for_fun(f);
+                    let fn_idx = self.fn_names.len() as u32;
+                    self.out.top_signatures.insert(DefId::Function(fn_idx), sig);
+                    self.fn_names.push(f.name);
+                }
                 Stmt::For {
                     var_name,
                     start: range_start,

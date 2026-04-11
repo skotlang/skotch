@@ -1,0 +1,3 @@
+name   = "152-nested-local-fun"
+status = "supported"
+features = ["local-function", "nested-call", "expression-body"]

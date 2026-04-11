@@ -1,0 +1,3 @@
+name   = "162-typed-val"
+status = "supported"
+features = ["typed-val", "explicit-type-annotation"]

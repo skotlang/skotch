@@ -1,0 +1,77 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        isPalindrome (I)Z 0x0019
+  code        max_stack=3 max_locals=3
+    0000 op_0x1A
+    0001 op_0x9C
+    0002 nop
+    0003 iconst_2
+    0004 iconst_0
+    0005 op_0xAC
+    0006 op_0x1A
+    0007 op_0x3C
+    0008 iconst_0
+    0009 op_0x3D
+    0010 op_0x1B
+    0011 op_0x9E
+    0012 nop
+    0013 iload 28
+    0015 bipush 10
+    0017 imul
+    0018 op_0x1B
+    0019 bipush 10
+    0021 irem
+    0022 iadd
+    0023 op_0x3D
+    0024 op_0x1B
+    0025 bipush 10
+    0027 idiv
+    0028 op_0x3C
+    0029 op_0xA7
+    0030 op_0xFF
+    0031 op_0xED
+    0032 op_0x1C
+    0033 op_0x1A
+    0034 op_0xA0
+    0035 nop
+    0036 iconst_4
+    0037 iconst_1
+    0038 op_0xA7
+    0039 nop
+    0040 iconst_1
+    0041 iconst_0
+    0042 op_0xAC
+    sub_attr  StackMapTable (12 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 bipush 121
+    0002 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0005 op_0x3B
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 op_0x1A
+    0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0013 bipush 123
+    0015 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0018 op_0x3B
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 op_0x1A
+    0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0026 sipush 1221
+    0029 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0032 op_0x3B
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 op_0x1A
+    0037 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0040 bipush -121
+    0042 invokestatic Method(InputKt.isPalindrome:(I)Z)
+    0045 op_0x3B
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 op_0x1A
+    0050 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0053 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

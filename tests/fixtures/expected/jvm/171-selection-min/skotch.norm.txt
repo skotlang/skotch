@@ -1,0 +1,134 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=13
+    0000 iconst_3
+    0001 istore 1
+    0003 iconst_1
+    0004 istore 2
+    0006 iconst_2
+    0007 istore 3
+    0009 iload 1
+    0011 iload 2
+    0013 iload 3
+    0015 invokestatic Method(InputKt.min3:(III)I)
+    0018 istore 4
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload 4
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 iconst_5
+    0029 istore 5
+    0031 bipush 9
+    0033 istore 6
+    0035 bipush 7
+    0037 istore 7
+    0039 iload 5
+    0041 iload 6
+    0043 iload 7
+    0045 invokestatic Method(InputKt.min3:(III)I)
+    0048 istore 8
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 iload 8
+    0055 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0058 bipush 10
+    0060 istore 9
+    0062 bipush 10
+    0064 istore 10
+    0066 bipush 10
+    0068 istore 11
+    0070 iload 9
+    0072 iload 10
+    0074 iload 11
+    0076 invokestatic Method(InputKt.min3:(III)I)
+    0079 istore 12
+    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0084 iload 12
+    0086 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0089 return
+method        min3 (III)I 0x0009
+  code        max_stack=3 max_locals=16
+    0000 iload 0
+    0002 istore 3
+    0004 iload 1
+    0006 istore 4
+    0008 iload 3
+    0010 iload 4
+    0012 op_0xA4
+    0013 nop
+    0014 iconst_4
+    0015 iconst_0
+    0016 op_0xA7
+    0017 nop
+    0018 iconst_1
+    0019 iconst_1
+    0020 istore 5
+    0022 iconst_0
+    0023 istore 6
+    0025 iload 5
+    0027 op_0x99
+    0028 nop
+    0029 op_0x20
+    0030 iload 0
+    0032 istore 7
+    0034 iload 2
+    0036 istore 8
+    0038 iload 7
+    0040 iload 8
+    0042 op_0xA4
+    0043 nop
+    0044 iconst_4
+    0045 iconst_0
+    0046 op_0xA7
+    0047 nop
+    0048 iconst_1
+    0049 iconst_1
+    0050 istore 9
+    0052 iload 9
+    0054 istore 6
+    0056 op_0xA7
+    0057 nop
+    0058 iconst_0
+    0059 iload 6
+    0061 op_0x99
+    0062 nop
+    0063 op_0x0A
+    0064 iload 0
+    0066 istore 10
+    0068 iload 10
+    0070 op_0xAC
+    0071 op_0xA7
+    0072 nop
+    0073 iconst_0
+    0074 iload 1
+    0076 istore 11
+    0078 iload 2
+    0080 istore 12
+    0082 iload 11
+    0084 iload 12
+    0086 op_0xA4
+    0087 nop
+    0088 iconst_4
+    0089 iconst_0
+    0090 op_0xA7
+    0091 nop
+    0092 iconst_1
+    0093 iconst_1
+    0094 istore 13
+    0096 iload 13
+    0098 op_0x99
+    0099 nop
+    0100 op_0x0A
+    0101 iload 1
+    0103 istore 14
+    0105 iload 14
+    0107 op_0xAC
+    0108 op_0xA7
+    0109 nop
+    0110 iconst_0
+    0111 iload 2
+    0113 istore 15
+    0115 iload 15
+    0117 op_0xAC
+    sub_attr  StackMapTable (185 bytes)

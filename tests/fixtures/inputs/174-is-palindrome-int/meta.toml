@@ -1,0 +1,3 @@
+name   = "174-is-palindrome-int"
+status = "supported"
+features = ["while-loop", "modulo", "division", "comparison"]

@@ -1,0 +1,4 @@
+name   = "160-format-entry"
+status = "supported"
+features = ["string-template", "if-expression-in-template", "multi-param"]
+skip_dex = true

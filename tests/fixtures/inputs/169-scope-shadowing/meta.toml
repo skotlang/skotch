@@ -1,0 +1,3 @@
+name   = "169-scope-local-in-loop"
+status = "supported"
+features = ["val-in-loop", "for-loop", "scope"]

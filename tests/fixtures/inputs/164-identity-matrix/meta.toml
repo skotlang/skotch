@@ -1,0 +1,3 @@
+name   = "164-identity-matrix"
+status = "supported"
+features = ["nested-for-loop", "if-else", "comparison"]

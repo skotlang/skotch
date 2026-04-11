@@ -1,0 +1,36 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iconst_5
+    0001 invokestatic Method(InputKt.outer:(I)I)
+    0004 op_0x3B
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 op_0x1A
+    0009 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0012 bipush 10
+    0014 invokestatic Method(InputKt.outer:(I)I)
+    0017 op_0x3B
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 op_0x1A
+    0022 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0025 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        outer (I)I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0x1A
+    0001 invokestatic Method(InputKt.outer$inner:(I)I)
+    0004 iconst_1
+    0005 iadd
+    0006 op_0xAC
+method        outer$inner (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 op_0x1A
+    0001 iconst_2
+    0002 imul
+    0003 op_0xAC
