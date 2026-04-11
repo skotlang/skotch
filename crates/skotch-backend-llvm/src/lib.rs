@@ -711,7 +711,9 @@ impl<'a> BlockWalker<'a> {
                 CallKind::Println => self.lower_println(args),
                 CallKind::PrintlnConcat => self.lower_println_concat(args),
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
-                CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+                CallKind::StaticJava { .. }
+                | CallKind::Constructor(_)
+                | CallKind::Virtual { .. } => {
                     // TODO: class support in LLVM backend
                 }
             },
@@ -755,7 +757,7 @@ impl<'a> BlockWalker<'a> {
             CallKind::Println => self.lower_println(args),
             CallKind::PrintlnConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
-            CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+            CallKind::StaticJava { .. } | CallKind::Constructor(_) | CallKind::Virtual { .. } => {
                 // TODO: class support in LLVM backend
             }
         }

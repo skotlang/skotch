@@ -255,9 +255,14 @@ impl<'a> Resolver<'a> {
             Expr::Ident(name, span) => {
                 let def = lookup(scope, *name).unwrap_or_else(|| {
                     self.out.top_level.get(name).copied().unwrap_or_else(|| {
+                        // Don't error for known Java class names.
+                        let name_str = self.interner.resolve(*name);
+                        if is_known_java_class(name_str) {
+                            return DefId::Error; // silently accept
+                        }
                         self.diags.push(Diagnostic::error(
                             *span,
-                            format!("unresolved identifier `{}`", self.interner.resolve(*name)),
+                            format!("unresolved identifier `{name_str}`"),
                         ));
                         DefId::Error
                     })
@@ -386,6 +391,32 @@ fn lookup(scope: &[(Symbol, DefId)], name: Symbol) -> Option<DefId> {
         }
     }
     None
+}
+/// Check if a name matches a known Java class or package prefix.
+fn is_known_java_class(name: &str) -> bool {
+    matches!(
+        name,
+        // Java classes
+        "System"
+            | "Math"
+            | "Integer"
+            | "Long"
+            | "Double"
+            | "Boolean"
+            | "String"
+            | "Thread"
+            | "Runtime"
+            | "Arrays"
+            | "Collections"
+            // Java package prefixes (for qualified names like java.lang.System)
+            | "java"
+            | "javax"
+            | "kotlin"
+            | "org"
+            | "com"
+            | "io"
+            | "net"
+    )
 }
 
 #[cfg(test)]

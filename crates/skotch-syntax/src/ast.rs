@@ -37,6 +37,8 @@ pub struct PackageDecl {
 #[derive(Clone, Debug)]
 pub struct ImportDecl {
     pub path: Vec<Symbol>,
+    /// True for `import foo.bar.*` (star import).
+    pub is_wildcard: bool,
     pub span: Span,
 }
 

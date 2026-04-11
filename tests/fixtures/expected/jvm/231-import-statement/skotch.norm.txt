@@ -1,0 +1,23 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 bipush -7
+    0002 istore 1
+    0004 iload 1
+    0006 invokestatic Method(java/lang/Math.abs:(I)I)
+    0009 istore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 iload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0019 ldc "42"
+    0021 astore 3
+    0023 aload 3
+    0025 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
+    0028 istore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 return

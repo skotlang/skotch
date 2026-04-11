@@ -1,0 +1,4 @@
+name   = "233-class-field-access"
+status = "supported"
+features = ["class", "field-access", "val-property", "constructor"]
+skip_dex = true

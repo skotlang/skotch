@@ -1,0 +1,4 @@
+name   = "228-math-interop"
+status = "supported"
+features = ["java-interop", "Math.abs", "Math.max", "Integer.parseInt"]
+skip_dex = true

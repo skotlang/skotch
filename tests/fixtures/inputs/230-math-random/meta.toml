@@ -1,0 +1,4 @@
+name   = "230-math-random"
+status = "supported"
+features = ["java-interop", "Math.random", "double-return"]
+skip_dex = true

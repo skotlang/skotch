@@ -1,0 +1,4 @@
+name   = "231-import-statement"
+status = "supported"
+features = ["import", "java-interop", "import-java-lang"]
+skip_dex = true

@@ -1,0 +1,4 @@
+name   = "232-system-getproperty"
+status = "supported"
+features = ["java-interop", "System.getProperty", "string-return"]
+skip_dex = true

@@ -1,0 +1,4 @@
+name   = "227-java-static-call"
+status = "supported"
+features = ["java-interop", "static-method-call", "System.currentTimeMillis"]
+skip_dex = true

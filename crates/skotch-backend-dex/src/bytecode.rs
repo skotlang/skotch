@@ -274,7 +274,10 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
             let n = match kind {
                 CallKind::Println => 1,
                 CallKind::PrintlnConcat => 2,
-                CallKind::Static(_) | CallKind::Constructor(_) | CallKind::Virtual { .. } => 0,
+                CallKind::Static(_)
+                | CallKind::StaticJava { .. }
+                | CallKind::Constructor(_)
+                | CallKind::Virtual { .. } => 0,
             };
             needed = needed.max(n);
         }
@@ -728,7 +731,7 @@ fn emit_call(
 
             2 // outs_size — every invoke-virtual passes ≤ 2 registers
         }
-        CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+        CallKind::StaticJava { .. } | CallKind::Constructor(_) | CallKind::Virtual { .. } => {
             // TODO: class support in DEX backend
             0
         }

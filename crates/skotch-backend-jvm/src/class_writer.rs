@@ -457,6 +457,8 @@ fn emit_method(
                 let ty = &func.locals[local.0 as usize];
                 match ty {
                     Ty::Int | Ty::Bool => code.push(0xAC), // ireturn
+                    Ty::Long => code.push(0xAD),           // lreturn
+                    Ty::Double => code.push(0xAF),         // dreturn
                     _ => code.push(0xB0),                  // areturn
                 }
             }
@@ -1027,6 +1029,8 @@ fn walk_block(
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
                             Ty::Int => "(I)V",
+                            Ty::Long => "(J)V",
+                            Ty::Double => "(D)V",
                             Ty::String => "(Ljava/lang/String;)V",
                             _ => "(Ljava/lang/Object;)V",
                         };
@@ -1128,6 +1132,33 @@ fn walk_block(
                     code.write_u16::<BigEndian>(println).unwrap();
                     bump(stack, max_stack, -2); // pops [PS, String]
                     let _ = dest;
+                }
+                CallKind::StaticJava {
+                    class_name,
+                    method_name,
+                    descriptor,
+                } => {
+                    // Load arguments.
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    let mref = cp.methodref(class_name, method_name, descriptor);
+                    code.push(0xB8); // invokestatic
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    // Stack effect: consumed args, pushed return value (if non-void).
+                    let ret_is_void = descriptor.ends_with(")V");
+                    let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
+                    let net = if ret_is_void {
+                        -(args.len() as i32)
+                    } else if ret_is_wide {
+                        -(args.len() as i32) + 2 // long/double take 2 stack slots
+                    } else {
+                        -(args.len() as i32) + 1
+                    };
+                    bump(stack, max_stack, net);
+                    if !ret_is_void {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
                 }
                 CallKind::Constructor(class_name) => {
                     // Stack has [ref, ref] from NewInstance+dup.
@@ -1260,6 +1291,21 @@ fn slot_for(slots: &mut FxHashMap<u32, u8>, next_slot: &mut u8, local: LocalId) 
     s
 }
 
+/// Like slot_for but accounts for wide types (Long/Double take 2 slots).
+fn slot_for_ty(slots: &mut FxHashMap<u32, u8>, next_slot: &mut u8, local: LocalId, ty: &Ty) -> u8 {
+    if let Some(&s) = slots.get(&local.0) {
+        return s;
+    }
+    let s = *next_slot;
+    slots.insert(local.0, s);
+    *next_slot += if matches!(ty, Ty::Long | Ty::Double) {
+        2
+    } else {
+        1
+    };
+    s
+}
+
 fn store_local(
     code: &mut Vec<u8>,
     stack: &mut i32,
@@ -1272,14 +1318,16 @@ fn store_local(
     if matches!(ty, Ty::Unit) {
         return;
     }
-    let slot = slot_for(slots, next_slot, local);
-    let opcode = match ty {
-        Ty::Int | Ty::Bool => 0x36, // istore
-        _ => 0x3A,                  // astore
+    let slot = slot_for_ty(slots, next_slot, local, ty);
+    let (opcode, width) = match ty {
+        Ty::Int | Ty::Bool => (0x36u8, 1), // istore
+        Ty::Long => (0x37, 2),             // lstore (takes 2 stack slots)
+        Ty::Double => (0x39, 2),           // dstore
+        _ => (0x3A, 1),                    // astore
     };
     code.push(opcode);
     code.push(slot);
-    *stack -= 1;
+    *stack -= width;
 }
 
 fn load_local(
@@ -1297,13 +1345,15 @@ fn load_local(
     let &slot = slots
         .get(&local.0)
         .expect("local must be stored before being loaded");
-    let opcode = match ty {
-        Ty::Int | Ty::Bool => 0x15, // iload
-        _ => 0x19,                  // aload
+    let (opcode, width) = match ty {
+        Ty::Int | Ty::Bool => (0x15u8, 1), // iload
+        Ty::Long => (0x16, 2),             // lload (pushes 2 stack slots)
+        Ty::Double => (0x18, 2),           // dload
+        _ => (0x19, 1),                    // aload
     };
     code.push(opcode);
     code.push(slot);
-    bump(stack, max_stack, 1);
+    bump(stack, max_stack, width);
 }
 
 fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {

@@ -1,0 +1,4 @@
+name   = "236-class-method-chain"
+status = "supported"
+features = ["class", "inline-construction", "method-call"]
+skip_dex = true

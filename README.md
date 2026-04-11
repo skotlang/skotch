@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 130 language-feature fixtures validated (~20% of the Kotlin spec).
+> implemented. 141 language-feature fixtures validated (~20–25% of the Kotlin spec).
 
 ## Installation
 
@@ -176,10 +176,11 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~20% of the Kotlin language specification.** The compiler
-handles functions, control flow, basic types, expressions, and basic classes with
-methods — but does not yet support inheritance, generics, lambdas, nullable
-types, or the standard library collection APIs. 130 test fixtures validated across
+**Estimated coverage: ~20–25% of the Kotlin language specification.** The compiler
+handles functions, control flow, basic types, expressions, classes with
+constructors/methods/field access, and Java static method interop — but does not
+yet support inheritance, generics, lambdas, nullable types, or the standard
+library collection APIs. 141 test fixtures validated across
 JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
@@ -190,7 +191,9 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
-| [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Empty classes, primary constructor with `val`/`var`, instance methods, `invokevirtual` dispatch |
+| [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access (`obj.field`), instance methods, `invokevirtual` dispatch |
+| [Java interop](https://kotlinlang.org/spec/platform-specific-parts.html) | §18 | Static calls, FQN (`java.lang.System`), `import`, `Math.random()`, `System.getProperty()` |
+| [Import declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.2 | `import java.lang.Math`, implicit `java.lang.*` |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
 | [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal, hex (`0xFF`), binary (`0b1010`), underscores (`1_000`), `L` suffix |
 | [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, escape sequences (`'\n'`, `'\t'`, `'\\'`) |
@@ -218,7 +221,7 @@ JVM, DEX, LLVM IR, and klib targets.
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Class properties & field access | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Medium | `obj.field`, `var` properties with body initializers |
+| Class body properties | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Medium | `var count: Int = 0` in class body, `count++` |
 | Inheritance & override | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Hard | `open class`, `override fun`, `super` calls |
 | Data classes | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Hard | Synthesized equals/hashCode/toString/copy |
 | Interfaces | [§4.5.3](https://kotlinlang.org/spec/declarations.html#interface-declaration) | Hard | Declaration, implementation, default methods |

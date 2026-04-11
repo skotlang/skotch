@@ -131,6 +131,13 @@ pub enum CallKind {
     /// support all use string templates as the immediate argument
     /// of `println`, so this fused form covers everything we need.
     PrintlnConcat,
+    /// Static method call on a Java/Kotlin class: `System.currentTimeMillis()`.
+    StaticJava {
+        class_name: std::string::String,
+        method_name: std::string::String,
+        /// JVM method descriptor, e.g. "()J" for currentTimeMillis.
+        descriptor: std::string::String,
+    },
     /// Constructor call: `new ClassName(args)`.
     Constructor(std::string::String),
     /// Virtual method call on an instance: `receiver.method(args)`.

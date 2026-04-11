@@ -354,6 +354,11 @@ impl<'a> TypeChecker<'a> {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
                         if lt == Ty::Int && rt == Ty::Int {
                             Ty::Int
+                        } else if (lt == Ty::Any || lt == Ty::Int)
+                            && (rt == Ty::Any || rt == Ty::Int)
+                        {
+                            // Allow Any (from unresolved field access) in arithmetic.
+                            Ty::Int
                         } else if *op == BinOp::Add && lt == Ty::String {
                             // String + anything → String concatenation
                             Ty::String
@@ -425,7 +430,17 @@ impl<'a> TypeChecker<'a> {
                 // Fixture 07 uses `if (true) 1 else 2` which fits.
                 Ty::Int
             }
-            Expr::Field { receiver, .. } => self.synth_expr(receiver, scope, out),
+            Expr::Field { receiver, .. } => {
+                let recv_ty = self.synth_expr(receiver, scope, out);
+                // For class-typed receivers, field access could return any type.
+                // Without full class metadata in the typechecker, return Any
+                // to avoid false "arithmetic not supported" errors.
+                if matches!(recv_ty, Ty::Class(_)) {
+                    Ty::Any
+                } else {
+                    recv_ty
+                }
+            }
             Expr::When {
                 subject,
                 branches,

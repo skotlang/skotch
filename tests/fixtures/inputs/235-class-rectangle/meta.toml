@@ -1,0 +1,4 @@
+name   = "235-class-rectangle"
+status = "supported"
+features = ["class", "multiple-methods", "field-access"]
+skip_dex = true

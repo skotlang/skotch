@@ -28,7 +28,7 @@ use skotch_mir::{
     BasicBlock, BinOp as MBinOp, CallKind, FuncId, LocalId, MirClass, MirConst, MirField,
     MirFunction, MirModule, Rvalue, Stmt as MStmt, Terminator,
 };
-use skotch_resolve::{DefId, ResolvedFile};
+use skotch_resolve::ResolvedFile;
 use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
@@ -101,6 +101,40 @@ pub fn lower_file(
             // If we can't extract a constant, typeck already errored;
             // we just don't register the global, and any reference to
             // it later will produce its own diagnostic.
+        }
+    }
+
+    // ─── Build import map ────────────────────────────────────────────────
+    // Maps simple class names → JVM class paths from import statements.
+    // Also includes default java.lang.* imports (Kotlin implicitly imports java.lang.*).
+    let mut import_map: FxHashMap<String, String> = FxHashMap::default();
+    // Default java.lang.* imports
+    for name in &[
+        "System",
+        "Math",
+        "Integer",
+        "Long",
+        "Double",
+        "Boolean",
+        "String",
+        "Thread",
+        "Runtime",
+        "Object",
+        "Class",
+        "Comparable",
+    ] {
+        import_map.insert(name.to_string(), format!("java/lang/{name}"));
+    }
+    // Process explicit imports
+    for imp in &file.imports {
+        let segments: Vec<&str> = imp.path.iter().map(|s| interner.resolve(*s)).collect();
+        if imp.is_wildcard {
+            // `import foo.bar.*` — we can't enumerate classes, but store the package prefix
+            // for future classpath scanning. For now, no-op.
+        } else if !segments.is_empty() {
+            let simple_name = segments.last().unwrap().to_string();
+            let jvm_path = segments.join("/");
+            import_map.insert(simple_name, jvm_path);
         }
     }
 
@@ -1096,10 +1130,27 @@ fn lower_expr(
         }
         Expr::Call { callee, args, span } => {
             // Handle method calls on a receiver: `receiver.method(args)`
-            // This is used for extension functions.
             if let Expr::Field { receiver, name, .. } = callee.as_ref() {
                 let method_name = *name;
-                // Lower the receiver as the first argument.
+
+                // Check if the receiver is a known Java class name for static calls.
+                if let Some(static_call) = try_java_static_call(
+                    receiver,
+                    method_name,
+                    args,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                ) {
+                    return Some(static_call);
+                }
+
+                // Lower the receiver as the first argument (instance method or extension).
                 let recv_local = lower_expr(
                     receiver,
                     fb,
@@ -1598,12 +1649,48 @@ fn lower_expr(
 
             Some(result)
         }
-        Expr::Field { span, .. } => {
-            diags.push(Diagnostic::error(
-                *span,
-                "field access is not yet lowered to MIR",
-            ));
-            let _ = (DefId::Error, name_to_func);
+        Expr::Field {
+            receiver,
+            name,
+            span,
+        } => {
+            // Try to lower as a field access on a class instance.
+            if let Some(recv_local) = lower_expr(
+                receiver,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) {
+                let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
+                if let Ty::Class(class_name) = recv_ty {
+                    let field_name = interner.resolve(*name).to_string();
+                    let field_ty = module
+                        .classes
+                        .iter()
+                        .find(|c| c.name == class_name)
+                        .and_then(|c| c.fields.iter().find(|f| f.name == field_name))
+                        .map(|f| f.ty.clone())
+                        .unwrap_or(Ty::Any);
+                    let dest = fb.new_local(field_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::GetField {
+                            receiver: recv_local,
+                            class_name,
+                            field_name,
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
+            // Not a class field access — could be a Java package path.
+            // Return None to let the caller handle it.
+            let _ = (name_to_func, *span);
             None
         }
     }
@@ -1657,6 +1744,165 @@ fn lower_template_part(
             diags,
             None,
         ),
+    }
+}
+
+/// Known Java static methods for interop. Accepts both simple names
+/// ("System") and fully-qualified JVM paths ("java/lang/System").
+fn lookup_java_static(
+    class_name: &str,
+    method_name: &str,
+) -> Option<(&'static str, &'static str, &'static str, Ty)> {
+    // Normalize: accept both "System" and "java/lang/System" and "java.lang.System"
+    let simple = class_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(class_name)
+        .rsplit('.')
+        .next()
+        .unwrap_or(class_name);
+    match (simple, method_name) {
+        // java.lang.System
+        ("System", "currentTimeMillis") => {
+            Some(("java/lang/System", "currentTimeMillis", "()J", Ty::Long))
+        }
+        ("System", "nanoTime") => Some(("java/lang/System", "nanoTime", "()J", Ty::Long)),
+        ("System", "exit") => Some(("java/lang/System", "exit", "(I)V", Ty::Unit)),
+        ("System", "getProperty") => Some((
+            "java/lang/System",
+            "getProperty",
+            "(Ljava/lang/String;)Ljava/lang/String;",
+            Ty::String,
+        )),
+        ("System", "getenv") => Some((
+            "java/lang/System",
+            "getenv",
+            "(Ljava/lang/String;)Ljava/lang/String;",
+            Ty::String,
+        )),
+        // java.lang.Math
+        ("Math", "abs") => Some(("java/lang/Math", "abs", "(I)I", Ty::Int)),
+        ("Math", "max") => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
+        ("Math", "min") => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+        ("Math", "random") => Some(("java/lang/Math", "random", "()D", Ty::Double)),
+        ("Math", "sqrt") => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double)),
+        ("Math", "pow") => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double)),
+        ("Math", "floor") => Some(("java/lang/Math", "floor", "(D)D", Ty::Double)),
+        ("Math", "ceil") => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double)),
+        ("Math", "round") => Some(("java/lang/Math", "round", "(D)J", Ty::Long)),
+        // java.lang.Integer
+        ("Integer", "parseInt") => Some((
+            "java/lang/Integer",
+            "parseInt",
+            "(Ljava/lang/String;)I",
+            Ty::Int,
+        )),
+        ("Integer", "toString") => Some((
+            "java/lang/Integer",
+            "toString",
+            "(I)Ljava/lang/String;",
+            Ty::String,
+        )),
+        ("Integer", "valueOf") => Some((
+            "java/lang/Integer",
+            "valueOf",
+            "(I)Ljava/lang/Integer;",
+            Ty::Int,
+        )),
+        ("Integer", "MAX_VALUE") | ("Integer", "MIN_VALUE") => None, // fields, not methods
+        // java.lang.Long
+        ("Long", "parseLong") => Some((
+            "java/lang/Long",
+            "parseLong",
+            "(Ljava/lang/String;)J",
+            Ty::Long,
+        )),
+        // java.lang.String
+        ("String", "valueOf") => Some((
+            "java/lang/String",
+            "valueOf",
+            "(I)Ljava/lang/String;",
+            Ty::String,
+        )),
+        ("String", "format") => Some((
+            "java/lang/String",
+            "format",
+            "(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;",
+            Ty::String,
+        )),
+        // java.lang.Thread
+        ("Thread", "sleep") => Some(("java/lang/Thread", "sleep", "(J)V", Ty::Unit)),
+        _ => None,
+    }
+}
+
+/// Try to lower a method call as a Java static call. Returns Some(dest_local) if successful.
+#[allow(clippy::too_many_arguments)]
+fn try_java_static_call(
+    receiver: &Expr,
+    method_name: Symbol,
+    args: &[Expr],
+    fb: &mut FnBuilder,
+    scope: &mut Vec<(Symbol, LocalId)>,
+    module: &mut MirModule,
+    name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+    loop_ctx: LoopCtx,
+) -> Option<LocalId> {
+    // Extract the class name from the receiver expression.
+    // Supports: `System` (simple), `java.lang.System` (qualified).
+    let class_name = extract_qualified_name(receiver, interner)?;
+
+    let method_str = interner.resolve(method_name).to_string();
+    let (jvm_class, jvm_method, descriptor, return_ty) =
+        lookup_java_static(&class_name, &method_str)?;
+
+    // Lower arguments.
+    let mut arg_locals = Vec::new();
+    for a in args {
+        let id = lower_expr(
+            a,
+            fb,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+            loop_ctx,
+        )?;
+        arg_locals.push(id);
+    }
+
+    let dest = fb.new_local(return_ty);
+    fb.push_stmt(MStmt::Assign {
+        dest,
+        value: Rvalue::Call {
+            kind: CallKind::StaticJava {
+                class_name: jvm_class.to_string(),
+                method_name: jvm_method.to_string(),
+                descriptor: descriptor.to_string(),
+            },
+            args: arg_locals,
+        },
+    });
+    Some(dest)
+}
+
+/// Extract a qualified name from a chain of Field expressions.
+/// `java.lang.System` → "java.lang.System"
+/// `System` → "System"
+fn extract_qualified_name(expr: &Expr, interner: &Interner) -> Option<String> {
+    match expr {
+        Expr::Ident(sym, _) => Some(interner.resolve(*sym).to_string()),
+        Expr::Field { receiver, name, .. } => {
+            let prefix = extract_qualified_name(receiver, interner)?;
+            let segment = interner.resolve(*name);
+            Some(format!("{prefix}.{segment}"))
+        }
+        _ => None,
     }
 }
 
@@ -1776,8 +2022,20 @@ fn lower_class(
             scope.push((p.name, id));
         }
 
-        // Register field names as accessible via `this`.
-        // When we encounter an unqualified field name, resolve it to GetField.
+        // Load fields into locals so they're accessible by name in the method body.
+        for field in &fields {
+            let field_sym = interner.intern(&field.name);
+            let field_local = fb.new_local(field.ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: field_local,
+                value: Rvalue::GetField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            scope.push((field_sym, field_local));
+        }
 
         for s in &method.body.stmts {
             lower_stmt(

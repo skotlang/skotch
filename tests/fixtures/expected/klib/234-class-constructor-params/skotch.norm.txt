@@ -1,0 +1,403 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "distFromOriginSquared"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "GetField": {
+                    "receiver": 7,
+                    "class_name": "Point",
+                    "field_name": "x"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      8
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "GetField": {
+                    "receiver": 10,
+                    "class_name": "Point",
+                    "field_name": "y"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      11
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": {
+        "Class": "Point"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Point",
+      "fields": [
+        {
+          "name": "x",
+          "ty": "Int"
+        },
+        {
+          "name": "y",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1,
+          "name": "distFromOriginSquared",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 6,
+                        "rhs": 7
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 5,
+                        "rhs": 8
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 9
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1,
+          2
+        ],
+        "locals": [
+          {
+            "Class": "Point"
+          },
+          "Int",
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "x",
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "y",
+                      "value": 2
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

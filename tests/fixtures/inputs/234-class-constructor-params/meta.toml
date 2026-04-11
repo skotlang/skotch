@@ -1,0 +1,4 @@
+name   = "234-class-constructor-params"
+status = "supported"
+features = ["class", "constructor-param-val", "method-using-fields"]
+skip_dex = true

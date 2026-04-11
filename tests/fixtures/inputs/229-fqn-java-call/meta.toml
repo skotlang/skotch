@@ -1,0 +1,4 @@
+name   = "229-fqn-java-call"
+status = "supported"
+features = ["java-interop", "fully-qualified-name", "System.getProperty"]
+skip_dex = true

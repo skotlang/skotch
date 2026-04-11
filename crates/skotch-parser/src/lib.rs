@@ -254,8 +254,15 @@ impl<'a> Parser<'a> {
         let kw = self.expect(TokenKind::KwImport, "import");
         let mut path = Vec::new();
         let mut end_span = kw;
+        let mut is_wildcard = false;
         loop {
             self.skip_trivia();
+            // Check for wildcard `*`
+            if self.peek_kind() == TokenKind::Star {
+                self.bump();
+                is_wildcard = true;
+                break;
+            }
             if self.peek_kind() != TokenKind::Ident {
                 break;
             }
@@ -270,6 +277,7 @@ impl<'a> Parser<'a> {
         }
         ImportDecl {
             path,
+            is_wildcard,
             span: kw.merge(end_span),
         }
     }
