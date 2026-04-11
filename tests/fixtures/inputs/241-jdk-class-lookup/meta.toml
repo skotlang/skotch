@@ -1,0 +1,4 @@
+name   = "241-jdk-class-lookup"
+status = "supported"
+features = ["java-interop", "real-jdk-lookup", "classpath-resolution"]
+skip_dex = true

@@ -1,0 +1,40 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=10
+    0000 bipush 100
+    0002 istore 1
+    0004 sipush 200
+    0007 istore 2
+    0009 iload 1
+    0011 iload 2
+    0013 invokestatic Method(java/lang/Math.addExact:(II)I)
+    0016 istore 3
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 iload 3
+    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0026 bipush 7
+    0028 istore 4
+    0030 bipush 6
+    0032 istore 5
+    0034 iload 4
+    0036 iload 5
+    0038 invokestatic Method(java/lang/Math.multiplyExact:(II)I)
+    0041 istore 6
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 iload 6
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 bipush 50
+    0053 istore 7
+    0055 bipush 30
+    0057 istore 8
+    0059 iload 7
+    0061 iload 8
+    0063 invokestatic Method(java/lang/Math.subtractExact:(II)I)
+    0066 istore 9
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 iload 9
+    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0076 return

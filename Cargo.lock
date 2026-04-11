@@ -1252,6 +1252,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "skotch-classinfo"
+version = "0.1.9"
+dependencies = [
+ "zip",
+]
+
+[[package]]
 name = "skotch-cli"
 version = "0.1.9"
 dependencies = [
@@ -1368,6 +1375,7 @@ name = "skotch-mir-lower"
 version = "0.1.9"
 dependencies = [
  "rustc-hash",
+ "skotch-classinfo",
  "skotch-diagnostics",
  "skotch-intern",
  "skotch-lexer",

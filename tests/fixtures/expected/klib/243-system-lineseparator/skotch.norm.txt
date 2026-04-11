@@ -1,0 +1,108 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "String",
+        "String",
+        "String",
+        "String",
+        "Bool",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/System",
+                        "method_name": "lineSeparator",
+                        "descriptor": "()Ljava/lang/String;"
+                      }
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 2,
+                    "rhs": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [],
+  "strings": [
+    "\n"
+  ]
+}

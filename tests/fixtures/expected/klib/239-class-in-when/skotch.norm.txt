@@ -1,0 +1,307 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        {
+          "Class": "Multiplier"
+        },
+        {
+          "Class": "Multiplier"
+        },
+        {
+          "Class": "Multiplier"
+        },
+        "Int",
+        "Int",
+        "Unit",
+        {
+          "Class": "Multiplier"
+        },
+        "Int",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "NewInstance": "Multiplier"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Multiplier"
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Multiplier",
+                        "method_name": "multiply"
+                      }
+                    },
+                    "args": [
+                      3,
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Multiplier",
+                        "method_name": "multiply"
+                      }
+                    },
+                    "args": [
+                      7,
+                      8
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      9
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [
+    {
+      "name": "Multiplier",
+      "fields": [
+        {
+          "name": "factor",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1,
+          "name": "multiply",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Multiplier"
+            },
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Multiplier",
+                        "field_name": "factor"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 5
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Multiplier"
+          },
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Multiplier",
+                      "field_name": "factor",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

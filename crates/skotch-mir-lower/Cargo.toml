@@ -14,6 +14,7 @@ skotch-resolve     = { workspace = true }
 skotch-typeck      = { workspace = true }
 skotch-mir         = { workspace = true }
 skotch-diagnostics = { workspace = true }
+skotch-classinfo   = { workspace = true }
 rustc-hash       = { workspace = true }
 
 [dev-dependencies]

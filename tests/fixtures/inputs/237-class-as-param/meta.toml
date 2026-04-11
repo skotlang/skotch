@@ -1,0 +1,4 @@
+name   = "237-class-as-param"
+status = "supported"
+features = ["class", "class-as-parameter", "field-access-in-function"]
+skip_dex = true

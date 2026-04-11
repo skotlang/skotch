@@ -1,0 +1,4 @@
+name   = "238-class-string-field"
+status = "supported"
+features = ["class", "string-field", "int-field", "mixed-types"]
+skip_dex = true

@@ -1747,13 +1747,15 @@ fn lower_template_part(
     }
 }
 
-/// Known Java static methods for interop. Accepts both simple names
-/// ("System") and fully-qualified JVM paths ("java/lang/System").
+/// Look up a Java static method by class name and method name.
+/// First tries the real JDK class file registry, then falls back to
+/// the hardcoded table for environments without a JDK.
 fn lookup_java_static(
     class_name: &str,
     method_name: &str,
-) -> Option<(&'static str, &'static str, &'static str, Ty)> {
-    // Normalize: accept both "System" and "java/lang/System" and "java.lang.System"
+    arg_count: usize,
+) -> Option<(String, String, String, Ty)> {
+    // Normalize class name.
     let simple = class_name
         .rsplit('/')
         .next()
@@ -1761,7 +1763,96 @@ fn lookup_java_static(
         .rsplit('.')
         .next()
         .unwrap_or(class_name);
-    match (simple, method_name) {
+
+    // Try real JDK lookup first.
+    if let Some(result) = lookup_java_static_from_jdk(simple, method_name, arg_count) {
+        return Some(result);
+    }
+
+    // Fallback to hardcoded table.
+    lookup_java_static_hardcoded(simple, method_name)
+        .map(|(c, m, d, t)| (c.to_string(), m.to_string(), d.to_string(), t))
+}
+
+/// Look up a static method from the JDK's actual class files.
+/// Count parameters in a JVM method descriptor.
+fn count_descriptor_params(desc: &str) -> usize {
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut count = 0;
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => count += 1,
+            'L' => {
+                // Skip to ';'
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                count += 1;
+            }
+            '[' => {} // array prefix, don't count yet
+            _ => {}
+        }
+    }
+    count
+}
+
+fn lookup_java_static_from_jdk(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+) -> Option<(String, String, String, Ty)> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+
+    static REGISTRY: OnceLock<HashMap<String, skotch_classinfo::ClassInfo>> = OnceLock::new();
+    let reg = REGISTRY.get_or_init(skotch_classinfo::build_jdk_registry);
+
+    let class_info = reg.get(class_name)?;
+    // First try: match by name AND parameter count.
+    let method = class_info
+        .methods
+        .iter()
+        .find(|m| {
+            m.name == method_name
+                && m.is_static()
+                && m.is_public()
+                && count_descriptor_params(&m.descriptor) == arg_count
+        })
+        // Fallback: just match by name.
+        .or_else(|| {
+            class_info
+                .methods
+                .iter()
+                .find(|m| m.name == method_name && m.is_static() && m.is_public())
+        })?;
+
+    let return_ty = match skotch_classinfo::return_type_from_descriptor(&method.descriptor) {
+        "Unit" => Ty::Unit,
+        "Boolean" => Ty::Bool,
+        "Int" => Ty::Int,
+        "Long" => Ty::Long,
+        "Double" => Ty::Double,
+        "String" => Ty::String,
+        _ => Ty::Any,
+    };
+
+    Some((
+        class_info.name.clone(),
+        method.name.clone(),
+        method.descriptor.clone(),
+        return_ty,
+    ))
+}
+
+/// Hardcoded fallback for environments without a JDK.
+fn lookup_java_static_hardcoded(
+    class_name: &str,
+    method_name: &str,
+) -> Option<(&'static str, &'static str, &'static str, Ty)> {
+    match (class_name, method_name) {
         // java.lang.System
         ("System", "currentTimeMillis") => {
             Some(("java/lang/System", "currentTimeMillis", "()J", Ty::Long))
@@ -1857,7 +1948,7 @@ fn try_java_static_call(
 
     let method_str = interner.resolve(method_name).to_string();
     let (jvm_class, jvm_method, descriptor, return_ty) =
-        lookup_java_static(&class_name, &method_str)?;
+        lookup_java_static(&class_name, &method_str, args.len())?;
 
     // Lower arguments.
     let mut arg_locals = Vec::new();
@@ -1881,9 +1972,9 @@ fn try_java_static_call(
         dest,
         value: Rvalue::Call {
             kind: CallKind::StaticJava {
-                class_name: jvm_class.to_string(),
-                method_name: jvm_method.to_string(),
-                descriptor: descriptor.to_string(),
+                class_name: jvm_class,
+                method_name: jvm_method,
+                descriptor,
             },
             args: arg_locals,
         },

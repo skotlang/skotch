@@ -1,0 +1,4 @@
+name   = "239-class-multiplier"
+status = "supported"
+features = ["class", "method-with-params", "field-in-method"]
+skip_dex = true

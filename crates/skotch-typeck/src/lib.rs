@@ -110,15 +110,18 @@ pub fn type_check(
                 val_idx_pass1 += 1;
             }
             Decl::Class(c) => {
+                // Register the class name in fn_names for call-site return type lookup,
+                // but use a high index that won't collide with real function indices.
+                let class_idx = 10000 + tc.fn_names.len() as u32;
                 let sig = Signature {
                     params: vec![],
                     ret: Ty::Class(tc.interner.resolve(c.name).to_string()),
                 };
                 tc.out
                     .top_signatures
-                    .insert(DefId::Function(fn_idx_pass1), sig);
+                    .insert(DefId::Function(class_idx), sig);
                 tc.fn_names.push(c.name);
-                fn_idx_pass1 += 1;
+                // Do NOT increment fn_idx_pass1 — class indices are separate.
             }
             Decl::Unsupported { .. } => {}
         }
@@ -189,6 +192,23 @@ impl<'a> TypeChecker<'a> {
                 t
             }),
             None => {
+                // Check if it's a user-defined class name.
+                if self
+                    .fn_names
+                    .iter()
+                    .any(|&sym| self.interner.resolve(sym) == name)
+                {
+                    return Some(Ty::Class(name));
+                }
+                // Accept any capitalized name as a potential class type.
+                if name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
+                    return Some(Ty::Class(name));
+                }
                 self.diags
                     .push(Diagnostic::error(tr.span, format!("unknown type `{name}`")));
                 None

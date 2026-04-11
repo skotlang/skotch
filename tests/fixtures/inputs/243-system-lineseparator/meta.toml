@@ -1,0 +1,4 @@
+name   = "243-system-lineseparator"
+status = "supported"
+features = ["java-interop", "System.lineSeparator", "string-equality"]
+skip_dex = true

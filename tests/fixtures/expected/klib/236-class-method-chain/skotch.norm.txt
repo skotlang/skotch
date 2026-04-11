@@ -186,9 +186,7 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": {
-        "Class": "Counter"
-      }
+      "return_ty": "Unit"
     }
   ],
   "classes": [

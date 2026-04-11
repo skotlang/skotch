@@ -777,10 +777,10 @@ fn jvm_descriptor(func: &MirFunction) -> String {
     let mut s = String::from("(");
     for &p in &func.params {
         let ty = &func.locals[p.0 as usize];
-        s.push_str(jvm_type(ty));
+        s.push_str(&jvm_type_string(ty));
     }
     s.push(')');
-    s.push_str(jvm_type(&func.return_ty));
+    s.push_str(&jvm_type_string(&func.return_ty));
     s
 }
 

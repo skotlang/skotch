@@ -1,0 +1,4 @@
+name   = "242-math-addexact"
+status = "supported"
+features = ["java-interop", "jdk-class-lookup", "Math.addExact"]
+skip_dex = true

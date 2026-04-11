@@ -1,0 +1,324 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "unbox",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "Box"
+        },
+        {
+          "Class": "Box"
+        },
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Box",
+                    "field_name": "value"
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 2
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 1,
+      "name": "doubleBox",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "Box"
+        },
+        {
+          "Class": "Box"
+        },
+        "Int",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Box",
+                    "field_name": "value"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 2,
+                    "rhs": 3
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 4
+          }
+        }
+      ],
+      "return_ty": "Int"
+    },
+    {
+      "id": 2,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        {
+          "Class": "Box"
+        },
+        {
+          "Class": "Box"
+        },
+        {
+          "Class": "Box"
+        },
+        "Int",
+        "Unit",
+        {
+          "Class": "Box"
+        },
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 21
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "NewInstance": "Box"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Box"
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 1
+                    },
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [
+    {
+      "name": "Box",
+      "fields": [
+        {
+          "name": "value",
+          "ty": "Int"
+        }
+      ],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Box"
+          },
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Box",
+                      "field_name": "value",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

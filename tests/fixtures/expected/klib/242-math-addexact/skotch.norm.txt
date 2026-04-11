@@ -1,0 +1,203 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Int",
+        "Int",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 100
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 200
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "addExact",
+                        "descriptor": "(II)I"
+                      }
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "multiplyExact",
+                        "descriptor": "(II)I"
+                      }
+                    },
+                    "args": [
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 50
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "Int": 30
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "subtractExact",
+                        "descriptor": "(II)I"
+                      }
+                    },
+                    "args": [
+                      8,
+                      9
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      10
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [],
+  "strings": []
+}

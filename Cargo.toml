@@ -39,6 +39,7 @@ members = [
     "crates/skotch-axml",
     "crates/skotch-apk",
     "crates/skotch-sign",
+    "crates/skotch-classinfo",
     "crates/skotch-buildscript",
 
     # Layer 7 — build orchestration + driver + CLI
@@ -134,6 +135,7 @@ skotch-backend-klib    = { path = "crates/skotch-backend-klib" }
 skotch-classfile-norm  = { path = "crates/skotch-classfile-norm" }
 skotch-dex-norm        = { path = "crates/skotch-dex-norm" }
 skotch-llvm-norm       = { path = "crates/skotch-llvm-norm" }
+skotch-classinfo       = { path = "crates/skotch-classinfo" }
 skotch-jar             = { path = "crates/skotch-jar" }
 skotch-axml            = { path = "crates/skotch-axml" }
 skotch-apk             = { path = "crates/skotch-apk" }
