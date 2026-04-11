@@ -1,0 +1,3 @@
+name   = "175-bool-function"
+status = "supported"
+features = ["boolean-return", "expression-body", "logical-and"]

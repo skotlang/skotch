@@ -34,9 +34,9 @@ toolchain it ever invokes).
 5. **Modular workspace.** ~25 small crates with a strict dependency DAG;
    no crate knows about anything in a higher layer.
 
-> **Status:** PR #4 — JVM, DEX, klib, LLVM IR, and native targets all green.
-> Build orchestration (`skotch build`), test runner (`skotch test`), REPL
-> (`skotch repl`), and Android APK packaging follow in subsequent PRs.
+> **Status:** JVM, DEX, klib, LLVM IR, and native targets shipping. Build
+> orchestration (`skotch build`), REPL (`skotch repl`), JAR packaging, and
+> unsigned APK assembly are implemented. 80 language feature fixtures validated.
 
 ## Installation
 
@@ -89,9 +89,10 @@ skotch emit --target native hello.kt -o hello
 | Command | What it does | Status |
 |---|---|---|
 | `skotch emit --target T <input.kt> -o <out>` | Compile a single Kotlin file directly to target T. | **shipping** |
-| `skotch build` | Discover `build.gradle.kts`, build the project. | stub (PR #5) |
-| `skotch test` | Discover `@Test` annotations, run the tests. | stub (PR #6) |
-| `skotch repl` | Interactive REPL backed by the JVM target. | stub (PR #7) |
+| `skotch build [-C dir] [--target T]` | Discover `build.gradle.kts`, compile and package (JAR/APK). | **shipping** |
+| `skotch repl [--exec CODE] [--file F]` | Interactive REPL backed by in-process JVM. | **shipping** |
+| `skotch run <script.kts>` | Execute a KotlinScript file. | **shipping** |
+| `skotch test` | Discover `@Test` annotations, run the tests. | planned |
 
 `skotch emit` is the testing surface: it bypasses build orchestration so
 the lexer/parser/typeck/MIR/backend pipeline can be exercised directly
@@ -154,6 +155,66 @@ The "normalized" text forms (produced by `skotch-classfile-norm`,
 pool ordering, debug attributes, kotlin metadata, target triples) so
 two compilers can be diffed without false positives. Byte-exact "self
 golden" tests still catch regressions in skotch's own emitter.
+
+## Kotlin language support
+
+80 test fixtures validated across JVM, DEX, LLVM IR, and klib targets.
+
+### Implemented and stable
+
+| Feature | Spec reference | Notes |
+|---|---|---|
+| [Function declarations](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | Top-level `fun`, parameters, return types |
+| [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
+| [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
+| [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
+| [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
+| [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal `Int` literals |
+| [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
+| [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
+| [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` |
+| [String concatenation](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `String + String`, `String + Int` |
+| [Comparison operators](https://kotlinlang.org/spec/expressions.html#comparison-expressions) | §7.6 | `==`, `!=`, `<`, `>`, `<=`, `>=` (Int and String) |
+| [Logical operators](https://kotlinlang.org/spec/expressions.html#logical-disjunction-expression) | §7.8–7.9 | `&&`, `\|\|` with short-circuit evaluation |
+| [Unary operators](https://kotlinlang.org/spec/expressions.html#unary-expressions) | §7.3 | `-` (negation), `!` (not) |
+| [Compound assignment](https://kotlinlang.org/spec/expressions.html#assignments) | §7.12 | `+=`, `-=`, `*=`, `/=`, `%=` |
+| [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
+| [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, string/int matching |
+| [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end) { }` with `Int` ranges |
+| [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
+| [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
+| [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |
+| [Return](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | Early return from functions (guard clauses) |
+| [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, extension method syntax |
+| [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(String)`, `println(Boolean)` |
+| [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
+
+### Not yet implemented
+
+| Feature | Spec reference | Difficulty | Notes |
+|---|---|---|---|
+| Classes and objects | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Hard | Constructors, properties, methods, inheritance |
+| Data classes | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Hard | Synthesized equals/hashCode/toString/copy |
+| Interfaces | [§4.5.3](https://kotlinlang.org/spec/declarations.html#interface-declaration) | Hard | Declaration, implementation, default methods |
+| Enums | [§4.5.7](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | Medium | Enum constants, entries, values() |
+| Sealed classes | [§4.5.5](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | Hard | Sealed hierarchies, exhaustive when |
+| Generics | [§4.6](https://kotlinlang.org/spec/declarations.html#type-parameters) | Hard | Type parameters, bounds, variance |
+| Lambdas | [§7.2.10](https://kotlinlang.org/spec/expressions.html#lambda-literals) | Hard | Lambda literals, closures, `it` parameter |
+| Nullable types | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | `T?`, safe call `?.`, elvis `?:`, smart casts |
+| Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
+| Default arguments | [§4.1.1](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | Synthetic `$default` overload |
+| Named arguments | [§7.2.2](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | Medium | Call-site argument reordering |
+| Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
+| Type aliases | [§4.7](https://kotlinlang.org/spec/declarations.html#type-alias) | Easy | `typealias` erased at compile time |
+| Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |
+| Try/catch/finally | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Exception handling, exception tables |
+| Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
+| Annotations | [§4.8](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | Medium | Declaration, retention, reflection |
+| Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |
+| `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
+| Range expressions (`in 0..9`) in when | — | Easy | `in` operator in when branch patterns |
+| Float/Double literals | [§7.1.2](https://kotlinlang.org/spec/expressions.html#real-literals) | Easy | `3.14`, `2.5e10` |
+| Long literals | [§7.1.1](https://kotlinlang.org/spec/expressions.html#integer-literals) | Easy | `100L` suffix |
 
 ## Running the tests
 

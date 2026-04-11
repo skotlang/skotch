@@ -1,0 +1,3 @@
+name   = "179-practical-algorithms"
+status = "supported"
+features = ["extension-function", "for-loop", "while-loop", "early-return", "comprehensive"]
