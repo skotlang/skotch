@@ -1,0 +1,46 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 iconst_5
+    0001 op_0x3B
+    0002 iconst_1
+    0003 op_0x3C
+    0004 op_0x1A
+    0005 iconst_2
+    0006 irem
+    0007 op_0x9A
+    0008 nop
+    0009 iconst_4
+    0010 iconst_1
+    0011 op_0xA7
+    0012 nop
+    0013 iconst_1
+    0014 iconst_0
+    0015 op_0x3D
+    0016 op_0x1B
+    0017 op_0xBA
+    0018 nop
+    0019 ldc #0
+    0021 nop
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 op_0x5F
+    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0029 op_0x1C
+    0030 op_0xBA
+    0031 nop
+    0032 op_0x21
+    0033 nop
+    0034 nop
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 op_0x5F
+    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0042 return
+    sub_attr  StackMapTable (9 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (14 bytes)

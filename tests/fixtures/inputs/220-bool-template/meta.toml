@@ -1,0 +1,4 @@
+name   = "220-bool-template"
+status = "supported"
+features = ["boolean-val", "string-template", "bool-interpolation"]
+skip_dex = true

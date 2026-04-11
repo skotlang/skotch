@@ -1,0 +1,4 @@
+name   = "221-multi-when-val"
+status = "supported"
+features = ["when-expression", "multiple-when", "string-template"]
+skip_dex = true

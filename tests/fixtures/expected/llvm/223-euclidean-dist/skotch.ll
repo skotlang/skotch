@@ -1,0 +1,40 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_squaredDist(i32 %arg0, i32 %arg1, i32 %arg2, i32 %arg3) {
+entry:
+  %t0 = sub i32 %arg2, %arg0
+  %t1 = sub i32 %arg3, %arg1
+  %t2 = mul i32 %t0, %t0
+  %t3 = mul i32 %t1, %t1
+  %t4 = add i32 %t2, %t3
+  ret i32 %t4
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 0
+  %t1 = add i32 0, 0
+  %t2 = add i32 0, 3
+  %t3 = add i32 0, 4
+  %t4 = call i32 @InputKt_squaredDist(i32 %t0, i32 %t1, i32 %t2, i32 %t3)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
+  %t6 = add i32 0, 1
+  %t7 = add i32 0, 1
+  %t8 = add i32 0, 4
+  %t9 = add i32 0, 5
+  %t10 = call i32 @InputKt_squaredDist(i32 %t6, i32 %t7, i32 %t8, i32 %t9)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
+  %t12 = add i32 0, 0
+  %t13 = add i32 0, 0
+  %t14 = add i32 0, 0
+  %t15 = add i32 0, 0
+  %t16 = call i32 @InputKt_squaredDist(i32 %t12, i32 %t13, i32 %t14, i32 %t15)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t16)
+  ret i32 0
+}
+

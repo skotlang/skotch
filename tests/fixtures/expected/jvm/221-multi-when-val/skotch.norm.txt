@@ -1,0 +1,185 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=34
+    0000 iconst_1
+    0001 istore 1
+    0003 iconst_5
+    0004 istore 2
+    0006 iload 1
+    0008 istore 3
+    0010 op_0xA7
+    0011 nop
+    0012 iconst_0
+    0013 iload 3
+    0015 iload 2
+    0017 op_0xA4
+    0018 nop
+    0019 iconst_4
+    0020 iconst_0
+    0021 op_0xA7
+    0022 nop
+    0023 iconst_1
+    0024 iconst_1
+    0025 istore 4
+    0027 iload 4
+    0029 op_0x99
+    0030 nop
+    0031 op_0x1A
+    0032 iconst_1
+    0033 istore 5
+    0035 op_0xA7
+    0036 nop
+    0037 iload 4
+    0039 istore 6
+    0041 iload 3
+    0043 iload 6
+    0045 iadd
+    0046 istore 7
+    0048 iload 7
+    0050 istore 3
+    0052 op_0xA7
+    0053 op_0xFF
+    0054 op_0xD9
+    0055 return
+    0056 iload 3
+    0058 istore 8
+    0060 iconst_2
+    0061 istore 9
+    0063 iload 8
+    0065 iload 9
+    0067 op_0xA4
+    0068 nop
+    0069 iconst_4
+    0070 iconst_0
+    0071 op_0xA7
+    0072 nop
+    0073 iconst_1
+    0074 iconst_1
+    0075 istore 10
+    0077 iload 10
+    0079 op_0x99
+    0080 nop
+    0081 op_0x0E
+    0082 ldc "small"
+    0084 astore 11
+    0086 aload 11
+    0088 astore 12
+    0090 op_0xA7
+    0091 nop
+    0092 op_0x33
+    0093 iload 3
+    0095 istore 13
+    0097 iconst_4
+    0098 istore 14
+    0100 iload 13
+    0102 iload 14
+    0104 op_0xA4
+    0105 nop
+    0106 iconst_4
+    0107 iconst_0
+    0108 op_0xA7
+    0109 nop
+    0110 iconst_1
+    0111 iconst_1
+    0112 istore 15
+    0114 iload 15
+    0116 op_0x99
+    0117 nop
+    0118 op_0x0E
+    0119 ldc "medium"
+    0121 astore 16
+    0123 aload 16
+    0125 astore 12
+    0127 op_0xA7
+    0128 nop
+    0129 op_0x0E
+    0130 ldc "large"
+    0132 astore 17
+    0134 aload 17
+    0136 astore 12
+    0138 op_0xA7
+    0139 nop
+    0140 iconst_0
+    0141 aload 12
+    0143 astore 18
+    0145 iconst_1
+    0146 istore 19
+    0148 op_0xA7
+    0149 nop
+    0150 iconst_0
+    0151 iload 3
+    0153 istore 20
+    0155 iconst_2
+    0156 istore 21
+    0158 iload 20
+    0160 iload 21
+    0162 irem
+    0163 istore 22
+    0165 iconst_0
+    0166 istore 23
+    0168 iload 22
+    0170 iload 23
+    0172 op_0x9F
+    0173 nop
+    0174 iconst_4
+    0175 iconst_0
+    0176 op_0xA7
+    0177 nop
+    0178 iconst_1
+    0179 iconst_1
+    0180 istore 24
+    0182 iload 24
+    0184 op_0x99
+    0185 nop
+    0186 op_0x0E
+    0187 ldc "even"
+    0189 astore 25
+    0191 aload 25
+    0193 astore 26
+    0195 op_0xA7
+    0196 nop
+    0197 op_0x0E
+    0198 ldc "odd"
+    0200 astore 27
+    0202 aload 27
+    0204 astore 26
+    0206 op_0xA7
+    0207 nop
+    0208 iconst_0
+    0209 aload 26
+    0211 astore 28
+    0213 iload 3
+    0215 istore 29
+    0217 ldc ": "
+    0219 astore 30
+    0221 aload 18
+    0223 astore 31
+    0225 ldc ", "
+    0227 astore 32
+    0229 aload 28
+    0231 astore 33
+    0233 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0236 op_0xBB
+    0237 nop
+    0238 op_0x1F
+    0239 op_0x59
+    0240 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0243 iload 29
+    0245 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0248 aload 30
+    0250 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0253 aload 31
+    0255 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0258 aload 32
+    0260 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0263 aload 33
+    0265 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0268 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0271 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0274 op_0xA7
+    0275 op_0xFF
+    0276 op_0x14
+    sub_attr  StackMapTable (475 bytes)
