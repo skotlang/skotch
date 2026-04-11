@@ -1117,7 +1117,7 @@ fn lower_expr(
                 }
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
             } else {
-                fb.cur_block = merge_blk as u32;
+                fb.cur_block = merge_blk;
             }
 
             Some(result)
