@@ -393,7 +393,12 @@ fn emit_method(
     } else {
         for &p in &func.params {
             slots.insert(p.0, next_slot);
-            next_slot += 1;
+            let ty = &func.locals[p.0 as usize];
+            next_slot += if matches!(ty, Ty::Long | Ty::Double) {
+                2
+            } else {
+                1
+            };
         }
     }
 
