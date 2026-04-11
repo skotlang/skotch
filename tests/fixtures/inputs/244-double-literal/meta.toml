@@ -1,0 +1,4 @@
+name     = "244-double-literal"
+status   = "supported"
+features = ["fun", "println", "double-literal", "val"]
+notes    = "Verifies basic double literal support."

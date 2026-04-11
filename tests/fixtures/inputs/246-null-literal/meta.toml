@@ -1,0 +1,4 @@
+name     = "246-null-literal"
+status   = "supported"
+features = ["fun", "println", "null"]
+notes    = "Verifies null literal support."

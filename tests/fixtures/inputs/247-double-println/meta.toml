@@ -1,0 +1,4 @@
+name     = "247-double-println"
+status   = "supported"
+features = ["fun", "println", "double-literal", "negation", "scientific-notation"]
+notes    = "Verifies println with various double formats."

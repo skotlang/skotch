@@ -1,0 +1,4 @@
+name     = "245-double-arithmetic"
+status   = "supported"
+features = ["fun", "println", "double-literal", "arithmetic"]
+notes    = "Verifies double arithmetic: add, sub, mul, div."

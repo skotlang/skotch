@@ -176,12 +176,14 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~20–25% of the Kotlin language specification.** The compiler
-handles functions, control flow, basic types, expressions, classes with
-constructors/methods/field access, and Java static method interop — but does not
-yet support inheritance, generics, lambdas, nullable types, or the standard
-library collection APIs. 148 test fixtures validated across
-JVM, DEX, LLVM IR, and klib targets.
+**Estimated coverage: ~25–30% of the Kotlin language specification.** The compiler
+handles functions, control flow, basic types (Int, Double, Boolean, String, Char),
+expressions, classes with constructors/methods/field access, null literals, and
+Java static method interop — but does not yet support inheritance, generics,
+lambdas, nullable type operators (`?.`, `?:`), or the standard library collection
+APIs. 153+ test fixtures validated across JVM, DEX, LLVM IR, and klib targets.
+A Language Server Protocol (LSP) implementation provides real-time diagnostics,
+semantic tokens, hover, go-to-definition, and completions.
 
 ### Implemented and stable
 
@@ -199,7 +201,9 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, escape sequences (`'\n'`, `'\t'`, `'\\'`) |
 | [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
-| [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` |
+| [Double/Float literals](https://kotlinlang.org/spec/expressions.html#real-literals) | §7.1.2 | `3.14`, `2.5e10`, `1.0f`, negative doubles, scientific notation |
+| [Null literal](https://kotlinlang.org/spec/expressions.html#null-literal) | §7.1.6 | `null` value, `println(null)` |
+| [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` and `Double` |
 | [String concatenation](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `String + String`, `String + Int` |
 | [Comparison operators](https://kotlinlang.org/spec/expressions.html#comparison-expressions) | §7.6 | `==`, `!=`, `<`, `>`, `<=`, `>=` (Int and String) |
 | [Logical operators](https://kotlinlang.org/spec/expressions.html#logical-disjunction-expression) | §7.8–7.9 | `&&`, `\|\|` with short-circuit evaluation |
@@ -214,8 +218,9 @@ JVM, DEX, LLVM IR, and klib targets.
 | [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |
 | [Return](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | Early return from functions (guard clauses) |
 | [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, mutual recursion, extension method syntax |
-| [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(String)`, `println(Boolean)` |
+| [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
+| Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
 
 ### Not yet implemented
 
@@ -241,7 +246,6 @@ JVM, DEX, LLVM IR, and klib targets.
 | Annotations | [§4.8](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | Medium | Declaration, retention, reflection |
 | Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |
 | `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
-| Float/Double literals | [§7.1.2](https://kotlinlang.org/spec/expressions.html#real-literals) | Easy | `3.14`, `2.5e10` |
 
 ## Running the tests
 

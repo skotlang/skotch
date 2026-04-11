@@ -19,6 +19,7 @@ use std::io::Write;
 enum Key {
     Utf8(String),
     Integer(i32),
+    Double(u64), // f64 bits for hashing
     Class(u16),
     String(u16),
     NameAndType(u16, u16),
@@ -30,11 +31,14 @@ enum Key {
 enum Entry {
     Utf8(String),
     Integer(i32),
+    Double(f64),
     Class(u16),
     String(u16),
     NameAndType(u16, u16),
     Fieldref(u16, u16),
     Methodref(u16, u16),
+    /// Placeholder for the second slot of Double/Long entries.
+    WideSlot,
 }
 
 #[derive(Default)]
@@ -53,8 +57,13 @@ impl ConstantPool {
             return idx;
         }
         let idx = (self.entries.len() + 1) as u16;
+        let is_wide = matches!(entry, Entry::Double(_));
         self.entries.push(entry);
         self.dedupe.insert(key, idx);
+        // Double (and Long) entries occupy two constant pool slots.
+        if is_wide {
+            self.entries.push(Entry::WideSlot);
+        }
         idx
     }
 
@@ -64,6 +73,10 @@ impl ConstantPool {
 
     pub fn integer(&mut self, v: i32) -> u16 {
         self.add(Key::Integer(v), Entry::Integer(v))
+    }
+
+    pub fn double(&mut self, v: f64) -> u16 {
+        self.add(Key::Double(v.to_bits()), Entry::Double(v))
     }
 
     pub fn class(&mut self, internal_name: &str) -> u16 {
@@ -111,6 +124,14 @@ impl ConstantPool {
                 Entry::Integer(v) => {
                     out.push(3); // CONSTANT_Integer
                     out.write_i32::<BigEndian>(*v).unwrap();
+                }
+                Entry::Double(v) => {
+                    out.push(6); // CONSTANT_Double
+                    out.write_u64::<BigEndian>(v.to_bits()).unwrap();
+                }
+                Entry::WideSlot => {
+                    // Second slot of a Double/Long entry — already accounted for.
+                    continue;
                 }
                 Entry::Class(idx) => {
                     out.push(7);

@@ -260,7 +260,9 @@ impl<'a> TypeChecker<'a> {
     fn synth_top_init(&mut self, e: &Expr) -> Ty {
         match e {
             Expr::IntLit(_, _) => Ty::Int,
+            Expr::DoubleLit(_, _) => Ty::Double,
             Expr::BoolLit(_, _) => Ty::Bool,
+            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
             Expr::StringLit(_, _) => Ty::String,
             other => {
                 self.diags.push(Diagnostic::error(
@@ -351,7 +353,9 @@ impl<'a> TypeChecker<'a> {
     ) -> Ty {
         let ty = match e {
             Expr::IntLit(_, _) => Ty::Int,
+            Expr::DoubleLit(_, _) => Ty::Double,
             Expr::BoolLit(_, _) => Ty::Bool,
+            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
             Expr::StringLit(_, _) => Ty::String,
             Expr::Ident(name, _) => {
                 // Look up in local scope first; otherwise fall back to
@@ -372,7 +376,10 @@ impl<'a> TypeChecker<'a> {
                 let rt = self.synth_expr(rhs, scope, out);
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
-                        if lt == Ty::Int && rt == Ty::Int {
+                        if lt == Ty::Double || rt == Ty::Double {
+                            // Double arithmetic: if either operand is Double, result is Double.
+                            Ty::Double
+                        } else if lt == Ty::Int && rt == Ty::Int {
                             Ty::Int
                         } else if (lt == Ty::Any || lt == Ty::Int)
                             && (rt == Ty::Any || rt == Ty::Int)

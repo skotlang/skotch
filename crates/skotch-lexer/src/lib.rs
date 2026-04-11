@@ -50,7 +50,7 @@ use skotch_span::{FileId, Span};
 use skotch_syntax::{Token, TokenKind};
 
 /// Decoded payload for tokens that carry per-instance data.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenPayload {
     /// Source text of an identifier. The parser interns it.
     Ident(String),
@@ -58,6 +58,8 @@ pub enum TokenPayload {
     Int(i64),
     /// Decoded string chunk content (escapes resolved).
     StringChunk(String),
+    /// Parsed floating-point value.
+    Double(f64),
     /// Identifier referenced by a `$ident` interpolation.
     StringIdentRef(String),
 }
@@ -358,9 +360,144 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
+        // Check for decimal point followed by digit → floating-point literal.
+        // Must not be hex/binary, and next char must be '.' followed by a digit
+        // (to avoid confusing `1..10` range with `1.` float).
+        let is_float = !is_hex
+            && self.pos < self.bytes.len()
+            && self.bytes[self.pos] == b'.'
+            && self.pos + 1 < self.bytes.len()
+            && self.bytes[self.pos + 1].is_ascii_digit();
+        if is_float {
+            self.pos += 1; // consume '.'
+            while let Some(b) = self.peek() {
+                if b.is_ascii_digit() || b == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+            // Optional exponent: e/E [+/-] digits
+            if self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'e' || self.bytes[self.pos] == b'E')
+            {
+                self.pos += 1;
+                if self.pos < self.bytes.len()
+                    && (self.bytes[self.pos] == b'+' || self.bytes[self.pos] == b'-')
+                {
+                    self.pos += 1;
+                }
+                while let Some(b) = self.peek() {
+                    if b.is_ascii_digit() || b == b'_' {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            // Optional f/F suffix (Float, treated as Double for now).
+            if self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F')
+            {
+                self.pos += 1;
+            }
+            let raw = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII float");
+            let s: String = raw
+                .chars()
+                .filter(|c| *c != '_' && *c != 'f' && *c != 'F')
+                .collect();
+            match s.parse::<f64>() {
+                Ok(v) => self.emit(
+                    TokenKind::DoubleLit,
+                    start,
+                    self.pos,
+                    Some(TokenPayload::Double(v)),
+                ),
+                Err(_) => {
+                    self.error(
+                        start,
+                        self.pos,
+                        format!("floating-point literal {s} invalid"),
+                    );
+                }
+            }
+            return;
+        }
+        // Check for exponent without decimal point: 1e10, 2E5
+        let has_exponent = !is_hex
+            && self.pos < self.bytes.len()
+            && (self.bytes[self.pos] == b'e' || self.bytes[self.pos] == b'E');
+        if has_exponent {
+            self.pos += 1;
+            if self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'+' || self.bytes[self.pos] == b'-')
+            {
+                self.pos += 1;
+            }
+            while let Some(b) = self.peek() {
+                if b.is_ascii_digit() || b == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+            if self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F')
+            {
+                self.pos += 1;
+            }
+            let raw = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII float");
+            let s: String = raw
+                .chars()
+                .filter(|c| *c != '_' && *c != 'f' && *c != 'F')
+                .collect();
+            match s.parse::<f64>() {
+                Ok(v) => self.emit(
+                    TokenKind::DoubleLit,
+                    start,
+                    self.pos,
+                    Some(TokenPayload::Double(v)),
+                ),
+                Err(_) => {
+                    self.error(
+                        start,
+                        self.pos,
+                        format!("floating-point literal {s} invalid"),
+                    );
+                }
+            }
+            return;
+        }
         // Consume optional `L` suffix for Long literals (treated as Int for now).
         if self.pos < self.bytes.len() && self.bytes[self.pos] == b'L' {
             self.pos += 1;
+        }
+        // Check for trailing f/F suffix → float literal without decimal point: 42f
+        if self.pos < self.bytes.len()
+            && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F')
+        {
+            self.pos += 1;
+            let raw = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII float");
+            let s: String = raw
+                .chars()
+                .filter(|c| *c != '_' && *c != 'f' && *c != 'F')
+                .collect();
+            match s.parse::<f64>() {
+                Ok(v) => self.emit(
+                    TokenKind::DoubleLit,
+                    start,
+                    self.pos,
+                    Some(TokenPayload::Double(v)),
+                ),
+                Err(_) => {
+                    self.error(
+                        start,
+                        self.pos,
+                        format!("floating-point literal {s} invalid"),
+                    );
+                }
+            }
+            return;
         }
         let raw = std::str::from_utf8(&self.bytes[start..self.pos])
             .expect("ASCII digits")

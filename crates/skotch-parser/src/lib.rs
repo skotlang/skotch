@@ -997,6 +997,18 @@ impl<'a> Parser<'a> {
                 self.bump();
                 Expr::IntLit(v, span)
             }
+            TokenKind::DoubleLit => {
+                let v = match self.payload(self.pos) {
+                    Some(TokenPayload::Double(v)) => *v,
+                    _ => 0.0,
+                };
+                self.bump();
+                Expr::DoubleLit(v, span)
+            }
+            TokenKind::KwNull => {
+                self.bump();
+                Expr::NullLit(span)
+            }
             TokenKind::KwTrue => {
                 self.bump();
                 Expr::BoolLit(true, span)
