@@ -1764,14 +1764,8 @@ fn lookup_java_static(
         .next()
         .unwrap_or(class_name);
 
-    // Try real JDK lookup first.
-    if let Some(result) = lookup_java_static_from_jdk(simple, method_name, arg_count) {
-        return Some(result);
-    }
-
-    // Fallback to hardcoded table.
-    lookup_java_static_hardcoded(simple, method_name)
-        .map(|(c, m, d, t)| (c.to_string(), m.to_string(), d.to_string(), t))
+    // Look up from real JDK class files.
+    lookup_java_static_from_jdk(simple, method_name, arg_count)
 }
 
 /// Look up a static method from the JDK's actual class files.
@@ -1805,10 +1799,25 @@ fn lookup_java_static_from_jdk(
     arg_count: usize,
 ) -> Option<(String, String, String, Ty)> {
     use std::collections::HashMap;
-    use std::sync::OnceLock;
+    use std::sync::Mutex;
 
-    static REGISTRY: OnceLock<HashMap<String, skotch_classinfo::ClassInfo>> = OnceLock::new();
-    let reg = REGISTRY.get_or_init(skotch_classinfo::build_jdk_registry);
+    static REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> = Mutex::new(None);
+
+    let mut guard = REGISTRY.lock().ok()?;
+    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+
+    // Try to find the class in the registry. If not found, try to load it.
+    if !reg.contains_key(class_name) {
+        // Map simple name → JVM path for common packages.
+        let jvm_path = if class_name.contains('/') {
+            class_name.to_string()
+        } else {
+            format!("java/lang/{class_name}")
+        };
+        if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
+            reg.insert(class_name.to_string(), info);
+        }
+    }
 
     let class_info = reg.get(class_name)?;
     // First try: match by name AND parameter count.
@@ -1845,86 +1854,6 @@ fn lookup_java_static_from_jdk(
         method.descriptor.clone(),
         return_ty,
     ))
-}
-
-/// Hardcoded fallback for environments without a JDK.
-fn lookup_java_static_hardcoded(
-    class_name: &str,
-    method_name: &str,
-) -> Option<(&'static str, &'static str, &'static str, Ty)> {
-    match (class_name, method_name) {
-        // java.lang.System
-        ("System", "currentTimeMillis") => {
-            Some(("java/lang/System", "currentTimeMillis", "()J", Ty::Long))
-        }
-        ("System", "nanoTime") => Some(("java/lang/System", "nanoTime", "()J", Ty::Long)),
-        ("System", "exit") => Some(("java/lang/System", "exit", "(I)V", Ty::Unit)),
-        ("System", "getProperty") => Some((
-            "java/lang/System",
-            "getProperty",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            Ty::String,
-        )),
-        ("System", "getenv") => Some((
-            "java/lang/System",
-            "getenv",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            Ty::String,
-        )),
-        // java.lang.Math
-        ("Math", "abs") => Some(("java/lang/Math", "abs", "(I)I", Ty::Int)),
-        ("Math", "max") => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
-        ("Math", "min") => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
-        ("Math", "random") => Some(("java/lang/Math", "random", "()D", Ty::Double)),
-        ("Math", "sqrt") => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double)),
-        ("Math", "pow") => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double)),
-        ("Math", "floor") => Some(("java/lang/Math", "floor", "(D)D", Ty::Double)),
-        ("Math", "ceil") => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double)),
-        ("Math", "round") => Some(("java/lang/Math", "round", "(D)J", Ty::Long)),
-        // java.lang.Integer
-        ("Integer", "parseInt") => Some((
-            "java/lang/Integer",
-            "parseInt",
-            "(Ljava/lang/String;)I",
-            Ty::Int,
-        )),
-        ("Integer", "toString") => Some((
-            "java/lang/Integer",
-            "toString",
-            "(I)Ljava/lang/String;",
-            Ty::String,
-        )),
-        ("Integer", "valueOf") => Some((
-            "java/lang/Integer",
-            "valueOf",
-            "(I)Ljava/lang/Integer;",
-            Ty::Int,
-        )),
-        ("Integer", "MAX_VALUE") | ("Integer", "MIN_VALUE") => None, // fields, not methods
-        // java.lang.Long
-        ("Long", "parseLong") => Some((
-            "java/lang/Long",
-            "parseLong",
-            "(Ljava/lang/String;)J",
-            Ty::Long,
-        )),
-        // java.lang.String
-        ("String", "valueOf") => Some((
-            "java/lang/String",
-            "valueOf",
-            "(I)Ljava/lang/String;",
-            Ty::String,
-        )),
-        ("String", "format") => Some((
-            "java/lang/String",
-            "format",
-            "(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;",
-            Ty::String,
-        )),
-        // java.lang.Thread
-        ("Thread", "sleep") => Some(("java/lang/Thread", "sleep", "(J)V", Ty::Unit)),
-        _ => None,
-    }
 }
 
 /// Try to lower a method call as a Java static call. Returns Some(dest_local) if successful.

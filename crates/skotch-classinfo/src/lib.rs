@@ -210,23 +210,82 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
     })
 }
 
-/// Load classes from the JDK's jmod files.
+/// Load a class from the JDK's jmod files. Searches java.base first,
+/// then all other jmod files in the jmods/ directory.
 pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
     let jdk_home = find_jdk_home()?;
-    let jmod = jdk_home.join("jmods/java.base.jmod");
-    if !jmod.exists() {
+    let jmods_dir = jdk_home.join("jmods");
+    if !jmods_dir.exists() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "java.base.jmod not found",
+            "jmods directory not found",
         ));
     }
     let entry_path = format!("classes/{class_path}.class");
-    let file = std::fs::File::open(&jmod)?;
+
+    // Try java.base.jmod first (most common classes).
+    let base_jmod = jmods_dir.join("java.base.jmod");
+    if base_jmod.exists() {
+        if let Ok(info) = load_class_from_jmod(&base_jmod, &entry_path) {
+            return Ok(info);
+        }
+    }
+
+    // Search all other jmod files.
+    if let Ok(entries) = std::fs::read_dir(&jmods_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("jmod") {
+                if let Ok(info) = load_class_from_jmod(&path, &entry_path) {
+                    return Ok(info);
+                }
+            }
+        }
+    }
+
+    // Also check CLASSPATH for directories and JARs.
+    if let Ok(cp) = std::env::var("CLASSPATH") {
+        for entry in cp.split(':') {
+            let p = Path::new(entry);
+            if p.is_dir() {
+                let class_file = p.join(format!("{class_path}.class"));
+                if class_file.exists() {
+                    let bytes = std::fs::read(&class_file)?;
+                    return parse_class(&bytes);
+                }
+            } else if p.extension().and_then(|e| e.to_str()) == Some("jar") && p.exists() {
+                if let Ok(info) = load_class_from_jar(p, &format!("{class_path}.class")) {
+                    return Ok(info);
+                }
+            }
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("class {class_path} not found in JDK or CLASSPATH"),
+    ))
+}
+
+fn load_class_from_jmod(jmod_path: &Path, entry_path: &str) -> io::Result<ClassInfo> {
+    let file = std::fs::File::open(jmod_path)?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let mut entry = archive.by_name(&entry_path).map_err(|_| {
+    let mut entry = archive.by_name(entry_path).map_err(|_| {
         io::Error::new(io::ErrorKind::NotFound, format!("{entry_path} not in jmod"))
     })?;
+    let mut bytes = Vec::new();
+    entry.read_to_end(&mut bytes)?;
+    parse_class(&bytes)
+}
+
+fn load_class_from_jar(jar_path: &Path, entry_path: &str) -> io::Result<ClassInfo> {
+    let file = std::fs::File::open(jar_path)?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let mut entry = archive
+        .by_name(entry_path)
+        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, format!("{entry_path} not in jar")))?;
     let mut bytes = Vec::new();
     entry.read_to_end(&mut bytes)?;
     parse_class(&bytes)
