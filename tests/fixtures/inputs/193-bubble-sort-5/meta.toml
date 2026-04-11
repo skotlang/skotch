@@ -1,0 +1,3 @@
+name   = "193-bubble-sort-5"
+status = "supported"
+features = ["var", "for-loop", "swap-pattern", "sorting"]

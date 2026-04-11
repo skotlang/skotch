@@ -1,0 +1,3 @@
+name   = "190-ext-chain-complex"
+status = "supported"
+features = ["extension-function", "method-chaining", "negation-in-parens"]

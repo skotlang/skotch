@@ -1,0 +1,3 @@
+name   = "188-day-name"
+status = "supported"
+features = ["when-subject", "comma-patterns", "for-loop"]

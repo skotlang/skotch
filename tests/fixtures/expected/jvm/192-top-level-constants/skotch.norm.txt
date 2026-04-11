@@ -1,0 +1,95 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        clamp (I)I 0x0009
+  code        max_stack=3 max_locals=10
+    0000 iload 0
+    0002 istore 1
+    0004 bipush 100
+    0006 istore 2
+    0008 iload 1
+    0010 iload 2
+    0012 op_0xA3
+    0013 nop
+    0014 iconst_4
+    0015 iconst_0
+    0016 op_0xA7
+    0017 nop
+    0018 iconst_1
+    0019 iconst_1
+    0020 istore 3
+    0022 iload 3
+    0024 op_0x99
+    0025 nop
+    0026 op_0x0A
+    0027 bipush 100
+    0029 istore 4
+    0031 iload 4
+    0033 op_0xAC
+    0034 op_0xA7
+    0035 nop
+    0036 iconst_0
+    0037 iload 0
+    0039 istore 5
+    0041 iconst_0
+    0042 istore 6
+    0044 iload 5
+    0046 iload 6
+    0048 op_0xA1
+    0049 nop
+    0050 iconst_4
+    0051 iconst_0
+    0052 op_0xA7
+    0053 nop
+    0054 iconst_1
+    0055 iconst_1
+    0056 istore 7
+    0058 iload 7
+    0060 op_0x99
+    0061 nop
+    0062 op_0x09
+    0063 iconst_0
+    0064 istore 8
+    0066 iload 8
+    0068 op_0xAC
+    0069 op_0xA7
+    0070 nop
+    0071 iconst_0
+    0072 iload 0
+    0074 istore 9
+    0076 iload 9
+    0078 op_0xAC
+    sub_attr  StackMapTable (104 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=8
+    0000 ldc "Hello"
+    0002 astore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 bipush 50
+    0014 istore 2
+    0016 iload 2
+    0018 invokestatic Method(InputKt.clamp:(I)I)
+    0021 istore 3
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 iload 3
+    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0031 sipush 200
+    0034 istore 4
+    0036 iload 4
+    0038 invokestatic Method(InputKt.clamp:(I)I)
+    0041 istore 5
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 iload 5
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 bipush -5
+    0053 istore 6
+    0055 iload 6
+    0057 invokestatic Method(InputKt.clamp:(I)I)
+    0060 istore 7
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 iload 7
+    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0070 return

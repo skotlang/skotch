@@ -1,0 +1,44 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define i32 @InputKt_hanoi(i32 %arg0) {
+entry:
+  %t0 = add i32 0, 0
+  %t1 = icmp sle i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 0
+  ret i32 %t2
+bb2:
+  br label %bb3
+bb3:
+  %t3 = add i32 0, 1
+  %t4 = sub i32 %arg0, %t3
+  %t5 = call i32 @InputKt_hanoi(i32 %t4)
+  %t6 = add i32 0, 1
+  %t7 = add i32 %t5, %t6
+  %t8 = add i32 0, 1
+  %t9 = sub i32 %arg0, %t8
+  %t10 = call i32 @InputKt_hanoi(i32 %t9)
+  %t11 = add i32 %t7, %t10
+  ret i32 %t11
+}
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 1
+  %t1 = call i32 @InputKt_hanoi(i32 %t0)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t1)
+  %t3 = add i32 0, 3
+  %t4 = call i32 @InputKt_hanoi(i32 %t3)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
+  %t6 = add i32 0, 4
+  %t7 = call i32 @InputKt_hanoi(i32 %t6)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t7)
+  ret i32 0
+}
+

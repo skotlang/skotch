@@ -1,0 +1,3 @@
+name   = "195-tower-of-hanoi"
+status = "supported"
+features = ["recursion", "top-level-var", "early-return"]

@@ -1,0 +1,101 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [7 x i8] c"Monday\00", align 1
+@.str.1 = private unnamed_addr constant [8 x i8] c"Tuesday\00", align 1
+@.str.2 = private unnamed_addr constant [10 x i8] c"Wednesday\00", align 1
+@.str.3 = private unnamed_addr constant [9 x i8] c"Thursday\00", align 1
+@.str.4 = private unnamed_addr constant [7 x i8] c"Friday\00", align 1
+@.str.5 = private unnamed_addr constant [8 x i8] c"Weekend\00", align 1
+@.str.6 = private unnamed_addr constant [8 x i8] c"Unknown\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+
+define ptr @InputKt_dayName(i32 %arg0) {
+entry:
+  %merge_2 = alloca ptr
+  br label %bb1
+bb1:
+  %t0 = add i32 0, 1
+  %t1 = icmp eq i32 %arg0, %t0
+  br i1 %t1, label %bb2, label %bb3
+bb2:
+  store ptr @.str.0, ptr %merge_2
+  br label %bb16
+bb3:
+  %t2 = add i32 0, 2
+  %t3 = icmp eq i32 %arg0, %t2
+  br i1 %t3, label %bb4, label %bb5
+bb4:
+  store ptr @.str.1, ptr %merge_2
+  br label %bb16
+bb5:
+  %t4 = add i32 0, 3
+  %t5 = icmp eq i32 %arg0, %t4
+  br i1 %t5, label %bb6, label %bb7
+bb6:
+  store ptr @.str.2, ptr %merge_2
+  br label %bb16
+bb7:
+  %t6 = add i32 0, 4
+  %t7 = icmp eq i32 %arg0, %t6
+  br i1 %t7, label %bb8, label %bb9
+bb8:
+  store ptr @.str.3, ptr %merge_2
+  br label %bb16
+bb9:
+  %t8 = add i32 0, 5
+  %t9 = icmp eq i32 %arg0, %t8
+  br i1 %t9, label %bb10, label %bb11
+bb10:
+  store ptr @.str.4, ptr %merge_2
+  br label %bb16
+bb11:
+  %t10 = add i32 0, 6
+  %t11 = icmp eq i32 %arg0, %t10
+  br i1 %t11, label %bb12, label %bb13
+bb12:
+  store ptr @.str.5, ptr %merge_2
+  br label %bb16
+bb13:
+  %t12 = add i32 0, 7
+  %t13 = icmp eq i32 %arg0, %t12
+  br i1 %t13, label %bb14, label %bb15
+bb14:
+  store ptr @.str.5, ptr %merge_2
+  br label %bb16
+bb15:
+  store ptr @.str.6, ptr %merge_2
+  br label %bb16
+bb16:
+  %t14 = load ptr, ptr %merge_2
+  ret ptr %t14
+}
+
+define i32 @main() {
+entry:
+  %merge_2 = alloca i32
+  %t0 = add i32 0, 1
+  %t1 = add i32 0, 8
+  store i32 %t0, ptr %merge_2
+  br label %bb1
+bb1:
+  %t2 = load i32, ptr %merge_2
+  %t3 = icmp sle i32 %t2, %t1
+  br i1 %t3, label %bb2, label %bb4
+bb2:
+  %t4 = load i32, ptr %merge_2
+  %t5 = call ptr @InputKt_dayName(i32 %t4)
+  call i32 @puts(ptr %t5)
+  br label %bb3
+bb3:
+  %t7 = add i32 0, 1
+  %t8 = load i32, ptr %merge_2
+  %t9 = add i32 %t8, %t7
+  store i32 %t9, ptr %merge_2
+  br label %bb1
+bb4:
+  ret i32 0
+}
+
