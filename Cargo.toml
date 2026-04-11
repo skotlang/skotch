@@ -42,12 +42,13 @@ members = [
     "crates/skotch-classinfo",
     "crates/skotch-buildscript",
 
-    # Layer 7 — build orchestration + driver + CLI
+    # Layer 7 — build orchestration + driver + CLI + LSP
     "crates/skotch-build",
     "crates/skotch-driver",
     "crates/skotch-cli",
     "crates/skotch-repl",
     "crates/skotch-jvm",
+    "crates/skotch-lsp",
 
     # Fixture generation tooling (cargo-xtask pattern)
     "xtask",
@@ -110,6 +111,11 @@ libloading   = "0.8"
 # REPL line editing
 reedline     = "0.46"
 
+# LSP
+tower-lsp    = "0.20"
+tokio        = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
+dashmap      = "6"
+
 # xtask
 walkdir      = "2"
 
@@ -145,6 +151,7 @@ skotch-build           = { path = "crates/skotch-build" }
 skotch-driver          = { path = "crates/skotch-driver" }
 skotch-repl            = { path = "crates/skotch-repl" }
 skotch-jvm             = { path = "crates/skotch-jvm" }
+skotch-lsp             = { path = "crates/skotch-lsp" }
 
 [profile.dev]
 debug            = "line-tables-only"

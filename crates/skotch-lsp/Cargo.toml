@@ -1,0 +1,24 @@
+[package]
+name        = "skotch-lsp"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Language Server Protocol implementation for skotch"
+
+[dependencies]
+# LSP framework
+tower-lsp  = { workspace = true }
+tokio      = { workspace = true }
+dashmap    = { workspace = true }
+
+# skotch layers 0–2 (front-end analysis)
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-diagnostics = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-parser      = { workspace = true }
+skotch-resolve     = { workspace = true }
+skotch-types       = { workspace = true }
+skotch-typeck      = { workspace = true }
