@@ -1,0 +1,3 @@
+name   = "144-nested-when"
+status = "supported"
+features = ["when-no-subject", "logical-and", "expression-body"]

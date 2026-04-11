@@ -1,0 +1,4 @@
+name   = "146-string-equality"
+status = "supported"
+features = ["string-equality", "comparison"]
+skip_dex = true

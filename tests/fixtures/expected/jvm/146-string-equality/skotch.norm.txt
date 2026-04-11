@@ -1,0 +1,55 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=16
+    0000 ldc "hello"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 ldc "hello"
+    0010 astore 3
+    0012 aload 3
+    0014 astore 4
+    0016 ldc "world"
+    0018 astore 5
+    0020 aload 5
+    0022 astore 6
+    0024 aload 2
+    0026 astore 7
+    0028 aload 4
+    0030 astore 8
+    0032 aload 7
+    0034 aload 8
+    0036 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0039 istore 9
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload 9
+    0046 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0049 aload 2
+    0051 astore 10
+    0053 aload 6
+    0055 astore 11
+    0057 aload 10
+    0059 aload 11
+    0061 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0064 istore 12
+    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0069 iload 12
+    0071 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0074 aload 2
+    0076 astore 13
+    0078 aload 6
+    0080 astore 14
+    0082 aload 13
+    0084 aload 14
+    0086 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0089 iconst_1
+    0090 op_0x5F
+    0091 isub
+    0092 istore 15
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 iload 15
+    0099 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0102 return

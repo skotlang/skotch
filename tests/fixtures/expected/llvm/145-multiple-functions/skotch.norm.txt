@@ -1,0 +1,78 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @InputKt_clamp
+define i32 @InputKt_clamp(i32 %arg0, i32 %arg1, i32 %arg2) {
+entry:
+  %t0 = call i32 @InputKt_min(i32 %arg0, i32 %arg2)
+  %t1 = call i32 @InputKt_max(i32 %arg1, i32 %t0)
+  ret i32 %t1
+}
+
+; @InputKt_max
+define i32 @InputKt_max(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_5 = alloca i32
+  %t0 = icmp sgt i32 %arg0, %arg1
+  br i1 %t0, label %bb1, label %bb2
+bb1:
+  store i32 %arg0, ptr %merge_5
+  br label %bb3
+bb2:
+  store i32 %arg1, ptr %merge_5
+  br label %bb3
+bb3:
+  %t1 = load i32, ptr %merge_5
+  ret i32 %t1
+}
+
+; @InputKt_min
+define i32 @InputKt_min(i32 %arg0, i32 %arg1) {
+entry:
+  %merge_5 = alloca i32
+  %t0 = icmp slt i32 %arg0, %arg1
+  br i1 %t0, label %bb1, label %bb2
+bb1:
+  store i32 %arg0, ptr %merge_5
+  br label %bb3
+bb2:
+  store i32 %arg1, ptr %merge_5
+  br label %bb3
+bb3:
+  %t1 = load i32, ptr %merge_5
+  ret i32 %t1
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 3
+  %t1 = add i32 0, 7
+  %t2 = call i32 @InputKt_min(i32 %t0, i32 %t1)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t2)
+  %t4 = add i32 0, 3
+  %t5 = add i32 0, 7
+  %t6 = call i32 @InputKt_max(i32 %t4, i32 %t5)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t6)
+  %t8 = add i32 0, 5
+  %t9 = add i32 0, 1
+  %t10 = add i32 0, 10
+  %t11 = call i32 @InputKt_clamp(i32 %t8, i32 %t9, i32 %t10)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t11)
+  %t13 = add i32 0, -5
+  %t14 = add i32 0, 0
+  %t15 = add i32 0, 100
+  %t16 = call i32 @InputKt_clamp(i32 %t13, i32 %t14, i32 %t15)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t16)
+  %t18 = add i32 0, 200
+  %t19 = add i32 0, 0
+  %t20 = add i32 0, 100
+  %t21 = call i32 @InputKt_clamp(i32 %t18, i32 %t19, i32 %t20)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t21)
+  ret i32 0
+}
+

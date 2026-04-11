@@ -1,0 +1,3 @@
+name   = "143-while-break-true"
+status = "supported"
+features = ["while-true", "break", "infinite-loop-with-break"]

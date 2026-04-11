@@ -153,11 +153,14 @@ struct TypeChecker<'a> {
 
 impl<'a> TypeChecker<'a> {
     fn signature_for_fun(&mut self, f: &FunDecl) -> Signature {
-        let params = f
-            .params
-            .iter()
-            .map(|p| self.type_ref(&p.ty).unwrap_or(Ty::Error))
-            .collect();
+        let mut params: Vec<Ty> = Vec::new();
+        // For extension functions: receiver type is the first param.
+        if let Some(recv) = &f.receiver_ty {
+            params.push(self.type_ref(recv).unwrap_or(Ty::Any));
+        }
+        for p in &f.params {
+            params.push(self.type_ref(&p.ty).unwrap_or(Ty::Error));
+        }
         let ret = match &f.return_ty {
             Some(r) => self.type_ref(r).unwrap_or(Ty::Error),
             None => Ty::Unit,
@@ -193,8 +196,16 @@ impl<'a> TypeChecker<'a> {
         let _ = rf;
         // Walk the body, tracking declared local types in declaration order.
         let mut scope: Vec<(skotch_intern::Symbol, Ty)> = Vec::new();
+        let param_offset = if f.receiver_ty.is_some() {
+            // Extension function: `this` is the first param.
+            let this_sym = self.interner.intern("this");
+            scope.push((this_sym, sig.params[0].clone()));
+            1
+        } else {
+            0
+        };
         for (pi, p) in f.params.iter().enumerate() {
-            scope.push((p.name, sig.params[pi].clone()));
+            scope.push((p.name, sig.params[pi + param_offset].clone()));
         }
         self.check_block(&f.body, &mut scope, &mut local_tys, &mut expr_tys);
         TypedFunction {
@@ -273,6 +284,8 @@ impl<'a> TypeChecker<'a> {
                 Stmt::Assign { value, .. } => {
                     let _ = self.synth_expr(value, scope, expr_tys);
                 }
+                Stmt::Break(_) | Stmt::Continue(_) => {}
+                Stmt::LocalFun(_) => {} // handled in MIR lowering
                 Stmt::For {
                     var_name,
                     start: range_start,

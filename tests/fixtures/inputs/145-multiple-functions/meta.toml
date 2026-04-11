@@ -1,0 +1,3 @@
+name   = "145-multiple-functions"
+status = "supported"
+features = ["multiple-functions", "expression-body", "nested-calls"]

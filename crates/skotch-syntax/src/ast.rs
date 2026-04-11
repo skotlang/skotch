@@ -61,6 +61,9 @@ pub struct FunDecl {
     pub name_span: Span,
     pub params: Vec<Param>,
     pub return_ty: Option<TypeRef>,
+    /// For extension functions: the receiver type (e.g. `String` in `fun String.exclaim()`).
+    /// The receiver becomes accessible as `this` in the function body.
+    pub receiver_ty: Option<TypeRef>,
     pub body: Block,
     pub span: Span,
 }
@@ -104,6 +107,12 @@ pub enum Stmt {
     Val(ValDecl),
     /// `return [expr]`.
     Return { value: Option<Expr>, span: Span },
+    /// Local function declaration inside a block.
+    LocalFun(FunDecl),
+    /// `break` — exits the innermost loop.
+    Break(Span),
+    /// `continue` — skips to the next iteration of the innermost loop.
+    Continue(Span),
     /// `while (cond) { body }`.
     While { cond: Expr, body: Block, span: Span },
     /// `do { body } while (cond)`.
