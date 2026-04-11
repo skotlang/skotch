@@ -51,6 +51,8 @@ pub enum TokenKind {
     KwWhen,
     KwFor,
     KwIn,
+    KwBreak,
+    KwContinue,
     KwClass,
     KwObject,
     KwPackage,

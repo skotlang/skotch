@@ -1,0 +1,4 @@
+name   = "147-complex-control-flow"
+status = "supported"
+features = ["while-loop", "if-else", "var", "string-template-expr", "collatz"]
+skip_dex = true

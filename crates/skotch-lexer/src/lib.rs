@@ -562,6 +562,8 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "when" => TokenKind::KwWhen,
         "for" => TokenKind::KwFor,
         "in" => TokenKind::KwIn,
+        "break" => TokenKind::KwBreak,
+        "continue" => TokenKind::KwContinue,
         "true" => TokenKind::KwTrue,
         "false" => TokenKind::KwFalse,
         "null" => TokenKind::KwNull,

@@ -287,9 +287,37 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let name_idx = self.pos;
         let name_span = self.peek_span();
+
+        // Check for extension function: `fun Type.name(...)`.
+        // If the next ident is followed by `.`, it's a receiver type.
+        let mut receiver_ty = None;
         let name = if self.peek_kind() == TokenKind::Ident {
             self.bump();
-            self.intern_ident_at(name_idx)
+            let first_ident = self.intern_ident_at(name_idx);
+            if self.peek_kind() == TokenKind::Dot {
+                // Extension function: first_ident is the receiver type.
+                let recv_name = first_ident;
+                let recv_span = name_span;
+                receiver_ty = Some(TypeRef {
+                    name: recv_name,
+                    nullable: false,
+                    span: recv_span,
+                });
+                self.bump(); // consume `.`
+                let fn_name_idx = self.pos;
+                if self.peek_kind() == TokenKind::Ident {
+                    self.bump();
+                    self.intern_ident_at(fn_name_idx)
+                } else {
+                    self.diags.push(Diagnostic::error(
+                        self.peek_span(),
+                        "expected function name after '.'",
+                    ));
+                    self.interner.intern("")
+                }
+            } else {
+                first_ident
+            }
         } else {
             self.diags
                 .push(Diagnostic::error(name_span, "expected function name"));
@@ -336,6 +364,7 @@ impl<'a> Parser<'a> {
             name_span,
             params,
             return_ty,
+            receiver_ty,
             span: kw.merge(rparen).merge(body.span),
             body,
         }
@@ -461,6 +490,21 @@ impl<'a> Parser<'a> {
                     None => kw,
                 };
                 Stmt::Return { value, span }
+            }
+            TokenKind::KwFun => {
+                // Local function declaration inside a block.
+                let fun_decl = self.parse_fun_decl();
+                Stmt::LocalFun(fun_decl)
+            }
+            TokenKind::KwBreak => {
+                let span = self.peek_span();
+                self.bump();
+                Stmt::Break(span)
+            }
+            TokenKind::KwContinue => {
+                let span = self.peek_span();
+                self.bump();
+                Stmt::Continue(span)
             }
             TokenKind::KwWhile => self.parse_while(),
             TokenKind::KwDo => self.parse_do_while(),

@@ -1,0 +1,4 @@
+name   = "150-comprehensive-demo"
+status = "supported"
+features = ["extension-function", "for-loop", "continue", "when", "string-template", "comprehensive"]
+skip_dex = true

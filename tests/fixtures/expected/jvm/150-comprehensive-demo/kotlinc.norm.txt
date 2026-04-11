@@ -1,0 +1,195 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        fibonacci (I)I 0x0019
+  code        max_stack=2 max_locals=5
+    0000 op_0x1A
+    0001 iconst_1
+    0002 op_0xA3
+    0003 nop
+    0004 iconst_2
+    0005 op_0x1A
+    0006 op_0xAC
+    0007 iconst_0
+    0008 op_0x3C
+    0009 iconst_1
+    0010 op_0x3D
+    0011 iconst_2
+    0012 op_0x3E
+    0013 op_0x1D
+    0014 op_0x1A
+    0015 op_0xA3
+    0016 nop
+    0017 op_0x18
+    0018 op_0x1B
+    0019 op_0x1C
+    0020 iadd
+    0021 istore 4
+    0023 op_0x1C
+    0024 op_0x3C
+    0025 iload 4
+    0027 op_0x3D
+    0028 op_0x1D
+    0029 op_0x1A
+    0030 op_0x9F
+    0031 nop
+    0032 op_0x09
+    0033 op_0x84
+    0034 iconst_0
+    0035 aconst_null
+    0036 op_0xA7
+    0037 op_0xFF
+    0038 op_0xEE
+    0039 op_0x1C
+    0040 op_0xAC
+    sub_attr  StackMapTable (10 bytes)
+method        isEven (I)Z 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0x1A
+    0001 iconst_2
+    0002 irem
+    0003 op_0x9A
+    0004 nop
+    0005 iconst_4
+    0006 iconst_1
+    0007 op_0xA7
+    0008 nop
+    0009 iconst_1
+    0010 iconst_0
+    0011 op_0xAC
+    sub_attr  StackMapTable (5 bytes)
+method        isOdd (I)Z 0x0019
+  code        max_stack=1 max_locals=1
+    0000 op_0x1A
+    0001 invokestatic Method(InputKt.isEven:(I)Z)
+    0004 op_0x9A
+    0005 nop
+    0006 iconst_4
+    0007 iconst_1
+    0008 op_0xA7
+    0009 nop
+    0010 iconst_1
+    0011 iconst_0
+    0012 op_0xAC
+    sub_attr  StackMapTable (5 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 bipush 10
+    0002 invokestatic Method(InputKt.sumOfOdds:(I)I)
+    0005 op_0xBA
+    0006 nop
+    0007 op_0x26
+    0008 nop
+    0009 nop
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 op_0x5F
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 bipush 10
+    0019 invokestatic Method(InputKt.fibonacci:(I)I)
+    0022 op_0xBA
+    0023 nop
+    0024 op_0x37
+    0025 nop
+    0026 nop
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 op_0x5F
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 nop
+    0035 bipush 10
+    0037 invokestatic Method(InputKt.sumOfOdds:(I)I)
+    0040 bipush 20
+    0042 op_0xA4
+    0043 nop
+    0044 iconst_5
+    0045 ldc "big"
+    0047 op_0xA7
+    0048 nop
+    0049 iconst_2
+    0050 ldc "small"
+    0052 op_0x4B
+    0053 op_0x2A
+    0054 op_0xBA
+    0055 nop
+    0056 op_0x40
+    0057 nop
+    0058 nop
+    0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0062 op_0x5F
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0066 iconst_1
+    0067 op_0x3C
+    0068 op_0x1B
+    0069 bipush 6
+    0071 op_0xA2
+    0072 nop
+    0073 op_0x24
+    0074 op_0x1B
+    0075 op_0x1B
+    0076 invokestatic Method(InputKt.isOdd:(I)Z)
+    0079 op_0x99
+    0080 nop
+    0081 iconst_5
+    0082 ldc "odd"
+    0084 op_0xA7
+    0085 nop
+    0086 iconst_2
+    0087 ldc "even"
+    0089 op_0xBA
+    0090 nop
+    0091 op_0x4B
+    0092 nop
+    0093 nop
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 op_0x5F
+    0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0101 op_0x84
+    0102 aconst_null
+    0103 aconst_null
+    0104 op_0xA7
+    0105 op_0xFF
+    0106 op_0xDC
+    0107 return
+    sub_attr  StackMapTable (32 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        sumOfOdds (I)I 0x0019
+  code        max_stack=2 max_locals=3
+    0000 iconst_0
+    0001 op_0x3C
+    0002 iconst_1
+    0003 op_0x3D
+    0004 op_0x1C
+    0005 op_0x1A
+    0006 op_0xA3
+    0007 nop
+    0008 op_0x1C
+    0009 op_0x1C
+    0010 invokestatic Method(InputKt.isEven:(I)Z)
+    0013 op_0x99
+    0014 nop
+    0015 iconst_3
+    0016 op_0xA7
+    0017 nop
+    0018 iconst_4
+    0019 op_0x1B
+    0020 op_0x1C
+    0021 iadd
+    0022 op_0x3C
+    0023 op_0x1C
+    0024 op_0x1A
+    0025 op_0x9F
+    0026 nop
+    0027 op_0x09
+    0028 op_0x84
+    0029 iconst_m1
+    0030 aconst_null
+    0031 op_0xA7
+    0032 op_0xFF
+    0033 op_0xEA
+    0034 op_0x1B
+    0035 op_0xAC
+    sub_attr  StackMapTable (10 bytes)
+class_attr    BootstrapMethods (26 bytes)

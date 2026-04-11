@@ -124,8 +124,14 @@ struct Resolver<'a> {
 impl<'a> Resolver<'a> {
     fn resolve_function(&mut self, idx: u32, f: &FunDecl) -> ResolvedFunction {
         let mut scope: Vec<(Symbol, DefId)> = Vec::new();
+        // For extension functions: add `this` as the first parameter.
+        if f.receiver_ty.is_some() {
+            let this_sym = self.interner.intern("this");
+            scope.push((this_sym, DefId::Param(idx, 0)));
+        }
+        let param_offset = if f.receiver_ty.is_some() { 1u32 } else { 0 };
         for (pi, p) in f.params.iter().enumerate() {
-            scope.push((p.name, DefId::Param(idx, pi as u32)));
+            scope.push((p.name, DefId::Param(idx, pi as u32 + param_offset)));
         }
         let mut rf = ResolvedFunction {
             name: f.name,
@@ -219,6 +225,16 @@ impl<'a> Resolver<'a> {
                     DefId::Local(fn_idx, 0)
                 });
                 self.resolve_expr(fn_idx, value, scope, rf);
+            }
+            Stmt::Break(_) | Stmt::Continue(_) => {}
+            Stmt::LocalFun(f) => {
+                // Register the local function name in scope so calls
+                // to it resolve correctly. Use a synthetic Function DefId.
+                // The actual index will be assigned during MIR lowering.
+                self.out.top_level.insert(f.name, DefId::Function(999));
+                // Resolve the function body.
+                let inner_rf = self.resolve_function(fn_idx, f);
+                let _ = inner_rf; // body refs handled separately
             }
         }
     }

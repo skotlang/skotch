@@ -1,0 +1,42 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+; --- declarations ---
+declare i32 @printf(ptr, ...)
+
+; --- definitions ---
+; @InputKt_factorial
+define i32 @InputKt_factorial(i32 %arg0) {
+entry:
+  %merge_4 = alloca i32
+  %t0 = add i32 0, 1
+  %t1 = icmp sle i32 %arg0, %t0
+  br i1 %t1, label %bb1, label %bb2
+bb1:
+  %t2 = add i32 0, 1
+  store i32 %t2, ptr %merge_4
+  br label %bb3
+bb2:
+  %t3 = add i32 0, 1
+  %t4 = sub i32 %arg0, %t3
+  %t5 = call i32 @InputKt_factorial(i32 %t4)
+  %t6 = mul i32 %arg0, %t5
+  store i32 %t6, ptr %merge_4
+  br label %bb3
+bb3:
+  %t7 = load i32, ptr %merge_4
+  ret i32 %t7
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 5
+  %t1 = call i32 @InputKt_factorial(i32 %t0)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t1)
+  %t3 = add i32 0, 10
+  %t4 = call i32 @InputKt_factorial(i32 %t3)
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
+  ret i32 0
+}
+

@@ -1,0 +1,3 @@
+name   = "148-local-helper"
+status = "supported"
+features = ["local-function", "for-loop", "early-return", "practical"]

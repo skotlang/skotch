@@ -1,0 +1,3 @@
+name   = "149-extension-chain"
+status = "supported"
+features = ["extension-function", "method-chaining"]

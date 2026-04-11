@@ -1,0 +1,95 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        classify (II)Ljava/lang/String; 0x0019
+  code        max_stack=1 max_locals=2
+    0000 nop
+    0001 op_0x1A
+    0002 op_0x9E
+    0003 nop
+    0004 op_0x0C
+    0005 op_0x1B
+    0006 op_0x9E
+    0007 nop
+    0008 iconst_5
+    0009 ldc "Q1"
+    0011 op_0xA7
+    0012 nop
+    0013 op_0x2C
+    0014 op_0x1A
+    0015 op_0x9C
+    0016 nop
+    0017 op_0x0C
+    0018 op_0x1B
+    0019 op_0x9E
+    0020 nop
+    0021 iconst_5
+    0022 ldc "Q2"
+    0024 op_0xA7
+    0025 nop
+    0026 op_0x1F
+    0027 op_0x1A
+    0028 op_0x9C
+    0029 nop
+    0030 op_0x0C
+    0031 op_0x1B
+    0032 op_0x9C
+    0033 nop
+    0034 iconst_5
+    0035 ldc "Q3"
+    0037 op_0xA7
+    0038 nop
+    0039 ldc Method(InputKt.classify:(II)Ljava/lang/String;)
+    0041 op_0x9E
+    0042 nop
+    0043 op_0x0C
+    0044 op_0x1B
+    0045 op_0x9C
+    0046 nop
+    0047 iconst_5
+    0048 ldc "Q4"
+    0050 op_0xA7
+    0051 nop
+    0052 iconst_2
+    0053 ldc "axis"
+    0055 op_0xB0
+    sub_attr  StackMapTable (10 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 iconst_1
+    0001 iconst_1
+    0002 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 op_0x5F
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 iconst_m1
+    0013 iconst_1
+    0014 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 op_0x5F
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 iconst_m1
+    0025 iconst_m1
+    0026 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 op_0x5F
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 iconst_1
+    0037 iconst_m1
+    0038 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 op_0x5F
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 iconst_0
+    0049 iconst_5
+    0050 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 op_0x5F
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
