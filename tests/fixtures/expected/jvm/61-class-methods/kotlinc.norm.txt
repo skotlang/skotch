@@ -1,0 +1,21 @@
+class_version major=61 minor=0
+this_class    Calculator
+super_class   java/lang/Object
+access_flags  0x0031
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        add (II)I 0x0011
+  code        max_stack=2 max_locals=3
+    0000 op_0x1B
+    0001 op_0x1C
+    0002 iadd
+    0003 op_0xAC
+method        multiply (II)I 0x0011
+  code        max_stack=2 max_locals=3
+    0000 op_0x1B
+    0001 op_0x1C
+    0002 imul
+    0003 op_0xAC

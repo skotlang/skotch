@@ -1,0 +1,83 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.1.9
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Foo"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Foo"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Foo"
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": {
+        "Class": "Foo"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Foo",
+      "fields": [],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0
+        ],
+        "locals": [
+          {
+            "Class": "Foo"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

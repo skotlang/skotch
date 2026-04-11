@@ -109,6 +109,17 @@ pub fn type_check(
                 );
                 val_idx_pass1 += 1;
             }
+            Decl::Class(c) => {
+                let sig = Signature {
+                    params: vec![],
+                    ret: Ty::Class(tc.interner.resolve(c.name).to_string()),
+                };
+                tc.out
+                    .top_signatures
+                    .insert(DefId::Function(fn_idx_pass1), sig);
+                tc.fn_names.push(c.name);
+                fn_idx_pass1 += 1;
+            }
             Decl::Unsupported { .. } => {}
         }
     }
@@ -137,6 +148,7 @@ pub fn type_check(
                 tc.out.top_vals.push(typed);
                 val_idx += 1;
             }
+            Decl::Class(_) => {} // class type checking during MIR lowering
             Decl::Unsupported { .. } => {}
         }
     }

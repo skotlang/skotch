@@ -274,7 +274,7 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
             let n = match kind {
                 CallKind::Println => 1,
                 CallKind::PrintlnConcat => 2,
-                CallKind::Static(_) => 0,
+                CallKind::Static(_) | CallKind::Constructor(_) | CallKind::Virtual { .. } => 0,
             };
             needed = needed.max(n);
         }
@@ -308,6 +308,9 @@ fn walk_block(
             }
             Rvalue::BinOp { op, lhs, rhs } => {
                 emit_binop(*op, *lhs, *rhs, *dest, slot, code);
+            }
+            Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
+                // TODO: class support in DEX backend
             }
             Rvalue::Call { kind, args } => {
                 let used = emit_call(
@@ -725,6 +728,10 @@ fn emit_call(
 
             2 // outs_size — every invoke-virtual passes ≤ 2 registers
         }
+        CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+            // TODO: class support in DEX backend
+            0
+        }
     }
 }
 
@@ -736,7 +743,7 @@ fn type_descriptor(ty: &Ty) -> &'static str {
         Ty::Long => "J",
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
-        Ty::Any | Ty::Nullable(_) => "Ljava/lang/Object;",
+        Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Error => "V",
     }
 }

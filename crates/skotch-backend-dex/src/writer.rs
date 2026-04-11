@@ -514,7 +514,7 @@ fn ty_descriptor(ty: &skotch_types::Ty) -> &'static str {
         Ty::Long => "J",
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
-        Ty::Any | Ty::Nullable(_) => "Ljava/lang/Object;",
+        Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Error => "V",
     }
 }

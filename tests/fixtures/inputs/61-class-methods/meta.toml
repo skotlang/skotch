@@ -1,4 +1,4 @@
 name   = "61-class-methods"
-status = "stub"
+status = "supported"
 features = ["class", "method", "int-return", "invokevirtual"]
-reason = "Requires class with multiple methods returning non-Unit."
+skip_dex = true

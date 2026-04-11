@@ -66,6 +66,21 @@ pub enum Rvalue {
         lhs: LocalId,
         rhs: LocalId,
     },
+    /// Create a new instance of a class (uninitialized — followed by Constructor call).
+    NewInstance(std::string::String),
+    /// Read an instance field: `receiver.field_name`.
+    GetField {
+        receiver: LocalId,
+        class_name: std::string::String,
+        field_name: std::string::String,
+    },
+    /// Write an instance field: `receiver.field_name = value`.
+    PutField {
+        receiver: LocalId,
+        class_name: std::string::String,
+        field_name: std::string::String,
+        value: LocalId,
+    },
     Call {
         kind: CallKind,
         args: Vec<LocalId>,
@@ -116,6 +131,13 @@ pub enum CallKind {
     /// support all use string templates as the immediate argument
     /// of `println`, so this fused form covers everything we need.
     PrintlnConcat,
+    /// Constructor call: `new ClassName(args)`.
+    Constructor(std::string::String),
+    /// Virtual method call on an instance: `receiver.method(args)`.
+    Virtual {
+        class_name: std::string::String,
+        method_name: std::string::String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -169,12 +191,31 @@ impl MirFunction {
 /// One MIR-level translation unit. Backends consume an entire
 /// `MirModule` at once and produce one (or more) class files / DEX
 /// files / `.ll` files.
+/// A user-defined class in MIR.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MirClass {
+    pub name: String,
+    pub fields: Vec<MirField>,
+    pub methods: Vec<MirFunction>,
+    /// The `<init>` constructor method.
+    pub constructor: MirFunction,
+}
+
+/// A field in a MIR class.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MirField {
+    pub name: String,
+    pub ty: Ty,
+}
+
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct MirModule {
     /// Wrapper class name for top-level functions in this file
     /// (e.g. `HelloKt` for a file named `Hello.kt`).
     pub wrapper_class: String,
     pub functions: Vec<MirFunction>,
+    /// User-defined classes.
+    pub classes: Vec<MirClass>,
     /// Insertion-order stable string pool. Backends iterate this in
     /// order to lay out their constant pool / string id table.
     pub strings: Vec<String>,

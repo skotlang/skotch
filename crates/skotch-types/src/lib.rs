@@ -29,6 +29,8 @@ pub enum Ty {
     Any,
     /// Nullable wrapper. `String?` ≡ `Nullable(String)`.
     Nullable(Box<Ty>),
+    /// A user-defined class type. Carries the fully-qualified class name.
+    Class(std::string::String),
     /// Sentinel emitted when type-checking fails for an expression. The
     /// downstream pass should propagate it without complaining.
     Error,
@@ -62,6 +64,7 @@ impl Ty {
             Ty::Double => "Double",
             Ty::String => "String",
             Ty::Any => "Any",
+            Ty::Class(_) => "<class>",
             Ty::Nullable(_) => "<nullable>",
             Ty::Error => "<error>",
         }

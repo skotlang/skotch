@@ -25,8 +25,8 @@ use rustc_hash::FxHashMap;
 use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_mir::{
-    BasicBlock, BinOp as MBinOp, CallKind, FuncId, LocalId, MirConst, MirFunction, MirModule,
-    Rvalue, Stmt as MStmt, Terminator,
+    BasicBlock, BinOp as MBinOp, CallKind, FuncId, LocalId, MirClass, MirConst, MirField,
+    MirFunction, MirModule, Rvalue, Stmt as MStmt, Terminator,
 };
 use skotch_resolve::{DefId, ResolvedFile};
 use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
@@ -124,6 +124,16 @@ pub fn lower_file(
             }
             Decl::Val(_) => {
                 // Already handled in pass 2.
+            }
+            Decl::Class(c) => {
+                lower_class(
+                    c,
+                    &mut name_to_func,
+                    &name_to_global,
+                    &mut module,
+                    interner,
+                    diags,
+                );
             }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
@@ -1117,19 +1127,36 @@ fn lower_expr(
                     all_args.push(id);
                 }
 
-                let kind = if let Some(fid) = name_to_func.get(&method_name) {
-                    CallKind::Static(*fid)
+                // Check if receiver is a class instance for virtual dispatch.
+                let recv_ty = &fb.mf.locals[recv_local.0 as usize];
+                let method_name_str = interner.resolve(method_name).to_string();
+                let (kind, dest_ty) = if let Ty::Class(class_name) = recv_ty {
+                    // Look up method in class.
+                    let return_ty = module
+                        .classes
+                        .iter()
+                        .find(|c| &c.name == class_name)
+                        .and_then(|c| c.methods.iter().find(|m| m.name == method_name_str))
+                        .map(|m| m.return_ty.clone())
+                        .unwrap_or(Ty::Unit);
+                    (
+                        CallKind::Virtual {
+                            class_name: class_name.clone(),
+                            method_name: method_name_str,
+                        },
+                        return_ty,
+                    )
+                } else if let Some(fid) = name_to_func.get(&method_name) {
+                    (
+                        CallKind::Static(*fid),
+                        module.functions[fid.0 as usize].return_ty.clone(),
+                    )
                 } else {
                     diags.push(Diagnostic::error(
                         *span,
                         format!("unknown method `{}`", interner.resolve(method_name)),
                     ));
                     return None;
-                };
-
-                let dest_ty = match &kind {
-                    CallKind::Static(fid) => module.functions[fid.0 as usize].return_ty.clone(),
-                    _ => Ty::Unit,
                 };
                 let dest = fb.new_local(dest_ty);
                 fb.push_stmt(MStmt::Assign {
@@ -1152,6 +1179,41 @@ fn lower_expr(
                     return None;
                 }
             };
+
+            // ─── Check for constructor call (class instantiation) ────
+            let callee_str = interner.resolve(callee_name).to_string();
+            let is_class = module.classes.iter().any(|c| c.name == callee_str);
+            if is_class {
+                // Lower as: NewInstance + Constructor call.
+                let mut arg_locals = Vec::new();
+                for a in args {
+                    let id = lower_expr(
+                        a,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )?;
+                    arg_locals.push(id);
+                }
+                let dest = fb.new_local(Ty::Class(callee_str.clone()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance(callee_str.clone()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::Constructor(callee_str),
+                        args: arg_locals,
+                    },
+                });
+                return Some(dest);
+            }
 
             // ─── Special form: println(<string template>) ───────────
             if interner.resolve(callee_name) == "println"
@@ -1596,6 +1658,150 @@ fn lower_template_part(
             None,
         ),
     }
+}
+
+fn lower_class(
+    c: &skotch_syntax::ClassDecl,
+    name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
+    module: &mut MirModule,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+) {
+    let class_name = interner.resolve(c.name).to_string();
+
+    // Collect fields from constructor params (val/var) and body properties.
+    let mut fields = Vec::new();
+    for p in &c.constructor_params {
+        if p.is_val || p.is_var {
+            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            fields.push(MirField {
+                name: interner.resolve(p.name).to_string(),
+                ty,
+            });
+        }
+    }
+    for prop in &c.properties {
+        let ty = prop
+            .ty
+            .as_ref()
+            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .unwrap_or(Ty::Int);
+        fields.push(MirField {
+            name: interner.resolve(prop.name).to_string(),
+            ty,
+        });
+    }
+
+    // Build the <init> constructor.
+    let mut init_fn = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+    };
+    // Add 'this' as local 0.
+    let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
+    init_fn.params.push(this_id);
+    // Add constructor params and field assignments.
+    for p in &c.constructor_params {
+        if p.is_val || p.is_var {
+            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let param_id = init_fn.new_local(ty);
+            init_fn.params.push(param_id);
+            let field_name = interner.resolve(p.name).to_string();
+            init_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: this_id, // dummy dest
+                value: Rvalue::PutField {
+                    receiver: this_id,
+                    class_name: class_name.clone(),
+                    field_name,
+                    value: param_id,
+                },
+            });
+        }
+    }
+    // Initialize body properties with default values.
+    for prop in &c.properties {
+        if let Some(Expr::IntLit(v, _)) = &prop.init {
+            {
+                let val_id = init_fn.new_local(Ty::Int);
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: val_id,
+                    value: Rvalue::Const(MirConst::Int(*v as i32)),
+                });
+                let field_name = interner.resolve(prop.name).to_string();
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: this_id, // dummy
+                    value: Rvalue::PutField {
+                        receiver: this_id,
+                        class_name: class_name.clone(),
+                        field_name,
+                        value: val_id,
+                    },
+                });
+            }
+        }
+    }
+
+    // Lower methods.
+    let mut mir_methods = Vec::new();
+    for method in &c.methods {
+        let method_name = interner.resolve(method.name).to_string();
+        let return_ty = method
+            .return_ty
+            .as_ref()
+            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .unwrap_or(Ty::Unit);
+
+        let fn_idx = module.functions.len() + mir_methods.len();
+        let mut fb = FnBuilder::new(fn_idx, method_name.clone(), return_ty);
+
+        // Add implicit `this` parameter.
+        let this_local = fb.new_local(Ty::Class(class_name.clone()));
+        fb.mf.params.push(this_local);
+        let this_sym = interner.intern("this");
+        let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+
+        // Add explicit parameters.
+        for p in &method.params {
+            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let id = fb.new_local(ty);
+            fb.mf.params.push(id);
+            scope.push((p.name, id));
+        }
+
+        // Register field names as accessible via `this`.
+        // When we encounter an unqualified field name, resolve it to GetField.
+
+        for s in &method.body.stmts {
+            lower_stmt(
+                s,
+                &mut fb,
+                &mut scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                None,
+            );
+        }
+
+        mir_methods.push(fb.finish());
+    }
+
+    module.classes.push(MirClass {
+        name: class_name,
+        fields,
+        methods: mir_methods,
+        constructor: init_fn,
+    });
 }
 
 #[cfg(test)]

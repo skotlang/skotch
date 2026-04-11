@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.1.7
+compiler_version=0.1.9
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -413,7 +413,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 3,
               "then_block": 2,
-              "else_block": 3
+              "else_block": 4
             }
           }
         },
@@ -446,9 +446,46 @@ unique_name=inputkt
           "terminator": {
             "Branch": {
               "cond": 5,
-              "then_block": 4,
-              "else_block": 5
+              "then_block": 5,
+              "else_block": 6
             }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "BinOp": {
+                    "op": "AddI",
+                    "lhs": 2,
+                    "rhs": 9
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 10
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
           }
         },
         {
@@ -488,55 +525,25 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "Goto": 6
+            "Goto": 7
           }
         },
         {
           "stmts": [],
           "terminator": {
-            "Goto": 6
+            "Goto": 7
           }
         },
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "AddI",
-                    "lhs": 2,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 10
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
-            "Goto": 1
+            "Goto": 3
           }
         }
       ],
       "return_ty": "Unit"
     }
   ],
+  "classes": [],
   "strings": []
 }

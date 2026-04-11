@@ -704,10 +704,16 @@ impl<'a> BlockWalker<'a> {
                     }
                 }
             }
+            Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
+                // TODO: class support in LLVM backend
+            }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println => self.lower_println(args),
                 CallKind::PrintlnConcat => self.lower_println_concat(args),
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
+                CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+                    // TODO: class support in LLVM backend
+                }
             },
         }
     }
@@ -749,6 +755,9 @@ impl<'a> BlockWalker<'a> {
             CallKind::Println => self.lower_println(args),
             CallKind::PrintlnConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
+            CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+                // TODO: class support in LLVM backend
+            }
         }
     }
 
@@ -921,7 +930,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::Long => "i64",
         Ty::Double => "double",
         Ty::String => "ptr",
-        Ty::Any | Ty::Nullable(_) => "ptr",
+        Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "ptr",
         Ty::Error => "void",
     }
 }

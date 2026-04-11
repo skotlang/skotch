@@ -94,6 +94,9 @@ pub fn resolve_file(
             Decl::Val(v) => {
                 r.out.top_level.insert(v.name, DefId::TopLevelVal(i as u32));
             }
+            Decl::Class(c) => {
+                r.out.top_level.insert(c.name, DefId::Function(i as u32));
+            }
             Decl::Unsupported { .. } => {}
         }
     }
@@ -109,6 +112,7 @@ pub fn resolve_file(
                 let rv = r.resolve_top_val(v);
                 r.out.top_vals.push(rv);
             }
+            Decl::Class(_) => {} // class body resolved during MIR lowering
             Decl::Unsupported { .. } => {}
         }
     }
