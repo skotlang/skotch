@@ -1,0 +1,4 @@
+name   = "133-string-int-concat"
+status = "supported"
+features = ["string-concat", "string-int-concat"]
+skip_dex = true  # String concat not yet in DEX backend

@@ -182,7 +182,7 @@ impl<'a> Resolver<'a> {
                     self.resolve_expr(fn_idx, v, scope, rf);
                 }
             }
-            Stmt::While { cond, body, .. } => {
+            Stmt::While { cond, body, .. } | Stmt::DoWhile { body, cond, .. } => {
                 self.resolve_expr(fn_idx, cond, scope, rf);
                 for s in &body.stmts {
                     self.resolve_stmt(fn_idx, s, scope, rf);

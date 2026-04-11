@@ -106,6 +106,8 @@ pub enum Stmt {
     Return { value: Option<Expr>, span: Span },
     /// `while (cond) { body }`.
     While { cond: Expr, body: Block, span: Span },
+    /// `do { body } while (cond)`.
+    DoWhile { body: Block, cond: Expr, span: Span },
     /// `for (name in start..end) { body }`.
     For {
         var_name: Symbol,

@@ -553,6 +553,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "else" => TokenKind::KwElse,
         "return" => TokenKind::KwReturn,
         "while" => TokenKind::KwWhile,
+        "do" => TokenKind::KwDo,
         "when" => TokenKind::KwWhen,
         "for" => TokenKind::KwFor,
         "in" => TokenKind::KwIn,

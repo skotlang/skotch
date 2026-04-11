@@ -1,0 +1,3 @@
+name   = "130-when-no-subject"
+status = "supported"
+features = ["when-no-subject", "expression-body", "comparison"]

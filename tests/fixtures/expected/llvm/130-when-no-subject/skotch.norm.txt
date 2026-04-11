@@ -1,0 +1,64 @@
+; --- globals ---
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.str.0 = private unnamed_addr constant [9 x i8] c"negative\00", align 1
+@.str.1 = private unnamed_addr constant [5 x i8] c"zero\00", align 1
+@.str.2 = private unnamed_addr constant [6 x i8] c"small\00", align 1
+@.str.3 = private unnamed_addr constant [4 x i8] c"big\00", align 1
+
+; --- declarations ---
+declare i32 @puts(ptr)
+
+; --- definitions ---
+; @InputKt_classify
+define ptr @InputKt_classify(i32 %arg0) {
+entry:
+  %merge_2 = alloca ptr
+  %t0 = add i32 0, 1
+  br label %bb1
+bb1:
+  %t1 = add i32 0, 0
+  %t2 = icmp slt i32 %arg0, %t1
+  br i1 %t2, label %bb2, label %bb3
+bb2:
+  store ptr @.str.0, ptr %merge_2
+  br label %bb8
+bb3:
+  %t3 = add i32 0, 0
+  %t4 = icmp eq i32 %arg0, %t3
+  br i1 %t4, label %bb4, label %bb5
+bb4:
+  store ptr @.str.1, ptr %merge_2
+  br label %bb8
+bb5:
+  %t5 = add i32 0, 100
+  %t6 = icmp slt i32 %arg0, %t5
+  br i1 %t6, label %bb6, label %bb7
+bb6:
+  store ptr @.str.2, ptr %merge_2
+  br label %bb8
+bb7:
+  store ptr @.str.3, ptr %merge_2
+  br label %bb8
+bb8:
+  %t7 = load ptr, ptr %merge_2
+  ret ptr %t7
+}
+
+; @main
+define i32 @main() {
+entry:
+  %t0 = add i32 0, -5
+  %t1 = call ptr @InputKt_classify(i32 %t0)
+  call i32 @puts(ptr %t1)
+  %t3 = add i32 0, 0
+  %t4 = call ptr @InputKt_classify(i32 %t3)
+  call i32 @puts(ptr %t4)
+  %t6 = add i32 0, 42
+  %t7 = call ptr @InputKt_classify(i32 %t6)
+  call i32 @puts(ptr %t7)
+  %t9 = add i32 0, 999
+  %t10 = call ptr @InputKt_classify(i32 %t9)
+  call i32 @puts(ptr %t10)
+  ret i32 0
+}
+

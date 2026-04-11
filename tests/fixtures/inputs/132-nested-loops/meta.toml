@@ -1,0 +1,3 @@
+name   = "132-nested-loops"
+status = "supported"
+features = ["nested-for", "range", "arithmetic"]

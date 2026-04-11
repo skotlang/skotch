@@ -266,7 +266,7 @@ impl<'a> TypeChecker<'a> {
                         self.synth_expr(v, scope, expr_tys);
                     }
                 }
-                Stmt::While { cond, body, .. } => {
+                Stmt::While { cond, body, .. } | Stmt::DoWhile { body, cond, .. } => {
                     let _ = self.synth_expr(cond, scope, expr_tys);
                     self.check_block(body, scope, expr_tys, local_tys);
                 }
