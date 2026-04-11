@@ -1,0 +1,40 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [8 x i8] c"Hello, \00", align 1
+@.str.1 = private unnamed_addr constant [2 x i8] c"!\00", align 1
+@.str.2 = private unnamed_addr constant [9 x i8] c"Number: \00", align 1
+@.str.3 = private unnamed_addr constant [7 x i8] c"Kotlin\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+@.fmt.concat.ss = private unnamed_addr constant [5 x i8] c"%s%s\00", align 1
+@.fmt.concat.sd = private unnamed_addr constant [5 x i8] c"%s%d\00", align 1
+declare i32 @snprintf(ptr, i32, ptr, ...)
+
+define ptr @InputKt_greet(ptr %arg0) {
+entry:
+  %t0 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t0, i32 256, ptr @.fmt.concat.ss, ptr @.str.0, ptr %arg0)
+  %t2 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t2, i32 256, ptr @.fmt.concat.ss, ptr %t0, ptr @.str.1)
+  ret ptr %t2
+}
+
+define ptr @InputKt_describe(i32 %arg0) {
+entry:
+  %t0 = alloca [256 x i8]
+  call i32 (ptr, i32, ptr, ...) @snprintf(ptr %t0, i32 256, ptr @.fmt.concat.sd, ptr @.str.2, i32 %arg0)
+  ret ptr %t0
+}
+
+define i32 @main() {
+entry:
+  %t0 = call ptr @InputKt_greet(ptr @.str.3)
+  call i32 @puts(ptr %t0)
+  %t2 = add i32 0, 42
+  %t3 = call ptr @InputKt_describe(i32 %t2)
+  call i32 @puts(ptr %t3)
+  ret i32 0
+}
+

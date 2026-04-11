@@ -191,6 +191,11 @@ impl<'a> Lexer<'a> {
             (b'&', Some(b'&')) => Some((TokenKind::AmpAmp, 2)),
             (b'|', Some(b'|')) => Some((TokenKind::PipePipe, 2)),
             (b'.', Some(b'.')) => Some((TokenKind::DotDot, 2)),
+            (b'+', Some(b'=')) => Some((TokenKind::PlusEq, 2)),
+            (b'-', Some(b'=')) => Some((TokenKind::MinusEq, 2)),
+            (b'*', Some(b'=')) => Some((TokenKind::StarEq, 2)),
+            (b'/', Some(b'=')) => Some((TokenKind::SlashEq, 2)),
+            (b'%', Some(b'=')) => Some((TokenKind::PercentEq, 2)),
             _ => None,
         };
         if let Some((k, n)) = kind {

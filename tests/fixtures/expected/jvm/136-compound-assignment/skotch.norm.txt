@@ -1,0 +1,86 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=23
+    0000 bipush 10
+    0002 istore 1
+    0004 iload 1
+    0006 istore 2
+    0008 iload 2
+    0010 istore 3
+    0012 iconst_5
+    0013 istore 4
+    0015 iload 3
+    0017 iload 4
+    0019 iadd
+    0020 istore 5
+    0022 iload 5
+    0024 istore 2
+    0026 iload 2
+    0028 istore 6
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 6
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 iload 2
+    0040 istore 7
+    0042 iconst_3
+    0043 istore 8
+    0045 iload 7
+    0047 iload 8
+    0049 isub
+    0050 istore 9
+    0052 iload 9
+    0054 istore 2
+    0056 iload 2
+    0058 istore 10
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 iload 10
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0068 iload 2
+    0070 istore 11
+    0072 iconst_2
+    0073 istore 12
+    0075 iload 11
+    0077 iload 12
+    0079 imul
+    0080 istore 13
+    0082 iload 13
+    0084 istore 2
+    0086 iload 2
+    0088 istore 14
+    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0093 iload 14
+    0095 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0098 iload 2
+    0100 istore 15
+    0102 iconst_4
+    0103 istore 16
+    0105 iload 15
+    0107 iload 16
+    0109 idiv
+    0110 istore 17
+    0112 iload 17
+    0114 istore 2
+    0116 iload 2
+    0118 istore 18
+    0120 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0123 iload 18
+    0125 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0128 iload 2
+    0130 istore 19
+    0132 iconst_3
+    0133 istore 20
+    0135 iload 19
+    0137 iload 20
+    0139 irem
+    0140 istore 21
+    0142 iload 21
+    0144 istore 2
+    0146 iload 2
+    0148 istore 22
+    0150 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0153 iload 22
+    0155 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0158 return

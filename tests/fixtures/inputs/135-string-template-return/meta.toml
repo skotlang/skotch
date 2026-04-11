@@ -1,0 +1,4 @@
+name   = "135-string-template-return"
+status = "supported"
+features = ["string-template", "function-return", "expression-body"]
+skip_dex = true

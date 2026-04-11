@@ -77,16 +77,21 @@ pub enum TokenKind {
     Question,
 
     // ─── multi-character punctuation ─────────────────────────────────────
-    Arrow,    // ->
-    EqEq,     // ==
-    NotEq,    // !=
-    Lt,       // <
-    Gt,       // >
-    LtEq,     // <=
-    GtEq,     // >=
-    AmpAmp,   // &&
-    PipePipe, // ||
-    DotDot,   // .. (range operator)
+    Arrow,     // ->
+    EqEq,      // ==
+    NotEq,     // !=
+    Lt,        // <
+    Gt,        // >
+    LtEq,      // <=
+    GtEq,      // >=
+    AmpAmp,    // &&
+    PipePipe,  // ||
+    DotDot,    // .. (range operator)
+    PlusEq,    // +=
+    MinusEq,   // -=
+    StarEq,    // *=
+    SlashEq,   // /=
+    PercentEq, // %=
 
     // ─── trivia / structural ─────────────────────────────────────────────
     /// One or more `\n`s. Kotlin treats newlines as soft statement

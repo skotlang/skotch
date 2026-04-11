@@ -1051,12 +1051,38 @@ fn lower_expr(
             });
             Some(dest)
         }
-        Expr::StringTemplate(_, span) => {
-            diags.push(Diagnostic::error(
-                *span,
-                "string templates are only supported as a direct argument of `println` in PR scope",
-            ));
-            None
+        Expr::StringTemplate(parts, _) => {
+            // Lower string template to a chain of ConcatStr operations.
+            // Start with the first part and concatenate the rest.
+            let mut result: Option<LocalId> = None;
+            for part in parts {
+                let part_local = lower_template_part(
+                    part,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                )?;
+                result = Some(match result {
+                    None => part_local,
+                    Some(prev) => {
+                        let concat = fb.new_local(Ty::String);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: concat,
+                            value: Rvalue::BinOp {
+                                op: MBinOp::ConcatStr,
+                                lhs: prev,
+                                rhs: part_local,
+                            },
+                        });
+                        concat
+                    }
+                });
+            }
+            result
         }
         Expr::Unary { op, operand, .. } => {
             // For negation of an integer literal, fold to a negative

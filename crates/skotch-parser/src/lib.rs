@@ -467,15 +467,36 @@ impl<'a> Parser<'a> {
             TokenKind::KwFor => self.parse_for(),
             _ => {
                 let expr = self.parse_expr();
-                // Check for `ident = expr` (var reassignment).
+                // Check for `ident = expr` or `ident += expr` etc.
                 self.skip_trivia();
-                if self.peek_kind() == TokenKind::Eq {
+                let assign_op = match self.peek_kind() {
+                    TokenKind::Eq => Some(None), // plain assignment
+                    TokenKind::PlusEq => Some(Some(BinOp::Add)),
+                    TokenKind::MinusEq => Some(Some(BinOp::Sub)),
+                    TokenKind::StarEq => Some(Some(BinOp::Mul)),
+                    TokenKind::SlashEq => Some(Some(BinOp::Div)),
+                    TokenKind::PercentEq => Some(Some(BinOp::Mod)),
+                    _ => None,
+                };
+                if let Some(compound_op) = assign_op {
                     if let Expr::Ident(name, name_span) = &expr {
                         let name = *name;
                         let start = *name_span;
-                        self.bump(); // consume `=`
+                        self.bump(); // consume `=` or `+=` etc.
                         self.skip_trivia();
-                        let value = self.parse_expr();
+                        let rhs = self.parse_expr();
+                        // For compound: desugar `x += e` to `x = x + e`
+                        let value = if let Some(op) = compound_op {
+                            let span = start.merge(rhs.span());
+                            Expr::Binary {
+                                op,
+                                lhs: Box::new(Expr::Ident(name, start)),
+                                rhs: Box::new(rhs),
+                                span,
+                            }
+                        } else {
+                            rhs
+                        };
                         let span = start.merge(value.span());
                         return Stmt::Assign {
                             target: name,

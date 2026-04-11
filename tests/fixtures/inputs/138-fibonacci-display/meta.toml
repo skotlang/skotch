@@ -1,0 +1,4 @@
+name   = "138-fibonacci-display"
+status = "supported"
+features = ["for-loop", "string-template-expr", "function-call-in-template", "recursion", "var", "compound"]
+skip_dex = true

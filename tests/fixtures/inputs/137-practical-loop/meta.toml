@@ -1,0 +1,3 @@
+name   = "137-practical-loop"
+status = "supported"
+features = ["while-loop", "for-loop", "early-return", "compound-assignment", "prime-sieve"]
