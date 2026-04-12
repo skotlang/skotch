@@ -1,4 +1,4 @@
-name   = "60-class-properties"
-status = "stub"
-features = ["class", "var-property", "method", "increment"]
-reason = "Requires mutable instance properties and postfix increment."
+name     = "60-class-properties"
+status   = "supported"
+features = ["class", "var", "increment", "field-mutation"]
+notes    = "Class with mutable var property, increment method, field writeback."

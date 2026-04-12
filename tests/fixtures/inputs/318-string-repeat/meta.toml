@@ -1,0 +1,4 @@
+name     = "318-string-repeat"
+status   = "supported"
+features = ["string", "repeat"]
+notes    = "String.repeat(n) method."

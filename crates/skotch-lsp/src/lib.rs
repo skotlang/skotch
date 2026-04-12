@@ -1228,4 +1228,10 @@ mod tests {
         let state = analyze_source(r#"fun main() { val x = "42".toInt(); println(x + 1) }"#);
         assert!(!state.diags.has_errors());
     }
+
+    #[test]
+    fn diagnostics_for_increment() {
+        let state = analyze_source("fun main() { var x = 0; x++; println(x) }");
+        assert!(!state.diags.has_errors());
+    }
 }

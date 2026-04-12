@@ -486,7 +486,7 @@ impl<'a> TypeChecker<'a> {
                         (Ty::String, "isEmpty") => Some(Ty::Bool),
                         (
                             Ty::String,
-                            "uppercase" | "lowercase" | "trim" | "substring" | "replace",
+                            "uppercase" | "lowercase" | "trim" | "substring" | "replace" | "repeat",
                         ) => Some(Ty::String),
                         (Ty::String, "contains" | "startsWith" | "endsWith" | "equals") => {
                             Some(Ty::Bool)

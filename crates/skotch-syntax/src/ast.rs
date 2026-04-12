@@ -168,11 +168,13 @@ pub enum Stmt {
     While { cond: Expr, body: Block, span: Span },
     /// `do { body } while (cond)`.
     DoWhile { body: Block, cond: Expr, span: Span },
-    /// `for (name in start..end) { body }`.
+    /// `for (name in start..end) { body }` or `for (name in start until end) { body }`.
     For {
         var_name: Symbol,
         start: Expr,
         end: Expr,
+        /// If true, use exclusive end (`until`); if false, inclusive (`..`).
+        exclusive: bool,
         body: Block,
         span: Span,
     },

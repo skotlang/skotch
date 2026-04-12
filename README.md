@@ -176,16 +176,14 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~50% of the Kotlin language specification.** The compiler
-handles functions with **default parameters** and **named arguments**, `print()`/
-`println()`, **data classes** with synthesized `toString()`, `maxOf()`/`minOf()`,
-complete control flow, try/finally, numeric types (Int, Long, Double), Boolean,
-String methods with correct return type inference (`.toInt()`, `.toDouble()`,
-`.uppercase()`, etc. can be used in expressions), Char, classes with
-constructors/methods/field access/init blocks, null literals, const val,
-visibility modifiers, nullable types with elvis (`?:`), Java static method
-interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. 275+ test
-fixtures validated across JVM, DEX, LLVM IR, and klib targets.
+**Estimated coverage: ~55% of the Kotlin language specification.** The compiler
+handles functions with default parameters and named arguments, `print()`/
+`println()`, data classes, `maxOf()`/`minOf()`, complete control flow including
+`for (i in a until b)` exclusive ranges, try/finally, numeric types (Int, Long,
+Double), Boolean, String with 20+ methods including `.repeat()`, Char, classes
+with mutable `var` field writeback and `override fun toString()`, `++`/`--`
+operators, null/const/visibility modifiers, nullable types with elvis (`?:`),
+Java interop, and Kotlin stdlib resolution. 290+ test fixtures.
 
 ### Implemented and stable
 
@@ -219,10 +217,13 @@ fixtures validated across JVM, DEX, LLVM IR, and klib targets.
 | [Logical operators](https://kotlinlang.org/spec/expressions.html#logical-disjunction-expression) | §7.8–7.9 | `&&`, `\|\|` with short-circuit evaluation |
 | [Unary operators](https://kotlinlang.org/spec/expressions.html#unary-expressions) | §7.3 | `-` (negation), `!` (not) |
 | [Compound assignment](https://kotlinlang.org/spec/expressions.html#assignments) | §7.12 | `+=`, `-=`, `*=`, `/=`, `%=` |
+| [Increment/decrement](https://kotlinlang.org/spec/expressions.html#postfix-increment-expression) | §7.3.4 | `x++`, `x--` — postfix operators on `var` locals and class fields |
+| [Mutable class fields](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `var` fields in classes with method writeback; `count++` in methods persists |
+| [Override toString()](https://kotlinlang.org/spec/declarations.html#overriding) | §4.5.1 | `override fun toString(): String` on regular classes |
 | [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
 | [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, `in range`, string/int matching, nested |
 | [Else-if chains](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | `if {} else if {} else {}` (as statements) |
-| [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end) { }` with `Int` ranges |
+| [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end)` inclusive, `for (i in start until end)` exclusive |
 | [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
 | [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
 | [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |
@@ -242,7 +243,6 @@ fixtures validated across JVM, DEX, LLVM IR, and klib targets.
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Class body properties | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Medium | `var count: Int = 0` in class body, `count++` |
 | Inheritance & override | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Hard | `open class`, `override fun`, `super` calls |
 | Data class equals/hashCode/copy | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Medium | `toString()` works; `equals()`/`hashCode()`/`copy()`/`componentN()` not yet synthesized |
 | Interfaces | [§4.5.3](https://kotlinlang.org/spec/declarations.html#interface-declaration) | Hard | Declaration, implementation, default methods |

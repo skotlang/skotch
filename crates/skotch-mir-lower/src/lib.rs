@@ -582,6 +582,7 @@ fn lower_stmt(
             var_name,
             start: range_start,
             end: range_end,
+            exclusive,
             body,
             ..
         } => {
@@ -632,12 +633,17 @@ fn lower_stmt(
 
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
 
-            // Condition: loop_var <= end_val
+            // Condition: loop_var <= end_val (inclusive) or < end_val (exclusive/until)
+            let cmp_op = if *exclusive {
+                MBinOp::CmpLt
+            } else {
+                MBinOp::CmpLe
+            };
             let cmp = fb.new_local(Ty::Bool);
             fb.push_stmt(MStmt::Assign {
                 dest: cmp,
                 value: Rvalue::BinOp {
-                    op: MBinOp::CmpLe,
+                    op: cmp_op,
                     lhs: loop_var,
                     rhs: end_val,
                 },
@@ -1362,6 +1368,12 @@ fn lower_expr(
                             "endsWith",
                             "(Ljava/lang/String;)Z",
                             Ty::Bool,
+                        )),
+                        (Ty::String, "repeat", 1) => Some((
+                            "java/lang/String",
+                            "repeat",
+                            "(I)Ljava/lang/String;",
+                            Ty::String,
                         )),
                         _ => None,
                     };
@@ -2915,6 +2927,8 @@ fn lower_class(
         }
 
         // Load fields into locals so they're accessible by name in the method body.
+        // Track field→local mapping for writeback after the body.
+        let mut field_locals: Vec<(String, LocalId)> = Vec::new();
         for field in &fields {
             let field_sym = interner.intern(&field.name);
             let field_local = fb.new_local(field.ty.clone());
@@ -2927,6 +2941,7 @@ fn lower_class(
                 },
             });
             scope.push((field_sym, field_local));
+            field_locals.push((field.name.clone(), field_local));
         }
 
         for s in &method.body.stmts {
@@ -2941,6 +2956,20 @@ fn lower_class(
                 diags,
                 None,
             );
+        }
+
+        // Write back all field locals to the object. This ensures that
+        // mutations like `count = count + 1` persist after the method returns.
+        for (field_name, field_local) in &field_locals {
+            fb.push_stmt(MStmt::Assign {
+                dest: this_local, // dummy dest
+                value: Rvalue::PutField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: field_name.clone(),
+                    value: *field_local,
+                },
+            });
         }
 
         mir_methods.push(fb.finish());

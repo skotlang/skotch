@@ -1,0 +1,4 @@
+name     = "312-field-mutation"
+status   = "supported"
+features = ["class", "var", "field-mutation", "method"]
+notes    = "Class method that mutates var field; changes persist."

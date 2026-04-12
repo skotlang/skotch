@@ -1,0 +1,4 @@
+name     = "319-until-vs-inclusive"
+status   = "supported"
+features = ["for", "until", "range", "comparison"]
+notes    = "until and .. produce same result when end differs by 1."

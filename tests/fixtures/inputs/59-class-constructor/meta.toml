@@ -1,4 +1,4 @@
-name   = "59-class-constructor"
-status = "stub"
-features = ["class", "constructor", "override", "toString"]
-reason = "Requires class with primary constructor and toString override."
+name     = "59-class-constructor"
+status   = "supported"
+features = ["class", "constructor", "toString", "override"]
+notes    = "Class with override toString() method."

@@ -1,0 +1,4 @@
+name     = "314-increment-decrement"
+status   = "supported"
+features = ["increment", "decrement", "var"]
+notes    = "Postfix ++ and -- operators on local variables."

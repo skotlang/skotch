@@ -1,0 +1,4 @@
+name     = "313-counter-class"
+status   = "supported"
+features = ["class", "var", "increment", "decrement", "field-mutation"]
+notes    = "Counter class with increment, decrement, and reset."

@@ -1,0 +1,4 @@
+name     = "315-bank-account"
+status   = "supported"
+features = ["class", "var", "deposit", "withdraw", "field-mutation"]
+notes    = "Bank account with deposit/withdraw and field persistence."

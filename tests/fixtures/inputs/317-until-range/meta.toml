@@ -1,0 +1,4 @@
+name     = "317-until-range"
+status   = "supported"
+features = ["for", "until", "exclusive-range"]
+notes    = "for-in with until (exclusive end)."

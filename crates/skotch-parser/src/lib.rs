@@ -753,6 +753,32 @@ impl<'a> Parser<'a> {
                         };
                     }
                 }
+                // Postfix increment/decrement: `x++` or `x--`
+                if let Expr::Ident(name, name_span) = &expr {
+                    self.skip_trivia();
+                    let inc_op = match self.peek_kind() {
+                        TokenKind::PlusPlus => Some(BinOp::Add),
+                        TokenKind::MinusMinus => Some(BinOp::Sub),
+                        _ => None,
+                    };
+                    if let Some(op) = inc_op {
+                        let name = *name;
+                        let start = *name_span;
+                        self.bump(); // consume ++ or --
+                        let one = Expr::IntLit(1, start);
+                        let value = Expr::Binary {
+                            op,
+                            lhs: Box::new(Expr::Ident(name, start)),
+                            rhs: Box::new(one),
+                            span: start,
+                        };
+                        return Stmt::Assign {
+                            target: name,
+                            value,
+                            span: start,
+                        };
+                    }
+                }
                 Stmt::Expr(expr)
             }
         }
@@ -816,7 +842,26 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let range_start = self.parse_expr();
         self.skip_trivia();
-        self.expect(TokenKind::DotDot, "'..' for range");
+        let exclusive = if self.peek_kind() == TokenKind::DotDot {
+            self.bump();
+            false
+        } else if self.peek_kind() == TokenKind::Ident {
+            let idx = self.pos;
+            let text = match self.payload(idx) {
+                Some(TokenPayload::Ident(s)) => s.clone(),
+                _ => String::new(),
+            };
+            if text == "until" {
+                self.bump();
+                true
+            } else {
+                self.expect(TokenKind::DotDot, "'..' or 'until' for range");
+                false
+            }
+        } else {
+            self.expect(TokenKind::DotDot, "'..' or 'until' for range");
+            false
+        };
         self.skip_trivia();
         let range_end = self.parse_expr();
         self.skip_trivia();
@@ -828,6 +873,7 @@ impl<'a> Parser<'a> {
             var_name,
             start: range_start,
             end: range_end,
+            exclusive,
             body,
             span,
         }

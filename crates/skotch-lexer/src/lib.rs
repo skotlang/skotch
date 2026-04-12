@@ -257,6 +257,8 @@ impl<'a> Lexer<'a> {
             (b'?', Some(b'.')) => Some((TokenKind::QuestionDot, 2)),
             (b'?', Some(b':')) => Some((TokenKind::Elvis, 2)),
             (b'!', Some(b'!')) => Some((TokenKind::BangBang, 2)),
+            (b'+', Some(b'+')) => Some((TokenKind::PlusPlus, 2)),
+            (b'-', Some(b'-')) => Some((TokenKind::MinusMinus, 2)),
             _ => None,
         };
         if let Some((k, n)) = kind {

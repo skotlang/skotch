@@ -116,6 +116,8 @@ pub enum TokenKind {
     QuestionDot, // ?.
     Elvis,       // ?:
     BangBang,    // !!
+    PlusPlus,    // ++
+    MinusMinus,  // --
 
     // ─── trivia / structural ─────────────────────────────────────────────
     /// One or more `\n`s. Kotlin treats newlines as soft statement

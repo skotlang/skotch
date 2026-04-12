@@ -1,0 +1,4 @@
+name     = "320-complex-class"
+status   = "supported"
+features = ["class", "var", "increment", "decrement", "field-mutation"]
+notes    = "Stack class with push/pop using ++ and --."

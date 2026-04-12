@@ -1,0 +1,4 @@
+name     = "316-override-tostring"
+status   = "supported"
+features = ["class", "override", "toString"]
+notes    = "Custom override toString() on regular class."
