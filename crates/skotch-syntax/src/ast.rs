@@ -125,6 +125,8 @@ pub struct ClassDecl {
     pub properties: Vec<PropertyDecl>,
     /// Methods declared in the class body.
     pub methods: Vec<FunDecl>,
+    /// Methods from a `companion object { }` block.
+    pub companion_methods: Vec<FunDecl>,
     /// Init blocks (statements run in the constructor).
     pub init_blocks: Vec<Block>,
     pub span: Span,

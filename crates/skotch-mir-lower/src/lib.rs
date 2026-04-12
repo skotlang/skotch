@@ -3165,8 +3165,47 @@ fn lower_class(
         mir_methods.push(fb.finish());
     }
 
+    // Lower companion object methods as top-level static functions.
+    // This makes ClassName.staticMethod() work via name_to_func lookup.
+    for method in &c.companion_methods {
+        let method_name = interner.resolve(method.name).to_string();
+        let return_ty = method
+            .return_ty
+            .as_ref()
+            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .unwrap_or(Ty::Unit);
+
+        let fn_idx = module.functions.len();
+        let fn_id = FuncId(fn_idx as u32);
+        name_to_func.insert(method.name, fn_id);
+
+        let mut fb = FnBuilder::new(fn_idx, method_name, return_ty);
+        let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
+        for p in &method.params {
+            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let id = fb.new_local(ty);
+            fb.mf.params.push(id);
+            scope.push((p.name, id));
+        }
+
+        for s in &method.body.stmts {
+            lower_stmt(
+                s,
+                &mut fb,
+                &mut scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                None,
+            );
+        }
+
+        module.add_function(fb.finish());
+    }
+
     // Synthesize toString() for data classes.
-    // Generates: "ClassName(field1=value1, field2=value2)"
     if c.is_data && !fields.is_empty() {
         let ts_idx = module.functions.len() + mir_methods.len();
         let mut ts_fb = FnBuilder::new(ts_idx, "toString".to_string(), Ty::String);
