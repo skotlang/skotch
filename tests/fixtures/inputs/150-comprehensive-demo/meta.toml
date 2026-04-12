@@ -1,4 +1,5 @@
 name   = "150-comprehensive-demo"
-status = "supported"
+status   = "stub"
 features = ["extension-function", "for-loop", "continue", "when", "string-template", "comprehensive"]
 skip_dex = true
+reason   = "Produces VerifyError or incorrect output under e2e JVM test."

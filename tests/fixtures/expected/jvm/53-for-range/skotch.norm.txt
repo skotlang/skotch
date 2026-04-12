@@ -27,22 +27,25 @@ method        main ([Ljava/lang/String;)V 0x0009
     0027 iload 4
     0029 op_0x99
     0030 nop
-    0031 op_0x20
+    0031 op_0x23
     0032 iload 3
     0034 istore 5
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0039 iload 5
     0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0044 iconst_1
-    0045 istore 6
-    0047 iload 3
-    0049 iload 6
-    0051 iadd
-    0052 istore 7
-    0054 iload 7
-    0056 istore 3
-    0058 op_0xA7
-    0059 op_0xFF
-    0060 op_0xD3
-    0061 return
-    sub_attr  StackMapTable (56 bytes)
+    0044 op_0xA7
+    0045 nop
+    0046 iconst_0
+    0047 iconst_1
+    0048 istore 6
+    0050 iload 3
+    0052 iload 6
+    0054 iadd
+    0055 istore 7
+    0057 iload 7
+    0059 istore 3
+    0061 op_0xA7
+    0062 op_0xFF
+    0063 op_0xD0
+    0064 return
+    sub_attr  StackMapTable (71 bytes)

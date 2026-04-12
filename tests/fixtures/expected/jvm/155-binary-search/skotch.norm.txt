@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        binarySearch (II)I 0x0009
-  code        max_stack=4 max_locals=33
+  code        max_stack=4 max_locals=31
     0000 iconst_0
     0001 istore 2
     0003 iload 2
@@ -39,7 +39,7 @@ method        binarySearch (II)I 0x0009
     0050 iload 10
     0052 op_0x99
     0053 nop
-    0054 op_0x41
+    0054 op_0x3E
     0055 iload 3
     0057 istore 11
     0059 iload 7
@@ -71,75 +71,71 @@ method        binarySearch (II)I 0x0009
     0102 iconst_1
     0103 iconst_1
     0104 istore 19
-    0106 iconst_0
-    0107 istore 20
-    0109 iload 19
-    0111 op_0x99
-    0112 nop
-    0113 ldc_w #42752
-    0116 op_0x09
-    0117 iconst_m1
-    0118 istore 21
-    0120 iload 21
-    0122 op_0xAC
-    0123 iload 16
-    0125 istore 22
-    0127 iload 22
-    0129 op_0xAC
-    0130 op_0xA7
-    0131 nop
-    0132 iconst_0
-    0133 iload 16
-    0135 istore 23
-    0137 iload 0
-    0139 istore 24
-    0141 iload 23
-    0143 iload 24
-    0145 op_0xA1
-    0146 nop
-    0147 iconst_4
-    0148 iconst_0
-    0149 op_0xA7
-    0150 nop
-    0151 iconst_1
-    0152 iconst_1
-    0153 istore 25
-    0155 iconst_0
-    0156 istore 26
-    0158 iload 25
-    0160 op_0x99
-    0161 nop
-    0162 op_0x18
-    0163 iload 16
-    0165 istore 27
-    0167 iconst_1
-    0168 istore 28
-    0170 iload 27
-    0172 iload 28
-    0174 iadd
-    0175 istore 29
-    0177 iload 29
-    0179 istore 3
-    0181 op_0xA7
-    0182 nop
-    0183 op_0x18
-    0184 iload 16
-    0186 istore 30
-    0188 iconst_1
-    0189 istore 31
-    0191 iload 30
-    0193 iload 31
-    0195 isub
-    0196 istore 32
-    0198 iload 32
-    0200 istore 7
-    0202 op_0xA7
-    0203 nop
-    0204 iconst_0
-    0205 op_0xA7
-    0206 op_0xFF
-    0207 op_0x4F
-    sub_attr  StackMapTable (340 bytes)
+    0106 iload 19
+    0108 op_0x99
+    0109 nop
+    0110 ldc_w #42752
+    0113 op_0x09
+    0114 iconst_m1
+    0115 istore 20
+    0117 iload 20
+    0119 op_0xAC
+    0120 iload 16
+    0122 istore 21
+    0124 iload 21
+    0126 op_0xAC
+    0127 op_0xA7
+    0128 nop
+    0129 iconst_0
+    0130 iload 16
+    0132 istore 22
+    0134 iload 0
+    0136 istore 23
+    0138 iload 22
+    0140 iload 23
+    0142 op_0xA1
+    0143 nop
+    0144 iconst_4
+    0145 iconst_0
+    0146 op_0xA7
+    0147 nop
+    0148 iconst_1
+    0149 iconst_1
+    0150 istore 24
+    0152 iload 24
+    0154 op_0x99
+    0155 nop
+    0156 op_0x18
+    0157 iload 16
+    0159 istore 25
+    0161 iconst_1
+    0162 istore 26
+    0164 iload 25
+    0166 iload 26
+    0168 iadd
+    0169 istore 27
+    0171 iload 27
+    0173 istore 3
+    0175 op_0xA7
+    0176 nop
+    0177 op_0x18
+    0178 iload 16
+    0180 istore 28
+    0182 iconst_1
+    0183 istore 29
+    0185 iload 28
+    0187 iload 29
+    0189 isub
+    0190 istore 30
+    0192 iload 30
+    0194 istore 7
+    0196 op_0xA7
+    0197 nop
+    0198 iconst_0
+    0199 op_0xA7
+    0200 op_0xFF
+    0201 op_0x55
+    sub_attr  StackMapTable (331 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=13
     0000 bipush 7

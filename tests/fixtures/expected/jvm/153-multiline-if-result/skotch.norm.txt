@@ -23,69 +23,67 @@ method        main ([Ljava/lang/String;)V 0x0009
     0025 iconst_1
     0026 iconst_1
     0027 istore 5
-    0029 iconst_0
-    0030 istore 6
-    0032 iload 5
-    0034 op_0x99
-    0035 nop
-    0036 op_0x42
-    0037 iload 2
+    0029 iload 5
+    0031 op_0x99
+    0032 nop
+    0033 op_0x42
+    0034 iload 2
+    0036 istore 6
+    0038 iconst_2
     0039 istore 7
-    0041 iconst_2
-    0042 istore 8
-    0044 iload 7
-    0046 iload 8
-    0048 imul
-    0049 istore 9
-    0051 iload 9
-    0053 istore 10
-    0055 ldc "Doubled: "
-    0057 astore 11
-    0059 iload 10
-    0061 istore 12
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 op_0xBB
-    0067 nop
-    0068 ldc_w #22967
-    0071 nop
-    0072 op_0x17
-    0073 aload 11
-    0075 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0078 iload 12
-    0080 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0083 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0086 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0089 iload 10
-    0091 istore 13
-    0093 iload 13
-    0095 istore 6
-    0097 op_0xA7
-    0098 nop
-    0099 op_0x0D
-    0100 iconst_0
-    0101 istore 14
-    0103 iload 14
-    0105 istore 6
-    0107 op_0xA7
-    0108 nop
-    0109 iconst_0
-    0110 iload 6
-    0112 istore 15
-    0114 ldc "Result: "
-    0116 astore 16
-    0118 iload 15
-    0120 istore 17
-    0122 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0125 op_0xBB
-    0126 nop
-    0127 ldc_w #22967
-    0130 nop
-    0131 op_0x17
-    0132 aload 16
-    0134 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0137 iload 17
-    0139 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0142 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0145 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0148 return
-    sub_attr  StackMapTable (63 bytes)
+    0041 iload 6
+    0043 iload 7
+    0045 imul
+    0046 istore 8
+    0048 iload 8
+    0050 istore 9
+    0052 ldc "Doubled: "
+    0054 astore 10
+    0056 iload 9
+    0058 istore 11
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 op_0xBB
+    0064 nop
+    0065 ldc_w #22967
+    0068 nop
+    0069 op_0x17
+    0070 aload 10
+    0072 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0075 iload 11
+    0077 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0080 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0083 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0086 iload 9
+    0088 istore 12
+    0090 iload 12
+    0092 istore 13
+    0094 op_0xA7
+    0095 nop
+    0096 op_0x0D
+    0097 iconst_0
+    0098 istore 14
+    0100 iload 14
+    0102 istore 13
+    0104 op_0xA7
+    0105 nop
+    0106 iconst_0
+    0107 iload 13
+    0109 istore 15
+    0111 ldc "Result: "
+    0113 astore 16
+    0115 iload 15
+    0117 istore 17
+    0119 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0122 op_0xBB
+    0123 nop
+    0124 ldc_w #22967
+    0127 nop
+    0128 op_0x17
+    0129 aload 16
+    0131 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0134 iload 17
+    0136 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0139 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0142 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0145 return
+    sub_attr  StackMapTable (69 bytes)

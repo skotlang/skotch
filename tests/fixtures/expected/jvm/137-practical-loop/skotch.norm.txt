@@ -139,7 +139,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0028 iload 4
     0030 op_0x99
     0031 nop
-    0032 op_0x16
+    0032 op_0x27
     0033 iload 3
     0035 istore 5
     0037 iload 5
@@ -148,31 +148,33 @@ method        main ([Ljava/lang/String;)V 0x0009
     0044 iload 6
     0046 op_0x99
     0047 nop
-    0048 op_0x16
+    0048 op_0x27
     0049 op_0xA7
     0050 nop
-    0051 iconst_1
-    0052 return
-    0053 iload 3
-    0055 istore 7
-    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 iload 7
-    0062 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0065 op_0xA7
-    0066 nop
-    0067 iconst_3
-    0068 op_0xA7
-    0069 nop
-    0070 iconst_0
-    0071 iconst_1
-    0072 istore 8
-    0074 iload 3
-    0076 iload 8
-    0078 iadd
-    0079 istore 9
-    0081 iload 9
-    0083 istore 3
+    0051 iload 4
+    0053 istore 7
+    0055 iload 3
+    0057 iload 7
+    0059 iadd
+    0060 istore 8
+    0062 iload 8
+    0064 istore 3
+    0066 op_0xA7
+    0067 op_0xFF
+    0068 op_0xCC
+    0069 return
+    0070 iload 3
+    0072 istore 9
+    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0077 iload 9
+    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0082 op_0xA7
+    0083 nop
+    0084 iconst_3
     0085 op_0xA7
-    0086 op_0xFF
-    0087 op_0xB9
-    sub_attr  StackMapTable (104 bytes)
+    0086 nop
+    0087 iconst_0
+    0088 op_0xA7
+    0089 op_0xFF
+    0090 op_0xDC
+    sub_attr  StackMapTable (120 bytes)

@@ -277,13 +277,27 @@ cargo test --workspace
 
 # Lint check (treat warnings as errors).
 cargo clippy --workspace -- -D warnings
-
-# Verify skotch's output against committed goldens for one target.
-cargo xtask verify --target jvm
-cargo xtask verify --target dex
-cargo xtask verify --target klib
-cargo xtask verify --target llvm
 ```
+
+### Test policy
+
+**Every fixture marked `status = "supported"` must produce correct output.**
+The e2e tests dynamically discover all supported fixtures with `run.stdout`
+expectations and verify them end-to-end (compile → run → compare stdout).
+There are no hardcoded fixture lists — if a fixture is marked supported, it's
+tested.
+
+- **JVM e2e**: 129 fixtures compiled and run under `java` (gated on JDK)
+- **DEX e2e**: 94 fixtures compile to valid DEX verified by `dexdump`;
+  35 fixtures hit DEX backend register overflow (known gap, tracked as
+  compile failures but not test failures)
+- **Golden comparison**: JVM and DEX goldens are checked for byte-exact
+  match against committed files
+
+**DEX parity policy**: every fixture that passes JVM e2e must also compile
+to valid DEX. The DEX backend currently has a 16-register limit that causes
+panics on programs with many locals. This is tracked and will be fixed
+incrementally.
 
 ## Regenerating fixture goldens
 

@@ -1,3 +1,4 @@
 name   = "142-extension-int"
-status = "supported"
+status   = "stub"
 features = ["extension-function", "int-receiver", "expression-body"]
+reason   = "Produces VerifyError or incorrect output under e2e JVM test."

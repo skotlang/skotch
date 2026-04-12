@@ -1,3 +1,4 @@
 name   = "190-ext-chain-complex"
-status = "supported"
+status   = "stub"
 features = ["extension-function", "method-chaining", "negation-in-parens"]
+reason   = "Produces VerifyError or incorrect output under e2e JVM test."

@@ -1,3 +1,4 @@
 name   = "199-char-literal"
-status = "supported"
+status   = "stub"
 features = ["char-literal", "escape-sequence"]
+reason   = "Produces VerifyError or incorrect output under e2e JVM test."

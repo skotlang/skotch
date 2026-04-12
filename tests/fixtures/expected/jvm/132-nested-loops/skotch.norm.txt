@@ -27,7 +27,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0027 iload 4
     0029 op_0x99
     0030 nop
-    0031 bipush 4
+    0031 op_0x21
+    0032 iconst_1
     0033 istore 5
     0035 iconst_3
     0036 istore 6
@@ -35,54 +36,59 @@ method        main ([Ljava/lang/String;)V 0x0009
     0040 istore 7
     0042 op_0xA7
     0043 nop
-    0044 iconst_1
-    0045 return
-    0046 iload 7
-    0048 iload 6
-    0050 op_0xA4
-    0051 nop
-    0052 iconst_4
-    0053 iconst_0
-    0054 op_0xA7
-    0055 nop
-    0056 iconst_1
-    0057 iconst_1
-    0058 istore 8
-    0060 iload 8
-    0062 op_0x99
-    0063 nop
-    0064 op_0x2B
-    0065 iload 3
-    0067 istore 9
-    0069 iload 7
-    0071 istore 10
-    0073 iload 9
-    0075 iload 10
-    0077 imul
-    0078 istore 11
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 iload 11
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 iconst_1
-    0089 istore 12
-    0091 iload 7
-    0093 iload 12
-    0095 iadd
-    0096 istore 13
-    0098 iload 13
-    0100 istore 7
-    0102 op_0xA7
-    0103 op_0xFF
-    0104 op_0xC8
-    0105 iconst_1
-    0106 istore 14
-    0108 iload 3
-    0110 iload 14
-    0112 iadd
-    0113 istore 15
-    0115 iload 15
-    0117 istore 3
-    0119 op_0xA7
-    0120 op_0xFF
-    0121 op_0x96
-    sub_attr  StackMapTable (126 bytes)
+    0044 iload 4
+    0046 istore 8
+    0048 iload 3
+    0050 iload 8
+    0052 iadd
+    0053 istore 9
+    0055 iload 9
+    0057 istore 3
+    0059 op_0xA7
+    0060 op_0xFF
+    0061 op_0xD2
+    0062 return
+    0063 iload 7
+    0065 iload 6
+    0067 op_0xA4
+    0068 nop
+    0069 iconst_4
+    0070 iconst_0
+    0071 op_0xA7
+    0072 nop
+    0073 iconst_1
+    0074 iconst_1
+    0075 istore 10
+    0077 iload 10
+    0079 op_0x99
+    0080 nop
+    0081 op_0x2E
+    0082 iload 3
+    0084 istore 11
+    0086 iload 7
+    0088 istore 12
+    0090 iload 11
+    0092 iload 12
+    0094 imul
+    0095 istore 13
+    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0100 iload 13
+    0102 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0105 op_0xA7
+    0106 nop
+    0107 iconst_0
+    0108 iconst_1
+    0109 istore 14
+    0111 iload 7
+    0113 iload 14
+    0115 iadd
+    0116 istore 15
+    0118 iload 15
+    0120 istore 7
+    0122 op_0xA7
+    0123 op_0xFF
+    0124 op_0xC5
+    0125 op_0xA7
+    0126 op_0xFF
+    0127 op_0xB0
+    sub_attr  StackMapTable (171 bytes)

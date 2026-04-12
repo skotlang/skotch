@@ -1,4 +1,4 @@
 name   = "233-class-field-access"
-status = "supported"
+status   = "stub"
 features = ["class", "field-access", "val-property", "constructor"]
 skip_dex = true

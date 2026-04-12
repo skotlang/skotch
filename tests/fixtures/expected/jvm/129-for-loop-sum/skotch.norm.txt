@@ -50,7 +50,7 @@ method        sumTo (I)I 0x0009
     0035 iload 6
     0037 op_0x99
     0038 nop
-    0039 op_0x27
+    0039 op_0x2A
     0040 iload 2
     0042 istore 7
     0044 iload 5
@@ -61,19 +61,22 @@ method        sumTo (I)I 0x0009
     0053 istore 9
     0055 iload 9
     0057 istore 2
-    0059 iconst_1
-    0060 istore 10
-    0062 iload 5
-    0064 iload 10
-    0066 iadd
-    0067 istore 11
-    0069 iload 11
-    0071 istore 5
-    0073 op_0xA7
-    0074 op_0xFF
-    0075 op_0xCC
-    0076 iload 2
-    0078 istore 12
-    0080 iload 12
-    0082 op_0xAC
-    sub_attr  StackMapTable (56 bytes)
+    0059 op_0xA7
+    0060 nop
+    0061 iconst_0
+    0062 iconst_1
+    0063 istore 10
+    0065 iload 5
+    0067 iload 10
+    0069 iadd
+    0070 istore 11
+    0072 iload 11
+    0074 istore 5
+    0076 op_0xA7
+    0077 op_0xFF
+    0078 op_0xC9
+    0079 iload 2
+    0081 istore 12
+    0083 iload 12
+    0085 op_0xAC
+    sub_attr  StackMapTable (73 bytes)

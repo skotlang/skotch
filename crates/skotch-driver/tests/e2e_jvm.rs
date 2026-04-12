@@ -1,35 +1,62 @@
 //! Behavioral end-to-end test: build each supported fixture with skotch,
-//! run the resulting `.class` through `java`, and assert stdout
-//! matches the committed `run.stdout`.
+//! run the resulting `.class` through `java`, and assert stdout matches
+//! the committed `run.stdout`.
 //!
-//! These tests are gated on `java` being available on `PATH`. They
-//! print a clear `[skip]` line and pass when it's not — so contributors
-//! without a JDK can still run the unit tests + the byte-level
-//! comparisons in `fixture_compare.rs`.
+//! Unlike the old hardcoded list of 12 fixtures, this test **dynamically
+//! discovers** every fixture that has:
+//!   1. `status = "supported"` in its `meta.toml`
+//!   2. A `run.stdout` file in `tests/fixtures/expected/jvm/<name>/`
+//!
+//! This ensures that marking a fixture as "supported" actually means it
+//! produces correct output — not just that the compiler doesn't crash.
+//!
+//! Gated on `java` being available on `PATH`.
 
 use std::path::PathBuf;
 use std::process::Command;
 
 use skotch_driver::{emit, EmitOptions, Target};
 
-const SUPPORTED: &[&str] = &[
-    "01-fun-main-empty",
-    "02-println-string-literal",
-    "03-println-int-literal",
-    "04-val-string",
-    "05-string-template-simple",
-    "06-arithmetic-int",
-    "07-if-expression",
-    "08-function-call",
-    "09-multiple-statements",
-    "10-top-level-val",
-    "38-string-template-expr",
-    "39-raw-string",
-];
-
 fn workspace_root() -> PathBuf {
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     here.parent().unwrap().parent().unwrap().to_path_buf()
+}
+
+/// Discover all fixtures that are marked "supported" in meta.toml and
+/// have a committed `run.stdout` expected output file.
+fn discover_e2e_fixtures() -> Vec<String> {
+    let inputs_dir = workspace_root().join("tests/fixtures/inputs");
+    let jvm_dir = workspace_root().join("tests/fixtures/expected/jvm");
+
+    let mut fixtures = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&inputs_dir) else {
+        return fixtures;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let meta_path = entry.path().join("meta.toml");
+        let stdout_path = jvm_dir.join(&name).join("run.stdout");
+
+        // Must have meta.toml with status = "supported"
+        if let Ok(meta) = std::fs::read_to_string(&meta_path) {
+            if !meta.contains("status") || !meta.contains("\"supported\"") {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        // Must have a run.stdout expected output
+        if !stdout_path.exists() {
+            continue;
+        }
+
+        fixtures.push(name);
+    }
+
+    fixtures.sort();
+    fixtures
 }
 
 #[test]
@@ -42,8 +69,17 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
         }
     };
 
+    let fixtures = discover_e2e_fixtures();
+    if fixtures.is_empty() {
+        eprintln!("[skip] no eligible fixtures found");
+        return;
+    }
+
     let mut failures: Vec<String> = Vec::new();
-    for &name in SUPPORTED {
+    let mut passed = 0;
+    let skipped = 0;
+
+    for name in &fixtures {
         let input = workspace_root()
             .join("tests/fixtures/inputs")
             .join(name)
@@ -52,51 +88,63 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
             .join("tests/fixtures/expected/jvm")
             .join(name)
             .join("run.stdout");
-        if !stdout_file.exists() {
-            // The fixture doesn't have a captured reference stdout
-            // (e.g. fixture 08 if kotlin-stdlib was missing at gen
-            // time). Skip silently rather than fail.
-            continue;
-        }
+
         let tmp = std::env::temp_dir().join(format!("skotch-e2e-{}-{}", name, std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let class_path = tmp.join("InputKt.class");
-        emit(&EmitOptions {
+
+        // Try to compile. If compilation fails, record failure.
+        let emit_result = emit(&EmitOptions {
             input: input.clone(),
             output: class_path.clone(),
             target: Target::Jvm,
             norm_out: None,
-        })
-        .unwrap_or_else(|e| panic!("emit failed for {name}: {e}"));
+        });
 
+        if let Err(e) = emit_result {
+            failures.push(format!("{name}: compilation failed: {e}"));
+            let _ = std::fs::remove_dir_all(&tmp);
+            continue;
+        }
+
+        // Run under java.
         let out = Command::new(&java)
             .arg("-cp")
             .arg(&tmp)
             .arg("InputKt")
             .output()
             .expect("running java");
-        // Compare modulo CR. Java's `println` on Windows prints
-        // `\r\n` (System.lineSeparator()), while the committed
-        // `run.stdout` is pinned to LF by `.gitattributes`. Stripping
-        // `\r` on both sides keeps the test platform-agnostic.
+
         let expected = std::fs::read_to_string(&stdout_file)
             .unwrap()
             .replace('\r', "");
         let actual = String::from_utf8_lossy(&out.stdout).replace('\r', "");
+
         if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            // VerifyError or other JVM errors mean our bytecode is wrong
             failures.push(format!(
-                "{name}: java exited {}: stderr={}",
+                "{name}: java exited {}: {}",
                 out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
+                stderr.lines().next().unwrap_or("(no stderr)")
             ));
-            continue;
-        }
-        if actual != expected {
+        } else if actual != expected {
             failures.push(format!(
                 "{name}: stdout mismatch\n  expected: {expected:?}\n  actual:   {actual:?}"
             ));
+        } else {
+            passed += 1;
         }
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    eprintln!(
+        "e2e_jvm: {passed} passed, {} failed, {skipped} skipped (of {} eligible)",
+        failures.len(),
+        fixtures.len()
+    );
+
     if !failures.is_empty() {
         panic!(
             "{} fixture(s) failed e2e:\n  - {}",

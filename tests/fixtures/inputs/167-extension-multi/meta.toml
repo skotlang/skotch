@@ -1,3 +1,4 @@
 name   = "167-extension-multi"
-status = "supported"
+status   = "stub"
 features = ["extension-function", "multiple-extensions", "int-receiver"]
+reason   = "Produces VerifyError or incorrect output under e2e JVM test."

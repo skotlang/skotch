@@ -61,8 +61,8 @@ method        fib (I)I 0x0009
     0078 iload 12
     0080 op_0x99
     0081 nop
-    0082 op_0x37
-    0083 iload 6
+    0082 astore 21
+    0084 iconst_3
     0085 istore 13
     0087 iload 8
     0089 istore 14
@@ -80,22 +80,25 @@ method        fib (I)I 0x0009
     0112 istore 18
     0114 iload 18
     0116 istore 8
-    0118 iconst_1
-    0119 istore 19
-    0121 iload 11
-    0123 iload 19
-    0125 iadd
-    0126 istore 20
-    0128 iload 20
-    0130 istore 11
-    0132 op_0xA7
-    0133 op_0xFF
-    0134 op_0xBC
-    0135 iload 8
-    0137 istore 21
-    0139 iload 21
-    0141 op_0xAC
-    sub_attr  StackMapTable (123 bytes)
+    0118 op_0xA7
+    0119 nop
+    0120 iconst_0
+    0121 iconst_1
+    0122 istore 19
+    0124 iload 11
+    0126 iload 19
+    0128 iadd
+    0129 istore 20
+    0131 iload 20
+    0133 istore 11
+    0135 op_0xA7
+    0136 op_0xFF
+    0137 op_0xB9
+    0138 iload 8
+    0140 istore 21
+    0142 iload 21
+    0144 op_0xAC
+    sub_attr  StackMapTable (149 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=12
     0000 iconst_0
@@ -121,7 +124,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0028 iload 4
     0030 op_0x99
     0031 nop
-    0032 op_0x4F
+    0032 op_0x52
     0033 ldc "fib("
     0035 astore 5
     0037 iload 3
@@ -149,16 +152,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0083 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
     0086 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
     0089 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0092 iconst_1
-    0093 istore 10
-    0095 iload 3
-    0097 iload 10
-    0099 iadd
-    0100 istore 11
-    0102 iload 11
-    0104 istore 3
-    0106 op_0xA7
-    0107 op_0xFF
-    0108 op_0xA4
-    0109 return
-    sub_attr  StackMapTable (56 bytes)
+    0092 op_0xA7
+    0093 nop
+    0094 iconst_0
+    0095 iconst_1
+    0096 istore 10
+    0098 iload 3
+    0100 iload 10
+    0102 iadd
+    0103 istore 11
+    0105 iload 11
+    0107 istore 3
+    0109 op_0xA7
+    0110 op_0xFF
+    0111 op_0xA1
+    0112 return
+    sub_attr  StackMapTable (79 bytes)
