@@ -1306,186 +1306,177 @@ fn lower_expr(
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
 
-                // Handle built-in type methods (String, Int, etc.).
-                let builtin = match (&recv_ty, method_name_str.as_str()) {
-                    // String methods
-                    (Ty::String, "length") => Some(("java/lang/String", "length", "()I", Ty::Int)),
-                    (Ty::String, "isEmpty") => {
-                        Some(("java/lang/String", "isEmpty", "()Z", Ty::Bool))
-                    }
-                    (Ty::String, "uppercase") => Some((
-                        "java/lang/String",
-                        "toUpperCase",
-                        "()Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "lowercase") => Some((
-                        "java/lang/String",
-                        "toLowerCase",
-                        "()Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "trim") => Some((
-                        "java/lang/String",
-                        "trim",
-                        "()Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "substring") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "substring",
-                        "(I)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "substring") if args.len() == 2 => Some((
-                        "java/lang/String",
-                        "substring",
-                        "(II)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "indexOf") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "indexOf",
-                        "(Ljava/lang/String;)I",
-                        Ty::Int,
-                    )),
-                    (Ty::String, "lastIndexOf") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "lastIndexOf",
-                        "(Ljava/lang/String;)I",
-                        Ty::Int,
-                    )),
-                    (Ty::String, "startsWith") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "startsWith",
-                        "(Ljava/lang/String;)Z",
-                        Ty::Bool,
-                    )),
-                    (Ty::String, "endsWith") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "endsWith",
-                        "(Ljava/lang/String;)Z",
-                        Ty::Bool,
-                    )),
-                    (Ty::String, "replace") if args.len() == 2 => Some((
-                        "java/lang/String",
-                        "replace",
-                        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::String, "contains") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "contains",
-                        "(Ljava/lang/CharSequence;)Z",
-                        Ty::Bool,
-                    )),
-                    (Ty::String, "toInt") => Some((
-                        "java/lang/Integer",
-                        "parseInt",
-                        "(Ljava/lang/String;)I",
-                        Ty::Int,
-                    )),
-                    (Ty::String, "toDouble") => Some((
-                        "java/lang/Double",
-                        "parseDouble",
-                        "(Ljava/lang/String;)D",
-                        Ty::Double,
-                    )),
-                    (Ty::String, "reversed") => Some((
-                        "java/lang/String",
-                        "reversed_stub",
-                        "()Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    // Int methods
-                    (Ty::Int, "toString") => Some((
-                        "java/lang/Integer",
-                        "toString",
-                        "(I)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::Long, "toString") => Some((
-                        "java/lang/Long",
-                        "toString",
-                        "(J)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    (Ty::Double, "toString") => Some((
-                        "java/lang/Double",
-                        "toString",
-                        "(D)Ljava/lang/String;",
-                        Ty::String,
-                    )),
-                    // String get/charAt
-                    (Ty::String, "get") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "charAt",
-                        "(I)C",
-                        Ty::Int, // Char is represented as Int
-                    )),
-                    // String equals (explicit)
-                    (Ty::String, "equals") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "equals",
-                        "(Ljava/lang/Object;)Z",
-                        Ty::Bool,
-                    )),
-                    // String compareTo
-                    (Ty::String, "compareTo") if args.len() == 1 => Some((
-                        "java/lang/String",
-                        "compareTo",
-                        "(Ljava/lang/String;)I",
-                        Ty::Int,
-                    )),
-                    // String toLong
-                    (Ty::String, "toLong") => Some((
-                        "java/lang/Long",
-                        "parseLong",
-                        "(Ljava/lang/String;)J",
-                        Ty::Long,
-                    )),
-                    // Int/Long/Double abs via Math.abs
-                    (Ty::Int, "coerceAtLeast") if args.len() == 1 => {
-                        Some(("java/lang/Math", "max", "(II)I", Ty::Int))
-                    }
-                    (Ty::Int, "coerceAtMost") if args.len() == 1 => {
-                        Some(("java/lang/Math", "min", "(II)I", Ty::Int))
-                    }
-                    (Ty::Double, "toInt") => {
-                        Some(("java/lang/Double", "toInt_stub", "(D)I", Ty::Int))
-                    }
-                    (Ty::Int, "toDouble") => {
-                        Some(("java/lang/Integer", "toDouble_stub", "(I)D", Ty::Double))
-                    }
-                    (Ty::Int, "toLong") => {
-                        Some(("java/lang/Integer", "toLong_stub", "(I)J", Ty::Long))
-                    }
+                // Override table for methods with ambiguous JVM overloads.
+                // These need explicit descriptors because the JVM class has
+                // multiple overloads that can't be distinguished by arg count.
+                // Disambiguation table for JVM methods with multiple overloads
+                // that share the same argument count. These cases can't be
+                // resolved by class-file lookup alone without full type
+                // inference on the argument expressions.
+                let overload_override: Option<(&str, &str, &str, Ty)> =
+                    match (&recv_ty, method_name_str.as_str(), args.len()) {
+                        // String methods with CharSequence vs char overloads
+                        (Ty::String, "replace", 2) => Some((
+                            "java/lang/String",
+                            "replace",
+                            "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
+                            Ty::String,
+                        )),
+                        (Ty::String, "contains", 1) => Some((
+                            "java/lang/String",
+                            "contains",
+                            "(Ljava/lang/CharSequence;)Z",
+                            Ty::Bool,
+                        )),
+                        (Ty::String, "indexOf", 1) => Some((
+                            "java/lang/String",
+                            "indexOf",
+                            "(Ljava/lang/String;)I",
+                            Ty::Int,
+                        )),
+                        (Ty::String, "lastIndexOf", 1) => Some((
+                            "java/lang/String",
+                            "lastIndexOf",
+                            "(Ljava/lang/String;)I",
+                            Ty::Int,
+                        )),
+                        (Ty::String, "startsWith", 1) => Some((
+                            "java/lang/String",
+                            "startsWith",
+                            "(Ljava/lang/String;)Z",
+                            Ty::Bool,
+                        )),
+                        (Ty::String, "endsWith", 1) => Some((
+                            "java/lang/String",
+                            "endsWith",
+                            "(Ljava/lang/String;)Z",
+                            Ty::Bool,
+                        )),
+                        _ => None,
+                    };
+                if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = overload_override {
+                    let is_instance =
+                        !matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
+                    let dest = fb.new_local(ret_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: if is_instance {
+                                CallKind::VirtualJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            } else {
+                                CallKind::StaticJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            },
+                            args: all_args,
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // Resolve methods dynamically from JDK class files.
+                let jvm_class_for_ty = match &recv_ty {
+                    Ty::String => Some("java/lang/String"),
+                    Ty::Int => Some("java/lang/Integer"),
+                    Ty::Long => Some("java/lang/Long"),
+                    Ty::Double => Some("java/lang/Double"),
+                    Ty::Bool => Some("java/lang/Boolean"),
                     _ => None,
                 };
-                if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = builtin {
-                    // Skip stubs that aren't real JVM methods.
-                    if jvm_method.contains("_stub") {
-                        // Stubs not yet implemented.
+
+                // Kotlin extension functions map to JVM method names.
+                // These are stable ABI translations documented by JetBrains.
+                let jvm_method_name = match (method_name_str.as_str(), jvm_class_for_ty) {
+                    ("uppercase", Some("java/lang/String")) => "toUpperCase",
+                    ("lowercase", Some("java/lang/String")) => "toLowerCase",
+                    ("get", Some("java/lang/String")) => "charAt",
+                    ("toInt", Some("java/lang/String")) => "parseInt__on__java/lang/Integer",
+                    ("toDouble", Some("java/lang/String")) => "parseDouble__on__java/lang/Double",
+                    ("toLong", Some("java/lang/String")) => "parseLong__on__java/lang/Long",
+                    _ => method_name_str.as_str(),
+                };
+
+                // Handle cross-class redirections (e.g., String.toInt() → Integer.parseInt)
+                let (effective_class, effective_method) =
+                    if let Some(pos) = jvm_method_name.find("__on__") {
+                        let method = &jvm_method_name[..pos];
+                        let class = &jvm_method_name[pos + 6..];
+                        (Some(class), method)
                     } else {
+                        (jvm_class_for_ty, jvm_method_name)
+                    };
+
+                if let Some(jvm_class) = effective_class {
+                    let is_primitive_ty =
+                        matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
+                    let is_cross_class = jvm_method_name.contains("__on__");
+
+                    // For instance methods on reference types, try instance lookup first.
+                    if !is_primitive_ty && !is_cross_class {
+                        let instance_arg_count = args.len(); // don't count receiver
+                                                             // Try the JVM-renamed name first.
+                        if let Some((found_class, found_method, descriptor, ret_ty)) =
+                            lookup_java_instance(jvm_class, effective_method, instance_arg_count)
+                        {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: found_class,
+                                        method_name: found_method,
+                                        descriptor,
+                                    },
+                                    args: all_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                        // Try original Kotlin name.
+                        if effective_method != method_name_str.as_str() {
+                            if let Some((found_class, found_method, descriptor, ret_ty)) =
+                                lookup_java_instance(
+                                    jvm_class,
+                                    &method_name_str,
+                                    instance_arg_count,
+                                )
+                            {
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: found_class,
+                                            method_name: found_method,
+                                            descriptor,
+                                        },
+                                        args: all_args,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
+                    }
+
+                    // For static methods (primitive types, cross-class redirections).
+                    let static_arg_count = args.len() + 1; // count receiver as arg
+                    if let Some((found_class, found_method, descriptor, ret_ty)) =
+                        lookup_java_static(jvm_class, effective_method, static_arg_count)
+                    {
                         let dest = fb.new_local(ret_ty);
-                        let is_static_method =
-                            matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
                         fb.push_stmt(MStmt::Assign {
                             dest,
                             value: Rvalue::Call {
-                                kind: if is_static_method {
-                                    CallKind::StaticJava {
-                                        class_name: jvm_class.to_string(),
-                                        method_name: jvm_method.to_string(),
-                                        descriptor: descriptor.to_string(),
-                                    }
-                                } else {
-                                    // Instance methods use VirtualJava for exact descriptor.
-                                    CallKind::VirtualJava {
-                                        class_name: jvm_class.to_string(),
-                                        method_name: jvm_method.to_string(),
-                                        descriptor: descriptor.to_string(),
-                                    }
+                                kind: CallKind::StaticJava {
+                                    class_name: found_class,
+                                    method_name: found_method,
+                                    descriptor,
                                 },
                                 args: all_args,
                             },
@@ -2431,7 +2422,6 @@ fn lookup_java_static(
     method_name: &str,
     arg_count: usize,
 ) -> Option<(String, String, String, Ty)> {
-    // Normalize class name.
     let simple = class_name
         .rsplit('/')
         .next()
@@ -2439,9 +2429,23 @@ fn lookup_java_static(
         .rsplit('.')
         .next()
         .unwrap_or(class_name);
-
-    // Look up from real JDK class files.
     lookup_java_static_from_jdk(simple, method_name, arg_count)
+}
+
+/// Look up an instance (non-static) method on a JVM class.
+fn lookup_java_instance(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+) -> Option<(String, String, String, Ty)> {
+    let simple = class_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(class_name)
+        .rsplit('.')
+        .next()
+        .unwrap_or(class_name);
+    lookup_java_instance_from_jdk(simple, method_name, arg_count)
 }
 
 /// Look up a static method from the JDK's actual class files.
@@ -2512,6 +2516,66 @@ fn lookup_java_static_from_jdk(
                 .methods
                 .iter()
                 .find(|m| m.name == method_name && m.is_static() && m.is_public())
+        })?;
+
+    let return_ty = match skotch_classinfo::return_type_from_descriptor(&method.descriptor) {
+        "Unit" => Ty::Unit,
+        "Boolean" => Ty::Bool,
+        "Int" => Ty::Int,
+        "Long" => Ty::Long,
+        "Double" => Ty::Double,
+        "String" => Ty::String,
+        _ => Ty::Any,
+    };
+
+    Some((
+        class_info.name.clone(),
+        method.name.clone(),
+        method.descriptor.clone(),
+        return_ty,
+    ))
+}
+
+/// Like `lookup_java_static_from_jdk` but for instance methods (not static).
+fn lookup_java_instance_from_jdk(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+) -> Option<(String, String, String, Ty)> {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    static REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> = Mutex::new(None);
+
+    let mut guard = REGISTRY.lock().ok()?;
+    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+
+    if !reg.contains_key(class_name) {
+        let jvm_path = if class_name.contains('/') {
+            class_name.to_string()
+        } else {
+            format!("java/lang/{class_name}")
+        };
+        if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
+            reg.insert(class_name.to_string(), info);
+        }
+    }
+
+    let class_info = reg.get(class_name)?;
+    let method = class_info
+        .methods
+        .iter()
+        .find(|m| {
+            m.name == method_name
+                && !m.is_static()
+                && m.is_public()
+                && count_descriptor_params(&m.descriptor) == arg_count
+        })
+        .or_else(|| {
+            class_info
+                .methods
+                .iter()
+                .find(|m| m.name == method_name && !m.is_static() && m.is_public())
         })?;
 
     let return_ty = match skotch_classinfo::return_type_from_descriptor(&method.descriptor) {

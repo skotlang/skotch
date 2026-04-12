@@ -7,4 +7,5 @@ license.workspace      = true
 version.workspace      = true
 
 [dependencies]
-zip = { workspace = true }
+zip   = { workspace = true }
+which = { workspace = true }

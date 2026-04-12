@@ -179,15 +179,14 @@ golden" tests still catch regressions in skotch's own emitter.
 **Estimated coverage: ~50% of the Kotlin language specification.** The compiler
 handles functions with **default parameter values**, `print()`/`println()`,
 **data classes** with synthesized `toString()`, `maxOf()`/`minOf()`, complete
-control flow (if/else/when/for/while/do-while/break/continue), try/finally,
-numeric types (Int, Long, Double), Boolean, String with 18+ instance methods,
-Char, classes with constructors/methods/field access/init blocks, null literals,
-const val, visibility modifiers, nullable types with elvis (`?:`), and Java
-static method interop. Does not yet support inheritance, generics, lambdas,
-or collections. 260+ test fixtures validated across JVM, DEX, LLVM IR, and
-klib targets. A Language Server Protocol (LSP) implementation provides
-real-time diagnostics, semantic tokens, hover, go-to-definition, and
-completions.
+control flow, try/finally, numeric types (Int, Long, Double), Boolean, String
+with dynamically-resolved methods from JDK class files, Char, classes with
+constructors/methods/field access/init blocks, null literals, const val,
+visibility modifiers, nullable types with elvis (`?:`), Java static method
+interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. Method
+resolution reads real `.class` files from the JDK and Kotlin stdlib instead of
+using hardcoded tables. 260+ test fixtures validated across JVM, DEX, LLVM IR,
+and klib targets.
 
 ### Implemented and stable
 
