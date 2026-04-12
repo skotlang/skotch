@@ -52,11 +52,23 @@ pub enum Decl {
     Class(ClassDecl),
     /// `object Singleton { fun greet() { } }` — singleton declaration.
     Object(ObjectDecl),
+    /// `enum class Color { RED, GREEN, BLUE }` — enum declaration.
+    Enum(EnumDecl),
     /// Recognised but not implemented.
     Unsupported {
         what: &'static str,
         span: Span,
     },
+}
+
+/// An enum class declaration.
+#[derive(Clone, Debug)]
+pub struct EnumDecl {
+    pub name: Symbol,
+    pub name_span: Span,
+    /// Enum constant names in declaration order.
+    pub entries: Vec<Symbol>,
+    pub span: Span,
 }
 
 /// An `object` declaration (singleton).

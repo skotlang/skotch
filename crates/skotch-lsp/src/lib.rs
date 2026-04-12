@@ -203,6 +203,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::KwAs
         | TokenKind::KwInit
         | TokenKind::KwData
+        | TokenKind::KwEnum
         | TokenKind::KwOverride
         | TokenKind::KwOpen
         | TokenKind::KwAbstract

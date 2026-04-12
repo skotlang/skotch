@@ -1,0 +1,4 @@
+name     = "328-enum-multiple"
+status   = "supported"
+features = ["enum", "multiple-enums"]
+notes    = "Multiple enum classes in same file."
