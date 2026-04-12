@@ -1,3 +1,4 @@
-name = "28-object-decl"
-status = "stub"
-reason = "object declarations need INSTANCE field synthesis."
+name     = "28-object-decl"
+status   = "supported"
+features = ["object", "singleton", "method"]
+notes    = "Object declaration with method, called via Singleton.method()."

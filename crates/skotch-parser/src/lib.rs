@@ -36,8 +36,8 @@ use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, ImportDecl, KtFile,
-    PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind, TypeRef, UnaryOp,
-    ValDecl, WhenBranch,
+    ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind, TypeRef,
+    UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -198,16 +198,7 @@ impl<'a> Parser<'a> {
                     decls.push(Decl::Class(cd));
                 }
                 TokenKind::KwObject => {
-                    let span = self.peek_span();
-                    self.diags.push(Diagnostic::error(
-                        span,
-                        "object declarations are not yet supported",
-                    ));
-                    decls.push(Decl::Unsupported {
-                        what: "object",
-                        span,
-                    });
-                    self.recover_to_top_level();
+                    decls.push(Decl::Object(self.parse_object_decl()));
                 }
                 _ => {
                     let span = self.peek_span();
@@ -228,6 +219,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[allow(dead_code)]
     fn recover_to_top_level(&mut self) {
         // Skip ahead to the next `fun`/`val`/`var`/`class`/`object` or EOF.
         while !matches!(
@@ -405,6 +397,58 @@ impl<'a> Parser<'a> {
             properties,
             methods,
             init_blocks,
+            span: kw.merge(name_span),
+        }
+    }
+
+    fn parse_object_decl(&mut self) -> ObjectDecl {
+        let kw = self.expect(TokenKind::KwObject, "object");
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(name_span, "expected object name"));
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+
+        let mut methods = Vec::new();
+        if self.peek_kind() == TokenKind::LBrace {
+            self.bump();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                // Skip modifier keywords.
+                while matches!(
+                    self.peek_kind(),
+                    TokenKind::KwOverride
+                        | TokenKind::KwOpen
+                        | TokenKind::KwPrivate
+                        | TokenKind::KwProtected
+                        | TokenKind::KwInternal
+                ) {
+                    self.bump();
+                    self.skip_trivia();
+                }
+                if self.peek_kind() == TokenKind::KwFun {
+                    methods.push(self.parse_fun_decl());
+                } else {
+                    self.bump(); // skip unknown
+                }
+            }
+            self.expect(TokenKind::RBrace, "}");
+        }
+
+        ObjectDecl {
+            name,
+            name_span,
+            methods,
             span: kw.merge(name_span),
         }
     }

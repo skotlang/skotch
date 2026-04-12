@@ -187,6 +187,16 @@ pub fn lower_file(
                     diags,
                 );
             }
+            Decl::Object(o) => {
+                lower_object(
+                    o,
+                    &mut name_to_func,
+                    &name_to_global,
+                    &mut module,
+                    interner,
+                    diags,
+                );
+            }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
                     *span,
@@ -1269,6 +1279,36 @@ fn lower_expr(
             // Handle method calls on a receiver: `receiver.method(args)`
             if let Expr::Field { receiver, name, .. } = callee.as_ref() {
                 let method_name = *name;
+
+                // Check if this is an object method call (Singleton.method()).
+                // Object methods are registered as top-level functions.
+                if let Some(&fid) = name_to_func.get(&method_name) {
+                    let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                    let mut arg_locals = Vec::new();
+                    for a in args {
+                        let id = lower_expr(
+                            &a.expr,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?;
+                        arg_locals.push(id);
+                    }
+                    let dest = fb.new_local(ret_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Static(fid),
+                            args: arg_locals,
+                        },
+                    });
+                    return Some(dest);
+                }
 
                 // Check if the receiver is a known Java class name for static calls.
                 if let Some(static_call) = try_java_static_call(
@@ -2752,6 +2792,87 @@ fn extract_qualified_name(expr: &Expr, interner: &Interner) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Lower an `object` declaration to a MirClass with static-like methods.
+/// The object compiles to a regular class with an empty constructor.
+/// Methods are instance methods (the JVM INSTANCE field dispatches to them).
+/// Calls like `Singleton.greet()` are resolved as static calls on the
+/// wrapper class that delegate to the object's methods.
+fn lower_object(
+    o: &skotch_syntax::ObjectDecl,
+    name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
+    module: &mut MirModule,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+) {
+    let obj_name = interner.resolve(o.name).to_string();
+
+    // Build an empty <init> constructor.
+    let mut init_fn = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+    };
+    let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
+    init_fn.params.push(LocalId(0));
+
+    // Lower each method as a top-level static function on the wrapper class.
+    // This way `Singleton.greet()` resolves via try_java_static_call or
+    // the normal name_to_func lookup.
+    for method in &o.methods {
+        let method_name = interner.resolve(method.name).to_string();
+        let return_ty = method
+            .return_ty
+            .as_ref()
+            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .unwrap_or(Ty::Unit);
+
+        // Register as a top-level function so Singleton.method() resolves.
+        let fn_idx = module.functions.len();
+        let fn_id = FuncId(fn_idx as u32);
+        name_to_func.insert(method.name, fn_id);
+
+        let mut fb = FnBuilder::new(fn_idx, method_name, return_ty);
+        // Object methods have no `this` — they're effectively static.
+        let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
+        for p in &method.params {
+            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let id = fb.new_local(ty);
+            fb.mf.params.push(id);
+            scope.push((p.name, id));
+        }
+
+        for s in &method.body.stmts {
+            lower_stmt(
+                s,
+                &mut fb,
+                &mut scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                None,
+            );
+        }
+
+        module.add_function(fb.finish());
+    }
+
+    // We don't add the object as a MirClass — its methods are top-level
+    // static functions on the wrapper class. This matches how kotlinc
+    // compiles `object` declarations for the JVM.
 }
 
 fn lower_class(
