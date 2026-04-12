@@ -356,6 +356,7 @@ impl<'a> Parser<'a> {
         // Class body.
         let mut properties = Vec::new();
         let mut methods = Vec::new();
+        let mut companion_methods = Vec::new();
         let mut init_blocks = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
@@ -390,6 +391,44 @@ impl<'a> Parser<'a> {
                         self.skip_trivia();
                         init_blocks.push(self.parse_block());
                     }
+                    TokenKind::Ident => {
+                        // Check for `companion object { ... }`.
+                        let idx = self.pos;
+                        let text = match self.payload(idx) {
+                            Some(TokenPayload::Ident(s)) => s.clone(),
+                            _ => String::new(),
+                        };
+                        if text == "companion" {
+                            self.bump(); // consume 'companion'
+                            self.skip_trivia();
+                            if self.peek_kind() == TokenKind::KwObject {
+                                self.bump(); // consume 'object'
+                                self.skip_trivia();
+                                // Parse companion object body.
+                                if self.peek_kind() == TokenKind::LBrace {
+                                    self.bump();
+                                    loop {
+                                        self.skip_trivia();
+                                        if self.peek_kind() == TokenKind::RBrace
+                                            || self.peek_kind() == TokenKind::Eof
+                                        {
+                                            break;
+                                        }
+                                        if self.peek_kind() == TokenKind::KwFun {
+                                            companion_methods.push(self.parse_fun_decl());
+                                        } else {
+                                            self.bump();
+                                        }
+                                    }
+                                    if self.peek_kind() == TokenKind::RBrace {
+                                        self.bump();
+                                    }
+                                }
+                            }
+                        } else {
+                            self.bump(); // skip unknown ident
+                        }
+                    }
                     _ => {
                         self.bump(); // skip unknown token
                     }
@@ -405,6 +444,7 @@ impl<'a> Parser<'a> {
             constructor_params,
             properties,
             methods,
+            companion_methods,
             init_blocks,
             span: kw.merge(name_span),
         }

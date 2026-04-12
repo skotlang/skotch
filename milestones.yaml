@@ -292,9 +292,10 @@ milestones:
           - "Object singleton accessed via ObjectName.method() compiles and runs"
 
       - name: "Companion objects"
+        completed: true
         description: >
           class Foo { companion object { fun create(): Foo = Foo() } }.
-          Synthetic inner class with INSTANCE delegation.
+          Methods lowered as top-level static functions. ClassName.method() resolves.
         crates:
           - skotch-syntax
           - skotch-parser

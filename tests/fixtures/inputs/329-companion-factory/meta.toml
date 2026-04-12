@@ -1,0 +1,4 @@
+name     = "329-companion-factory"
+status   = "supported"
+features = ["companion-object", "multiple-methods", "return-value"]
+notes    = "Companion object with multiple methods."

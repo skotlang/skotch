@@ -1,3 +1,4 @@
-name = "27-companion-object"
-status = "stub"
-reason = "Companion objects synthesize a static \"Companion\" inner class."
+name     = "27-companion-object"
+status   = "supported"
+features = ["companion-object", "static-method"]
+notes    = "Companion object with static method called via ClassName.method()."
