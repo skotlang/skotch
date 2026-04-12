@@ -1,0 +1,4 @@
+name     = "289-fizzbuzz"
+status   = "supported"
+features = ["when", "modulo", "toString", "for-loop", "expression-body"]
+notes    = "Classic FizzBuzz using when expression and Int.toString()."

@@ -1,0 +1,4 @@
+name     = "290-string-template-double"
+status   = "supported"
+features = ["string-template", "double", "println"]
+notes    = "String templates with Double-typed variables."
