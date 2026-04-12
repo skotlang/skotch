@@ -1,0 +1,4 @@
+name     = "323-multiple-classes"
+status   = "supported"
+features = ["data-class", "multiple-classes", "toString"]
+notes    = "Multiple data classes in the same file."

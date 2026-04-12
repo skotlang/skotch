@@ -179,11 +179,12 @@ golden" tests still catch regressions in skotch's own emitter.
 **Estimated coverage: ~55% of the Kotlin language specification.** The compiler
 handles functions with default parameters and named arguments, `print()`/
 `println()`, data classes, `maxOf()`/`minOf()`, complete control flow including
-`for (i in a until b)` exclusive ranges, try/finally, numeric types (Int, Long,
-Double), Boolean, String with 20+ methods including `.repeat()`, Char, classes
-with mutable `var` field writeback and `override fun toString()`, `++`/`--`
-operators, null/const/visibility modifiers, nullable types with elvis (`?:`),
-Java interop, and Kotlin stdlib resolution. 290+ test fixtures.
+`for (i in a..b)`, `for (i in a until b)`, and `for (i in b downTo a)`, try/
+finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
+including `.repeat()`, Char, classes with mutable `var` field writeback and
+`override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
+nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
+295+ test fixtures.
 
 ### Implemented and stable
 
@@ -223,7 +224,7 @@ Java interop, and Kotlin stdlib resolution. 290+ test fixtures.
 | [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
 | [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, `in range`, string/int matching, nested |
 | [Else-if chains](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | `if {} else if {} else {}` (as statements) |
-| [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (i in start..end)` inclusive, `for (i in start until end)` exclusive |
+| [For loop](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `..` (inclusive), `until` (exclusive), `downTo` (descending) |
 | [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
 | [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
 | [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |

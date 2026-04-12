@@ -1,0 +1,4 @@
+name     = "322-downto-sum"
+status   = "supported"
+features = ["for", "downTo", "compound-assignment"]
+notes    = "Sum using downTo descending range."

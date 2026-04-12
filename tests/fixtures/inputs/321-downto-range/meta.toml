@@ -1,0 +1,4 @@
+name     = "321-downto-range"
+status   = "supported"
+features = ["for", "downTo", "descending-range"]
+notes    = "for-in with downTo (descending range)."
