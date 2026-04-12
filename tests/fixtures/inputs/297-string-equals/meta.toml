@@ -1,0 +1,4 @@
+name     = "297-string-equals"
+status   = "supported"
+features = ["string", "equals"]
+notes    = "String.equals() explicit method call."

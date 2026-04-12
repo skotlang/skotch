@@ -1189,4 +1189,17 @@ mod tests {
         let state = analyze_source(src);
         assert!(!state.diags.has_errors());
     }
+
+    #[test]
+    fn diagnostics_for_default_params() {
+        let src = r#"fun greet(name: String = "World") { println(name) } fun main() { greet() }"#;
+        let state = analyze_source(src);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_print_builtin() {
+        let state = analyze_source(r#"fun main() { print("hello"); println() }"#);
+        assert!(!state.diags.has_errors());
+    }
 }

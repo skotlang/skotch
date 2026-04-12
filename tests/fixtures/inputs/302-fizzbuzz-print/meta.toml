@@ -1,0 +1,4 @@
+name     = "302-fizzbuzz-print"
+status   = "supported"
+features = ["print", "when", "for-loop", "toString", "if"]
+notes    = "FizzBuzz with comma-separated output using print()."

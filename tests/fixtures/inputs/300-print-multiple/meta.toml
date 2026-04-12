@@ -1,0 +1,4 @@
+name     = "300-print-multiple"
+status   = "supported"
+features = ["print", "for-loop", "println"]
+notes    = "print() with for loop and trailing println()."

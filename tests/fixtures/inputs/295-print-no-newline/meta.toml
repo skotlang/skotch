@@ -1,0 +1,4 @@
+name     = "295-print-no-newline"
+status   = "supported"
+features = ["print", "println"]
+notes    = "print() without newline, followed by println()."

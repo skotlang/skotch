@@ -126,9 +126,10 @@ pub enum BinOp {
 pub enum CallKind {
     /// Static call to another top-level function in the same module.
     Static(FuncId),
-    /// Hard-coded `println` intrinsic. The backend dispatches by the
-    /// type of the (single) argument.
+    /// Hard-coded `println` intrinsic.
     Println,
+    /// Hard-coded `print` intrinsic (no trailing newline).
+    Print,
     /// Hard-coded `println` of a string template, fused with the
     /// concatenation step. The args are the *parts* of the template
     /// in source order: literal text chunks (typed `String`) and

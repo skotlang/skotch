@@ -1,0 +1,4 @@
+name     = "296-string-get-char"
+status   = "supported"
+features = ["string", "get", "charAt"]
+notes    = "String.get(index) returns char as Int."

@@ -89,6 +89,8 @@ pub fn resolve_file(
     };
     let println_sym = r.interner.intern("println");
     r.out.top_level.insert(println_sym, DefId::PrintlnIntrinsic);
+    let print_sym = r.interner.intern("print");
+    r.out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
 
     // First pass: register every top-level fun/val by name so order doesn't matter.
     for (i, decl) in file.decls.iter().enumerate() {
