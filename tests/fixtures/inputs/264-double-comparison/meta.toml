@@ -1,0 +1,4 @@
+name     = "264-double-comparison"
+status   = "supported"
+features = ["double", "arithmetic", "negation"]
+notes    = "Double arithmetic operations."

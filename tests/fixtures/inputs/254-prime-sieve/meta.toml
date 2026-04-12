@@ -1,0 +1,4 @@
+name     = "254-prime-sieve"
+status   = "supported"
+features = ["fun", "if", "return", "while", "for", "boolean", "modulo"]
+notes    = "Trial-division primality test."

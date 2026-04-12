@@ -1,0 +1,4 @@
+name     = "263-power-function"
+status   = "supported"
+features = ["fun", "recursion", "if", "return", "arithmetic"]
+notes    = "Recursive power (exponentiation) function."

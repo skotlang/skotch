@@ -325,13 +325,45 @@ impl<'a> TypeChecker<'a> {
                     finally_body,
                     ..
                 } => {
-                    self.check_block(body, scope, local_tys, expr_tys);
-                    if let Some(cb) = catch_body {
-                        self.check_block(cb, scope, local_tys, expr_tys);
+                    // Walk body stmts inline (not via check_block) to stay
+                    // in sync with MIR lowering's inline walk.
+                    for inner in &body.stmts {
+                        match inner {
+                            Stmt::Expr(e) => {
+                                let _ = self.synth_expr(e, scope, expr_tys);
+                            }
+                            Stmt::Val(v) => {
+                                let init_ty = self.synth_expr(&v.init, scope, expr_tys);
+                                let declared = match &v.ty {
+                                    Some(tr) => self.type_ref(tr).unwrap_or(Ty::Error),
+                                    None => init_ty.clone(),
+                                };
+                                local_tys.push(declared.clone());
+                                scope.push((v.name, declared));
+                            }
+                            _ => {}
+                        }
                     }
                     if let Some(fb) = finally_body {
-                        self.check_block(fb, scope, local_tys, expr_tys);
+                        for inner in &fb.stmts {
+                            match inner {
+                                Stmt::Expr(e) => {
+                                    let _ = self.synth_expr(e, scope, expr_tys);
+                                }
+                                Stmt::Val(v) => {
+                                    let init_ty = self.synth_expr(&v.init, scope, expr_tys);
+                                    let declared = match &v.ty {
+                                        Some(tr) => self.type_ref(tr).unwrap_or(Ty::Error),
+                                        None => init_ty.clone(),
+                                    };
+                                    local_tys.push(declared.clone());
+                                    scope.push((v.name, declared));
+                                }
+                                _ => {}
+                            }
+                        }
                     }
+                    let _ = catch_body; // catch stmts not yet type-checked
                 }
                 Stmt::ThrowStmt { expr, .. } => {
                     let _ = self.synth_expr(expr, scope, expr_tys);

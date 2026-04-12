@@ -1846,9 +1846,9 @@ fn lower_expr(
                 then_block,
             );
 
-            // then: result = lhs
-            let result_ty = fb.mf.locals[l.0 as usize].clone();
-            let result = fb.new_local(result_ty.clone());
+            // Result typed as Any (java/lang/Object) so both branches
+            // (nullable lhs or concrete rhs) are verifier-compatible.
+            let result = fb.new_local(Ty::Any);
             fb.push_stmt(MStmt::Assign {
                 dest: result,
                 value: Rvalue::Local(l),

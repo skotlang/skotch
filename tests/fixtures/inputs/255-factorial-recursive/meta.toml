@@ -1,0 +1,4 @@
+name     = "255-factorial-recursive"
+status   = "supported"
+features = ["fun", "recursion", "if", "return", "arithmetic"]
+notes    = "Classic recursive factorial."

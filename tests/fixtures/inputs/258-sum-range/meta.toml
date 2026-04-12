@@ -1,0 +1,4 @@
+name     = "258-sum-range"
+status   = "supported"
+features = ["fun", "for", "var", "arithmetic", "return"]
+notes    = "Sum integers in a range."

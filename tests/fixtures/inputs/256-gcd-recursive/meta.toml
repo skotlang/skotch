@@ -1,0 +1,4 @@
+name     = "256-gcd-recursive"
+status   = "supported"
+features = ["fun", "recursion", "if", "return", "modulo"]
+notes    = "Euclidean algorithm for GCD."

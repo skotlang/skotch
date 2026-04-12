@@ -1,0 +1,4 @@
+name     = "265-class-with-nullable"
+status   = "supported"
+features = ["nullable", "elvis", "fun", "expression-body"]
+notes    = "Nullable parameter with elvis operator."

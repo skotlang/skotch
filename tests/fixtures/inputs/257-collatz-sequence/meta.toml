@@ -1,0 +1,4 @@
+name     = "257-collatz-sequence"
+status   = "supported"
+features = ["fun", "while", "if", "var", "arithmetic", "return"]
+notes    = "Collatz conjecture step counter."

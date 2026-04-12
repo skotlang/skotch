@@ -1326,6 +1326,17 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         if self.peek_kind() == TokenKind::LBrace {
             self.parse_block()
+        } else if self.peek_kind() == TokenKind::KwReturn {
+            // `if (cond) return expr` — single-statement branch.
+            let stmt = self.parse_stmt();
+            let span = match &stmt {
+                Stmt::Return { span, .. } => *span,
+                _ => self.peek_span(),
+            };
+            Block {
+                stmts: vec![stmt],
+                span,
+            }
         } else {
             let expr = self.parse_expr();
             let span = expr.span();

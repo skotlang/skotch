@@ -1,0 +1,4 @@
+name     = "259-return-in-if-branch"
+status   = "supported"
+features = ["fun", "if", "return", "guard-clause"]
+notes    = "Early return in if-then branch without braces."

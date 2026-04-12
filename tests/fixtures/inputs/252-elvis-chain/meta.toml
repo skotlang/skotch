@@ -1,0 +1,4 @@
+name     = "252-elvis-chain"
+status   = "supported"
+features = ["nullable", "elvis", "chain", "null"]
+notes    = "Chained elvis operators: a ?: b ?: default."

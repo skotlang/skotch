@@ -1,4 +1,4 @@
-name   = "86-nullable-elvis"
-status = "stub"
+name     = "86-nullable-elvis"
+status   = "supported"
 features = ["nullable", "elvis", "branch"]
-reason = "Requires elvis operator (?:) lowering to null-check + fallback branch."
+notes    = "Elvis operator (?:) for null fallback."

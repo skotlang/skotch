@@ -1,0 +1,4 @@
+name     = "253-fibonacci"
+status   = "supported"
+features = ["fun", "if", "return", "for", "var", "val", "arithmetic", "recursion"]
+notes    = "Iterative fibonacci with early return guard clause."

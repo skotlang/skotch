@@ -460,6 +460,20 @@ fn emit_method(
                     &func.locals,
                 );
                 let ty = &func.locals[local.0 as usize];
+                // Insert checkcast if the local is Any/Object but the
+                // function return type is more specific (e.g. String).
+                if matches!(ty, Ty::Any | Ty::Nullable(_))
+                    && matches!(func.return_ty, Ty::String | Ty::Class(_))
+                {
+                    let target_class = match &func.return_ty {
+                        Ty::String => "java/lang/String",
+                        Ty::Class(name) => name.as_str(),
+                        _ => "java/lang/Object",
+                    };
+                    let class_idx = cp.class(target_class);
+                    code.push(0xC0); // checkcast
+                    code.write_u16::<BigEndian>(class_idx).unwrap();
+                }
                 match ty {
                     Ty::Int | Ty::Bool => code.push(0xAC), // ireturn
                     Ty::Long => code.push(0xAD),           // lreturn
@@ -944,23 +958,25 @@ fn walk_block(
                             continue;
                         }
 
-                        // Integer comparison → push 0 or 1 (bool).
-                        // JVM doesn't have a direct "compare and push
-                        // bool" instruction; we use if_icmp + iconst.
-                        //   if_icmp<op> L_true   (3 bytes)
-                        //   iconst_0             (1 byte)
-                        //   goto L_end           (3 bytes)
-                        // L_true:                (offset = cmp_start + 7)
-                        //   iconst_1             (1 byte)
-                        // L_end:                 (offset = cmp_start + 8)
-                        let branch_op: u8 = match op {
-                            MBinOp::CmpEq => 0x9F, // if_icmpeq
-                            MBinOp::CmpNe => 0xA0, // if_icmpne
-                            MBinOp::CmpLt => 0xA1, // if_icmplt
-                            MBinOp::CmpGe => 0xA2, // if_icmpge
-                            MBinOp::CmpGt => 0xA3, // if_icmpgt
-                            MBinOp::CmpLe => 0xA4, // if_icmple
-                            _ => unreachable!(),
+                        // Comparison → push 0 or 1 (bool).
+                        // Choose reference or integer comparison opcodes.
+                        let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Class(_) | Ty::Any);
+                        let branch_op: u8 = if is_ref {
+                            match op {
+                                MBinOp::CmpEq => 0xA5, // if_acmpeq
+                                MBinOp::CmpNe => 0xA6, // if_acmpne
+                                _ => 0xA5,             // reference types only support eq/ne
+                            }
+                        } else {
+                            match op {
+                                MBinOp::CmpEq => 0x9F, // if_icmpeq
+                                MBinOp::CmpNe => 0xA0, // if_icmpne
+                                MBinOp::CmpLt => 0xA1, // if_icmplt
+                                MBinOp::CmpGe => 0xA2, // if_icmpge
+                                MBinOp::CmpGt => 0xA3, // if_icmpgt
+                                MBinOp::CmpLe => 0xA4, // if_icmple
+                                _ => unreachable!(),
+                            }
                         };
                         let cmp_start = code.len();
                         code.push(branch_op);
@@ -1439,9 +1455,21 @@ fn write_slot_verif(
             let ty = &func.locals[mir_id as usize];
             match ty {
                 Ty::Int | Ty::Bool => out.push(1), // Integer_variable_info
+                Ty::Long => out.push(4),           // Long_variable_info
+                Ty::Double => out.push(3),         // Double_variable_info
                 Ty::String => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class("java/lang/String");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::Class(name) => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class(name);
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::Nullable(_) | Ty::Any => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("java/lang/Object");
                     out.write_u16::<BigEndian>(idx).unwrap();
                 }
                 _ => out.push(1), // fallback to Integer

@@ -1,0 +1,4 @@
+name     = "260-multi-function-utility"
+status   = "supported"
+features = ["fun", "if-expression", "expression-body", "multi-function"]
+notes    = "Multiple utility functions with expression bodies."

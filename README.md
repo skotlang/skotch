@@ -176,17 +176,20 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~30–35% of the Kotlin language specification.** The compiler
-handles functions, control flow, basic types (Int, Double, Boolean, String, Char),
-expressions, classes with constructors/methods/field access/init blocks, null
-literals, const val, visibility modifiers, and Java static method interop. The
-parser recognizes nullable operators (`?.`, `?:`, `!!`), type checks (`is`/`!is`),
-type casts (`as`/`as?`), try/catch/finally, and throw — though some of these are
-not yet fully compiled to all backends. Does not yet support inheritance, generics,
-lambdas, or the standard library collection APIs. 160+ test fixtures validated
-across JVM, DEX, LLVM IR, and klib targets. A Language Server Protocol (LSP)
-implementation provides real-time diagnostics, semantic tokens, hover,
-go-to-definition, and completions.
+**Estimated coverage: ~35–40% of the Kotlin language specification.** The compiler
+handles functions (including recursion, multi-parameter, expression-body, guard
+clauses with `if (cond) return expr`), complete control flow (if/else/when/for/
+while/do-while/break/continue), basic types (Int, Double, Boolean, String, Char),
+classes with constructors/methods/field access, null literals, const val, visibility
+modifiers, nullable types with the elvis operator (`?:`), and Java static method
+interop. Programs like Fibonacci, prime sieves, GCD, factorial, and Collatz sequences
+compile and run correctly. The parser additionally recognizes safe call (`?.`),
+non-null assert (`!!`), type checks (`is`/`!is`), type casts (`as`/`as?`),
+try/catch/finally, and throw. Does not yet support inheritance, generics, lambdas,
+or the standard library collection APIs. 180+ test fixtures validated across
+JVM, DEX, LLVM IR, and klib targets. A Language Server Protocol (LSP) implementation
+provides real-time diagnostics, semantic tokens, hover, go-to-definition, and
+completions.
 
 ### Implemented and stable
 
@@ -208,6 +211,8 @@ go-to-definition, and completions.
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
 | [Double/Float literals](https://kotlinlang.org/spec/expressions.html#real-literals) | §7.1.2 | `3.14`, `2.5e10`, `1.0f`, negative doubles, scientific notation |
 | [Null literal](https://kotlinlang.org/spec/expressions.html#null-literal) | §7.1.6 | `null` value, `println(null)` |
+| [Elvis operator](https://kotlinlang.org/spec/expressions.html#elvis-expressions) | §7.4.3 | `x ?: default` — null-check with fallback, supports chaining |
+| [Nullable parameters](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `fun f(x: String?): String`, nullable function parameters |
 | [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` and `Double` |
 | [String concatenation](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `String + String`, `String + Int` |
 | [Comparison operators](https://kotlinlang.org/spec/expressions.html#comparison-expressions) | §7.6 | `==`, `!=`, `<`, `>`, `<=`, `>=` (Int and String) |
@@ -221,7 +226,8 @@ go-to-definition, and completions.
 | [While loop](https://kotlinlang.org/spec/statements.html#while-loop-statements) | §8.3 | `while (cond) { }` |
 | [Do-while loop](https://kotlinlang.org/spec/statements.html#do-while-loop-statements) | §8.3 | `do { } while (cond)` |
 | [Break and continue](https://kotlinlang.org/spec/expressions.html#break-and-continue-expressions) | §7.10 | In `for`, `while`, and `do-while` loops (including nested in `if`) |
-| [Return](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | Early return from functions (guard clauses) |
+| [Return](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | Early return from functions, guard clauses (`if (cond) return expr` without braces) |
+| [Recursive functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | Direct recursion (factorial, GCD, power), mutual recursion, multi-parameter |
 | [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, mutual recursion, extension method syntax |
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
@@ -239,7 +245,8 @@ go-to-definition, and completions.
 | Sealed classes | [§4.5.5](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | Hard | Sealed hierarchies, exhaustive when |
 | Generics | [§4.6](https://kotlinlang.org/spec/declarations.html#type-parameters) | Hard | Type parameters, bounds, variance |
 | Lambdas | [§7.2.10](https://kotlinlang.org/spec/expressions.html#lambda-literals) | Hard | Lambda literals, closures, `it` parameter |
-| Nullable operators | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | `?.`, `?:`, `!!` parsed; need reference-type comparison opcodes for JVM |
+| Safe call (`?.`) | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | Parsed; needs field/method dispatch on nullable receiver |
+| Non-null assert (`!!`) | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Easy | Parsed; passthrough (no NullPointerException yet) |
 | Type checks (`is`/`!is`) | [§7.6.3](https://kotlinlang.org/spec/expressions.html#type-checking-and-containment-checking-expressions) | Medium | Parsed; MIR lowered as stub (always true) |
 | Type casts (`as`/`as?`) | [§7.6.4](https://kotlinlang.org/spec/expressions.html#cast-expression) | Medium | Parsed; MIR lowered as no-op passthrough |
 | Try/catch/finally | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; needs JVM exception tables for catch |

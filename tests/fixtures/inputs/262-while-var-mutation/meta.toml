@@ -1,0 +1,4 @@
+name     = "262-while-var-mutation"
+status   = "supported"
+features = ["while", "var", "compound-assignment"]
+notes    = "Sum 1..100 using while loop and += compound assignment."

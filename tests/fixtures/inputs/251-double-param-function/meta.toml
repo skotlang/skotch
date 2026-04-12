@@ -1,0 +1,4 @@
+name     = "251-double-param-function"
+status   = "supported"
+features = ["double", "fun", "parameter", "return-type", "arithmetic"]
+notes    = "Double as function parameter and return type."

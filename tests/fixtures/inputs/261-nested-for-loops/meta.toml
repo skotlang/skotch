@@ -1,0 +1,4 @@
+name     = "261-nested-for-loops"
+status   = "supported"
+features = ["for", "nested-loop", "arithmetic"]
+notes    = "Nested for loops with multiplication table."
