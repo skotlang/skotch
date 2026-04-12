@@ -1,0 +1,4 @@
+name     = "281-string-indexof"
+status   = "supported"
+features = ["string", "indexOf", "lastIndexOf"]
+notes    = "String.indexOf() and lastIndexOf() search methods."

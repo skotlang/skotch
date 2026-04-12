@@ -1176,4 +1176,17 @@ mod tests {
         let state = analyze_source("fun abs(x: Int): Int { if (x < 0) return -x; return x }");
         assert!(!state.diags.has_errors());
     }
+
+    #[test]
+    fn diagnostics_for_string_methods() {
+        let state = analyze_source(r#"fun main() { val s = "hello"; println(s.length) }"#);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_init_block() {
+        let src = r#"class Foo(val x: Int) { init { println(x) } } fun main() { val f = Foo(1) }"#;
+        let state = analyze_source(src);
+        assert!(!state.diags.has_errors());
+    }
 }

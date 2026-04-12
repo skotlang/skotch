@@ -1,0 +1,4 @@
+name     = "279-string-contains"
+status   = "supported"
+features = ["string", "contains", "startsWith", "endsWith"]
+notes    = "String.contains(), startsWith(), endsWith() methods."

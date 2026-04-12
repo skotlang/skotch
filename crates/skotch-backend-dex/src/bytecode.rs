@@ -277,7 +277,8 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
                 CallKind::Static(_)
                 | CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
-                | CallKind::Virtual { .. } => 0,
+                | CallKind::Virtual { .. }
+                | CallKind::VirtualJava { .. } => 0,
             };
             needed = needed.max(n);
         }
@@ -755,7 +756,10 @@ fn emit_call(
 
             2 // outs_size — every invoke-virtual passes ≤ 2 registers
         }
-        CallKind::StaticJava { .. } | CallKind::Constructor(_) | CallKind::Virtual { .. } => {
+        CallKind::StaticJava { .. }
+        | CallKind::Constructor(_)
+        | CallKind::Virtual { .. }
+        | CallKind::VirtualJava { .. } => {
             // TODO: class support in DEX backend
             0
         }

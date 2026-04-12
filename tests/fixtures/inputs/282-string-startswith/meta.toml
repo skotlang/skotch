@@ -1,0 +1,4 @@
+name     = "282-string-startswith"
+status   = "supported"
+features = ["string", "startsWith", "fun", "expression-body"]
+notes    = "String.startsWith() used in function."

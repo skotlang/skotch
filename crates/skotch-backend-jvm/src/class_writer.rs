@@ -1193,6 +1193,32 @@ fn walk_block(
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }
                 }
+                CallKind::VirtualJava {
+                    class_name,
+                    method_name,
+                    descriptor,
+                } => {
+                    // Load receiver + arguments.
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    let mref = cp.methodref(class_name, method_name, descriptor);
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    let ret_is_void = descriptor.ends_with(")V");
+                    let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
+                    let net = if ret_is_void {
+                        -(args.len() as i32)
+                    } else if ret_is_wide {
+                        -(args.len() as i32) + 2
+                    } else {
+                        -(args.len() as i32) + 1
+                    };
+                    bump(stack, max_stack, net);
+                    if !ret_is_void {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
+                }
                 CallKind::Constructor(class_name) => {
                     // Stack has [ref, ref] from NewInstance+dup.
                     // Load constructor args on top: [ref, ref, arg1, ...]

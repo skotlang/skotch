@@ -1,0 +1,4 @@
+name     = "283-double-to-string"
+status   = "supported"
+features = ["int", "double", "toString"]
+notes    = "Int.toString() and Double.toString() methods."

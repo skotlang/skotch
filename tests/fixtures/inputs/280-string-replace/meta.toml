@@ -1,0 +1,4 @@
+name     = "280-string-replace"
+status   = "supported"
+features = ["string", "replace", "indexOf", "lastIndexOf"]
+notes    = "String.replace(), indexOf(), lastIndexOf() methods."

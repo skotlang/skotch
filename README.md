@@ -232,8 +232,8 @@ tokens, hover, go-to-definition, and completions.
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
 | [Try-finally](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `try { body } finally { cleanup }` — finally always executes after body |
-| [String methods](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/) | stdlib | `.length`, `.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()` |
-| [`Int.toString()`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-string.html) | stdlib | `42.toString()` → `"42"` |
+| [String methods](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/) | stdlib | `.length`, `.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()`, `.contains()`, `.startsWith()`, `.endsWith()`, `.indexOf()`, `.lastIndexOf()`, `.replace()` |
+| [Type conversions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-string.html) | stdlib | `Int.toString()`, `Double.toString()` |
 | [Init blocks](https://kotlinlang.org/spec/declarations.html#class-initialization) | §4.5.2 | `init { }` blocks execute during construction, access constructor params |
 | Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
 

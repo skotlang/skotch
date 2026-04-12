@@ -1305,6 +1305,60 @@ fn lower_expr(
                         "(II)Ljava/lang/String;",
                         Ty::String,
                     )),
+                    (Ty::String, "indexOf") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "indexOf",
+                        "(Ljava/lang/String;)I",
+                        Ty::Int,
+                    )),
+                    (Ty::String, "lastIndexOf") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "lastIndexOf",
+                        "(Ljava/lang/String;)I",
+                        Ty::Int,
+                    )),
+                    (Ty::String, "startsWith") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "startsWith",
+                        "(Ljava/lang/String;)Z",
+                        Ty::Bool,
+                    )),
+                    (Ty::String, "endsWith") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "endsWith",
+                        "(Ljava/lang/String;)Z",
+                        Ty::Bool,
+                    )),
+                    (Ty::String, "replace") if args.len() == 2 => Some((
+                        "java/lang/String",
+                        "replace",
+                        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::String, "contains") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "contains",
+                        "(Ljava/lang/CharSequence;)Z",
+                        Ty::Bool,
+                    )),
+                    (Ty::String, "toInt") => Some((
+                        "java/lang/Integer",
+                        "parseInt",
+                        "(Ljava/lang/String;)I",
+                        Ty::Int,
+                    )),
+                    (Ty::String, "toDouble") => Some((
+                        "java/lang/Double",
+                        "parseDouble",
+                        "(Ljava/lang/String;)D",
+                        Ty::Double,
+                    )),
+                    (Ty::String, "reversed") => Some((
+                        "java/lang/String",
+                        "reversed_stub",
+                        "()Ljava/lang/String;",
+                        Ty::String,
+                    )),
                     // Int methods
                     (Ty::Int, "toString") => Some((
                         "java/lang/Integer",
@@ -1312,34 +1366,49 @@ fn lower_expr(
                         "(I)Ljava/lang/String;",
                         Ty::String,
                     )),
+                    (Ty::Double, "toString") => Some((
+                        "java/lang/Double",
+                        "toString",
+                        "(D)Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::Double, "toInt") => {
+                        Some(("java/lang/Double", "toInt_stub", "(D)I", Ty::Int))
+                    }
+                    (Ty::Int, "toDouble") => {
+                        Some(("java/lang/Integer", "toDouble_stub", "(I)D", Ty::Double))
+                    }
                     _ => None,
                 };
                 if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = builtin {
-                    let dest = fb.new_local(ret_ty);
-                    // Use StaticJava with explicit descriptor for precise control.
-                    // The JVM backend emits invokestatic for this, but for instance
-                    // methods on String we need invokevirtual. We'll handle this
-                    // by using Virtual call kind for non-static methods.
-                    let is_instance = matches!(&recv_ty, Ty::String);
-                    fb.push_stmt(MStmt::Assign {
-                        dest,
-                        value: Rvalue::Call {
-                            kind: if is_instance {
-                                CallKind::Virtual {
-                                    class_name: jvm_class.to_string(),
-                                    method_name: jvm_method.to_string(),
-                                }
-                            } else {
-                                CallKind::StaticJava {
-                                    class_name: jvm_class.to_string(),
-                                    method_name: jvm_method.to_string(),
-                                    descriptor: descriptor.to_string(),
-                                }
+                    // Skip stubs that aren't real JVM methods.
+                    if jvm_method.contains("_stub") {
+                        // Stubs not yet implemented.
+                    } else {
+                        let dest = fb.new_local(ret_ty);
+                        let is_static_method = matches!(&recv_ty, Ty::Int | Ty::Double | Ty::Bool);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: if is_static_method {
+                                    CallKind::StaticJava {
+                                        class_name: jvm_class.to_string(),
+                                        method_name: jvm_method.to_string(),
+                                        descriptor: descriptor.to_string(),
+                                    }
+                                } else {
+                                    // Instance methods use VirtualJava for exact descriptor.
+                                    CallKind::VirtualJava {
+                                        class_name: jvm_class.to_string(),
+                                        method_name: jvm_method.to_string(),
+                                        descriptor: descriptor.to_string(),
+                                    }
+                                },
+                                args: all_args,
                             },
-                            args: all_args,
-                        },
-                    });
-                    return Some(dest);
+                        });
+                        return Some(dest);
+                    }
                 }
 
                 let (kind, dest_ty) = if let Ty::Class(class_name) = &recv_ty {

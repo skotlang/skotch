@@ -1262,7 +1262,7 @@ impl<'a> Parser<'a> {
                 self.skip_trivia();
                 self.expect(TokenKind::Arrow, "'->' after 'else'");
                 self.skip_trivia();
-                let body = self.parse_expr();
+                let body = self.parse_when_body();
                 let _ = start;
                 else_body = Some(Box::new(body));
                 self.skip_trivia();
@@ -1295,7 +1295,7 @@ impl<'a> Parser<'a> {
             }
             self.expect(TokenKind::Arrow, "'->' in when branch");
             self.skip_trivia();
-            let body = self.parse_expr();
+            let body = self.parse_when_body();
             let span = start.merge(body.span());
             for (pattern, range_end) in patterns {
                 branches.push(WhenBranch {
@@ -1318,6 +1318,11 @@ impl<'a> Parser<'a> {
             else_body,
             span: kw.merge(end),
         }
+    }
+
+    /// Parse a when-branch body — currently single expressions only.
+    fn parse_when_body(&mut self) -> Expr {
+        self.parse_expr()
     }
 
     /// Parse the body of an `if` branch — either a `{ block }` or a

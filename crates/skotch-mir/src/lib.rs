@@ -145,6 +145,14 @@ pub enum CallKind {
         /// JVM method descriptor, e.g. "()J" for currentTimeMillis.
         descriptor: std::string::String,
     },
+    /// Virtual method call with an explicit descriptor (for JVM built-in
+    /// types where the descriptor can't be inferred from MIR types alone,
+    /// e.g. `String.contains(CharSequence)` where arg is typed as String).
+    VirtualJava {
+        class_name: std::string::String,
+        method_name: std::string::String,
+        descriptor: std::string::String,
+    },
     /// Constructor call: `new ClassName(args)`.
     Constructor(std::string::String),
     /// Virtual method call on an instance: `receiver.method(args)`.
