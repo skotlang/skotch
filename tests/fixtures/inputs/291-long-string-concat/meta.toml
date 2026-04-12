@@ -1,0 +1,4 @@
+name     = "291-long-string-concat"
+status   = "supported"
+features = ["string", "long", "toString", "concatenation"]
+notes    = "String concatenation with Long.toString()."

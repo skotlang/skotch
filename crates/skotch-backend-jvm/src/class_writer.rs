@@ -698,25 +698,44 @@ fn emit_method(
                 stack_map_entries
                     .write_u16::<BigEndian>(delta as u16)
                     .unwrap();
-                stack_map_entries
-                    .write_u16::<BigEndian>(num_locals)
-                    .unwrap();
-                for slot in 0..num_locals as usize {
-                    write_slot_verif(
-                        &mut stack_map_entries,
-                        cp,
-                        slot,
-                        merged.get(slot).copied().unwrap_or(false),
-                        &slot_to_local,
-                        func,
-                    );
+                // Count verification type entries (Long/Double count as 1 entry
+                // but occupy 2 JVM slots).
+                let mut verif_count = 0u16;
+                let mut verif_entries = Vec::new();
+                {
+                    let mut s = 0usize;
+                    while s < num_locals as usize {
+                        let live = merged.get(s).copied().unwrap_or(false);
+                        let mut entry_buf = Vec::new();
+                        write_slot_verif(&mut entry_buf, cp, s, live, &slot_to_local, func);
+                        verif_entries.extend_from_slice(&entry_buf);
+                        verif_count += 1;
+                        // Check if this slot is a wide type (Long/Double).
+                        let is_wide = if live {
+                            slot_to_local
+                                .get(s)
+                                .copied()
+                                .flatten()
+                                .map(|mir_id| {
+                                    matches!(func.locals[mir_id as usize], Ty::Long | Ty::Double)
+                                })
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        s += if is_wide { 2 } else { 1 };
+                    }
                 }
-                stack_map_entries.write_u16::<BigEndian>(0).unwrap(); // empty stack
+                stack_map_entries
+                    .write_u16::<BigEndian>(verif_count)
+                    .unwrap();
+                stack_map_entries.extend_from_slice(&verif_entries);
+
+                // Emit stack items (always 0 for block targets).
+                stack_map_entries.write_u16::<BigEndian>(0).unwrap();
             }
             TargetSource::Cmp(ci) => {
                 let ct = &cmp_targets[*ci];
-                // Compute live slots at the comparison point: inherited
-                // set for this block + stores from block start to cmp_start.
                 let mut live = inherited_per_block[ct.block_idx].clone();
                 let blk_start = block_offsets[ct.block_idx];
                 scan_stores(&code, blk_start, ct.cmp_start, max_slots, &mut live);
@@ -731,23 +750,37 @@ fn emit_method(
                 stack_map_entries
                     .write_u16::<BigEndian>(delta as u16)
                     .unwrap();
-                stack_map_entries
-                    .write_u16::<BigEndian>(num_locals)
-                    .unwrap();
-                for slot in 0..num_locals as usize {
-                    write_slot_verif(
-                        &mut stack_map_entries,
-                        cp,
-                        slot,
-                        live.get(slot).copied().unwrap_or(false),
-                        &slot_to_local,
-                        func,
-                    );
+                // Count verification entries (skipping second slot of wide types).
+                let mut cmp_verif_count = 0u16;
+                let mut cmp_verif_entries = Vec::new();
+                {
+                    let mut s = 0usize;
+                    while s < num_locals as usize {
+                        let lv = live.get(s).copied().unwrap_or(false);
+                        write_slot_verif(&mut cmp_verif_entries, cp, s, lv, &slot_to_local, func);
+                        cmp_verif_count += 1;
+                        let is_wide = if lv {
+                            slot_to_local
+                                .get(s)
+                                .copied()
+                                .flatten()
+                                .map(|mid| {
+                                    matches!(func.locals[mid as usize], Ty::Long | Ty::Double)
+                                })
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        s += if is_wide { 2 } else { 1 };
+                    }
                 }
+                stack_map_entries
+                    .write_u16::<BigEndian>(cmp_verif_count)
+                    .unwrap();
+                stack_map_entries.extend_from_slice(&cmp_verif_entries);
                 stack_map_entries
                     .write_u16::<BigEndian>(ct.stack_count)
                     .unwrap();
-                // Integer_variable_info
                 stack_map_entries.extend(std::iter::repeat_n(1u8, ct.stack_count as usize));
             }
         }
@@ -992,13 +1025,59 @@ fn walk_block(
                         }
 
                         // Comparison → push 0 or 1 (bool).
-                        // Choose reference or integer comparison opcodes.
                         let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Class(_) | Ty::Any);
+                        let is_long = matches!(lhs_ty, Ty::Long);
+                        let is_double = matches!(lhs_ty, Ty::Double);
+
+                        if is_long || is_double {
+                            // Long/Double comparison: emit lcmp/dcmpg then if<cond>
+                            if is_long {
+                                code.push(0x94); // lcmp: pops 2 longs, pushes int
+                                bump(stack, max_stack, -3); // -4 slots in, +1 out = -3
+                            } else {
+                                code.push(0x98); // dcmpg: pops 2 doubles, pushes int
+                                bump(stack, max_stack, -3);
+                            }
+                            let branch_op: u8 = match op {
+                                MBinOp::CmpEq => 0x99, // ifeq
+                                MBinOp::CmpNe => 0x9A, // ifne
+                                MBinOp::CmpLt => 0x9B, // iflt
+                                MBinOp::CmpGe => 0x9C, // ifge
+                                MBinOp::CmpGt => 0x9D, // ifgt
+                                MBinOp::CmpLe => 0x9E, // ifle
+                                _ => unreachable!(),
+                            };
+                            let cmp_start = code.len();
+                            code.push(branch_op);
+                            code.write_i16::<BigEndian>(7).unwrap();
+                            bump(stack, max_stack, -1); // pops the int result
+                            code.push(0x03); // iconst_0
+                            bump(stack, max_stack, 1);
+                            code.push(0xA7); // goto L_end
+                            code.write_i16::<BigEndian>(4).unwrap();
+                            code.push(0x04); // iconst_1
+
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 7,
+                                stack_count: 0,
+                                cmp_start,
+                                block_idx,
+                            });
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 8,
+                                stack_count: 1,
+                                cmp_start,
+                                block_idx,
+                            });
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
                         let branch_op: u8 = if is_ref {
                             match op {
                                 MBinOp::CmpEq => 0xA5, // if_acmpeq
                                 MBinOp::CmpNe => 0xA6, // if_acmpne
-                                _ => 0xA5,             // reference types only support eq/ne
+                                _ => 0xA5,
                             }
                         } else {
                             match op {
@@ -1013,8 +1092,8 @@ fn walk_block(
                         };
                         let cmp_start = code.len();
                         code.push(branch_op);
-                        code.write_i16::<BigEndian>(7).unwrap(); // skip to L_true (3+1+3=7)
-                        bump(stack, max_stack, -2); // pops both operands
+                        code.write_i16::<BigEndian>(7).unwrap();
+                        bump(stack, max_stack, -2); // pops both int operands
                         code.push(0x03); // iconst_0 (false)
                         bump(stack, max_stack, 1);
                         code.push(0xA7); // goto L_end
@@ -1103,7 +1182,13 @@ fn walk_block(
                         let mref = cp.methodref("java/io/PrintStream", "println", descriptor);
                         code.push(0xB6); // invokevirtual
                         code.write_u16::<BigEndian>(mref).unwrap();
-                        bump(stack, max_stack, -2);
+                        // Stack: pops PrintStream (1) + arg (1 or 2 for wide types)
+                        let effect = if matches!(arg_ty, Ty::Long | Ty::Double) {
+                            -3
+                        } else {
+                            -2
+                        };
+                        bump(stack, max_stack, effect);
                     } else {
                         let mref = cp.methodref("java/io/PrintStream", "println", "()V");
                         code.push(0xB6);
@@ -1178,8 +1263,13 @@ fn walk_block(
                         let append = cp.methodref("java/lang/StringBuilder", "append", append_desc);
                         code.push(0xB6); // invokevirtual
                         code.write_u16::<BigEndian>(append).unwrap();
-                        // append: pops [SB, arg], pushes [SB] → net -1
-                        bump(stack, max_stack, -1);
+                        // append: pops [SB, arg], pushes [SB]
+                        let append_effect = if matches!(arg_ty, Ty::Long | Ty::Double) {
+                            -2 // SB(1) + wide_arg(2) → SB(1): net -2
+                        } else {
+                            -1 // SB(1) + arg(1) → SB(1): net -1
+                        };
+                        bump(stack, max_stack, append_effect);
                     }
 
                     let to_string = cp.methodref(
@@ -1211,17 +1301,28 @@ fn walk_block(
                     let mref = cp.methodref(class_name, method_name, descriptor);
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mref).unwrap();
-                    // Stack effect: consumed args, pushed return value (if non-void).
+                    // Stack effect: consumed args (accounting for wide types),
+                    // pushed return value (if non-void).
+                    let args_slots: i32 = args
+                        .iter()
+                        .map(|a| {
+                            if matches!(func.locals[a.0 as usize], Ty::Long | Ty::Double) {
+                                2
+                            } else {
+                                1
+                            }
+                        })
+                        .sum();
                     let ret_is_void = descriptor.ends_with(")V");
                     let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
-                    let net = if ret_is_void {
-                        -(args.len() as i32)
+                    let ret_slots = if ret_is_void {
+                        0
                     } else if ret_is_wide {
-                        -(args.len() as i32) + 2 // long/double take 2 stack slots
+                        2
                     } else {
-                        -(args.len() as i32) + 1
+                        1
                     };
-                    bump(stack, max_stack, net);
+                    bump(stack, max_stack, -args_slots + ret_slots);
                     if !ret_is_void {
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }

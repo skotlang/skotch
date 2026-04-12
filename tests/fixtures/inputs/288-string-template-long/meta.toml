@@ -1,0 +1,4 @@
+name     = "288-string-template-long"
+status   = "supported"
+features = ["string-template", "long", "println"]
+notes    = "String templates with Long-typed variables."

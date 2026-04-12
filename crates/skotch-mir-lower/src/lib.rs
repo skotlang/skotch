@@ -1382,6 +1382,12 @@ fn lower_expr(
                         "(I)Ljava/lang/String;",
                         Ty::String,
                     )),
+                    (Ty::Long, "toString") => Some((
+                        "java/lang/Long",
+                        "toString",
+                        "(J)Ljava/lang/String;",
+                        Ty::String,
+                    )),
                     (Ty::Double, "toString") => Some((
                         "java/lang/Double",
                         "toString",
@@ -1402,7 +1408,8 @@ fn lower_expr(
                         // Stubs not yet implemented.
                     } else {
                         let dest = fb.new_local(ret_ty);
-                        let is_static_method = matches!(&recv_ty, Ty::Int | Ty::Double | Ty::Bool);
+                        let is_static_method =
+                            matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
                         fb.push_stmt(MStmt::Assign {
                             dest,
                             value: Rvalue::Call {
