@@ -162,10 +162,16 @@ pub fn run_repl_interactive() -> Result<()> {
                     // our own declaration history. A future PR could
                     // hook up reedline's FileBackedHistory to persist
                     // across sessions and iterate it here.
-                    if state.decls.is_empty() {
+                    let all_decls: Vec<&str> = state
+                        .top_decls
+                        .iter()
+                        .chain(state.local_decls.iter())
+                        .map(|s| s.as_str())
+                        .collect();
+                    if all_decls.is_empty() {
                         println!("(no declarations in history)");
                     } else {
-                        for (i, d) in state.decls.iter().enumerate() {
+                        for (i, d) in all_decls.iter().enumerate() {
                             println!("  {}: {d}", i + 1);
                         }
                     }
@@ -314,10 +320,10 @@ fn unique_class_name(prefix: &str) -> String {
 /// `fun` definitions. Shared by both the interactive (reedline) and
 /// piped (BufRead) REPL paths.
 struct ReplState {
-    /// Top-level declarations seen so far, one entry per `val`/`var`/
-    /// `fun` line. Concatenated (separated by newlines) to form the
-    /// preamble of every executed turn.
-    decls: Vec<String>,
+    /// Top-level declarations (class, fun) that go outside fun main().
+    top_decls: Vec<String>,
+    /// Local declarations (val, var) that go inside fun main().
+    local_decls: Vec<String>,
     /// Monotonic counter of all turns (declarations + expressions),
     /// used only for unique synthetic class names.
     turn: usize,
@@ -326,7 +332,8 @@ struct ReplState {
 impl ReplState {
     fn new() -> Self {
         ReplState {
-            decls: Vec::new(),
+            top_decls: Vec::new(),
+            local_decls: Vec::new(),
             turn: 0,
         }
     }
@@ -334,24 +341,54 @@ impl ReplState {
     /// Process one REPL turn. Returns the captured stdout (empty for
     /// declaration-only turns) or a compile/run error.
     fn process(&mut self, line: &str, jvm: &EmbeddedJvm) -> Result<String> {
+        // Split on semicolons to handle multi-statement lines like:
+        // "data class User(...); val user = User(...); println(user)"
+        let parts: Vec<&str> = line
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.len() > 1 {
+            let mut combined_output = String::new();
+            for part in parts {
+                let out = self.process_single(part, jvm)?;
+                combined_output.push_str(&out);
+            }
+            return Ok(combined_output);
+        }
+        self.process_single(line, jvm)
+    }
+
+    fn process_single(&mut self, line: &str, jvm: &EmbeddedJvm) -> Result<String> {
         self.turn += 1;
         let trimmed = line.trim_start();
-        if is_top_level_decl(trimmed) {
-            // Verify the new declaration parses + compiles by
-            // wrapping it with all prior decls in a no-op main.
-            // We don't actually run anything for declaration turns.
-            let preamble = self.decls.join("\n");
-            let candidate = format!("{preamble}\n{line}\nfun main() {{}}\n");
+
+        if is_top_level_only_decl(trimmed) {
+            // Class/fun declarations go at top level.
+            let top = self.top_decls.join("\n");
+            let locals = self.local_decls.join("\n    ");
+            let candidate = format!("{top}\n{line}\nfun main() {{\n    {locals}\n}}\n");
             let class_name = format!("ReplTurn{}Kt", self.turn);
             compile_only(&candidate, &class_name)?;
-            // Persist on success.
-            self.decls.push(line.to_string());
+            self.top_decls.push(line.to_string());
+            Ok(String::new())
+        } else if is_local_decl(trimmed) {
+            // val/var declarations go inside fun main() as locals.
+            let top = self.top_decls.join("\n");
+            let mut locals: Vec<String> = self.local_decls.clone();
+            locals.push(line.to_string());
+            let locals_str = locals.join("\n    ");
+            let candidate = format!("{top}\nfun main() {{\n    {locals_str}\n}}\n");
+            let class_name = format!("ReplTurn{}Kt", self.turn);
+            compile_only(&candidate, &class_name)?;
+            self.local_decls.push(line.to_string());
             Ok(String::new())
         } else {
-            // Expression statement: wrap in a fresh main and run.
-            let preamble = self.decls.join("\n");
+            // Expression statement: wrap in main with all prior decls.
+            let top = self.top_decls.join("\n");
+            let locals = self.local_decls.join("\n    ");
             let body = line.trim_end();
-            let source = format!("{preamble}\nfun main() {{\n    {body}\n}}\n");
+            let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
             let class_name = format!("ReplTurn{}Kt", self.turn);
             compile_and_run_jni(&source, jvm, &class_name)
         }
@@ -364,15 +401,36 @@ impl ReplState {
 /// `var `, or `fun ` (or has a visibility modifier in front of
 /// those) is treated as a declaration. Everything else is treated
 /// as an expression statement.
-fn is_top_level_decl(trimmed: &str) -> bool {
-    let after_modifier = trimmed
-        .strip_prefix("public ")
-        .or_else(|| trimmed.strip_prefix("private "))
-        .or_else(|| trimmed.strip_prefix("internal "))
-        .unwrap_or(trimmed);
-    after_modifier.starts_with("val ")
-        || after_modifier.starts_with("var ")
-        || after_modifier.starts_with("fun ")
+/// Strip leading modifier keywords from a declaration line.
+fn strip_modifiers(trimmed: &str) -> &str {
+    let mut s = trimmed;
+    loop {
+        let next = s
+            .strip_prefix("public ")
+            .or_else(|| s.strip_prefix("private "))
+            .or_else(|| s.strip_prefix("internal "))
+            .or_else(|| s.strip_prefix("data "))
+            .or_else(|| s.strip_prefix("open "))
+            .or_else(|| s.strip_prefix("abstract "))
+            .or_else(|| s.strip_prefix("const "));
+        match next {
+            Some(rest) => s = rest.trim_start(),
+            None => break,
+        }
+    }
+    s
+}
+
+/// Is this a declaration that must be at the top level (class, fun)?
+fn is_top_level_only_decl(trimmed: &str) -> bool {
+    let s = strip_modifiers(trimmed);
+    s.starts_with("class ") || s.starts_with("fun ")
+}
+
+/// Is this a local declaration (val, var)?
+fn is_local_decl(trimmed: &str) -> bool {
+    let s = strip_modifiers(trimmed);
+    s.starts_with("val ") || s.starts_with("var ")
 }
 
 // ─── compilation + execution helpers ─────────────────────────────────────
@@ -408,13 +466,36 @@ fn compile_only(source: &str, class_name: &str) -> Result<PathBuf> {
 /// the in-process JVM via JNI. Returns captured stdout.
 fn compile_and_run_jni(source: &str, jvm: &EmbeddedJvm, class_name: &str) -> Result<String> {
     let class_path = compile_only(source, class_name)?;
-    let class_bytes = std::fs::read(&class_path)
-        .with_context(|| format!("reading compiled class {}", class_path.display()))?;
-    let class_stem = class_path
+    let class_dir = class_path
+        .parent()
+        .ok_or_else(|| anyhow!("class file has no parent directory"))?;
+
+    // Load all additional class files (user-defined classes like data classes)
+    // into the JVM before running main.
+    let main_stem = class_path
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow!("compiled class has no UTF-8 stem"))?;
-    jvm.run_class_main(class_stem, &class_bytes)
+    if let Ok(entries) = std::fs::read_dir(class_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("class") {
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                // Skip the main class — we'll load it when running.
+                if stem == main_stem {
+                    continue;
+                }
+                if let Ok(bytes) = std::fs::read(&path) {
+                    // Define the class in the JVM (ignore errors for already-defined).
+                    let _ = jvm.define_class(stem, &bytes);
+                }
+            }
+        }
+    }
+
+    let class_bytes = std::fs::read(&class_path)
+        .with_context(|| format!("reading compiled class {}", class_path.display()))?;
+    jvm.run_class_main(main_stem, &class_bytes)
 }
 
 /// Check whether the JVM can be initialized. Returns `Ok(())` if
@@ -437,15 +518,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn is_top_level_decl_recognizes_keywords() {
-        assert!(is_top_level_decl("val x = 1"));
-        assert!(is_top_level_decl("var y = 2"));
-        assert!(is_top_level_decl("fun foo() {}"));
-        assert!(is_top_level_decl("private val x = 1"));
-        assert!(is_top_level_decl("internal fun foo() {}"));
-        assert!(!is_top_level_decl("println(1)"));
-        assert!(!is_top_level_decl("1 + 2"));
-        assert!(!is_top_level_decl(""));
+    fn decl_classification() {
+        // Top-level declarations (class, fun)
+        assert!(is_top_level_only_decl("fun foo() {}"));
+        assert!(is_top_level_only_decl("class Foo {}"));
+        assert!(is_top_level_only_decl("data class Point(val x: Int)"));
+        assert!(is_top_level_only_decl("private fun foo() {}"));
+        assert!(!is_top_level_only_decl("val x = 1"));
+        assert!(!is_top_level_only_decl("println(1)"));
+
+        // Local declarations (val, var)
+        assert!(is_local_decl("val x = 1"));
+        assert!(is_local_decl("var y = 2"));
+        assert!(is_local_decl("const val PI = 3.14"));
+        assert!(!is_local_decl("fun foo() {}"));
+        assert!(!is_local_decl("println(1)"));
+        assert!(!is_local_decl(""));
     }
 
     #[test]

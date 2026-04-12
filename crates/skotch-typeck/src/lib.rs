@@ -467,7 +467,7 @@ impl<'a> TypeChecker<'a> {
             Expr::Unary { operand, .. } => self.synth_expr(operand, scope, out),
             Expr::Call { callee, args, .. } => {
                 for a in args {
-                    self.synth_expr(a, scope, out);
+                    self.synth_expr(&a.expr, scope, out);
                 }
                 // Look up the callee's return type so function calls
                 // used in expressions get the correct type.

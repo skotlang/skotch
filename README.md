@@ -177,16 +177,14 @@ golden" tests still catch regressions in skotch's own emitter.
 ## Kotlin language support
 
 **Estimated coverage: ~50% of the Kotlin language specification.** The compiler
-handles functions with **default parameter values**, `print()`/`println()`,
-**data classes** with synthesized `toString()`, `maxOf()`/`minOf()`, complete
-control flow, try/finally, numeric types (Int, Long, Double), Boolean, String
-with dynamically-resolved methods from JDK class files, Char, classes with
+handles functions with **default parameters** and **named arguments**, `print()`/
+`println()`, **data classes** with synthesized `toString()`, `maxOf()`/`minOf()`,
+complete control flow, try/finally, numeric types (Int, Long, Double), Boolean,
+String with dynamically-resolved methods from JDK class files, Char, classes with
 constructors/methods/field access/init blocks, null literals, const val,
 visibility modifiers, nullable types with elvis (`?:`), Java static method
-interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. Method
-resolution reads real `.class` files from the JDK and Kotlin stdlib instead of
-using hardcoded tables. 260+ test fixtures validated across JVM, DEX, LLVM IR,
-and klib targets.
+interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. 270+ test
+fixtures validated across JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
 
@@ -194,6 +192,7 @@ and klib targets.
 |---|---|---|
 | [Function declarations](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | Top-level `fun`, parameters, return types |
 | [Default parameters](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.1 | `fun f(x: Int = 10)` — literal defaults injected at call sites |
+| [Named arguments](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | §7.2.2 | `f(height = 3, width = 4)` — arguments reordered to match parameter positions |
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
@@ -257,7 +256,6 @@ and klib targets.
 | Try/catch | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; catch blocks need JVM exception tables |
 | Throw expression | [§7.4.6](https://kotlinlang.org/spec/expressions.html#throw-expressions) | Medium | Parsed; needs `athrow` opcode |
 | Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
-| Named arguments | [§7.2.2](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | Medium | Call-site argument reordering |
 | Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
 | Type aliases | [§4.7](https://kotlinlang.org/spec/declarations.html#type-alias) | Easy | `typealias` erased at compile time |
 | Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |

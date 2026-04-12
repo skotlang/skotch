@@ -205,6 +205,44 @@ impl EmbeddedJvm {
         String::from_utf8(bytes).map_err(|e| anyhow!("stdout not UTF-8: {e}"))
     }
 
+    /// Define a class in the embedded JVM without running it.
+    /// Used to pre-load user-defined classes (data classes, etc.)
+    /// before running main().
+    pub fn define_class(&self, class_name: &str, class_bytes: &[u8]) -> Result<()> {
+        let env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("JNI attach failed: {e}"))?;
+        let mut env = env;
+        Self::define_class_in_env(&mut env, class_name, class_bytes)
+    }
+
+    fn define_class_in_env(
+        env: &mut jni::JNIEnv,
+        class_name: &str,
+        class_bytes: &[u8],
+    ) -> Result<()> {
+        let loader_class = env
+            .find_class("java/lang/ClassLoader")
+            .map_err(|e| anyhow!("FindClass ClassLoader: {e}"))?;
+        let loader = env
+            .call_static_method(
+                loader_class,
+                "getSystemClassLoader",
+                "()Ljava/lang/ClassLoader;",
+                &[],
+            )
+            .map_err(|e| anyhow!("getSystemClassLoader: {e}"))?
+            .l()
+            .map_err(|e| anyhow!("getSystemClassLoader result: {e}"))?;
+        let jni_name = class_name.replace('.', "/");
+        env.define_class(&jni_name, &loader, class_bytes)
+            .map_err(|e| {
+                let _ = env.exception_clear();
+                anyhow!("DefineClass `{jni_name}` failed: {e}")
+            })?;
+        Ok(())
+    }
+
     fn define_and_run(
         &self,
         env: &mut jni::JNIEnv,

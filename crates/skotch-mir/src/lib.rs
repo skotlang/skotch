@@ -214,6 +214,9 @@ pub struct MirFunction {
     /// Number of required parameters (those without defaults).
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub required_params: usize,
+    /// Parameter names (for named argument resolution at call sites).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub param_names: Vec<String>,
     /// Default values for optional parameters, indexed by param position.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub param_defaults: Vec<Option<MirConst>>,

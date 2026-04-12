@@ -128,6 +128,14 @@ pub struct PropertyDecl {
     pub span: Span,
 }
 
+/// An argument in a function call, optionally named.
+#[derive(Clone, Debug)]
+pub struct CallArg {
+    /// If `Some`, this is a named argument: `name = expr`.
+    pub name: Option<Symbol>,
+    pub expr: Expr,
+}
+
 /// A surface-level type reference. We don't model generics yet.
 #[derive(Clone, Debug)]
 pub struct TypeRef {
@@ -200,12 +208,11 @@ pub enum Expr {
     /// text or an embedded expression.
     StringTemplate(Vec<TemplatePart>, Span),
     Ident(Symbol, Span),
-    /// `f(arg, arg)` or `obj.f(arg)`. The callee is itself an expression
-    /// — we don't pre-distinguish "name" from "method" here; resolution
-    /// does that.
+    /// `f(arg, arg)` or `obj.f(arg)`. Supports named arguments:
+    /// `f(name = value, other = value)`.
     Call {
         callee: Box<Expr>,
-        args: Vec<Expr>,
+        args: Vec<CallArg>,
         span: Span,
     },
     Binary {

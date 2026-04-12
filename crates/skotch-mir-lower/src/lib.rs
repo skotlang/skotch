@@ -76,6 +76,11 @@ pub fn lower_file(
                         .and_then(|d| lower_const_init(d, &mut module))
                 })
                 .collect();
+            let param_names: Vec<String> = f
+                .params
+                .iter()
+                .map(|p| interner.resolve(p.name).to_string())
+                .collect();
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -84,6 +89,7 @@ pub fn lower_file(
                 blocks: Vec::new(),
                 return_ty,
                 required_params: required,
+                param_names,
                 param_defaults,
             });
             fn_pass1_idx += 1;
@@ -259,6 +265,7 @@ impl FnBuilder {
             }],
             return_ty,
             required_params: 0,
+            param_names: Vec::new(),
             param_defaults: Vec::new(),
         };
         FnBuilder { mf, cur_block: 0 }
@@ -371,12 +378,14 @@ fn lower_function(
     // FnBuilder constructor and never overwritten for the last block).
 
     if ok {
-        // Preserve param_defaults and required_params from Pass 1.
+        // Preserve param metadata from Pass 1.
         let saved_defaults = module.functions[fn_idx].param_defaults.clone();
         let saved_required = module.functions[fn_idx].required_params;
+        let saved_names = module.functions[fn_idx].param_names.clone();
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
+        module.functions[fn_idx].param_names = saved_names;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -389,6 +398,7 @@ fn lower_function(
             }],
             return_ty: Ty::Unit,
             required_params: 0,
+            param_names: Vec::new(),
             param_defaults: Vec::new(),
         };
     }
@@ -700,6 +710,7 @@ fn lower_stmt(
                 blocks: Vec::new(),
                 return_ty: return_ty.clone(),
                 required_params: 0,
+                param_names: Vec::new(),
                 param_defaults: Vec::new(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
@@ -1289,7 +1300,7 @@ fn lower_expr(
                 let mut all_args = vec![recv_local];
                 for a in args {
                     let id = lower_expr(
-                        a,
+                        &a.expr,
                         fb,
                         scope,
                         module,
@@ -1543,7 +1554,7 @@ fn lower_expr(
                 let mut arg_locals = Vec::new();
                 for a in args {
                     let id = lower_expr(
-                        a,
+                        &a.expr,
                         fb,
                         scope,
                         module,
@@ -1573,9 +1584,9 @@ fn lower_expr(
             // ─── Special form: println(<string template>) ───────────
             if interner.resolve(callee_name) == "println"
                 && args.len() == 1
-                && matches!(&args[0], Expr::StringTemplate(_, _))
+                && matches!(&args[0].expr, Expr::StringTemplate(_, _))
             {
-                if let Expr::StringTemplate(parts, _) = &args[0] {
+                if let Expr::StringTemplate(parts, _) = &args[0].expr {
                     let mut arg_locals = Vec::with_capacity(parts.len());
                     for part in parts {
                         let id = lower_template_part(
@@ -1602,10 +1613,12 @@ fn lower_expr(
                 }
             }
 
-            let mut arg_locals = Vec::new();
+            // Lower arguments. If any are named, we'll reorder after.
+            let has_named = args.iter().any(|a| a.name.is_some());
+            let mut named_pairs: Vec<(Option<Symbol>, LocalId)> = Vec::new();
             for a in args {
                 let id = lower_expr(
-                    a,
+                    &a.expr,
                     fb,
                     scope,
                     module,
@@ -1615,8 +1628,54 @@ fn lower_expr(
                     diags,
                     loop_ctx,
                 )?;
-                arg_locals.push(id);
+                named_pairs.push((a.name, id));
             }
+
+            // Reorder named arguments to match parameter order.
+            let mut arg_locals: Vec<LocalId> = if has_named {
+                // Look up the function's parameter names from the MIR module.
+                let param_name_strs: Vec<String> = name_to_func
+                    .get(&callee_name)
+                    .map(|fid| module.functions[fid.0 as usize].param_names.clone())
+                    .unwrap_or_default();
+
+                if param_name_strs.is_empty() {
+                    // No param names found — keep positional order.
+                    named_pairs.iter().map(|(_, id)| *id).collect()
+                } else {
+                    let mut reordered = vec![None; param_name_strs.len()];
+                    let mut positional_idx = 0;
+                    for (name_opt, id) in &named_pairs {
+                        if let Some(name_sym) = name_opt {
+                            let name_str = interner.resolve(*name_sym);
+                            if let Some(pos) = param_name_strs.iter().position(|pn| pn == name_str)
+                            {
+                                reordered[pos] = Some(*id);
+                            } else {
+                                // Unknown param name — keep in order.
+                                if positional_idx < reordered.len() {
+                                    reordered[positional_idx] = Some(*id);
+                                    positional_idx += 1;
+                                }
+                            }
+                        } else {
+                            // Positional arg: fill the next unfilled slot.
+                            while positional_idx < reordered.len()
+                                && reordered[positional_idx].is_some()
+                            {
+                                positional_idx += 1;
+                            }
+                            if positional_idx < reordered.len() {
+                                reordered[positional_idx] = Some(*id);
+                                positional_idx += 1;
+                            }
+                        }
+                    }
+                    reordered.into_iter().flatten().collect()
+                }
+            } else {
+                named_pairs.iter().map(|(_, id)| *id).collect()
+            };
 
             // If fewer args provided than params, inject default values.
             if let Some(fid) = name_to_func.get(&callee_name) {
@@ -2422,14 +2481,19 @@ fn lookup_java_static(
     method_name: &str,
     arg_count: usize,
 ) -> Option<(String, String, String, Ty)> {
-    let simple = class_name
-        .rsplit('/')
-        .next()
-        .unwrap_or(class_name)
-        .rsplit('.')
-        .next()
-        .unwrap_or(class_name);
-    lookup_java_static_from_jdk(simple, method_name, arg_count)
+    // If the name is already a JVM internal path (contains '/'), use it directly.
+    if class_name.contains('/') {
+        return lookup_java_static_from_jdk(class_name, method_name, arg_count);
+    }
+    // If it's a dot-qualified name like "java.lang.System", convert to JVM
+    // path "java/lang/System" and look up by full path.
+    if class_name.contains('.') {
+        let jvm_path = class_name.replace('.', "/");
+        return lookup_java_static_from_jdk(&jvm_path, method_name, arg_count);
+    }
+    // Simple name like "System" — look up in registry (which maps simple
+    // names to pre-loaded classes from java.lang.* and kotlin.*).
+    lookup_java_static_from_jdk(class_name, method_name, arg_count)
 }
 
 /// Look up an instance (non-static) method on a JVM class.
@@ -2438,13 +2502,14 @@ fn lookup_java_instance(
     method_name: &str,
     arg_count: usize,
 ) -> Option<(String, String, String, Ty)> {
-    let simple = class_name
-        .rsplit('/')
-        .next()
-        .unwrap_or(class_name)
-        .rsplit('.')
-        .next()
-        .unwrap_or(class_name);
+    if class_name.contains('/') {
+        return lookup_java_instance_from_jdk(class_name, method_name, arg_count);
+    }
+    if class_name.contains('.') {
+        let jvm_path = class_name.replace('.', "/");
+        return lookup_java_instance_from_jdk(&jvm_path, method_name, arg_count);
+    }
+    let simple = class_name;
     lookup_java_instance_from_jdk(simple, method_name, arg_count)
 }
 
@@ -2601,7 +2666,7 @@ fn lookup_java_instance_from_jdk(
 fn try_java_static_call(
     receiver: &Expr,
     method_name: Symbol,
-    args: &[Expr],
+    args: &[skotch_syntax::CallArg],
     fb: &mut FnBuilder,
     scope: &mut Vec<(Symbol, LocalId)>,
     module: &mut MirModule,
@@ -2623,7 +2688,7 @@ fn try_java_static_call(
     let mut arg_locals = Vec::new();
     for a in args {
         let id = lower_expr(
-            a,
+            &a.expr,
             fb,
             scope,
             module,
@@ -2711,6 +2776,7 @@ fn lower_class(
         }],
         return_ty: Ty::Unit,
         required_params: 0,
+        param_names: Vec::new(),
         param_defaults: Vec::new(),
     };
     // Add 'this' as local 0.

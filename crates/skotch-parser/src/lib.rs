@@ -35,7 +35,7 @@ use skotch_intern::{Interner, Symbol};
 use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
-    BinOp, Block, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, ImportDecl, KtFile,
+    BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, ImportDecl, KtFile,
     PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind, TypeRef, UnaryOp,
     ValDecl, WhenBranch,
 };
@@ -1130,11 +1130,33 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::LParen => {
                     self.bump();
-                    let mut args = Vec::new();
+                    let mut args: Vec<CallArg> = Vec::new();
                     self.skip_trivia();
                     if self.peek_kind() != TokenKind::RParen {
                         loop {
-                            args.push(self.parse_expr());
+                            self.skip_trivia();
+                            // Check for named argument: `name = expr`
+                            // Peek: Ident followed by Eq (not EqEq)
+                            let named = self.peek_kind() == TokenKind::Ident
+                                && self.peek_kind_at(1) == TokenKind::Eq;
+                            if named {
+                                let name_idx = self.pos;
+                                self.bump(); // consume ident
+                                let name_sym = self.intern_ident_at(name_idx);
+                                self.bump(); // consume '='
+                                self.skip_trivia();
+                                let value = self.parse_expr();
+                                args.push(CallArg {
+                                    name: Some(name_sym),
+                                    expr: value,
+                                });
+                            } else {
+                                let value = self.parse_expr();
+                                args.push(CallArg {
+                                    name: None,
+                                    expr: value,
+                                });
+                            }
                             self.skip_trivia();
                             if !self.eat(TokenKind::Comma) {
                                 break;

@@ -1,0 +1,4 @@
+name     = "309-named-args-reorder"
+status   = "supported"
+features = ["named-arguments", "reordering", "expression-body"]
+notes    = "Named arguments reordered to match parameter order."

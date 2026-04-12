@@ -314,7 +314,7 @@ impl<'a> Resolver<'a> {
             Expr::Call { callee, args, .. } => {
                 self.resolve_expr(fn_idx, callee, scope, rf);
                 for a in args {
-                    self.resolve_expr(fn_idx, a, scope, rf);
+                    self.resolve_expr(fn_idx, &a.expr, scope, rf);
                 }
             }
             Expr::Binary { lhs, rhs, .. } => {
@@ -427,7 +427,7 @@ impl<'a> Resolver<'a> {
             Expr::Call { callee, args, .. } => {
                 self.resolve_expr_in_top(callee, refs);
                 for a in args {
-                    self.resolve_expr_in_top(a, refs);
+                    self.resolve_expr_in_top(&a.expr, refs);
                 }
             }
             Expr::Binary { lhs, rhs, .. } => {

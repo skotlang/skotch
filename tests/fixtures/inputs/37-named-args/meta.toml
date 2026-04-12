@@ -1,3 +1,4 @@
-name = "37-named-args"
-status = "stub"
-reason = "Resolver needs to bind by name and reorder arguments."
+name     = "37-named-args"
+status   = "supported"
+features = ["named-arguments", "argument-reordering"]
+notes    = "Named arguments reordered at call site."
