@@ -410,6 +410,7 @@ fn strip_modifiers(trimmed: &str) -> &str {
             .or_else(|| s.strip_prefix("private "))
             .or_else(|| s.strip_prefix("internal "))
             .or_else(|| s.strip_prefix("data "))
+            .or_else(|| s.strip_prefix("enum "))
             .or_else(|| s.strip_prefix("open "))
             .or_else(|| s.strip_prefix("abstract "))
             .or_else(|| s.strip_prefix("const "));

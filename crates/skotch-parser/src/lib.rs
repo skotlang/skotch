@@ -35,9 +35,9 @@ use skotch_intern::{Interner, Symbol};
 use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
-    BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, ImportDecl, KtFile,
-    ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind, TypeRef,
-    UnaryOp, ValDecl, WhenBranch,
+    BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
+    KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind,
+    TypeRef, UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -166,6 +166,7 @@ impl<'a> Parser<'a> {
             }
             // Skip modifier keywords that we recognize but don't enforce.
             let mut is_data = false;
+            let mut is_enum = false;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -176,9 +177,13 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwInternal
                     | TokenKind::KwOverride
                     | TokenKind::KwData
+                    | TokenKind::KwEnum
             ) {
                 if self.peek_kind() == TokenKind::KwData {
                     is_data = true;
+                }
+                if self.peek_kind() == TokenKind::KwEnum {
+                    is_enum = true;
                 }
                 self.bump();
                 self.skip_trivia();
@@ -193,9 +198,13 @@ impl<'a> Parser<'a> {
                     decls.push(Decl::Val(v));
                 }
                 TokenKind::KwClass => {
-                    let mut cd = self.parse_class_decl();
-                    cd.is_data = is_data;
-                    decls.push(Decl::Class(cd));
+                    if is_enum {
+                        decls.push(Decl::Enum(self.parse_enum_decl()));
+                    } else {
+                        let mut cd = self.parse_class_decl();
+                        cd.is_data = is_data;
+                        decls.push(Decl::Class(cd));
+                    }
                 }
                 TokenKind::KwObject => {
                     decls.push(Decl::Object(self.parse_object_decl()));
@@ -449,6 +458,63 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             methods,
+            span: kw.merge(name_span),
+        }
+    }
+
+    fn parse_enum_decl(&mut self) -> EnumDecl {
+        let kw = self.expect(TokenKind::KwClass, "class");
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(name_span, "expected enum name"));
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+
+        let mut entries = Vec::new();
+        if self.peek_kind() == TokenKind::LBrace {
+            self.bump();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                if self.peek_kind() == TokenKind::Ident {
+                    let entry_idx = self.pos;
+                    self.bump();
+                    entries.push(self.intern_ident_at(entry_idx));
+                    self.skip_trivia();
+                    // Consume optional comma or semicolon between entries.
+                    if self.peek_kind() == TokenKind::Comma {
+                        self.bump();
+                    } else if self.peek_kind() == TokenKind::Semi {
+                        self.bump();
+                        // Semicolon ends the entry list; rest is methods (skip for now).
+                        break;
+                    }
+                } else {
+                    self.bump(); // skip unknown
+                }
+            }
+            // Skip any remaining content until closing brace.
+            while self.peek_kind() != TokenKind::RBrace && self.peek_kind() != TokenKind::Eof {
+                self.bump();
+            }
+            if self.peek_kind() == TokenKind::RBrace {
+                self.bump();
+            }
+        }
+
+        EnumDecl {
+            name,
+            name_span,
+            entries,
             span: kw.merge(name_span),
         }
     }

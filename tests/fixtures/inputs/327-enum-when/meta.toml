@@ -1,0 +1,4 @@
+name     = "327-enum-when"
+status   = "supported"
+features = ["enum", "when", "string-matching"]
+notes    = "Enum entries used with when expression."

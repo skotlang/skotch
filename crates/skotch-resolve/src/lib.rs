@@ -110,10 +110,15 @@ pub fn resolve_file(
                 r.out.top_level.insert(c.name, DefId::Function(i as u32));
             }
             Decl::Object(o) => {
-                // Register object name so Singleton.method() resolves.
                 r.out
                     .top_level
                     .insert(o.name, DefId::PossibleExternal(o.name));
+            }
+            Decl::Enum(e) => {
+                // Register enum name so Color.RED resolves.
+                r.out
+                    .top_level
+                    .insert(e.name, DefId::PossibleExternal(e.name));
             }
             Decl::Unsupported { .. } => {}
         }
@@ -130,7 +135,7 @@ pub fn resolve_file(
                 let rv = r.resolve_top_val(v);
                 r.out.top_vals.push(rv);
             }
-            Decl::Class(_) | Decl::Object(_) => {} // resolved during MIR lowering
+            Decl::Class(_) | Decl::Object(_) | Decl::Enum(_) => {} // resolved during MIR lowering
             Decl::Unsupported { .. } => {}
         }
     }

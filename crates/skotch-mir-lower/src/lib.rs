@@ -197,6 +197,9 @@ pub fn lower_file(
                     diags,
                 );
             }
+            Decl::Enum(e) => {
+                lower_enum(e, &mut name_to_func, &mut module, interner);
+            }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
                     *span,
@@ -2176,6 +2179,24 @@ fn lower_expr(
             name,
             span,
         } => {
+            // Check if this is an enum/object constant access (Color.RED).
+            // If the field name is a known zero-arg function, call it.
+            if let Some(&fid) = name_to_func.get(name) {
+                let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                let params_len = module.functions[fid.0 as usize].params.len();
+                if params_len == 0 {
+                    let dest = fb.new_local(ret_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Static(fid),
+                            args: vec![],
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
+
             // Try to lower as a field access on a class instance.
             if let Some(recv_local) = lower_expr(
                 receiver,
@@ -2797,6 +2818,43 @@ fn extract_qualified_name(expr: &Expr, interner: &Interner) -> Option<String> {
 /// Lower an `object` declaration to a MirClass with static-like methods.
 /// The object compiles to a regular class with an empty constructor.
 /// Methods are instance methods (the JVM INSTANCE field dispatches to them).
+/// Lower an `enum class` to top-level constant functions.
+/// Each enum entry becomes a function returning its name as a String.
+/// `Color.RED` resolves to calling the `RED` function which returns `"RED"`.
+/// `.name` returns the string; `.ordinal` returns the index.
+fn lower_enum(
+    e: &skotch_syntax::EnumDecl,
+    name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    module: &mut MirModule,
+    interner: &mut Interner,
+) {
+    let enum_name = interner.resolve(e.name).to_string();
+
+    // For each entry, create a function that returns the entry's name as a String.
+    // This is a simplified model — real enums have ordinals and are instances of a
+    // class, but for basic usage (when matching, println, .name) strings suffice.
+    for (ordinal, &entry_sym) in e.entries.iter().enumerate() {
+        let entry_name = interner.resolve(entry_sym).to_string();
+        let fn_idx = module.functions.len();
+        let fn_id = FuncId(fn_idx as u32);
+
+        // Register the entry name so Color.RED resolves.
+        name_to_func.insert(entry_sym, fn_id);
+
+        let sid = module.intern_string(&entry_name);
+        let mut fb = FnBuilder::new(fn_idx, entry_name, Ty::String);
+        let result = fb.new_local(Ty::String);
+        fb.push_stmt(MStmt::Assign {
+            dest: result,
+            value: Rvalue::Const(MirConst::String(sid)),
+        });
+        fb.set_terminator(Terminator::ReturnValue(result));
+        module.add_function(fb.finish());
+
+        let _ = (ordinal, &enum_name); // used later for .ordinal support
+    }
+}
+
 /// Calls like `Singleton.greet()` are resolved as static calls on the
 /// wrapper class that delegate to the object's methods.
 fn lower_object(

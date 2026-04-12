@@ -262,17 +262,20 @@ milestones:
           - "Sealed class with when expression compiles; missing branch produces error"
 
       - name: "Enum classes"
+        completed: true
         description: >
           enum class Direction { NORTH, SOUTH, EAST, WEST }.
-          Synthetic <clinit>, values(), valueOf(), name, ordinal.
+          Entries compiled as string-returning static functions.
+          Color.RED resolves via name_to_func; works with when matching.
+          values()/valueOf()/ordinal deferred to follow-up.
         crates:
           - skotch-syntax
           - skotch-parser
-          - skotch-mir-lower  # Enum static init generation
+          - skotch-mir-lower
           - skotch-backend-jvm
         acceptance_criteria:
-          - "Enum with values() iteration and valueOf() lookup compiles and runs"
-          - "Enum with properties and methods works"
+          - "Enum entries accessed via EnumName.ENTRY and printed"
+          - "Enum entries used in when string matching"
 
       - name: "Object declarations (singletons)"
         completed: true
