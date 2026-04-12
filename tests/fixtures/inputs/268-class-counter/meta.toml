@@ -1,0 +1,4 @@
+name     = "268-class-box"
+status   = "supported"
+features = ["class", "val", "method", "expression-body"]
+notes    = "Class with val field, methods returning computed values."

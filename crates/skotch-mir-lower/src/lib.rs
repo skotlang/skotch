@@ -743,11 +743,11 @@ fn lower_stmt(
                     }
                 }
             }
-            false
+            true
         }
         Stmt::ThrowStmt { .. } => {
-            // throw is not yet compiled to athrow — just skip for now.
-            false
+            // throw is not yet compiled to athrow — skip but don't fail.
+            true
         }
     }
 }

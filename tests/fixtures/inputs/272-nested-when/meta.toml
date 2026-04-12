@@ -1,0 +1,4 @@
+name     = "272-nested-when"
+status   = "supported"
+features = ["when", "comma-pattern", "expression-body"]
+notes    = "When with comma-separated patterns."

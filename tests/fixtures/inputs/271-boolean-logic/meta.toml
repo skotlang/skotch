@@ -1,0 +1,4 @@
+name     = "271-boolean-logic"
+status   = "supported"
+features = ["boolean", "and", "or", "not", "comparison"]
+notes    = "Boolean logic operators with short-circuit evaluation."

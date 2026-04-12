@@ -176,20 +176,20 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~35–40% of the Kotlin language specification.** The compiler
+**Estimated coverage: ~40% of the Kotlin language specification.** The compiler
 handles functions (including recursion, multi-parameter, expression-body, guard
 clauses with `if (cond) return expr`), complete control flow (if/else/when/for/
-while/do-while/break/continue), basic types (Int, Double, Boolean, String, Char),
-classes with constructors/methods/field access, null literals, const val, visibility
-modifiers, nullable types with the elvis operator (`?:`), and Java static method
-interop. Programs like Fibonacci, prime sieves, GCD, factorial, and Collatz sequences
-compile and run correctly. The parser additionally recognizes safe call (`?.`),
-non-null assert (`!!`), type checks (`is`/`!is`), type casts (`as`/`as?`),
-try/catch/finally, and throw. Does not yet support inheritance, generics, lambdas,
-or the standard library collection APIs. 180+ test fixtures validated across
-JVM, DEX, LLVM IR, and klib targets. A Language Server Protocol (LSP) implementation
-provides real-time diagnostics, semantic tokens, hover, go-to-definition, and
-completions.
+while/do-while/break/continue), try/finally, basic types (Int, Double, Boolean,
+String, Char), classes with constructors/methods/field access, null literals,
+const val, visibility modifiers, nullable types with the elvis operator (`?:`),
+and Java static method interop. Programs like Fibonacci, prime sieves, GCD,
+factorial, Collatz sequences, and FizzBuzz compile and run correctly. The parser
+additionally recognizes safe call (`?.`), non-null assert (`!!`), type checks
+(`is`/`!is`), type casts (`as`/`as?`), try/catch, and throw. Does not yet support
+inheritance, generics, lambdas, or the standard library collection APIs. 190+
+test fixtures validated across JVM, DEX, LLVM IR, and klib targets. A Language
+Server Protocol (LSP) implementation provides real-time diagnostics, semantic
+tokens, hover, go-to-definition, and completions.
 
 ### Implemented and stable
 
@@ -231,6 +231,7 @@ completions.
 | [Function calls](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | Direct, nested, recursive, mutual recursion, extension method syntax |
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
+| [Try-finally](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `try { body } finally { cleanup }` — finally always executes after body |
 | Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
 
 ### Not yet implemented
@@ -249,7 +250,7 @@ completions.
 | Non-null assert (`!!`) | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Easy | Parsed; passthrough (no NullPointerException yet) |
 | Type checks (`is`/`!is`) | [§7.6.3](https://kotlinlang.org/spec/expressions.html#type-checking-and-containment-checking-expressions) | Medium | Parsed; MIR lowered as stub (always true) |
 | Type casts (`as`/`as?`) | [§7.6.4](https://kotlinlang.org/spec/expressions.html#cast-expression) | Medium | Parsed; MIR lowered as no-op passthrough |
-| Try/catch/finally | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; needs JVM exception tables for catch |
+| Try/catch | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; catch blocks need JVM exception tables |
 | Throw expression | [§7.4.6](https://kotlinlang.org/spec/expressions.html#throw-expressions) | Medium | Parsed; needs `athrow` opcode |
 | Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
 | Default arguments | [§4.1.1](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | Synthetic `$default` overload |

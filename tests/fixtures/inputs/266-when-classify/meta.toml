@@ -1,0 +1,4 @@
+name     = "266-when-classify"
+status   = "supported"
+features = ["when", "expression-body", "string", "comparison"]
+notes    = "Multi-branch when expression as function body."

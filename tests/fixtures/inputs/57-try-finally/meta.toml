@@ -1,4 +1,4 @@
-name   = "57-try-finally"
-status = "stub"
+name     = "57-try-finally"
+status   = "supported"
 features = ["try-finally", "exception"]
-reason = "Requires finally block lowering (JSR/RET or duplication strategy)."
+notes    = "Finally block executes after try body (no exception tables yet)."

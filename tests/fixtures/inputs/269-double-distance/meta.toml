@@ -1,0 +1,4 @@
+name     = "269-double-distance"
+status   = "supported"
+features = ["double", "arithmetic", "val"]
+notes    = "Distance squared calculation with double arithmetic."
