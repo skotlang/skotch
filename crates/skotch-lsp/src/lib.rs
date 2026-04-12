@@ -1215,4 +1215,17 @@ mod tests {
         let state = analyze_source("fun main() { println(maxOf(1, 2)) }");
         assert!(!state.diags.has_errors());
     }
+
+    #[test]
+    fn diagnostics_for_named_args() {
+        let src = "fun f(a: Int, b: Int) { println(a + b) }\nfun main() { f(b = 2, a = 1) }";
+        let state = analyze_source(src);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_string_toint() {
+        let state = analyze_source(r#"fun main() { val x = "42".toInt(); println(x + 1) }"#);
+        assert!(!state.diags.has_errors());
+    }
 }

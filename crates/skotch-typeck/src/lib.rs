@@ -469,14 +469,45 @@ impl<'a> TypeChecker<'a> {
                 for a in args {
                     self.synth_expr(&a.expr, scope, out);
                 }
-                // Look up the callee's return type so function calls
-                // used in expressions get the correct type.
-                // Extract the function name from the callee.
                 let callee_name = match callee.as_ref() {
                     Expr::Ident(name, _) => Some(*name),
-                    Expr::Field { name, .. } => Some(*name), // method call
+                    Expr::Field { name, .. } => Some(*name),
                     _ => None,
                 };
+
+                // For method calls on typed receivers, infer return type
+                // from the receiver type + method name.
+                if let Expr::Field { receiver, name, .. } = callee.as_ref() {
+                    let recv_ty = self.synth_expr(receiver, scope, out);
+                    let method = self.interner.resolve(*name);
+                    let inferred = match (&recv_ty, method) {
+                        // String methods
+                        (Ty::String, "length") => Some(Ty::Int),
+                        (Ty::String, "isEmpty") => Some(Ty::Bool),
+                        (
+                            Ty::String,
+                            "uppercase" | "lowercase" | "trim" | "substring" | "replace",
+                        ) => Some(Ty::String),
+                        (Ty::String, "contains" | "startsWith" | "endsWith" | "equals") => {
+                            Some(Ty::Bool)
+                        }
+                        (Ty::String, "indexOf" | "lastIndexOf" | "compareTo" | "get") => {
+                            Some(Ty::Int)
+                        }
+                        (Ty::String, "toInt") => Some(Ty::Int),
+                        (Ty::String, "toLong") => Some(Ty::Long),
+                        (Ty::String, "toDouble") => Some(Ty::Double),
+                        // Numeric toString
+                        (Ty::Int | Ty::Long | Ty::Double, "toString") => Some(Ty::String),
+                        // maxOf/minOf
+                        (_, "coerceAtLeast" | "coerceAtMost") => Some(recv_ty.clone()),
+                        _ => None,
+                    };
+                    if let Some(ty) = inferred {
+                        return ty;
+                    }
+                }
+
                 if let Some(name) = callee_name {
                     for (&def_id, sig) in &self.out.top_signatures {
                         if let DefId::Function(fi) = def_id {

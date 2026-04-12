@@ -180,10 +180,11 @@ golden" tests still catch regressions in skotch's own emitter.
 handles functions with **default parameters** and **named arguments**, `print()`/
 `println()`, **data classes** with synthesized `toString()`, `maxOf()`/`minOf()`,
 complete control flow, try/finally, numeric types (Int, Long, Double), Boolean,
-String with dynamically-resolved methods from JDK class files, Char, classes with
+String methods with correct return type inference (`.toInt()`, `.toDouble()`,
+`.uppercase()`, etc. can be used in expressions), Char, classes with
 constructors/methods/field access/init blocks, null literals, const val,
 visibility modifiers, nullable types with elvis (`?:`), Java static method
-interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. 270+ test
+interop, and **Kotlin stdlib resolution** from `kotlin-stdlib.jar`. 275+ test
 fixtures validated across JVM, DEX, LLVM IR, and klib targets.
 
 ### Implemented and stable
