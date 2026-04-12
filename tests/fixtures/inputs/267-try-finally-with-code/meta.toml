@@ -1,0 +1,4 @@
+name     = "267-try-finally-with-code"
+status   = "supported"
+features = ["try-finally", "val", "println"]
+notes    = "Try-finally with val declaration and code before/after."

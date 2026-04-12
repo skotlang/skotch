@@ -1,0 +1,4 @@
+name     = "270-string-when-match"
+status   = "supported"
+features = ["when", "string", "expression-body", "pattern-matching"]
+notes    = "When expression matching on String subjects."

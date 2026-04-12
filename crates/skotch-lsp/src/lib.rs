@@ -1150,4 +1150,30 @@ mod tests {
         );
         assert_eq!(info, Some("val pi: Double".into()));
     }
+
+    #[test]
+    fn diagnostics_for_try_finally() {
+        let state =
+            analyze_source("fun main() { try { println(\"ok\") } finally { println(\"done\") } }");
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_when_expression() {
+        let src = r#"fun classify(x: Int): String = when { x < 0 -> "neg" else -> "pos" }"#;
+        let state = analyze_source(src);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_elvis_operator() {
+        let state = analyze_source(r#"fun f(x: String?): String = x ?: "default""#);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_return_in_if() {
+        let state = analyze_source("fun abs(x: Int): Int { if (x < 0) return -x; return x }");
+        assert!(!state.diags.has_errors());
+    }
 }
