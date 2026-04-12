@@ -260,6 +260,7 @@ impl<'a> TypeChecker<'a> {
     fn synth_top_init(&mut self, e: &Expr) -> Ty {
         match e {
             Expr::IntLit(_, _) => Ty::Int,
+            Expr::LongLit(_, _) => Ty::Long,
             Expr::DoubleLit(_, _) => Ty::Double,
             Expr::BoolLit(_, _) => Ty::Bool,
             Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
@@ -402,6 +403,7 @@ impl<'a> TypeChecker<'a> {
     ) -> Ty {
         let ty = match e {
             Expr::IntLit(_, _) => Ty::Int,
+            Expr::LongLit(_, _) => Ty::Long,
             Expr::DoubleLit(_, _) => Ty::Double,
             Expr::BoolLit(_, _) => Ty::Bool,
             Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
@@ -426,8 +428,9 @@ impl<'a> TypeChecker<'a> {
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
                         if lt == Ty::Double || rt == Ty::Double {
-                            // Double arithmetic: if either operand is Double, result is Double.
                             Ty::Double
+                        } else if lt == Ty::Long || rt == Ty::Long {
+                            Ty::Long
                         } else if lt == Ty::Int && rt == Ty::Int {
                             Ty::Int
                         } else if (lt == Ty::Any || lt == Ty::Int)

@@ -372,6 +372,14 @@ fn emit_const(
                 code.push(((*v as u32 >> 16) & 0xFFFF) as u16);
             }
         }
+        MirConst::Long(v) => {
+            code.push(opcode_aa(0x18, dest_reg as u8));
+            let bits = *v as u64;
+            code.push((bits & 0xFFFF) as u16);
+            code.push(((bits >> 16) & 0xFFFF) as u16);
+            code.push(((bits >> 32) & 0xFFFF) as u16);
+            code.push(((bits >> 48) & 0xFFFF) as u16);
+        }
         MirConst::Double(v) => {
             // const-wide vAA, #+BBBBBBBBBBBBBBBB (op 0x18, format 51l)
             code.push(opcode_aa(0x18, dest_reg as u8));
@@ -476,6 +484,18 @@ fn emit_binop(
                 MBinOp::MulD => 0xCD, // mul-double
                 MBinOp::DivD => 0xCE, // div-double
                 MBinOp::ModD => 0xCF, // rem-double
+                _ => unreachable!(),
+            };
+            code.push(((d as u16) << 8) | opcode as u16);
+            code.push(((r as u16) << 8) | (l as u16));
+        }
+        MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL => {
+            let opcode: u8 = match op {
+                MBinOp::AddL => 0x9B, // add-long
+                MBinOp::SubL => 0x9C, // sub-long
+                MBinOp::MulL => 0x9D, // mul-long
+                MBinOp::DivL => 0x9E, // div-long
+                MBinOp::ModL => 0x9F, // rem-long
                 _ => unreachable!(),
             };
             code.push(((d as u16) << 8) | opcode as u16);

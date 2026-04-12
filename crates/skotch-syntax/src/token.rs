@@ -14,6 +14,8 @@ pub enum TokenKind {
     // ─── identifiers and literals ────────────────────────────────────────
     Ident,
     IntLit,
+    /// A `Long` literal with `L` suffix: `100L`, `0xFFL`.
+    LongLit,
     /// A floating-point literal: `3.14`, `2.5e10`, `1.0f`.
     DoubleLit,
     /// A string literal *with no template interpolations* — content is

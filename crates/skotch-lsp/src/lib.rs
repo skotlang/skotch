@@ -217,7 +217,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::StringEnd => Some(1),
 
         // Numbers
-        TokenKind::IntLit | TokenKind::DoubleLit => Some(2),
+        TokenKind::IntLit | TokenKind::LongLit | TokenKind::DoubleLit => Some(2),
 
         // Operators
         TokenKind::Plus

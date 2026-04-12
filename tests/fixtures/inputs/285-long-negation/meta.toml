@@ -1,0 +1,4 @@
+name     = "285-long-negation"
+status   = "supported"
+features = ["long", "negation", "unary-minus"]
+notes    = "Long negation with literal folding and general 0-x."

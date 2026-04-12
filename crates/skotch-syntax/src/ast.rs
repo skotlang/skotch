@@ -188,6 +188,7 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub enum Expr {
     IntLit(i64, Span),
+    LongLit(i64, Span),
     DoubleLit(f64, Span),
     BoolLit(bool, Span),
     NullLit(Span),
@@ -335,6 +336,7 @@ impl Expr {
     pub fn span(&self) -> Span {
         match self {
             Expr::IntLit(_, s)
+            | Expr::LongLit(_, s)
             | Expr::DoubleLit(_, s)
             | Expr::BoolLit(_, s)
             | Expr::NullLit(s)

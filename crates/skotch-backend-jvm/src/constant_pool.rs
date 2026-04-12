@@ -19,6 +19,7 @@ use std::io::Write;
 enum Key {
     Utf8(String),
     Integer(i32),
+    Long(i64),
     Double(u64), // f64 bits for hashing
     Class(u16),
     String(u16),
@@ -31,6 +32,7 @@ enum Key {
 enum Entry {
     Utf8(String),
     Integer(i32),
+    Long(i64),
     Double(f64),
     Class(u16),
     String(u16),
@@ -57,7 +59,7 @@ impl ConstantPool {
             return idx;
         }
         let idx = (self.entries.len() + 1) as u16;
-        let is_wide = matches!(entry, Entry::Double(_));
+        let is_wide = matches!(entry, Entry::Double(_) | Entry::Long(_));
         self.entries.push(entry);
         self.dedupe.insert(key, idx);
         // Double (and Long) entries occupy two constant pool slots.
@@ -73,6 +75,10 @@ impl ConstantPool {
 
     pub fn integer(&mut self, v: i32) -> u16 {
         self.add(Key::Integer(v), Entry::Integer(v))
+    }
+
+    pub fn long(&mut self, v: i64) -> u16 {
+        self.add(Key::Long(v), Entry::Long(v))
     }
 
     pub fn double(&mut self, v: f64) -> u16 {
@@ -124,6 +130,10 @@ impl ConstantPool {
                 Entry::Integer(v) => {
                     out.push(3); // CONSTANT_Integer
                     out.write_i32::<BigEndian>(*v).unwrap();
+                }
+                Entry::Long(v) => {
+                    out.push(5); // CONSTANT_Long
+                    out.write_i64::<BigEndian>(*v).unwrap();
                 }
                 Entry::Double(v) => {
                     out.push(6); // CONSTANT_Double

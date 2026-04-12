@@ -1,0 +1,4 @@
+name     = "284-long-arithmetic"
+status   = "supported"
+features = ["long", "arithmetic", "L-suffix"]
+notes    = "Long (64-bit) arithmetic: add, multiply, divide, modulo."

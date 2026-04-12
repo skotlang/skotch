@@ -1,0 +1,4 @@
+name     = "286-long-large-values"
+status   = "supported"
+features = ["long", "large-values", "overflow-safe"]
+notes    = "Long values exceeding Int.MAX_VALUE (2^31-1)."

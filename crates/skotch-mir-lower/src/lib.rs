@@ -194,6 +194,7 @@ pub fn lower_file(
 fn lower_const_init(e: &Expr, module: &mut MirModule) -> Option<MirConst> {
     match e {
         Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
+        Expr::LongLit(v, _) => Some(MirConst::Long(*v)),
         Expr::DoubleLit(v, _) => Some(MirConst::Double(*v)),
         Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
         Expr::NullLit(_) => Some(MirConst::Null),
@@ -216,6 +217,7 @@ fn const_ty(c: &MirConst) -> Ty {
         MirConst::Unit => Ty::Unit,
         MirConst::Bool(_) => Ty::Bool,
         MirConst::Int(_) => Ty::Int,
+        MirConst::Long(_) => Ty::Long,
         MirConst::Double(_) => Ty::Double,
         MirConst::Null => Ty::Nullable(Box::new(Ty::Any)),
         MirConst::String(_) => Ty::String,
@@ -809,6 +811,14 @@ fn lower_expr(
             });
             Some(dest)
         }
+        Expr::LongLit(v, _) => {
+            let dest = fb.new_local(Ty::Long);
+            fb.push_stmt(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Long(*v)),
+            });
+            Some(dest)
+        }
         Expr::DoubleLit(v, _) => {
             let dest = fb.new_local(Ty::Double);
             fb.push_stmt(MStmt::Assign {
@@ -977,6 +987,7 @@ fn lower_expr(
             let lhs_ty = &fb.mf.locals[l.0 as usize];
             let rhs_ty = &fb.mf.locals[r.0 as usize];
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
+            let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
             let (mop, result_ty) = match op {
                 BinOp::Add if matches!(lhs_ty, Ty::String) => (MBinOp::ConcatStr, Ty::String),
                 BinOp::Add if is_double => (MBinOp::AddD, Ty::Double),
@@ -984,6 +995,11 @@ fn lower_expr(
                 BinOp::Mul if is_double => (MBinOp::MulD, Ty::Double),
                 BinOp::Div if is_double => (MBinOp::DivD, Ty::Double),
                 BinOp::Mod if is_double => (MBinOp::ModD, Ty::Double),
+                BinOp::Add if is_long => (MBinOp::AddL, Ty::Long),
+                BinOp::Sub if is_long => (MBinOp::SubL, Ty::Long),
+                BinOp::Mul if is_long => (MBinOp::MulL, Ty::Long),
+                BinOp::Div if is_long => (MBinOp::DivL, Ty::Long),
+                BinOp::Mod if is_long => (MBinOp::ModL, Ty::Long),
                 BinOp::Add => (MBinOp::AddI, Ty::Int),
                 BinOp::Sub => (MBinOp::SubI, Ty::Int),
                 BinOp::Mul => (MBinOp::MulI, Ty::Int),
@@ -1618,6 +1634,14 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
+                    if let Expr::LongLit(v, _) = operand.as_ref() {
+                        let dest = fb.new_local(Ty::Long);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Long(-*v)),
+                        });
+                        return Some(dest);
+                    }
                     if let Expr::DoubleLit(v, _) = operand.as_ref() {
                         let dest = fb.new_local(Ty::Double);
                         fb.push_stmt(MStmt::Assign {
@@ -1639,6 +1663,23 @@ fn lower_expr(
                         loop_ctx,
                     )?;
                     let val_ty = fb.mf.locals[val.0 as usize].clone();
+                    if matches!(val_ty, Ty::Long) {
+                        let zero = fb.new_local(Ty::Long);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: zero,
+                            value: Rvalue::Const(MirConst::Long(0)),
+                        });
+                        let dest = fb.new_local(Ty::Long);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::BinOp {
+                                op: MBinOp::SubL,
+                                lhs: zero,
+                                rhs: val,
+                            },
+                        });
+                        return Some(dest);
+                    }
                     if matches!(val_ty, Ty::Double) {
                         let zero = fb.new_local(Ty::Double);
                         fb.push_stmt(MStmt::Assign {
@@ -2520,6 +2561,7 @@ fn lower_class(
         let (val, ty) = if let Some(init) = &prop.init {
             match init {
                 Expr::IntLit(v, _) => (Some(MirConst::Int(*v as i32)), Ty::Int),
+                Expr::LongLit(v, _) => (Some(MirConst::Long(*v)), Ty::Long),
                 Expr::DoubleLit(v, _) => (Some(MirConst::Double(*v)), Ty::Double),
                 Expr::BoolLit(v, _) => (Some(MirConst::Bool(*v)), Ty::Bool),
                 Expr::StringLit(s, _) => {

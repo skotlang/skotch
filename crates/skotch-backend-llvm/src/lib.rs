@@ -565,6 +565,7 @@ impl<'a> BlockWalker<'a> {
                     // Format as hex double for exact representation.
                     format!("{:#018x}", v.to_bits())
                 }
+                Rvalue::Const(MirConst::Long(v)) => format!("{v}"),
                 Rvalue::Const(MirConst::Bool(b)) => format!("{}", if *b { 1 } else { 0 }),
                 Rvalue::Const(MirConst::Null) => "null".to_string(),
                 Rvalue::Const(MirConst::String(sid)) => {
@@ -667,6 +668,19 @@ impl<'a> BlockWalker<'a> {
                         writeln!(self.out, "  {dst} = {opcode} i32 {l}, {r}").unwrap();
                         self.ssa_for_local[dest.0 as usize] = Some(dst);
                     }
+                    MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL => {
+                        let opcode = match op {
+                            MBinOp::AddL => "add",
+                            MBinOp::SubL => "sub",
+                            MBinOp::MulL => "mul",
+                            MBinOp::DivL => "sdiv",
+                            MBinOp::ModL => "srem",
+                            _ => unreachable!(),
+                        };
+                        let dst = self.fresh();
+                        writeln!(self.out, "  {dst} = {opcode} i64 {l}, {r}").unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(dst);
+                    }
                     MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD => {
                         let opcode = match op {
                             MBinOp::AddD => "fadd",
@@ -754,9 +768,13 @@ impl<'a> BlockWalker<'a> {
                 writeln!(self.out, "  {dst} = add i32 0, {v}").unwrap();
                 self.ssa_for_local[dest.0 as usize] = Some(dst);
             }
+            MirConst::Long(v) => {
+                let dst = self.fresh();
+                writeln!(self.out, "  {dst} = add i64 0, {v}").unwrap();
+                self.ssa_for_local[dest.0 as usize] = Some(dst);
+            }
             MirConst::Double(v) => {
                 let dst = self.fresh();
-                // Use LLVM double constant syntax.
                 writeln!(self.out, "  {dst} = fadd double 0.0, {v:e}").unwrap();
                 self.ssa_for_local[dest.0 as usize] = Some(dst);
             }

@@ -881,7 +881,28 @@ fn walk_block(
                             );
                             code.push(0xB8); // invokestatic
                             code.write_u16::<BigEndian>(valueof).unwrap();
-                            // stack: consumed int, pushed String → net 0
+                        }
+                        Ty::Long => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let valueof = cp.methodref(
+                                "java/lang/String",
+                                "valueOf",
+                                "(J)Ljava/lang/String;",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(valueof).unwrap();
+                            bump(stack, max_stack, -1); // long→String: -2 for long, +1 for string
+                        }
+                        Ty::Double => {
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let valueof = cp.methodref(
+                                "java/lang/String",
+                                "valueOf",
+                                "(D)Ljava/lang/String;",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(valueof).unwrap();
+                            bump(stack, max_stack, -1); // double→String: -2 for double, +1 for string
                         }
                         _ => {
                             load_local(code, stack, max_stack, slots, *rhs, &func.locals);
@@ -914,6 +935,18 @@ fn walk_block(
                         };
                         code.push(opcode);
                         bump(stack, max_stack, -1); // two ints in, one int out
+                    }
+                    MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL => {
+                        let opcode: u8 = match op {
+                            MBinOp::AddL => 0x61, // ladd
+                            MBinOp::SubL => 0x65, // lsub
+                            MBinOp::MulL => 0x69, // lmul
+                            MBinOp::DivL => 0x6D, // ldiv
+                            MBinOp::ModL => 0x71, // lrem
+                            _ => unreachable!(),
+                        };
+                        code.push(opcode);
+                        bump(stack, max_stack, -2); // two longs (4 slots) in, one long (2 slots) out
                     }
                     MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD => {
                         let opcode: u8 = match op {
@@ -1288,6 +1321,22 @@ fn emit_load_const(
             bump(stack, max_stack, 1);
         }
         MirConst::Int(v) => emit_iconst(cp, code, stack, max_stack, *v),
+        MirConst::Long(v) => {
+            // lconst_0 / lconst_1 for 0L/1L, otherwise ldc2_w.
+            if *v == 0 {
+                code.push(0x09); // lconst_0
+            } else if *v == 1 {
+                code.push(0x0A); // lconst_1
+            } else {
+                // Need a Long constant pool entry. Reuse the double pool
+                // mechanism — Long entries also take 2 slots (tag=5).
+                // For now, emit as ldc2_w with a Long constant.
+                let idx = cp.long(*v);
+                code.push(0x14); // ldc2_w
+                code.write_u16::<BigEndian>(idx).unwrap();
+            }
+            bump(stack, max_stack, 2); // Long takes 2 stack slots
+        }
         MirConst::Double(v) => {
             let idx = cp.double(*v);
             code.push(0x14); // ldc2_w

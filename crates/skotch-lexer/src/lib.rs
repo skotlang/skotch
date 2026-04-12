@@ -471,8 +471,9 @@ impl<'a> Lexer<'a> {
             }
             return;
         }
-        // Consume optional `L` suffix for Long literals (treated as Int for now).
-        if self.pos < self.bytes.len() && self.bytes[self.pos] == b'L' {
+        // Consume optional `L` suffix for Long literals.
+        let is_long = self.pos < self.bytes.len() && self.bytes[self.pos] == b'L';
+        if is_long {
             self.pos += 1;
         }
         // Check for trailing f/F suffix → float literal without decimal point: 42f
@@ -515,12 +516,23 @@ impl<'a> Lexer<'a> {
             s.parse::<i64>()
         };
         match parsed {
-            Ok(v) => self.emit(
-                TokenKind::IntLit,
-                start,
-                self.pos,
-                Some(TokenPayload::Int(v)),
-            ),
+            Ok(v) => {
+                if is_long {
+                    self.emit(
+                        TokenKind::LongLit,
+                        start,
+                        self.pos,
+                        Some(TokenPayload::Int(v)),
+                    );
+                } else {
+                    self.emit(
+                        TokenKind::IntLit,
+                        start,
+                        self.pos,
+                        Some(TokenPayload::Int(v)),
+                    );
+                }
+            }
             Err(_) => {
                 self.error(start, self.pos, format!("integer literal {s} out of range"));
             }

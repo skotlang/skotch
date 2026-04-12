@@ -176,20 +176,20 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~40–45% of the Kotlin language specification.** The compiler
+**Estimated coverage: ~45% of the Kotlin language specification.** The compiler
 handles functions (including recursion, multi-parameter, expression-body, guard
 clauses), complete control flow (if/else/when/for/while/do-while/break/continue),
-try/finally, basic types (Int, Double, Boolean, String, Char), classes with
-constructors/methods/field access/init blocks, String methods (`.length`,
-`.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()`),
-`Int.toString()`, null literals, const val, visibility modifiers, nullable types
-with the elvis operator (`?:`), and Java static method interop. The parser
-additionally recognizes safe call (`?.`), non-null assert (`!!`), type checks
-(`is`/`!is`), type casts (`as`/`as?`), try/catch, and throw. Does not yet support
-inheritance, generics, lambdas, or the standard library collection APIs. 200+
-test fixtures validated across JVM, DEX, LLVM IR, and klib targets. A Language
-Server Protocol (LSP) implementation provides real-time diagnostics, semantic
-tokens, hover, go-to-definition, and completions.
+try/finally, numeric types (Int, Long with `L` suffix, Double), Boolean, String
+with 12 instance methods, Char, classes with constructors/methods/field
+access/init blocks, null literals, const val, visibility modifiers, nullable types
+with the elvis operator (`?:`), and Java static method interop. Long arithmetic
+supports values exceeding Int range (e.g. `9999999999L`). The parser additionally
+recognizes safe call (`?.`), non-null assert (`!!`), type checks (`is`/`!is`),
+type casts (`as`/`as?`), try/catch, and throw. Does not yet support inheritance,
+generics, lambdas, or the standard library collection APIs. 220+ test fixtures
+validated across JVM, DEX, LLVM IR, and klib targets. A Language Server Protocol
+(LSP) implementation provides real-time diagnostics, semantic tokens, hover,
+go-to-definition, and completions.
 
 ### Implemented and stable
 
@@ -209,12 +209,13 @@ tokens, hover, go-to-definition, and completions.
 | [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, escape sequences (`'\n'`, `'\t'`, `'\\'`) |
 | [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
+| [Long literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | `100L`, `0xFFL` — full 64-bit arithmetic (`+`, `-`, `*`, `/`, `%`), negation, values exceeding Int range |
 | [Double/Float literals](https://kotlinlang.org/spec/expressions.html#real-literals) | §7.1.2 | `3.14`, `2.5e10`, `1.0f`, negative doubles, scientific notation |
 | [Null literal](https://kotlinlang.org/spec/expressions.html#null-literal) | §7.1.6 | `null` value, `println(null)` |
 | [Elvis operator](https://kotlinlang.org/spec/expressions.html#elvis-expressions) | §7.4.3 | `x ?: default` — null-check with fallback, supports chaining |
 | [Nullable parameters](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `fun f(x: String?): String`, nullable function parameters |
-| [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int` and `Double` |
-| [String concatenation](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `String + String`, `String + Int` |
+| [Arithmetic operators](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `+`, `-`, `*`, `/`, `%` on `Int`, `Long`, and `Double` |
+| [String concatenation](https://kotlinlang.org/spec/expressions.html#arithmetic-expressions) | §7.5 | `String + String`, `String + Int/Long/Double/Bool` |
 | [Comparison operators](https://kotlinlang.org/spec/expressions.html#comparison-expressions) | §7.6 | `==`, `!=`, `<`, `>`, `<=`, `>=` (Int and String) |
 | [Logical operators](https://kotlinlang.org/spec/expressions.html#logical-disjunction-expression) | §7.8–7.9 | `&&`, `\|\|` with short-circuit evaluation |
 | [Unary operators](https://kotlinlang.org/spec/expressions.html#unary-expressions) | §7.3 | `-` (negation), `!` (not) |
