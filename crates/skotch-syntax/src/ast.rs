@@ -75,6 +75,8 @@ pub struct FunDecl {
 pub struct Param {
     pub name: Symbol,
     pub ty: TypeRef,
+    /// Default value expression, e.g. `fun greet(name: String = "world")`.
+    pub default: Option<Box<Expr>>,
     pub span: Span,
 }
 

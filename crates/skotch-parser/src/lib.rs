@@ -541,9 +541,19 @@ impl<'a> Parser<'a> {
         };
         self.expect(TokenKind::Colon, ":");
         let ty = self.parse_type_ref();
+        // Check for default value: `param: Type = expr`
+        self.skip_trivia();
+        let default = if self.eat(TokenKind::Eq) {
+            self.skip_trivia();
+            Some(Box::new(self.parse_expr()))
+        } else {
+            None
+        };
+        let end = default.as_ref().map(|d| d.span()).unwrap_or(ty.span);
         Param {
             name,
-            span: name_span.merge(ty.span),
+            default,
+            span: name_span.merge(end),
             ty,
         }
     }

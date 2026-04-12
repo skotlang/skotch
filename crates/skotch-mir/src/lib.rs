@@ -32,6 +32,10 @@
 use serde::{Deserialize, Serialize};
 use skotch_types::Ty;
 
+fn is_zero_usize(v: &usize) -> bool {
+    *v == 0
+}
+
 /// Identifier for a virtual local inside a function. Locals are dense:
 /// 0..N for parameters and `val`/`var` declarations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -206,6 +210,12 @@ pub struct MirFunction {
     pub locals: Vec<Ty>,
     pub blocks: Vec<BasicBlock>,
     pub return_ty: Ty,
+    /// Number of required parameters (those without defaults).
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub required_params: usize,
+    /// Default values for optional parameters, indexed by param position.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub param_defaults: Vec<Option<MirConst>>,
 }
 
 impl MirFunction {

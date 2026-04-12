@@ -66,6 +66,16 @@ pub fn lower_file(
                 .get(fn_pass1_idx)
                 .map(|t| t.return_ty.clone())
                 .unwrap_or(Ty::Unit);
+            let required = f.params.iter().filter(|p| p.default.is_none()).count();
+            let param_defaults: Vec<Option<MirConst>> = f
+                .params
+                .iter()
+                .map(|p| {
+                    p.default
+                        .as_ref()
+                        .and_then(|d| lower_const_init(d, &mut module))
+                })
+                .collect();
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -73,6 +83,8 @@ pub fn lower_file(
                 locals: Vec::new(),
                 blocks: Vec::new(),
                 return_ty,
+                required_params: required,
+                param_defaults,
             });
             fn_pass1_idx += 1;
         }
@@ -241,12 +253,13 @@ impl FnBuilder {
             name,
             params: Vec::new(),
             locals: Vec::new(),
-            // Start with one empty entry block (block 0).
             blocks: vec![BasicBlock {
                 stmts: Vec::new(),
-                terminator: Terminator::Return, // patched later
+                terminator: Terminator::Return,
             }],
             return_ty,
+            required_params: 0,
+            param_defaults: Vec::new(),
         };
         FnBuilder { mf, cur_block: 0 }
     }
@@ -358,7 +371,12 @@ fn lower_function(
     // FnBuilder constructor and never overwritten for the last block).
 
     if ok {
+        // Preserve param_defaults and required_params from Pass 1.
+        let saved_defaults = module.functions[fn_idx].param_defaults.clone();
+        let saved_required = module.functions[fn_idx].required_params;
         module.functions[fn_idx] = fb.finish();
+        module.functions[fn_idx].param_defaults = saved_defaults;
+        module.functions[fn_idx].required_params = saved_required;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -370,6 +388,8 @@ fn lower_function(
                 terminator: Terminator::Return,
             }],
             return_ty: Ty::Unit,
+            required_params: 0,
+            param_defaults: Vec::new(),
         };
     }
 }
@@ -679,6 +699,8 @@ fn lower_stmt(
                 locals: Vec::new(),
                 blocks: Vec::new(),
                 return_ty: return_ty.clone(),
+                required_params: 0,
+                param_defaults: Vec::new(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -1565,6 +1587,25 @@ fn lower_expr(
                     loop_ctx,
                 )?;
                 arg_locals.push(id);
+            }
+
+            // If fewer args provided than params, inject default values.
+            if let Some(fid) = name_to_func.get(&callee_name) {
+                let defaults = module.functions[fid.0 as usize].param_defaults.clone();
+                let total_params = defaults.len();
+                if !defaults.is_empty() && arg_locals.len() < total_params {
+                    for i in arg_locals.len()..total_params {
+                        if let Some(Some(default_const)) = defaults.get(i) {
+                            let ty = const_ty(default_const);
+                            let id = fb.new_local(ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: id,
+                                value: Rvalue::Const(default_const.clone()),
+                            });
+                            arg_locals.push(id);
+                        }
+                    }
+                }
             }
 
             let kind = if interner.resolve(callee_name) == "println" {
@@ -2541,6 +2582,8 @@ fn lower_class(
             terminator: Terminator::Return,
         }],
         return_ty: Ty::Unit,
+        required_params: 0,
+        param_defaults: Vec::new(),
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
