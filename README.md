@@ -176,17 +176,17 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~40% of the Kotlin language specification.** The compiler
+**Estimated coverage: ~40–45% of the Kotlin language specification.** The compiler
 handles functions (including recursion, multi-parameter, expression-body, guard
-clauses with `if (cond) return expr`), complete control flow (if/else/when/for/
-while/do-while/break/continue), try/finally, basic types (Int, Double, Boolean,
-String, Char), classes with constructors/methods/field access, null literals,
-const val, visibility modifiers, nullable types with the elvis operator (`?:`),
-and Java static method interop. Programs like Fibonacci, prime sieves, GCD,
-factorial, Collatz sequences, and FizzBuzz compile and run correctly. The parser
+clauses), complete control flow (if/else/when/for/while/do-while/break/continue),
+try/finally, basic types (Int, Double, Boolean, String, Char), classes with
+constructors/methods/field access/init blocks, String methods (`.length`,
+`.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()`),
+`Int.toString()`, null literals, const val, visibility modifiers, nullable types
+with the elvis operator (`?:`), and Java static method interop. The parser
 additionally recognizes safe call (`?.`), non-null assert (`!!`), type checks
 (`is`/`!is`), type casts (`as`/`as?`), try/catch, and throw. Does not yet support
-inheritance, generics, lambdas, or the standard library collection APIs. 190+
+inheritance, generics, lambdas, or the standard library collection APIs. 200+
 test fixtures validated across JVM, DEX, LLVM IR, and klib targets. A Language
 Server Protocol (LSP) implementation provides real-time diagnostics, semantic
 tokens, hover, go-to-definition, and completions.
@@ -232,6 +232,9 @@ tokens, hover, go-to-definition, and completions.
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
 | [Try-finally](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `try { body } finally { cleanup }` — finally always executes after body |
+| [String methods](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/) | stdlib | `.length`, `.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()` |
+| [`Int.toString()`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-string.html) | stdlib | `42.toString()` → `"42"` |
+| [Init blocks](https://kotlinlang.org/spec/declarations.html#class-initialization) | §4.5.2 | `init { }` blocks execute during construction, access constructor params |
 | Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
 
 ### Not yet implemented
