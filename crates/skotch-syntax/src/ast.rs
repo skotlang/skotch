@@ -50,12 +50,23 @@ pub enum Decl {
     Fun(FunDecl),
     Val(ValDecl),
     Class(ClassDecl),
-    /// Recognised but not implemented. The parser may attach this for
-    /// e.g. `object Foo`. Carries the original span for diagnostics.
+    /// `object Singleton { fun greet() { } }` — singleton declaration.
+    Object(ObjectDecl),
+    /// Recognised but not implemented.
     Unsupported {
         what: &'static str,
         span: Span,
     },
+}
+
+/// An `object` declaration (singleton).
+#[derive(Clone, Debug)]
+pub struct ObjectDecl {
+    pub name: Symbol,
+    pub name_span: Span,
+    /// Methods declared in the object body.
+    pub methods: Vec<FunDecl>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]

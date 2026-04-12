@@ -221,6 +221,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Increment/decrement](https://kotlinlang.org/spec/expressions.html#postfix-increment-expression) | §7.3.4 | `x++`, `x--` — postfix operators on `var` locals and class fields |
 | [Mutable class fields](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `var` fields in classes with method writeback; `count++` in methods persists |
 | [Override toString()](https://kotlinlang.org/spec/declarations.html#overriding) | §4.5.1 | `override fun toString(): String` on regular classes |
+| [Object declarations](https://kotlinlang.org/spec/declarations.html#object-declaration) | §4.5.4 | `object Singleton { fun greet() {} }` — methods as static functions; `Singleton.greet()` calls |
 | [If expression](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | As statement and expression, with/without else |
 | [When expression](https://kotlinlang.org/spec/expressions.html#when-expressions) | §7.4.2 | With subject, without subject, comma patterns, `in range`, string/int matching, nested |
 | [Else-if chains](https://kotlinlang.org/spec/expressions.html#conditional-expressions) | §7.4.1 | `if {} else if {} else {}` (as statements) |

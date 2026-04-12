@@ -275,9 +275,11 @@ milestones:
           - "Enum with properties and methods works"
 
       - name: "Object declarations (singletons)"
+        completed: true
         description: >
           object Logger { fun log(msg: String) {} }.
-          JVM: static INSTANCE field + private constructor.
+          Methods lowered as top-level static functions on the wrapper class.
+          Singleton.method() calls resolve via name_to_func lookup.
         crates:
           - skotch-syntax
           - skotch-parser

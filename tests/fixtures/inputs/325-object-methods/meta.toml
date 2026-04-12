@@ -1,0 +1,4 @@
+name     = "325-object-methods"
+status   = "supported"
+features = ["object", "multiple-methods", "return-value"]
+notes    = "Object with multiple methods returning values."

@@ -1,0 +1,4 @@
+name     = "326-multiple-objects"
+status   = "supported"
+features = ["object", "multiple-objects", "cross-object-calls"]
+notes    = "Multiple object declarations calling each other."
