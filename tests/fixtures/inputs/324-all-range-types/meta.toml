@@ -1,0 +1,4 @@
+name     = "324-all-range-types"
+status   = "supported"
+features = ["for", "range", "until", "downTo"]
+notes    = "All three range types: .., until, downTo — all sum to 15."

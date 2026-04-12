@@ -173,8 +173,8 @@ pub enum Stmt {
         var_name: Symbol,
         start: Expr,
         end: Expr,
-        /// If true, use exclusive end (`until`); if false, inclusive (`..`).
         exclusive: bool,
+        descending: bool,
         body: Block,
         span: Span,
     },

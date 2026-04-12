@@ -1,0 +1,908 @@
+# ============================================================================
+# skotch — Milestone Roadmap: v0.2.0 through v1.0.0
+# ============================================================================
+#
+# This file defines the roadmap for the skotch Kotlin toolchain from its
+# current state (v0.1.x, ~55% Kotlin language coverage) to v1.0.0, where
+# the goal is building every Official Jetpack Compose Sample
+# (https://github.com/android/compose-samples) using only skotch — no
+# kotlinc, aapt2, d8, AGP, or Gradle.
+#
+# R8/ProGuard tree-shaking and minification are explicitly deferred to v2.0.
+# The v1.0.0 target is debug APK builds only.
+#
+# This YAML is consumed by an Astro pre-build script to generate a visual
+# roadmap on the skotch.dev/ front page. It is also used by Claude and
+# human contributors to guide future implementation work.
+#
+# Dependency graph between milestones:
+#
+#   v0.2.0 (Objects) → v0.3.0 (Lambdas) → v0.4.0 (Generics) → v0.5.0 (Collections)
+#                                                                       ↓
+#   v0.7.0 (Dependencies) ──────────────→ v0.8.0 (Resources+DEX) → v0.6.0 (Coroutines)
+#                                                                       ↓
+#                                                                 v0.9.0 (Compose)
+#                                                                       ↓
+#                                                                 v1.0.0 (Integration)
+#
+# v0.7.0 can start in parallel with v0.4.0–v0.5.0 since build tooling is
+# independent of language features.
+# ============================================================================
+
+project:
+  name: skotch
+  tagline: "Streamlined Kotlin Optimized Toolchain"
+  repository: https://github.com/skotlang/skotch
+  current_version: "0.1.11"
+  target_version: "1.0.0"
+  # The ultimate acceptance criterion for v1.0.0:
+  target_description: >
+    Build every Official Jetpack Compose Sample
+    (https://github.com/android/compose-samples) using only `skotch build`,
+    producing debug APKs that install and launch on an Android emulator.
+    No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
+
+# ============================================================================
+# MILESTONE 0: v0.1.0 — Foundation (COMPLETED)
+# ============================================================================
+# This milestone represents all work completed through the v0.1.x series.
+# It established the full compilation pipeline (lex → parse → resolve →
+# typecheck → MIR → backends), five output targets (JVM, DEX, LLVM IR,
+# klib, native), the fixture-driven test system, build pipeline with JAR/APK
+# packaging, REPL, LSP server, and ~55% of the Kotlin language specification.
+# ============================================================================
+
+milestones:
+
+  - version: "0.1.0"
+    title: "Foundation"
+    status: completed
+    depends_on: []
+    description: >
+      Full compilation pipeline across five targets, ~55% Kotlin language
+      coverage, build system with JAR/APK packaging, REPL with JNI, LSP
+      server, and 295+ validated test fixtures.
+    estimated_loc: "23,000 (existing)"
+
+    features:
+      # ── Compiler infrastructure ──────────────────────────────────────
+      - name: "Five-target compilation pipeline"
+        completed: true
+        description: >
+          lex → parse → resolve → typecheck → MIR lower → backend codegen.
+          Targets: JVM bytecode (.class, Java 17 v61), DEX (v035, Android 4.4+),
+          LLVM IR (.ll), klib (Kotlin Native library), native binary (via clang).
+
+      - name: "Fixture-driven validation system"
+        completed: true
+        description: >
+          295+ test fixtures with golden outputs committed for all targets.
+          Normalizers strip cosmetic differences for cross-compiler diffing.
+
+      - name: "Build pipeline (JAR and APK)"
+        completed: true
+        description: >
+          skotch build reads build.gradle.kts/settings.gradle.kts, discovers
+          sources, compiles, packages to JAR (JVM) or unsigned APK (Android).
+          Multi-module support with topological dependency ordering.
+
+      - name: "REPL with JNI"
+        completed: true
+        description: >
+          Interactive REPL backed by embedded JVM. Supports class definitions,
+          semicolon-separated multi-statement lines, val/var accumulation.
+
+      - name: "Language Server Protocol"
+        completed: true
+        description: >
+          Real-time diagnostics, semantic tokens, hover with type info,
+          go-to-definition, completions. skotch lsp subcommand.
+
+      # ── Functions ────────────────────────────────────────────────────
+      - name: "Function declarations"
+        completed: true
+        description: "Top-level fun with parameters, return types, expression bodies."
+      - name: "Default parameters"
+        completed: true
+        description: "fun f(x: Int = 10) — literal defaults injected at call sites."
+      - name: "Named arguments"
+        completed: true
+        description: "f(height = 3, width = 4) — reordered to match parameter positions."
+      - name: "Extension functions"
+        completed: true
+        description: "fun Int.isEven(), this receiver, method chaining."
+      - name: "Local functions"
+        completed: true
+        description: "fun inside blocks with recursive calls."
+
+      # ── Classes ──────────────────────────────────────────────────────
+      - name: "Class declarations"
+        completed: true
+        description: "Primary constructor with val/var, field access, instance methods, invokevirtual dispatch."
+      - name: "Data classes"
+        completed: true
+        description: "data class with synthesized toString() producing ClassName(field=value, ...)."
+      - name: "Init blocks"
+        completed: true
+        description: "init { } blocks execute during construction."
+      - name: "Mutable class fields"
+        completed: true
+        description: "var fields with method writeback — count++ in methods persists."
+      - name: "Override toString()"
+        completed: true
+        description: "override fun toString(): String on regular classes."
+      - name: "Const val"
+        completed: true
+        description: "Compile-time constants inlined at call site."
+      - name: "Visibility modifiers"
+        completed: true
+        description: "private, internal, protected, open, abstract — parsed (not yet enforced)."
+
+      # ── Types and literals ───────────────────────────────────────────
+      - name: "Numeric types (Int, Long, Double)"
+        completed: true
+        description: "Full arithmetic, negation, type-specific println/print overloads."
+      - name: "String type with 20+ methods"
+        completed: true
+        description: >
+          Regular/raw/template strings. Methods resolved dynamically from JDK
+          class files: length, uppercase, lowercase, trim, substring, contains,
+          startsWith, endsWith, indexOf, replace, get, equals, compareTo,
+          toInt, toDouble, toLong, repeat, isEmpty.
+      - name: "Null literal and nullable types"
+        completed: true
+        description: "null, nullable parameters (String?), elvis operator (?:) with chaining."
+      - name: "Type conversions"
+        completed: true
+        description: "Int/Long/Double.toString(), String.toInt()/toLong()/toDouble()."
+
+      # ── Operators ────────────────────────────────────────────────────
+      - name: "All basic operators"
+        completed: true
+        description: >
+          Arithmetic (+, -, *, /, %), comparison (==, !=, <, >, <=, >=),
+          logical (&&, ||), unary (-, !), compound assignment (+=, -=, *=, /=, %=),
+          increment/decrement (x++, x--), string concatenation.
+
+      # ── Control flow ─────────────────────────────────────────────────
+      - name: "Complete control flow"
+        completed: true
+        description: >
+          if/else (statement and expression), when (with/without subject,
+          comma patterns, in range), for (.. inclusive, until exclusive,
+          downTo descending), while, do-while, break, continue, return
+          (including guard clauses), try-finally.
+
+      # ── Standard library and interop ─────────────────────────────────
+      - name: "println, print, maxOf, minOf"
+        completed: true
+        description: "Compiler intrinsics with all type overloads."
+      - name: "Java interop"
+        completed: true
+        description: "Real .class parsing from JDK jmods + CLASSPATH. Import declarations."
+      - name: "Kotlin stdlib resolution"
+        completed: true
+        description: "Locates kotlin-stdlib.jar via CLASSPATH, KOTLIN_HOME, or kotlinc PATH."
+      - name: "Dynamic method resolution"
+        completed: true
+        description: "Instance/static methods resolved from JDK .class files at compile time."
+
+    risks: []  # Completed milestone — no remaining risks
+
+  # ============================================================================
+  # MILESTONE 1: v0.2.0 — Object Model Foundation
+  # ============================================================================
+  # WHY THIS IS FIRST: Every Android API relies on inheritance (Activity extends
+  # AppCompatActivity), every callback uses interfaces, Compose Material3 uses
+  # sealed classes and enums. Without the object model, no real Kotlin code
+  # compiles. The existing class support (constructors, fields, methods, data
+  # classes) provides the foundation to build on.
+  # ============================================================================
+
+  - version: "0.2.0"
+    title: "Object Model Foundation"
+    status: planned
+    depends_on: []
+    description: >
+      Build the full Kotlin object model on top of existing class support.
+      Inheritance, interfaces, sealed/enum classes, object declarations,
+      companion objects, and smart casts.
+    estimated_loc: "3,000–4,000"
+
+    features:
+      - name: "Inheritance with open/override"
+        description: >
+          open class Base, class Derived : Base(), method override dispatch.
+          JVM: invokespecial for super calls, ACC_OPEN flags.
+          DEX: invoke-super.
+        crates:
+          - skotch-syntax    # ClassDecl gains superclass field
+          - skotch-parser    # Parse `: SuperClass()` after class name
+          - skotch-mir-lower # Virtual dispatch encoding in MIR
+          - skotch-backend-jvm  # invokespecial, ACC_OPEN
+          - skotch-backend-dex  # invoke-super
+        acceptance_criteria:
+          - "3-level class hierarchy with overridden virtual methods compiles and runs"
+          - "super.method() calls dispatch to parent implementation"
+
+      - name: "Interface declaration and implementation"
+        description: >
+          interface Foo { fun bar() }, class X : Foo { override fun bar() {} }.
+          JVM: invokeinterface. DEX: invoke-interface.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-backend-jvm
+          - skotch-backend-dex
+        acceptance_criteria:
+          - "Interface with two methods, implemented by a class, compiles and runs"
+          - "Interface with default method body works"
+
+      - name: "Abstract classes"
+        description: >
+          abstract class Shape { abstract fun area(): Double }.
+          Straightforward extension of inheritance.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-backend-jvm
+        acceptance_criteria:
+          - "Abstract class with concrete subclass compiles; calling abstract method dispatches correctly"
+
+      - name: "Sealed classes"
+        description: >
+          sealed class Result, class Success : Result(), class Failure : Result().
+          Compile-time exhaustiveness checking in when statements.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-types    # Track sealed hierarchies for exhaustiveness
+          - skotch-typeck   # Exhaustive when checking
+        acceptance_criteria:
+          - "Sealed class with when expression compiles; missing branch produces error"
+
+      - name: "Enum classes"
+        description: >
+          enum class Direction { NORTH, SOUTH, EAST, WEST }.
+          Synthetic <clinit>, values(), valueOf(), name, ordinal.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-mir-lower  # Enum static init generation
+          - skotch-backend-jvm
+        acceptance_criteria:
+          - "Enum with values() iteration and valueOf() lookup compiles and runs"
+          - "Enum with properties and methods works"
+
+      - name: "Object declarations (singletons)"
+        description: >
+          object Logger { fun log(msg: String) {} }.
+          JVM: static INSTANCE field + private constructor.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-mir-lower
+          - skotch-backend-jvm
+        acceptance_criteria:
+          - "Object singleton accessed via ObjectName.method() compiles and runs"
+
+      - name: "Companion objects"
+        description: >
+          class Foo { companion object { fun create(): Foo = Foo() } }.
+          Synthetic inner class with INSTANCE delegation.
+        crates:
+          - skotch-syntax
+          - skotch-parser
+          - skotch-mir-lower
+          - skotch-backend-jvm
+        acceptance_criteria:
+          - "Foo.create() dispatches to companion object method"
+
+      - name: "Smart casts with is checks"
+        description: >
+          if (x is String) { x.length }. Type checker narrows type after is.
+          AST already has IsCheck node; typeck needs narrowing logic.
+        crates:
+          - skotch-typeck   # Flow-sensitive type narrowing
+          - skotch-mir-lower  # instanceof instruction emission
+          - skotch-backend-jvm  # instanceof opcode
+        acceptance_criteria:
+          - "if (x is String) { println(x.length) } compiles without cast"
+          - "when (x) { is String -> x.length } works"
+
+    risks:
+      - description: "Virtual dispatch table construction is complex for deep hierarchies"
+        mitigation: "Start with single-level inheritance; extend to multi-level incrementally"
+      - description: "Sealed class exhaustiveness requires tracking all subclasses at compile time"
+        mitigation: "Limit to same-file sealed hierarchies initially (matches Kotlin spec)"
+
+  # ============================================================================
+  # MILESTONE 2: v0.3.0 — Lambdas, Closures, and Higher-Order Functions
+  # ============================================================================
+  # WHY THIS IS THE MOST CRITICAL MILESTONE: Every @Composable function receives
+  # lambdas. Every Button { Text("Click") } is a trailing lambda. remember {},
+  # LaunchedEffect {}, derivedStateOf {} all take lambdas. Without lambdas,
+  # zero Compose code compiles.
+  # ============================================================================
+
+  - version: "0.3.0"
+    title: "Lambdas, Closures, and Higher-Order Functions"
+    status: planned
+    depends_on: ["0.2.0"]
+    description: >
+      Function types, lambda expressions, closures with capture, trailing
+      lambda syntax, lambda with receiver, and scope functions. This is
+      the single most important milestone for Compose compatibility.
+    estimated_loc: "4,000–5,000"
+
+    features:
+      - name: "Lambda expressions"
+        description: >
+          { x: Int -> x * 2 } and { it * 2 } (implicit it parameter).
+          Compiled as inner classes implementing kotlin.jvm.functions.FunctionN.
+          Inner class approach chosen over invokedynamic for DEX compatibility.
+        crates:
+          - skotch-syntax    # Expr::Lambda { params, body }
+          - skotch-parser    # Lambda parsing, { } blocks
+          - skotch-typeck    # Lambda type inference
+          - skotch-mir-lower # Lambda body extraction to synthetic functions
+          - skotch-backend-jvm  # Inner class generation for FunctionN
+          - skotch-backend-dex  # Same inner class pattern
+        acceptance_criteria:
+          - "val double = { x: Int -> x * 2 }; println(double(5)) prints 10"
+          - "val inc = { it + 1 }; println(inc(5)) prints 6 (implicit it)"
+
+      - name: "Function types"
+        description: >
+          (Int) -> String, () -> Unit, (String, Int) -> Boolean.
+          Maps to kotlin.jvm.functions.Function0..Function22 on JVM/DEX.
+        crates:
+          - skotch-types    # Ty::Function { params, return_ty }
+          - skotch-syntax   # TypeRef gains function type syntax
+          - skotch-parser   # Parse (T, T) -> R syntax
+        acceptance_criteria:
+          - "Function type parameter compiles: fun apply(f: (Int) -> Int, x: Int): Int = f(x)"
+
+      - name: "Closure capture"
+        description: >
+          Variables from enclosing scope captured by lambdas.
+          Immutable val: passed as constructor arg to lambda class.
+          Mutable var: boxed in synthetic Ref<T> holder class.
+        crates:
+          - skotch-typeck   # Capture analysis pass
+          - skotch-mir-lower # Capture list construction, Ref boxing
+          - skotch-backend-jvm
+        acceptance_criteria:
+          - "Lambda captures val from enclosing scope and reads it correctly"
+          - "Lambda captures var and mutates it (change visible outside)"
+
+      - name: "Trailing lambda syntax"
+        description: >
+          list.forEach { println(it) } — { } block after ) as last argument.
+        crates:
+          - skotch-parser   # Detect trailing { } after call RParen
+        acceptance_criteria:
+          - "repeat(3) { println(\"hi\") } works"
+
+      - name: "Lambda with receiver"
+        description: >
+          fun buildString(block: StringBuilder.() -> Unit).
+          Lambda body has this bound to receiver. Critical for Compose
+          content lambdas like Column { Text(\"A\") }.
+        crates:
+          - skotch-types
+          - skotch-mir-lower
+        acceptance_criteria:
+          - "buildString { append(\"hello\"); append(\" world\") } returns \"hello world\""
+
+      - name: "Scope functions (let, apply, also, run, with)"
+        description: >
+          Implemented as compiler intrinsics recognized by name and lowered
+          directly in MIR. These are used pervasively in idiomatic Kotlin.
+        crates:
+          - skotch-resolve   # Register as known identifiers
+          - skotch-mir-lower # Intrinsic lowering
+        acceptance_criteria:
+          - "\"hello\".let { it.uppercase() } returns \"HELLO\""
+          - "StringBuilder().apply { append(\"hi\") }.toString() returns \"hi\""
+
+    risks:
+      - description: "Lambda synthesis touches every layer of the compiler"
+        mitigation: "Start with non-capturing lambdas, then add val capture, then var capture"
+      - description: "FunctionN inner class generation is complex"
+        mitigation: "Use a single template pattern; generate invoke() from the lambda body MIR"
+
+  # ============================================================================
+  # MILESTONE 3: v0.4.0 — Generics and Type Erasure
+  # ============================================================================
+  # WHY: Generics unlock all collection APIs (List<T>, Map<K,V>), all Compose
+  # state management (MutableState<T>, remember<T>), and every generic utility.
+  # ============================================================================
+
+  - version: "0.4.0"
+    title: "Generics and Type Erasure"
+    status: planned
+    depends_on: ["0.3.0"]
+    description: >
+      Type parameters, variance, generic classes and functions, reified types.
+      JVM/DEX use type erasure; the compiler inserts casts at erasure boundaries.
+    estimated_loc: "3,000–4,000"
+
+    features:
+      - name: "Generic function declarations"
+        description: "fun <T> identity(x: T): T = x. Type parameters parsed and erased."
+        crates: [skotch-syntax, skotch-parser, skotch-types, skotch-typeck, skotch-mir-lower]
+        acceptance_criteria:
+          - "fun <T> identity(x: T): T = x; println(identity(42)); println(identity(\"hi\"))"
+
+      - name: "Generic class declarations"
+        description: "class Box<T>(val value: T). Fields and constructor use erased types."
+        crates: [skotch-syntax, skotch-parser, skotch-types, skotch-mir-lower, skotch-backend-jvm]
+        acceptance_criteria:
+          - "class Box<T>(val value: T); val b = Box(42); println(b.value)"
+
+      - name: "Upper bounds"
+        description: "fun <T : Comparable<T>> maxOf(a: T, b: T): T. Erases to bound type."
+        crates: [skotch-types, skotch-typeck]
+        acceptance_criteria:
+          - "Bound-constrained generic function compiles; incorrect type arg rejected"
+
+      - name: "Variance annotations"
+        description: "class Producer<out T>, class Consumer<in T>. Affects subtyping only."
+        crates: [skotch-types, skotch-typeck]
+        acceptance_criteria:
+          - "Producer<String> assignable to Producer<Any>"
+
+      - name: "Reified type parameters"
+        description: >
+          inline fun <reified T> isInstance(x: Any): Boolean = x is T.
+          Requires inline function support (body copied to call site).
+        crates: [skotch-mir-lower, skotch-typeck]
+        acceptance_criteria:
+          - "isInstance<String>(\"hello\") returns true"
+
+      - name: "Type aliases"
+        description: "typealias StringList = List<String>. Expanded before typeck."
+        crates: [skotch-syntax, skotch-parser, skotch-resolve]
+        acceptance_criteria:
+          - "typealias works as transparent wrapper"
+
+    risks:
+      - description: "Kotlin's type inference is sophisticated (local inference with look-ahead)"
+        mitigation: "Implement common patterns first; fall back to explicit annotations for edge cases"
+      - description: "Angle-bracket disambiguation (generics vs comparison) is tricky in the parser"
+        mitigation: "Use Kotlin's disambiguation rules: < after identifier = type args"
+
+  # ============================================================================
+  # MILESTONE 4: v0.5.0 — Collections, Varargs, Destructuring
+  # ============================================================================
+  # WHY: With generics and lambdas, this builds the collection APIs every
+  # Compose sample uses. listOf(), map {}, filter {}, forEach {} are ubiquitous.
+  # ============================================================================
+
+  - version: "0.5.0"
+    title: "Collections, Varargs, Destructuring, and Stdlib"
+    status: planned
+    depends_on: ["0.4.0"]
+    description: >
+      Collection types, iteration protocols, varargs, destructuring,
+      operator overloading. Builds on generics and lambdas.
+    estimated_loc: "4,000–5,000"
+
+    features:
+      - name: "Varargs and spread operator"
+        description: "fun printAll(vararg items: String). MIR lowers to array creation."
+        crates: [skotch-syntax, skotch-parser, skotch-mir-lower, skotch-backend-jvm]
+        acceptance_criteria:
+          - "Vararg function called with multiple args and with *spread works"
+
+      - name: "Collection factories (listOf, mapOf, setOf)"
+        description: >
+          Intrinsics lowering to java.util.ArrayList/HashMap/HashSet constructors.
+        crates: [skotch-resolve, skotch-mir-lower, skotch-classinfo]
+        acceptance_criteria:
+          - "val list = listOf(1, 2, 3); list.forEach { println(it) } prints 1, 2, 3"
+
+      - name: "Collection extension functions"
+        description: >
+          map, filter, forEach, fold, any, all, flatMap, associate, groupBy, sortedBy.
+          Intrinsic lowering to loops in MIR for the most common ones.
+        crates: [skotch-mir-lower]
+        acceptance_criteria:
+          - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } returns [4, 6]"
+
+      - name: "For-in over iterables"
+        description: >
+          for (x in collection) desugars to iterator()/hasNext()/next() protocol.
+        crates: [skotch-syntax, skotch-mir-lower]
+        acceptance_criteria:
+          - "for (item in listOf(1, 2, 3)) { println(item) } works"
+
+      - name: "Destructuring declarations"
+        description: >
+          val (a, b) = Pair(1, 2). Desugars to component1()/component2() calls.
+        crates: [skotch-syntax, skotch-parser, skotch-mir-lower]
+        acceptance_criteria:
+          - "val (a, b) = Pair(1, \"hello\"); println(\"$a $b\") works"
+          - "for ((k, v) in mapOf(1 to \"a\")) works"
+
+      - name: "Operator overloading"
+        description: >
+          operator fun plus, get, compareTo, invoke. Parser desugars a + b to
+          a.plus(b) for user-defined types. Critical for Dp arithmetic in Compose.
+        crates: [skotch-parser, skotch-typeck, skotch-mir-lower]
+        acceptance_criteria:
+          - "Custom class with operator plus compiles; a + b dispatches to plus()"
+
+      - name: "Infix functions and Pair/Triple"
+        description: "1 to \"one\" creates Pair(1, \"one\"). Infix function support."
+        crates: [skotch-parser, skotch-resolve]
+        acceptance_criteria:
+          - "mapOf(1 to \"a\", 2 to \"b\") works"
+
+    risks:
+      - description: "Collection intrinsic lowering is extensive (20+ extension functions)"
+        mitigation: "Prioritize the top 10 most-used (map, filter, forEach, fold, any, first, last, size, isEmpty, contains)"
+
+  # ============================================================================
+  # MILESTONE 5: v0.6.0 — Coroutines, Suspend, Property Delegation
+  # ============================================================================
+  # WHY: Coroutines drive all async Compose patterns (LaunchedEffect,
+  # rememberCoroutineScope, data loading). Property delegation (by remember,
+  # by viewModels) is the fundamental state mechanism.
+  # ============================================================================
+
+  - version: "0.6.0"
+    title: "Coroutines, Suspend Functions, and Property Delegation"
+    status: planned
+    depends_on: ["0.5.0"]
+    description: >
+      The hardest language features: coroutine CPS transform and property
+      delegation. Also includes secondary constructors and DEX exception tables.
+    estimated_loc: "5,000–7,000"
+
+    features:
+      - name: "Suspend functions and CPS transform"
+        description: >
+          suspend fun fetchData(): String. Compiler transforms to state machine.
+          Each suspension point becomes a state in a when over an integer.
+          Function receives Continuation<T> parameter; returns Any? (may be
+          COROUTINE_SUSPENDED sentinel). This is the most complex single
+          transform in the compiler (~2,000+ lines of MIR lowering).
+        crates: [skotch-syntax, skotch-parser, skotch-types, skotch-mir, skotch-mir-lower]
+        acceptance_criteria:
+          - "suspend fun compiles to state machine class"
+          - "runBlocking { delay(100); println(\"done\") } works (with kotlinx.coroutines JAR)"
+
+      - name: "Property delegation"
+        description: >
+          val x by lazy { 42 }, var name by Delegates.observable(...).
+          Desugars to backing field of delegate type + getValue/setValue calls.
+        crates: [skotch-syntax, skotch-parser, skotch-mir-lower]
+        acceptance_criteria:
+          - "val x by lazy { println(\"computed\"); 42 } computes once"
+          - "by remember { mutableStateOf(0) } delegation pattern works"
+
+      - name: "Lateinit var"
+        description: "lateinit var name: String. Null-backed field; access check throws."
+        crates: [skotch-syntax, skotch-parser, skotch-mir-lower, skotch-backend-jvm]
+        acceptance_criteria:
+          - "lateinit var throws UninitializedPropertyAccessException on early access"
+
+      - name: "Secondary constructors"
+        description: "constructor(s: Int) : this(s, 0). Chain to primary via this()."
+        crates: [skotch-syntax, skotch-parser, skotch-mir-lower, skotch-backend-jvm]
+        acceptance_criteria:
+          - "Secondary constructor chains to primary; both work"
+
+      - name: "DEX exception tables"
+        description: >
+          try-catch in DEX needs try_item and encoded_catch_handler structures.
+          Required for coroutine state machines which use try-catch.
+        crates: [skotch-backend-dex]
+        acceptance_criteria:
+          - "try { } catch (e: Exception) { } compiles to valid DEX with exception table"
+
+    risks:
+      - description: "CPS transform is the most under-documented complex transform"
+        mitigation: "Study kotlinc's CoroutineTransformerMethodVisitor; start with sequential suspends only"
+      - description: "Coroutine edge cases (cancellation, try-catch across suspension) are subtle"
+        mitigation: "Defer cancellation semantics; focus on happy-path sequential suspend/resume"
+
+  # ============================================================================
+  # MILESTONE 6: v0.7.0 — Dependency Resolution and Build System
+  # ============================================================================
+  # WHY: Real Compose apps depend on dozens of Maven artifacts. Without
+  # dependency resolution, apps can only use JDK classes.
+  # NOTE: This milestone can start in parallel with v0.4.0–v0.5.0.
+  # ============================================================================
+
+  - version: "0.7.0"
+    title: "Dependency Resolution and Build System"
+    status: planned
+    depends_on: []  # Can start in parallel with language milestones
+    description: >
+      Maven dependency fetching, version catalogs, Gradle plugin model,
+      AAR handling, and classpath assembly.
+    estimated_loc: "4,000–5,000"
+
+    features:
+      - name: "Maven dependency resolution"
+        description: >
+          Parse implementation(\"group:artifact:version\") from build.gradle.kts.
+          Resolve from Maven Central and Google Maven. Download POMs, resolve
+          transitive dependencies, download JARs/AARs. Cache in ~/.skotch/cache/.
+        crates:
+          - skotch-buildscript  # Parse dependency declarations
+          - new: skotch-deps    # Maven resolution engine, HTTP client, cache
+        acceptance_criteria:
+          - "implementation(\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0\") resolved and downloaded"
+
+      - name: "Version catalog parsing (libs.versions.toml)"
+        description: >
+          Parse [versions], [libraries], [plugins] sections.
+          Resolve libs.androidx.compose.material3 references.
+        crates: [skotch-buildscript, new: skotch-deps]
+        acceptance_criteria:
+          - "libs.versions.toml parsed; catalog references resolve in build.gradle.kts"
+
+      - name: "AAR handling"
+        description: >
+          Android deps come as .aar (ZIP with classes.jar + res/ + AndroidManifest.xml).
+          Extract classes.jar for classpath; res/ for resource merging.
+        crates: [new: skotch-deps]
+        acceptance_criteria:
+          - "AAR dependency extracted; classes.jar scanned for type resolution"
+
+      - name: "BOM (Bill of Materials) support"
+        description: >
+          platform(\"androidx.compose:compose-bom:2026.03.00\") constrains versions.
+        crates: [new: skotch-deps]
+        acceptance_criteria:
+          - "BOM applies version constraints to all Compose artifacts"
+
+      - name: "Gradle plugin stubs"
+        description: >
+          Recognize android application, kotlin android, compose plugins.
+          Map to internal configuration (SDK versions, compose compiler flags).
+        crates: [skotch-buildscript]
+        acceptance_criteria:
+          - "Plugin block parsed; android {} config extracted correctly"
+
+    risks:
+      - description: "Maven POM transitivity can pull hundreds of artifacts"
+        mitigation: "Implement depth-limited resolution; cache aggressively"
+      - description: "Google Maven repository has non-standard URL patterns"
+        mitigation: "Hard-code Google Maven URL prefix; test with real Compose BOMs"
+
+  # ============================================================================
+  # MILESTONE 7: v0.8.0 — Android Resource Pipeline and Full DEX Backend
+  # ============================================================================
+  # WHY: Real Android apps need compiled resources and a full DEX backend.
+  # Compose apps use minimal XML resources but still need AndroidManifest,
+  # strings, themes, drawables, and the R class.
+  # ============================================================================
+
+  - version: "0.8.0"
+    title: "Android Resource Pipeline and Full DEX Backend"
+    status: planned
+    depends_on: ["0.6.0", "0.7.0"]
+    description: >
+      Resource compilation (aapt2 replacement), R class generation,
+      full DEX backend to parity with JVM, multi-DEX, debug APK assembly.
+    estimated_loc: "6,000–8,000"
+
+    features:
+      - name: "Resource compilation (aapt2 equivalent)"
+        description: >
+          Compile Android XML resources to binary format. Generate resources.arsc
+          (resource table mapping R.drawable.foo to file offsets/values).
+          Extend skotch-axml for all resource types beyond AndroidManifest.
+        crates:
+          - new: skotch-resource  # XML parser, resource table builder, R class gen
+          - skotch-axml           # Generalize binary XML encoding
+        acceptance_criteria:
+          - "res/values/strings.xml compiles to resources.arsc"
+          - "R.string.app_name resolves at compile time"
+
+      - name: "R class generation"
+        description: >
+          Generate R.java/R.kt class with integer constants for all resources.
+          Available before Kotlin compilation so R.drawable.ic_launcher resolves.
+        crates: [new: skotch-resource, skotch-build]
+        acceptance_criteria:
+          - "R class generated with correct integer constants"
+
+      - name: "Full DEX backend"
+        description: >
+          Currently DEX handles only static functions. Needs: classes with fields
+          and methods, virtual dispatch, interface dispatch, exception tables,
+          all branching, string operations, arrays, instance creation, casts.
+          Bring to parity with JVM backend.
+        crates: [skotch-backend-dex]
+        acceptance_criteria:
+          - "Class hierarchy with inheritance compiles to valid DEX"
+          - "Interface dispatch works in DEX"
+          - "Exception handling works in DEX"
+
+      - name: "Multi-DEX support"
+        description: >
+          Large apps exceed 65K method limit. Implement classes.dex,
+          classes2.dex splitting with method reference counting.
+        crates: [skotch-backend-dex, skotch-apk]
+        acceptance_criteria:
+          - "App with >65K method refs produces multiple DEX files"
+
+      - name: "Debug APK assembly end-to-end"
+        description: >
+          Complete pipeline: AndroidManifest + classes.dex + resources.arsc +
+          res/ + lib/ (native libs). Debug signing with generated keystore.
+        crates: [skotch-apk, skotch-sign, skotch-build]
+        acceptance_criteria:
+          - "Non-trivial Android app produces installable debug APK"
+
+    risks:
+      - description: "DEX backend expansion is the largest single piece (~4K lines)"
+        mitigation: "Keep parity with JVM backend feature-by-feature; MIR provides stable intermediate"
+      - description: "resources.arsc format is complex and under-documented"
+        mitigation: "Use aapt2 output as test oracle; validate with aapt dump resources"
+
+  # ============================================================================
+  # MILESTONE 8: v0.9.0 — Compose Compiler Plugin
+  # ============================================================================
+  # WHY: The @Composable transform is what makes Compose work. Without it,
+  # @Composable functions are just regular functions — no recomposition,
+  # no state tracking, no slot table management.
+  # ============================================================================
+
+  - version: "0.9.0"
+    title: "Compose Compiler Plugin"
+    status: planned
+    depends_on: ["0.8.0"]
+    description: >
+      The @Composable function transform, state tracking, remember intrinsic,
+      and recomposition support. Implemented as a dedicated MIR-to-MIR pass
+      rather than a general-purpose compiler plugin API.
+    estimated_loc: "5,000–7,000"
+
+    features:
+      - name: "Annotation parsing"
+        description: >
+          @Composable, @Preview, @OptIn, @file:OptIn, custom annotations.
+          Stored on AST nodes; become runtime-visible class file attributes.
+        crates: [skotch-syntax, skotch-parser, skotch-backend-jvm, skotch-backend-dex]
+        acceptance_criteria:
+          - "@Composable annotation stored in class metadata"
+          - "@Preview annotation preserved for IDE tooling"
+
+      - name: "@Composable function transform"
+        description: >
+          Core transform: every @Composable function receives synthetic Composer
+          and $changed parameters. Body wrapped in startRestartGroup/endRestartGroup.
+          Conditional recomposition via $changed bitmask guards.
+        crates:
+          - new: skotch-compose  # MIR-to-MIR transform pass
+          - skotch-build         # Insert Compose pass in pipeline
+        acceptance_criteria:
+          - "@Composable fun Greeting(name: String) { Text(\"Hello, $name\") } compiles with Composer parameter"
+          - "Generated bytecode compatible with Compose runtime library"
+
+      - name: "remember intrinsic"
+        description: >
+          remember { value } → slot table read/write via Composer.cache().
+          If slot empty or keys changed, recompute and store.
+        crates: [new: skotch-compose]
+        acceptance_criteria:
+          - "remember { mutableStateOf(0) } generates correct slot table access"
+
+      - name: "State tracking"
+        description: >
+          mutableStateOf / State<T>. When State is read during composition,
+          Composer records dependency. When state changes, reading composable
+          scheduled for recomposition.
+        crates: [new: skotch-compose]
+        acceptance_criteria:
+          - "var count by remember { mutableStateOf(0) } triggers recomposition on change"
+
+      - name: "Stability inference"
+        description: >
+          Analyze classes for stability (all fields immutable + stable types).
+          Generate $stable flags. Enables skipping during recomposition.
+        crates: [new: skotch-compose]
+        acceptance_criteria:
+          - "Data class with only val Int fields inferred as stable"
+
+    risks:
+      - description: "Compose transform is the most under-documented piece"
+        mitigation: "Target specific Compose BOM version; study plugin source at github.com/JetBrains/kotlin"
+      - description: "Transform semantics change across Compose compiler versions"
+        mitigation: "Pin to a single BOM version (2026.03.00) and validate against its runtime"
+
+  # ============================================================================
+  # MILESTONE 9: v1.0.0 — Compose Samples Integration
+  # ============================================================================
+  # This is primarily integration, bug-fixing, and gap-filling. No major new
+  # features — the focus is making everything work together on real code.
+  # ============================================================================
+
+  - version: "1.0.0"
+    title: "Compose Samples Integration"
+    status: planned
+    depends_on: ["0.9.0"]
+    description: >
+      End-to-end validation: build every Official Jetpack Compose Sample
+      with skotch alone. Fix all compilation gaps found in real-world code.
+    estimated_loc: "3,000–5,000 (fixes)"
+
+    features:
+      - name: "Build each compose-sample"
+        description: >
+          Clone android/compose-samples. Run skotch build in each project.
+          Record and fix every compilation failure. Start with simplest
+          (Reply) and work up to most complex (Jetcaster).
+        crates: [all]
+        acceptance_criteria:
+          - "skotch build produces debug APK for each sample"
+          - "Each APK installs on Android emulator (API 23+) via adb install"
+          - "Each app launches to main screen without crashing"
+
+      - name: "Parser gap fixes"
+        description: >
+          Real code uses syntax combinations not covered by fixtures.
+          Multi-line lambda chains, complex when expressions, nested generics.
+        crates: [skotch-parser, skotch-syntax]
+        acceptance_criteria:
+          - "All compose-sample source files parse without errors"
+
+      - name: "Type inference gap fixes"
+        description: >
+          Complex generic inference chains, SAM conversions, variance in
+          collection operations.
+        crates: [skotch-typeck, skotch-types]
+        acceptance_criteria:
+          - "All compose-sample source files type-check without errors"
+
+      - name: "Missing stdlib functions"
+        description: >
+          Each sample uses stdlib functions not yet handled. Add as needed.
+          Most are thin wrappers around Java methods.
+        crates: [skotch-mir-lower, skotch-classinfo]
+        acceptance_criteria:
+          - "No unresolved stdlib function calls across all samples"
+
+      - name: "Material3 and Navigation compatibility"
+        description: >
+          Scaffold, TopAppBar, NavHost, composable(\"route\") { }.
+          Library code — no compiler support beyond v0.9.0 needed, but
+          generic signatures may stress the type system.
+        crates: [skotch-typeck, skotch-types]
+        acceptance_criteria:
+          - "Basic Material3 screens render correctly"
+          - "Navigation between screens works"
+
+    # The v1.0.0 release gate:
+    release_criteria:
+      - "skotch build succeeds for: Jetchat, JetNews, Jetsnack, Jetcaster, Reply, JetLagged"
+      - "Each debug APK installs on Android emulator"
+      - "Each app launches to main screen"
+      - "Basic user interactions work (navigation, scrolling, button clicks)"
+      - "No external tools invoked (no kotlinc, aapt2, d8, AGP, Gradle)"
+      - "Build completes in under 60 seconds per sample (clean build)"
+
+    risks:
+      - description: "Real-world code will expose hundreds of edge cases"
+        mitigation: "Iterate: compile, fix, compile, fix. Track coverage per-sample."
+      - description: "Some samples use advanced features (Hilt DI, Room DB, KSP)"
+        mitigation: "Focus on core samples first (Reply, Jetchat); defer Hilt/Room samples if needed"
+
+# ============================================================================
+# FUTURE: v2.0.0 (not detailed here)
+# ============================================================================
+# v2.0.0 will add:
+# - R8/ProGuard tree-shaking and minification
+# - Release build optimization
+# - Incremental compilation
+# - Build caching
+# - Parallel compilation
+# - IDE integration beyond LSP
+# ============================================================================

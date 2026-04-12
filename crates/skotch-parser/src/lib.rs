@@ -842,25 +842,32 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let range_start = self.parse_expr();
         self.skip_trivia();
-        let exclusive = if self.peek_kind() == TokenKind::DotDot {
+        // Range operator: .. (inclusive), until (exclusive), downTo (descending)
+        let mut exclusive = false;
+        let mut descending = false;
+        if self.peek_kind() == TokenKind::DotDot {
             self.bump();
-            false
         } else if self.peek_kind() == TokenKind::Ident {
             let idx = self.pos;
             let text = match self.payload(idx) {
                 Some(TokenPayload::Ident(s)) => s.clone(),
                 _ => String::new(),
             };
-            if text == "until" {
-                self.bump();
-                true
-            } else {
-                self.expect(TokenKind::DotDot, "'..' or 'until' for range");
-                false
+            match text.as_str() {
+                "until" => {
+                    self.bump();
+                    exclusive = true;
+                }
+                "downTo" => {
+                    self.bump();
+                    descending = true;
+                }
+                _ => {
+                    self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
+                }
             }
         } else {
-            self.expect(TokenKind::DotDot, "'..' or 'until' for range");
-            false
+            self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
         };
         self.skip_trivia();
         let range_end = self.parse_expr();
@@ -874,6 +881,7 @@ impl<'a> Parser<'a> {
             start: range_start,
             end: range_end,
             exclusive,
+            descending,
             body,
             span,
         }

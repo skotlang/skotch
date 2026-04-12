@@ -583,6 +583,7 @@ fn lower_stmt(
             start: range_start,
             end: range_end,
             exclusive,
+            descending,
             body,
             ..
         } => {
@@ -633,8 +634,13 @@ fn lower_stmt(
 
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
 
-            // Condition: loop_var <= end_val (inclusive) or < end_val (exclusive/until)
-            let cmp_op = if *exclusive {
+            // Condition depends on range kind:
+            // ..     → loop_var <= end_val
+            // until  → loop_var <  end_val
+            // downTo → loop_var >= end_val
+            let cmp_op = if *descending {
+                MBinOp::CmpGe
+            } else if *exclusive {
                 MBinOp::CmpLt
             } else {
                 MBinOp::CmpLe
@@ -676,7 +682,12 @@ fn lower_stmt(
             // After body: goto increment block
             fb.terminate_and_switch(Terminator::Goto(incr_block), incr_block);
 
-            // Increment block: i = i + 1, then goto condition
+            // Step block: i = i + 1 (ascending) or i = i - 1 (descending)
+            let step_op = if *descending {
+                MBinOp::SubI
+            } else {
+                MBinOp::AddI
+            };
             let one = fb.new_local(Ty::Int);
             fb.push_stmt(MStmt::Assign {
                 dest: one,
@@ -686,7 +697,7 @@ fn lower_stmt(
             fb.push_stmt(MStmt::Assign {
                 dest: incremented,
                 value: Rvalue::BinOp {
-                    op: MBinOp::AddI,
+                    op: step_op,
                     lhs: loop_var,
                     rhs: one,
                 },
