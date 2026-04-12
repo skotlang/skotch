@@ -43,5 +43,5 @@ classes       1
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       grade(I)Ljava/lang/String; flags=0x0019 regs=20 ins=1 outs=0 insns=59
+  method       grade(I)Ljava/lang/String; flags=0x0019 regs=20 ins=1 outs=0 insns=73
   method       main()V flags=0x0019 regs=11 ins=0 outs=2 insns=56
