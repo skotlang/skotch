@@ -176,20 +176,19 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~45–50% of the Kotlin language specification.** The compiler
-handles functions with **default parameter values** (including recursion,
-multi-parameter, expression-body, guard clauses), complete control flow
-(if/else/when/for/while/do-while/break/continue), try/finally, numeric types
-(Int, Long with `L` suffix, Double), Boolean, String with 12 instance methods,
-Char, classes with constructors/methods/field access/init blocks, null literals,
-const val, visibility modifiers, nullable types with the elvis operator (`?:`),
-and Java static method interop. String templates work with all types including
-Long and Double. The parser additionally recognizes safe call (`?.`), non-null
-assert (`!!`), type checks (`is`/`!is`), type casts (`as`/`as?`), try/catch,
-and throw. Does not yet support inheritance, generics, lambdas, or the standard
-library collection APIs. 240+ test fixtures validated across JVM, DEX, LLVM IR,
-and klib targets. A Language Server Protocol (LSP) implementation provides
-real-time diagnostics, semantic tokens, hover, go-to-definition, and completions.
+**Estimated coverage: ~50% of the Kotlin language specification.** The compiler
+handles functions with **default parameter values**, `print()`/`println()`,
+complete control flow (if/else/when/for/while/do-while/break/continue),
+try/finally, numeric types (Int, Long, Double), Boolean, String with 15+
+instance methods (`.length`, `.uppercase()`, `.get()`, `.contains()`,
+`.replace()`, `.compareTo()`, `.equals()`, `.toInt()`, `.toLong()`, etc.),
+Char, classes with constructors/methods/field access/init blocks, null
+literals, const val, visibility modifiers, nullable types with elvis (`?:`),
+and Java static method interop. Does not yet support inheritance, generics,
+lambdas, or collections. 250+ test fixtures validated across JVM, DEX, LLVM
+IR, and klib targets. A Language Server Protocol (LSP) implementation provides
+real-time diagnostics, semantic tokens, hover, go-to-definition, and
+completions.
 
 ### Implemented and stable
 
@@ -234,9 +233,10 @@ real-time diagnostics, semantic tokens, hover, go-to-definition, and completions
 | [`println`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/println.html) | stdlib | `println()`, `println(Int)`, `println(Double)`, `println(String)`, `println(Boolean)`, `println(null)` |
 | [String templates in expressions](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | `"$var"`, `"${expr}"` usable anywhere (val, return, args) |
 | [Try-finally](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `try { body } finally { cleanup }` — finally always executes after body |
-| [String methods](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/) | stdlib | `.length`, `.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()`, `.contains()`, `.startsWith()`, `.endsWith()`, `.indexOf()`, `.lastIndexOf()`, `.replace()` |
-| [Type conversions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-string.html) | stdlib | `Int.toString()`, `Long.toString()`, `Double.toString()` |
+| [String methods](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/) | stdlib | `.length`, `.uppercase()`, `.lowercase()`, `.isEmpty()`, `.trim()`, `.substring()`, `.contains()`, `.startsWith()`, `.endsWith()`, `.indexOf()`, `.lastIndexOf()`, `.replace()`, `.get()`, `.equals()`, `.compareTo()`, `.toInt()`, `.toDouble()`, `.toLong()` |
+| [Type conversions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-string.html) | stdlib | `Int.toString()`, `Long.toString()`, `Double.toString()`, `String.toInt()`, `String.toLong()`, `String.toDouble()` |
 | [Init blocks](https://kotlinlang.org/spec/declarations.html#class-initialization) | §4.5.2 | `init { }` blocks execute during construction, access constructor params |
+| [`print()`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/print.html) | stdlib | `print()` without trailing newline — all type overloads |
 | Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
 
 ### Not yet implemented

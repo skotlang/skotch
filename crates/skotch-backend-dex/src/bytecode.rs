@@ -272,7 +272,7 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
         let Stmt::Assign { value, .. } = stmt;
         if let Rvalue::Call { kind, .. } = value {
             let n = match kind {
-                CallKind::Println => 1,
+                CallKind::Println | CallKind::Print => 1,
                 CallKind::PrintlnConcat => 2,
                 CallKind::Static(_)
                 | CallKind::StaticJava { .. }
@@ -557,7 +557,7 @@ fn emit_call(
     patches: &mut Vec<Patch>,
 ) -> u16 {
     match kind {
-        CallKind::Println => {
+        CallKind::Println | CallKind::Print => {
             // Use scratch register 0 for System.out. The slot map
             // already reserves the lowest `scratch_needed` registers
             // for this.

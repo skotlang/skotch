@@ -1416,11 +1416,49 @@ fn lower_expr(
                         "(D)Ljava/lang/String;",
                         Ty::String,
                     )),
+                    // String get/charAt
+                    (Ty::String, "get") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "charAt",
+                        "(I)C",
+                        Ty::Int, // Char is represented as Int
+                    )),
+                    // String equals (explicit)
+                    (Ty::String, "equals") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "equals",
+                        "(Ljava/lang/Object;)Z",
+                        Ty::Bool,
+                    )),
+                    // String compareTo
+                    (Ty::String, "compareTo") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "compareTo",
+                        "(Ljava/lang/String;)I",
+                        Ty::Int,
+                    )),
+                    // String toLong
+                    (Ty::String, "toLong") => Some((
+                        "java/lang/Long",
+                        "parseLong",
+                        "(Ljava/lang/String;)J",
+                        Ty::Long,
+                    )),
+                    // Int/Long/Double abs via Math.abs
+                    (Ty::Int, "coerceAtLeast") if args.len() == 1 => {
+                        Some(("java/lang/Math", "max", "(II)I", Ty::Int))
+                    }
+                    (Ty::Int, "coerceAtMost") if args.len() == 1 => {
+                        Some(("java/lang/Math", "min", "(II)I", Ty::Int))
+                    }
                     (Ty::Double, "toInt") => {
                         Some(("java/lang/Double", "toInt_stub", "(D)I", Ty::Int))
                     }
                     (Ty::Int, "toDouble") => {
                         Some(("java/lang/Integer", "toDouble_stub", "(I)D", Ty::Double))
+                    }
+                    (Ty::Int, "toLong") => {
+                        Some(("java/lang/Integer", "toLong_stub", "(I)J", Ty::Long))
                     }
                     _ => None,
                 };
@@ -1608,8 +1646,11 @@ fn lower_expr(
                 }
             }
 
-            let kind = if interner.resolve(callee_name) == "println" {
+            let callee_str = interner.resolve(callee_name);
+            let kind = if callee_str == "println" {
                 CallKind::Println
+            } else if callee_str == "print" {
+                CallKind::Print
             } else if let Some(fid) = name_to_func.get(&callee_name) {
                 CallKind::Static(*fid)
             } else {

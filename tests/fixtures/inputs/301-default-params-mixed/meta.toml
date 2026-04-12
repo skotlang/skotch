@@ -1,0 +1,4 @@
+name     = "301-default-params-mixed"
+status   = "supported"
+features = ["default-args", "string-template", "return"]
+notes    = "Function with multiple default parameters of different types."

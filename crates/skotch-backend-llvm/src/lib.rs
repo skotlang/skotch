@@ -740,7 +740,7 @@ impl<'a> BlockWalker<'a> {
                 // TODO: class support in LLVM backend
             }
             Rvalue::Call { kind, args } => match kind {
-                CallKind::Println => self.lower_println(args),
+                CallKind::Println | CallKind::Print => self.lower_println(args),
                 CallKind::PrintlnConcat => self.lower_println_concat(args),
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
                 CallKind::StaticJava { .. }
@@ -802,7 +802,7 @@ impl<'a> BlockWalker<'a> {
             return;
         };
         match kind {
-            CallKind::Println => self.lower_println(args),
+            CallKind::Println | CallKind::Print => self.lower_println(args),
             CallKind::PrintlnConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
             CallKind::StaticJava { .. }

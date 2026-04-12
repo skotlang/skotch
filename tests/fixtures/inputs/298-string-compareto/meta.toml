@@ -1,0 +1,4 @@
+name     = "298-string-compareto"
+status   = "supported"
+features = ["string", "compareTo"]
+notes    = "String.compareTo() for lexicographic comparison."

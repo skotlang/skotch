@@ -1197,6 +1197,36 @@ fn walk_block(
                     }
                     let _ = dest;
                 }
+                CallKind::Print => {
+                    // Same as Println but uses "print" instead of "println".
+                    let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                    code.push(0xB2); // getstatic
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                    bump(stack, max_stack, 1);
+
+                    if let Some(&a) = args.first() {
+                        load_local(code, stack, max_stack, slots, a, &func.locals);
+                        let arg_ty = &func.locals[a.0 as usize];
+                        let descriptor = match arg_ty {
+                            Ty::Bool => "(Z)V",
+                            Ty::Int => "(I)V",
+                            Ty::Long => "(J)V",
+                            Ty::Double => "(D)V",
+                            Ty::String => "(Ljava/lang/String;)V",
+                            _ => "(Ljava/lang/Object;)V",
+                        };
+                        let mref = cp.methodref("java/io/PrintStream", "print", descriptor);
+                        code.push(0xB6); // invokevirtual
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                        let effect = if matches!(arg_ty, Ty::Long | Ty::Double) {
+                            -3
+                        } else {
+                            -2
+                        };
+                        bump(stack, max_stack, effect);
+                    }
+                    let _ = dest;
+                }
                 CallKind::Static(target_id) => {
                     for a in args {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
