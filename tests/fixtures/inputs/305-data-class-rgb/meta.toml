@@ -1,0 +1,4 @@
+name     = "305-data-class-rgb"
+status   = "supported"
+features = ["data-class", "three-fields", "toString"]
+notes    = "Data class with three Int fields."

@@ -93,6 +93,7 @@ pub struct ValDecl {
 /// A class declaration.
 #[derive(Clone, Debug)]
 pub struct ClassDecl {
+    pub is_data: bool,
     pub name: Symbol,
     pub name_span: Span,
     /// Primary constructor parameters (may include `val`/`var` properties).

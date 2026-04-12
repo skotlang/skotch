@@ -1,0 +1,4 @@
+name     = "306-maxof-minof"
+status   = "supported"
+features = ["maxOf", "minOf", "stdlib"]
+notes    = "Top-level maxOf() and minOf() stdlib functions."

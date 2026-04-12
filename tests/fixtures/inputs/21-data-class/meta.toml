@@ -1,3 +1,4 @@
-name   = "21-data-class"
-status = "stub"
-reason = "Data classes need synthesized equals/hashCode/toString/copy/componentN."
+name     = "21-data-class"
+status   = "supported"
+features = ["data-class", "toString", "println"]
+notes    = "Data class with synthesized toString() (equals/hashCode/copy/componentN not yet synthesized)."

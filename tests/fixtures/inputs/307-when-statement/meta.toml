@@ -1,0 +1,4 @@
+name     = "307-when-statement"
+status   = "supported"
+features = ["when", "statement", "println"]
+notes    = "When used as statement (not expression)."

@@ -1647,6 +1647,29 @@ fn lower_expr(
             }
 
             let callee_str = interner.resolve(callee_name);
+
+            // Handle stdlib top-level functions as StaticJava calls.
+            let stdlib_call = match (callee_str, args.len()) {
+                ("maxOf", 2) => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
+                ("minOf", 2) => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                _ => None,
+            };
+            if let Some((class, method, desc, ret_ty)) = stdlib_call {
+                let dest = fb.new_local(ret_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: class.to_string(),
+                            method_name: method.to_string(),
+                            descriptor: desc.to_string(),
+                        },
+                        args: arg_locals,
+                    },
+                });
+                return Some(dest);
+            }
+
             let kind = if callee_str == "println" {
                 CallKind::Println
             } else if callee_str == "print" {
@@ -2791,6 +2814,110 @@ fn lower_class(
         }
 
         mir_methods.push(fb.finish());
+    }
+
+    // Synthesize toString() for data classes.
+    // Generates: "ClassName(field1=value1, field2=value2)"
+    if c.is_data && !fields.is_empty() {
+        let ts_idx = module.functions.len() + mir_methods.len();
+        let mut ts_fb = FnBuilder::new(ts_idx, "toString".to_string(), Ty::String);
+        let ts_this = ts_fb.new_local(Ty::Class(class_name.clone()));
+        ts_fb.mf.params.push(ts_this);
+
+        // Build the string: "ClassName(f1=v1, f2=v2)"
+        // Start with "ClassName(" as a string constant.
+        let prefix = format!("{}(", class_name);
+        let prefix_sid = module.intern_string(&prefix);
+        let result = ts_fb.new_local(Ty::String);
+        ts_fb.push_stmt(MStmt::Assign {
+            dest: result,
+            value: Rvalue::Const(MirConst::String(prefix_sid)),
+        });
+
+        for (fi, field) in fields.iter().enumerate() {
+            // For each field after the first, prepend ", "
+            if fi > 0 {
+                let comma_sid = module.intern_string(", ");
+                let comma = ts_fb.new_local(Ty::String);
+                ts_fb.push_stmt(MStmt::Assign {
+                    dest: comma,
+                    value: Rvalue::Const(MirConst::String(comma_sid)),
+                });
+                let cat = ts_fb.new_local(Ty::String);
+                ts_fb.push_stmt(MStmt::Assign {
+                    dest: cat,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::ConcatStr,
+                        lhs: result,
+                        rhs: comma,
+                    },
+                });
+                ts_fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Local(cat),
+                });
+            }
+
+            // Append "fieldName="
+            let label_sid = module.intern_string(&format!("{}=", field.name));
+            let label = ts_fb.new_local(Ty::String);
+            ts_fb.push_stmt(MStmt::Assign {
+                dest: label,
+                value: Rvalue::Const(MirConst::String(label_sid)),
+            });
+            let cat1 = ts_fb.new_local(Ty::String);
+            ts_fb.push_stmt(MStmt::Assign {
+                dest: cat1,
+                value: Rvalue::BinOp {
+                    op: MBinOp::ConcatStr,
+                    lhs: result,
+                    rhs: label,
+                },
+            });
+
+            // Load the field value and concat it.
+            let field_val = ts_fb.new_local(field.ty.clone());
+            ts_fb.push_stmt(MStmt::Assign {
+                dest: field_val,
+                value: Rvalue::GetField {
+                    receiver: ts_this,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            let cat2 = ts_fb.new_local(Ty::String);
+            ts_fb.push_stmt(MStmt::Assign {
+                dest: cat2,
+                value: Rvalue::BinOp {
+                    op: MBinOp::ConcatStr,
+                    lhs: cat1,
+                    rhs: field_val,
+                },
+            });
+            ts_fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Local(cat2),
+            });
+        }
+
+        // Append closing ")"
+        let close_sid = module.intern_string(")");
+        let close = ts_fb.new_local(Ty::String);
+        ts_fb.push_stmt(MStmt::Assign {
+            dest: close,
+            value: Rvalue::Const(MirConst::String(close_sid)),
+        });
+        let final_str = ts_fb.new_local(Ty::String);
+        ts_fb.push_stmt(MStmt::Assign {
+            dest: final_str,
+            value: Rvalue::BinOp {
+                op: MBinOp::ConcatStr,
+                lhs: result,
+                rhs: close,
+            },
+        });
+        ts_fb.set_terminator(Terminator::ReturnValue(final_str));
+        mir_methods.push(ts_fb.finish());
     }
 
     module.classes.push(MirClass {

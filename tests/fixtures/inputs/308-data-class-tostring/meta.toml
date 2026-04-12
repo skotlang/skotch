@@ -1,0 +1,4 @@
+name     = "308-data-class-tostring"
+status   = "supported"
+features = ["data-class", "toString", "explicit-call"]
+notes    = "Data class toString() called explicitly and implicitly via println()."

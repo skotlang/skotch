@@ -165,6 +165,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             // Skip modifier keywords that we recognize but don't enforce.
+            let mut is_data = false;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -176,6 +177,9 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwOverride
                     | TokenKind::KwData
             ) {
+                if self.peek_kind() == TokenKind::KwData {
+                    is_data = true;
+                }
                 self.bump();
                 self.skip_trivia();
             }
@@ -189,7 +193,9 @@ impl<'a> Parser<'a> {
                     decls.push(Decl::Val(v));
                 }
                 TokenKind::KwClass => {
-                    decls.push(Decl::Class(self.parse_class_decl()));
+                    let mut cd = self.parse_class_decl();
+                    cd.is_data = is_data;
+                    decls.push(Decl::Class(cd));
                 }
                 TokenKind::KwObject => {
                     let span = self.peek_span();
@@ -392,6 +398,7 @@ impl<'a> Parser<'a> {
         }
 
         ClassDecl {
+            is_data: false, // set by caller if `data` modifier present
             name,
             name_span,
             constructor_params,

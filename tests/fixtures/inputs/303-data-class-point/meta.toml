@@ -1,0 +1,4 @@
+name     = "303-data-class-point"
+status   = "supported"
+features = ["data-class", "toString", "println"]
+notes    = "Data class with synthesized toString()."

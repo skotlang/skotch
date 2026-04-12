@@ -1,0 +1,4 @@
+name     = "304-data-class-person"
+status   = "supported"
+features = ["data-class", "string", "int", "toString"]
+notes    = "Data class with String and Int fields."

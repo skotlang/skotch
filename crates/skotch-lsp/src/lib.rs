@@ -1202,4 +1202,17 @@ mod tests {
         let state = analyze_source(r#"fun main() { print("hello"); println() }"#);
         assert!(!state.diags.has_errors());
     }
+
+    #[test]
+    fn diagnostics_for_data_class() {
+        let src = "data class Point(val x: Int, val y: Int)\nfun main() { println(Point(1, 2)) }";
+        let state = analyze_source(src);
+        assert!(!state.diags.has_errors());
+    }
+
+    #[test]
+    fn diagnostics_for_maxof() {
+        let state = analyze_source("fun main() { println(maxOf(1, 2)) }");
+        assert!(!state.diags.has_errors());
+    }
 }

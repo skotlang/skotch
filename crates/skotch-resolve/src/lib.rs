@@ -91,6 +91,11 @@ pub fn resolve_file(
     r.out.top_level.insert(println_sym, DefId::PrintlnIntrinsic);
     let print_sym = r.interner.intern("print");
     r.out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
+    // Register stdlib top-level functions.
+    for name in &["maxOf", "minOf"] {
+        let sym = r.interner.intern(name);
+        r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId
+    }
 
     // First pass: register every top-level fun/val by name so order doesn't matter.
     for (i, decl) in file.decls.iter().enumerate() {

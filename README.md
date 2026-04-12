@@ -178,15 +178,14 @@ golden" tests still catch regressions in skotch's own emitter.
 
 **Estimated coverage: ~50% of the Kotlin language specification.** The compiler
 handles functions with **default parameter values**, `print()`/`println()`,
-complete control flow (if/else/when/for/while/do-while/break/continue),
-try/finally, numeric types (Int, Long, Double), Boolean, String with 15+
-instance methods (`.length`, `.uppercase()`, `.get()`, `.contains()`,
-`.replace()`, `.compareTo()`, `.equals()`, `.toInt()`, `.toLong()`, etc.),
-Char, classes with constructors/methods/field access/init blocks, null
-literals, const val, visibility modifiers, nullable types with elvis (`?:`),
-and Java static method interop. Does not yet support inheritance, generics,
-lambdas, or collections. 250+ test fixtures validated across JVM, DEX, LLVM
-IR, and klib targets. A Language Server Protocol (LSP) implementation provides
+**data classes** with synthesized `toString()`, `maxOf()`/`minOf()`, complete
+control flow (if/else/when/for/while/do-while/break/continue), try/finally,
+numeric types (Int, Long, Double), Boolean, String with 18+ instance methods,
+Char, classes with constructors/methods/field access/init blocks, null literals,
+const val, visibility modifiers, nullable types with elvis (`?:`), and Java
+static method interop. Does not yet support inheritance, generics, lambdas,
+or collections. 260+ test fixtures validated across JVM, DEX, LLVM IR, and
+klib targets. A Language Server Protocol (LSP) implementation provides
 real-time diagnostics, semantic tokens, hover, go-to-definition, and
 completions.
 
@@ -199,6 +198,7 @@ completions.
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
+| [Data classes](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | §4.5.6 | `data class Point(val x: Int, val y: Int)` — synthesized `toString()` producing `"Point(x=1, y=2)"` |
 | [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access, instance methods, `init` blocks, `invokevirtual` dispatch |
 | [Const val](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `const val` compile-time constants inlined at call site |
 | [Visibility modifiers](https://kotlinlang.org/spec/declarations.html#declaration-modifiers) | §4.3 | `private`, `internal`, `protected`, `open`, `abstract` — parsed and accepted (not yet enforced) |
@@ -245,7 +245,7 @@ completions.
 |---|---|---|---|
 | Class body properties | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Medium | `var count: Int = 0` in class body, `count++` |
 | Inheritance & override | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Hard | `open class`, `override fun`, `super` calls |
-| Data classes | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Hard | Synthesized equals/hashCode/toString/copy |
+| Data class equals/hashCode/copy | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Medium | `toString()` works; `equals()`/`hashCode()`/`copy()`/`componentN()` not yet synthesized |
 | Interfaces | [§4.5.3](https://kotlinlang.org/spec/declarations.html#interface-declaration) | Hard | Declaration, implementation, default methods |
 | Enums | [§4.5.7](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | Medium | Enum constants, entries, values() |
 | Sealed classes | [§4.5.5](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | Hard | Sealed hierarchies, exhaustive when |
