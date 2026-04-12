@@ -1,0 +1,4 @@
+name     = "311-method-chain-types"
+status   = "supported"
+features = ["string", "method-chain", "type-inference"]
+notes    = "Method calls return correct types for chaining and arithmetic."

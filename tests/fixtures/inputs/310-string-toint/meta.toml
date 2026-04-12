@@ -1,0 +1,4 @@
+name     = "310-string-toint"
+status   = "supported"
+features = ["string", "toInt", "toDouble", "toLong", "arithmetic"]
+notes    = "String-to-numeric conversion with arithmetic on result."

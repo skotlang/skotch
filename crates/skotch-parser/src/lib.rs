@@ -1573,7 +1573,7 @@ mod tests {
             panic!("expected ident callee")
         };
         assert_eq!(args.len(), 1);
-        let Expr::StringLit(s, _) = &args[0] else {
+        let Expr::StringLit(s, _) = &args[0].expr else {
             panic!("expected string arg")
         };
         assert_eq!(s, "Hello, world!");
@@ -1590,7 +1590,7 @@ mod tests {
             panic!()
         };
         assert_eq!(args.len(), 1);
-        assert!(matches!(args[0], Expr::IntLit(42, _)));
+        assert!(matches!(args[0].expr, Expr::IntLit(42, _)));
     }
 
     #[test]
@@ -1625,7 +1625,7 @@ mod tests {
             panic!()
         };
         // Should parse as 1 + (2 * 3) — check the outer is `+`.
-        let Expr::Binary { op: BinOp::Add, .. } = args[0] else {
+        let Expr::Binary { op: BinOp::Add, .. } = args[0].expr else {
             panic!("expected outer Add");
         };
     }

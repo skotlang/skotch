@@ -52,6 +52,9 @@ unique_name=inputkt
       ],
       "return_ty": "Unit",
       "required_params": 1,
+      "param_names": [
+        "name"
+      ],
       "param_defaults": [
         null
       ]
