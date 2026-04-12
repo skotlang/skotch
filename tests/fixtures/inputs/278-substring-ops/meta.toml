@@ -1,0 +1,4 @@
+name     = "278-substring-ops"
+status   = "supported"
+features = ["string", "substring", "trim"]
+notes    = "String.substring() and String.trim() operations."

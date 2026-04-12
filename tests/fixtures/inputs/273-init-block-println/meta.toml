@@ -1,0 +1,4 @@
+name     = "273-init-block-println"
+status   = "supported"
+features = ["class", "init-block", "println", "string-template", "method"]
+notes    = "Init block executes during construction."

@@ -1,0 +1,4 @@
+name     = "276-int-tostring"
+status   = "supported"
+features = ["int", "toString", "method-call"]
+notes    = "Int.toString() method call."

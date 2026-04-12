@@ -1,0 +1,4 @@
+name     = "275-string-length"
+status   = "supported"
+features = ["string", "length", "property"]
+notes    = "String.length property access."

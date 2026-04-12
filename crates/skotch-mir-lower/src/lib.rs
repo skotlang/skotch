@@ -1265,9 +1265,84 @@ fn lower_expr(
                 }
 
                 // Check if receiver is a class instance for virtual dispatch.
-                let recv_ty = &fb.mf.locals[recv_local.0 as usize];
+                let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
-                let (kind, dest_ty) = if let Ty::Class(class_name) = recv_ty {
+
+                // Handle built-in type methods (String, Int, etc.).
+                let builtin = match (&recv_ty, method_name_str.as_str()) {
+                    // String methods
+                    (Ty::String, "length") => Some(("java/lang/String", "length", "()I", Ty::Int)),
+                    (Ty::String, "isEmpty") => {
+                        Some(("java/lang/String", "isEmpty", "()Z", Ty::Bool))
+                    }
+                    (Ty::String, "uppercase") => Some((
+                        "java/lang/String",
+                        "toUpperCase",
+                        "()Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::String, "lowercase") => Some((
+                        "java/lang/String",
+                        "toLowerCase",
+                        "()Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::String, "trim") => Some((
+                        "java/lang/String",
+                        "trim",
+                        "()Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::String, "substring") if args.len() == 1 => Some((
+                        "java/lang/String",
+                        "substring",
+                        "(I)Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    (Ty::String, "substring") if args.len() == 2 => Some((
+                        "java/lang/String",
+                        "substring",
+                        "(II)Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    // Int methods
+                    (Ty::Int, "toString") => Some((
+                        "java/lang/Integer",
+                        "toString",
+                        "(I)Ljava/lang/String;",
+                        Ty::String,
+                    )),
+                    _ => None,
+                };
+                if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = builtin {
+                    let dest = fb.new_local(ret_ty);
+                    // Use StaticJava with explicit descriptor for precise control.
+                    // The JVM backend emits invokestatic for this, but for instance
+                    // methods on String we need invokevirtual. We'll handle this
+                    // by using Virtual call kind for non-static methods.
+                    let is_instance = matches!(&recv_ty, Ty::String);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: if is_instance {
+                                CallKind::Virtual {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                }
+                            } else {
+                                CallKind::StaticJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            },
+                            args: all_args,
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                let (kind, dest_ty) = if let Ty::Class(class_name) = &recv_ty {
                     // Look up method in class.
                     let return_ty = module
                         .classes
@@ -1795,6 +1870,23 @@ fn lower_expr(
                             receiver: recv_local,
                             class_name,
                             field_name,
+                        },
+                    });
+                    return Some(dest);
+                }
+                // Handle built-in type properties.
+                let field_name = interner.resolve(*name).to_string();
+                if matches!(recv_ty, Ty::String) && field_name == "length" {
+                    // String.length → invokevirtual String.length()I
+                    let dest = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Virtual {
+                                class_name: "java/lang/String".to_string(),
+                                method_name: "length".to_string(),
+                            },
+                            args: vec![recv_local],
                         },
                     });
                     return Some(dest);
@@ -2356,24 +2448,87 @@ fn lower_class(
     }
     // Initialize body properties with default values.
     for prop in &c.properties {
-        if let Some(Expr::IntLit(v, _)) = &prop.init {
-            {
-                let val_id = init_fn.new_local(Ty::Int);
-                init_fn.blocks[0].stmts.push(MStmt::Assign {
-                    dest: val_id,
-                    value: Rvalue::Const(MirConst::Int(*v as i32)),
-                });
-                let field_name = interner.resolve(prop.name).to_string();
-                init_fn.blocks[0].stmts.push(MStmt::Assign {
-                    dest: this_id, // dummy
-                    value: Rvalue::PutField {
-                        receiver: this_id,
-                        class_name: class_name.clone(),
-                        field_name,
-                        value: val_id,
-                    },
-                });
+        let (val, ty) = if let Some(init) = &prop.init {
+            match init {
+                Expr::IntLit(v, _) => (Some(MirConst::Int(*v as i32)), Ty::Int),
+                Expr::DoubleLit(v, _) => (Some(MirConst::Double(*v)), Ty::Double),
+                Expr::BoolLit(v, _) => (Some(MirConst::Bool(*v)), Ty::Bool),
+                Expr::StringLit(s, _) => {
+                    let sid = module.intern_string(s);
+                    (Some(MirConst::String(sid)), Ty::String)
+                }
+                _ => (None, Ty::Int),
             }
+        } else {
+            (None, Ty::Int)
+        };
+        if let Some(c_val) = val {
+            let val_id = init_fn.new_local(ty);
+            init_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: val_id,
+                value: Rvalue::Const(c_val),
+            });
+            let field_name = interner.resolve(prop.name).to_string();
+            init_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: this_id, // dummy
+                value: Rvalue::PutField {
+                    receiver: this_id,
+                    class_name: class_name.clone(),
+                    field_name,
+                    value: val_id,
+                },
+            });
+        }
+    }
+
+    // Lower init blocks — execute statements in the constructor.
+    // We need a FnBuilder-like scope for the init block body. Since init_fn
+    // is a raw MirFunction (not a FnBuilder), we create a temporary FnBuilder,
+    // lower the init block stmts, then merge the resulting stmts back.
+    if !c.init_blocks.is_empty() {
+        let init_fn_idx = module.functions.len() + 1000; // temporary index
+        let mut fb = FnBuilder::new(init_fn_idx, "<init>".to_string(), Ty::Unit);
+        // Transfer existing locals and stmts from init_fn into the FnBuilder.
+        fb.mf.locals = init_fn.locals.clone();
+        fb.mf.params = init_fn.params.clone();
+        fb.mf.blocks[0].stmts = init_fn.blocks[0].stmts.clone();
+
+        let this_sym = interner.intern("this");
+        let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_id)];
+        // Add constructor param names to scope.
+        let mut param_idx = 1usize; // skip 'this' at 0
+        for p in &c.constructor_params {
+            if p.is_val || p.is_var {
+                if param_idx < fb.mf.params.len() {
+                    let param_local = fb.mf.params[param_idx];
+                    scope.push((p.name, param_local));
+                }
+                param_idx += 1;
+            }
+        }
+
+        for init_block in &c.init_blocks {
+            for s in &init_block.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+        }
+
+        // Transfer the results back to init_fn.
+        init_fn.locals = fb.mf.locals;
+        init_fn.blocks = fb.mf.blocks;
+        // Ensure the last block terminates with Return.
+        if let Some(last) = init_fn.blocks.last_mut() {
+            last.terminator = Terminator::Return;
         }
     }
 

@@ -1,0 +1,4 @@
+name     = "277-class-init-greeting"
+status   = "supported"
+features = ["class", "init-block", "string-template", "method", "expression-body"]
+notes    = "Class with init block printing during construction."

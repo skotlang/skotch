@@ -1,0 +1,4 @@
+name     = "274-string-methods"
+status   = "supported"
+features = ["string", "length", "uppercase", "lowercase", "isEmpty"]
+notes    = "String instance methods: length, uppercase, lowercase, isEmpty."
