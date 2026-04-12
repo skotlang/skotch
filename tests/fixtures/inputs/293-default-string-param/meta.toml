@@ -1,0 +1,4 @@
+name     = "293-default-string-param"
+status   = "supported"
+features = ["default-args", "string", "string-template"]
+notes    = "String default parameter with template usage."

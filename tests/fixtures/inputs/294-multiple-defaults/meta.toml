@@ -1,0 +1,4 @@
+name     = "294-multiple-defaults"
+status   = "supported"
+features = ["default-args", "multiple", "string-template"]
+notes    = "Function with multiple default parameters."

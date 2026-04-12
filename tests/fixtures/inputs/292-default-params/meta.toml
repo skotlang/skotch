@@ -1,0 +1,4 @@
+name     = "292-default-params"
+status   = "supported"
+features = ["default-args", "fun", "expression-body"]
+notes    = "Function with default parameter value."

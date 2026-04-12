@@ -176,26 +176,27 @@ golden" tests still catch regressions in skotch's own emitter.
 
 ## Kotlin language support
 
-**Estimated coverage: ~45% of the Kotlin language specification.** The compiler
-handles functions (including recursion, multi-parameter, expression-body, guard
-clauses), complete control flow (if/else/when/for/while/do-while/break/continue),
-try/finally, numeric types (Int, Long with `L` suffix, Double), Boolean, String
-with 12 instance methods, Char, classes with constructors/methods/field
-access/init blocks, null literals, const val, visibility modifiers, nullable types
-with the elvis operator (`?:`), and Java static method interop. String templates
-work with all types including Long and Double. Long/Double/Int have `.toString()`
-methods. The parser additionally recognizes safe call (`?.`), non-null assert
-(`!!`), type checks (`is`/`!is`), type casts (`as`/`as?`), try/catch, and throw.
-Does not yet support inheritance, generics, lambdas, or the standard library
-collection APIs. 230+ test fixtures validated across JVM, DEX, LLVM IR, and klib
-targets. A Language Server Protocol (LSP) implementation provides real-time
-diagnostics, semantic tokens, hover, go-to-definition, and completions.
+**Estimated coverage: ~45–50% of the Kotlin language specification.** The compiler
+handles functions with **default parameter values** (including recursion,
+multi-parameter, expression-body, guard clauses), complete control flow
+(if/else/when/for/while/do-while/break/continue), try/finally, numeric types
+(Int, Long with `L` suffix, Double), Boolean, String with 12 instance methods,
+Char, classes with constructors/methods/field access/init blocks, null literals,
+const val, visibility modifiers, nullable types with the elvis operator (`?:`),
+and Java static method interop. String templates work with all types including
+Long and Double. The parser additionally recognizes safe call (`?.`), non-null
+assert (`!!`), type checks (`is`/`!is`), type casts (`as`/`as?`), try/catch,
+and throw. Does not yet support inheritance, generics, lambdas, or the standard
+library collection APIs. 240+ test fixtures validated across JVM, DEX, LLVM IR,
+and klib targets. A Language Server Protocol (LSP) implementation provides
+real-time diagnostics, semantic tokens, hover, go-to-definition, and completions.
 
 ### Implemented and stable
 
 | Feature | Spec reference | Notes |
 |---|---|---|
 | [Function declarations](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | Top-level `fun`, parameters, return types |
+| [Default parameters](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.1 | `fun f(x: Int = 10)` — literal defaults injected at call sites |
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
@@ -257,7 +258,6 @@ diagnostics, semantic tokens, hover, go-to-definition, and completions.
 | Try/catch | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; catch blocks need JVM exception tables |
 | Throw expression | [§7.4.6](https://kotlinlang.org/spec/expressions.html#throw-expressions) | Medium | Parsed; needs `athrow` opcode |
 | Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
-| Default arguments | [§4.1.1](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | Synthetic `$default` overload |
 | Named arguments | [§7.2.2](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | Medium | Call-site argument reordering |
 | Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
 | Type aliases | [§4.7](https://kotlinlang.org/spec/declarations.html#type-alias) | Easy | `typealias` erased at compile time |

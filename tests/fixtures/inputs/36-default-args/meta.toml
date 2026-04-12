@@ -1,3 +1,4 @@
-name = "36-default-args"
-status = "stub"
-reason = "Default arguments synthesize a $default trampoline overload."
+name     = "36-default-args"
+status   = "supported"
+features = ["default-args", "fun", "string-template"]
+notes    = "Default argument values injected at call site from MIR constants."
