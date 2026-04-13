@@ -353,7 +353,17 @@ pub fn run_script(path: &Path) -> Result<String> {
     let jvm = EmbeddedJvm::new()?;
     let source =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let wrapped = wrap_script(&source);
+
+    // Resolve @file:DependsOn / @file:Repository annotations.
+    let (deps, clean_source) = skotch_tape::resolve_script_deps(&source)?;
+    if !deps.is_empty() {
+        // Add resolved JARs to the JVM classpath.
+        for jar in &deps.jars {
+            jvm.add_jar_to_classpath(jar)?;
+        }
+    }
+
+    let wrapped = wrap_script(&clean_source);
     let class_name = unique_class_name("Script");
     compile_and_run_jni(&wrapped, &jvm, &class_name)
 }

@@ -41,6 +41,7 @@ members = [
     "crates/skotch-sign",
     "crates/skotch-classinfo",
     "crates/skotch-buildscript",
+    "crates/skotch-tape",
 
     # Layer 7 — incremental compilation database
     "crates/skotch-db",
@@ -122,6 +123,11 @@ dashmap      = "6"
 # XDG-compliant directories
 directories  = "6"
 
+# Maven dependency resolution (skotch-tape)
+reqwest      = { version = "0.12", features = ["blocking"] }
+roxmltree    = "0.20"
+indicatif    = "0.17"
+
 # incremental computation + parallelism
 salsa        = "0.26"
 rayon        = "1.10"
@@ -158,6 +164,7 @@ skotch-axml            = { path = "crates/skotch-axml" }
 skotch-apk             = { path = "crates/skotch-apk" }
 skotch-sign            = { path = "crates/skotch-sign" }
 skotch-buildscript     = { path = "crates/skotch-buildscript" }
+skotch-tape            = { path = "crates/skotch-tape" }
 skotch-db              = { path = "crates/skotch-db" }
 skotch-build           = { path = "crates/skotch-build" }
 skotch-driver          = { path = "crates/skotch-driver" }

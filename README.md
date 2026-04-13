@@ -463,6 +463,4 @@ under `tests/fixtures/inputs/2X-*/` with `status = "stub"` in their
 `meta.toml` so they can graduate to "supported" as the corresponding
 backend support lands.
 
-## License
 
-Apache-2.0

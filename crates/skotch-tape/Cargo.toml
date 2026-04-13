@@ -1,0 +1,13 @@
+[package]
+name         = "skotch-tape"
+version      = { workspace = true }
+edition      = { workspace = true }
+license      = { workspace = true }
+description  = "Maven dependency resolver: @file:DependsOn → classpath JARs"
+
+[dependencies]
+anyhow       = { workspace = true }
+directories  = { workspace = true }
+reqwest      = { workspace = true }
+roxmltree    = { workspace = true }
+indicatif    = { workspace = true }
