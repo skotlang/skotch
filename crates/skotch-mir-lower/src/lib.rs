@@ -1162,7 +1162,14 @@ fn lower_expr(
             {
                 if let Expr::Ident(var_name, _) = checked.as_ref() {
                     let type_str = interner.resolve(*type_name);
-                    let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or(Ty::Any);
+                    let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
+                        // Check if it's a user-defined class/interface.
+                        if module.classes.iter().any(|c| c.name == type_str) {
+                            Ty::Class(type_str.to_string())
+                        } else {
+                            Ty::Any
+                        }
+                    });
                     // Find the variable's current local.
                     if let Some((_, old_local)) = scope.iter().rev().find(|(s, _)| s == var_name) {
                         // Create a new local with the narrowed type.
