@@ -119,6 +119,9 @@ tower-lsp    = "0.20"
 tokio        = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 dashmap      = "6"
 
+# XDG-compliant directories
+directories  = "6"
+
 # incremental computation + parallelism
 salsa        = "0.26"
 rayon        = "1.10"

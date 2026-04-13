@@ -102,6 +102,29 @@ enum Command {
 }
 
 fn main() -> Result<()> {
+    // ── Shebang support ─────────────────────────────────────────────
+    // When invoked as `#!/usr/bin/env skotch`, the OS passes the script
+    // path as the first argument: `skotch myscript.kts`. Detect this
+    // and route to the `run` subcommand automatically.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 {
+        let first_arg = &args[1];
+        if !first_arg.starts_with('-')
+            && !matches!(
+                first_arg.as_str(),
+                "emit" | "repl" | "run" | "build" | "lsp" | "test" | "help"
+            )
+            && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
+        {
+            let path = std::path::PathBuf::from(first_arg);
+            if path.exists() {
+                let captured = skotch_repl::run_script(&path)?;
+                print!("{captured}");
+                return Ok(());
+            }
+        }
+    }
+
     let cli = Cli::parse();
     match cli.cmd {
         Command::Emit {
