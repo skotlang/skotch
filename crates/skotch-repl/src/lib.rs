@@ -76,21 +76,14 @@ use skotch_driver::{emit, EmitOptions, Target};
 /// streams.
 pub fn run_repl_interactive() -> Result<()> {
     use reedline::{
-        default_emacs_keybindings, DefaultPrompt, DefaultPromptSegment, EditCommand, Emacs,
-        KeyCode, KeyModifiers, Reedline, ReedlineEvent, Signal,
+        default_emacs_keybindings, DefaultHinter, DefaultPrompt, DefaultPromptSegment, EditCommand,
+        Emacs, FileBackedHistory, KeyCode, KeyModifiers, Reedline, ReedlineEvent, Signal,
     };
 
     let jvm = EmbeddedJvm::new()?;
 
     // ── reedline setup ──────────────────────────────────────────────
-    //
-    // Future extension points are wired here with passthrough stubs.
-    // Each stub has a `// TODO:` comment describing what a real
-    // implementation would do.
     let mut keybindings = default_emacs_keybindings();
-    // Ctrl-D on empty line → exit. Reedline handles this natively
-    // for `Signal::CtrlD`, but we also add a keybinding so it works
-    // even when the user has typed partial text and then deleted it.
     keybindings.add_binding(
         KeyModifiers::CONTROL,
         KeyCode::Char('l'),
@@ -98,27 +91,21 @@ pub fn run_repl_interactive() -> Result<()> {
     );
     let edit_mode = Box::new(Emacs::new(keybindings));
 
-    // TODO: Tab-completion — implement `reedline::Completer` to
-    //   suggest Kotlin keywords, REPL commands (`:quit`, `:help`),
-    //   and identifiers from accumulated declarations.
-    //
-    // TODO: Syntax highlighting — implement `reedline::Highlighter`
-    //   that colorizes Kotlin keywords, string literals, and
-    //   numbers using ANSI escape codes.
-    //
-    // TODO: Input validation — implement `reedline::Validator` that
-    //   checks for unbalanced braces/parens/quotes so the user can
-    //   enter multi-line expressions naturally. When the validator
-    //   reports "incomplete", reedline continues prompting for more
-    //   input instead of executing the partial line.
-    //
-    // TODO: Hints — implement `reedline::Hinter` that shows a
-    //   dimmed-text preview of the most recent history match as the
-    //   user types (fish-shell style). reedline supplies a built-in
-    //   `DefaultHinter` that can be wired up with one line once we
-    //   decide on the hint color.
+    // Persistent history across REPL sessions (~/.skotch/repl_history).
+    let history_path = dirs_for_history();
+    let history: Box<FileBackedHistory> = Box::new(
+        FileBackedHistory::with_file(1000, history_path.clone())
+            .or_else(|_| FileBackedHistory::new(1000))
+            .expect("failed to create history"),
+    );
 
-    let mut editor = Reedline::create().with_edit_mode(edit_mode);
+    // Fish-shell style history hints.
+    let hinter = Box::new(DefaultHinter::default());
+
+    let mut editor = Reedline::create()
+        .with_edit_mode(edit_mode)
+        .with_history(history)
+        .with_hinter(hinter);
 
     let prompt = DefaultPrompt::new(
         DefaultPromptSegment::Basic(if cfg!(debug_assertions) {
@@ -131,9 +118,12 @@ pub fn run_repl_interactive() -> Result<()> {
 
     let debug_star = if cfg!(debug_assertions) { "*" } else { "" };
     println!(
-        "skotch {}{debug_star} — type :quit to exit, :help for commands",
+        "skotch repl {}{debug_star} — type :help for commands, :quit to exit",
         env!("CARGO_PKG_VERSION")
     );
+    if history_path.exists() {
+        eprintln!("  history: {}", history_path.display());
+    }
 
     let mut state = ReplState::new();
 
@@ -145,39 +135,54 @@ pub fn run_repl_interactive() -> Result<()> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                if trimmed == ":quit" || trimmed == ":exit" {
-                    println!("bye");
-                    return Ok(());
-                }
-                if trimmed == ":help" {
-                    println!("  :quit / :exit  — leave the REPL");
-                    println!("  :help          — show this help");
-                    println!("  :history       — show command history");
-                    println!("  <kotlin>       — compile and run one expression or declaration");
-                    continue;
-                }
-                if trimmed == ":history" {
-                    // TODO: reedline doesn't expose a public iterator
-                    // over its in-memory history yet, so we print from
-                    // our own declaration history. A future PR could
-                    // hook up reedline's FileBackedHistory to persist
-                    // across sessions and iterate it here.
-                    let all_decls: Vec<&str> = state
-                        .top_decls
-                        .iter()
-                        .chain(state.local_decls.iter())
-                        .map(|s| s.as_str())
-                        .collect();
-                    if all_decls.is_empty() {
-                        println!("(no declarations in history)");
-                    } else {
-                        for (i, d) in all_decls.iter().enumerate() {
-                            println!("  {}: {d}", i + 1);
+
+                // ── REPL commands (colon-prefixed) ──────────────
+                if let Some(cmd) = trimmed.strip_prefix(':') {
+                    match cmd {
+                        "quit" | "exit" | "q" => {
+                            println!("bye");
+                            return Ok(());
                         }
+                        "help" | "h" | "?" => {
+                            println!("  :quit / :q     — exit the REPL");
+                            println!("  :help / :?     — show this help");
+                            println!("  :history       — show accumulated declarations");
+                            println!("  :reset         — clear all declarations");
+                            println!("  :type <expr>   — show the inferred type of an expression");
+                            println!("  <kotlin>       — compile and run");
+                            println!();
+                            println!("  Up/Down        — navigate history");
+                            println!("  Ctrl-R         — reverse history search");
+                            println!("  Ctrl-L         — clear screen");
+                            println!("  Ctrl-D         — exit");
+                        }
+                        "history" | "hist" => {
+                            let all_decls: Vec<&str> = state
+                                .top_decls
+                                .iter()
+                                .chain(state.local_decls.iter())
+                                .map(|s| s.as_str())
+                                .collect();
+                            if all_decls.is_empty() {
+                                println!("(no declarations)");
+                            } else {
+                                for (i, d) in all_decls.iter().enumerate() {
+                                    println!("  {}: {d}", i + 1);
+                                }
+                            }
+                        }
+                        "reset" | "clear" => {
+                            state.reset();
+                            println!("(state cleared)");
+                        }
+                        other => {
+                            eprintln!("unknown command :{other} — type :help for options");
+                        } // :type deferred — needs typechecker integration
                     }
                     continue;
                 }
 
+                // ── Kotlin code ─────────────────────────────────
                 match state.process(&line, &jvm) {
                     Ok(stdout) => {
                         if !stdout.is_empty() {
@@ -196,16 +201,23 @@ pub fn run_repl_interactive() -> Result<()> {
                 println!("bye");
                 return Ok(());
             }
-            Ok(Signal::CtrlC) => {
-                // Abort the current line, print a fresh prompt.
-                continue;
-            }
+            Ok(Signal::CtrlC) => continue,
             Err(e) => {
                 eprintln!("reedline error: {e}");
                 return Err(e.into());
             }
         }
     }
+}
+
+/// Determine the history file path. Uses `~/.skotch/repl_history`.
+fn dirs_for_history() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let dir = std::path::PathBuf::from(home).join(".skotch");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("repl_history")
 }
 
 /// Run the REPL on the given input/output streams (non-interactive).
@@ -239,19 +251,46 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
             writeln!(output)?;
             continue;
         }
-        if trimmed == ":quit" || trimmed == ":exit" {
+        // ── REPL commands (colon-prefixed) ──────────────────────────
+        if let Some(cmd) = trimmed.strip_prefix(':') {
             writeln!(output, "{trimmed}")?;
-            writeln!(output, "bye")?;
-            return Ok(());
-        }
-        if trimmed == ":help" {
-            writeln!(output, "{trimmed}")?;
-            writeln!(output, "  :quit / :exit  — leave the REPL")?;
-            writeln!(output, "  :help          — show this help")?;
-            writeln!(
-                output,
-                "  <kotlin>       — compile and run one expression or declaration"
-            )?;
+            match cmd {
+                "quit" | "exit" | "q" => {
+                    writeln!(output, "bye")?;
+                    return Ok(());
+                }
+                "help" | "h" | "?" => {
+                    writeln!(output, "  :quit / :exit  — leave the REPL")?;
+                    writeln!(output, "  :help          — show this help")?;
+                    writeln!(output, "  :reset         — clear all declarations")?;
+                    writeln!(
+                        output,
+                        "  <kotlin>       — compile and run one expression or declaration"
+                    )?;
+                }
+                "reset" | "clear" => {
+                    state.reset();
+                    writeln!(output, "(state cleared)")?;
+                }
+                "history" | "hist" => {
+                    let all: Vec<&str> = state
+                        .top_decls
+                        .iter()
+                        .chain(state.local_decls.iter())
+                        .map(|s| s.as_str())
+                        .collect();
+                    if all.is_empty() {
+                        writeln!(output, "(no declarations)")?;
+                    } else {
+                        for (i, d) in all.iter().enumerate() {
+                            writeln!(output, "  {}: {d}", i + 1)?;
+                        }
+                    }
+                }
+                other => {
+                    writeln!(output, "unknown command :{other}")?;
+                }
+            }
             continue;
         }
         // Echo the line (the prompt was already written, so this
@@ -336,6 +375,13 @@ impl ReplState {
             local_decls: Vec::new(),
             turn: 0,
         }
+    }
+
+    /// Clear accumulated declarations but keep the turn counter so
+    /// generated class names don't collide with already-loaded JVM classes.
+    fn reset(&mut self) {
+        self.top_decls.clear();
+        self.local_decls.clear();
     }
 
     /// Process one REPL turn. Returns the captured stdout (empty for

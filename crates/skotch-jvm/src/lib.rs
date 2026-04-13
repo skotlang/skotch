@@ -282,15 +282,100 @@ impl EmbeddedJvm {
             let main_id = env
                 .get_static_method_id(&defined, "main", "([Ljava/lang/String;)V")
                 .map_err(|e| anyhow!("GetStaticMethodID main: {e}"))?;
-            env.call_static_method_unchecked(
+            let result = env.call_static_method_unchecked(
                 &defined,
                 main_id,
                 jni::signature::ReturnType::Primitive(jni::signature::Primitive::Void),
                 &[JValue::Object(&JObject::from_raw(empty_args.into_raw())).as_jni()],
-            )
-            .map_err(|e| anyhow!("main() call failed: {e}"))?;
+            );
+            if result.is_err() {
+                // Extract the Java exception details before clearing it.
+                let detail = Self::extract_exception_detail(env);
+                env.exception_clear().ok();
+                return Err(anyhow!("main() call failed:\n{detail}"));
+            }
         }
         Ok(())
+    }
+
+    /// Extract exception class name, message, and stack trace from a
+    /// pending Java exception. Returns a formatted string for diagnostics.
+    fn extract_exception_detail(env: &mut jni::JNIEnv<'_>) -> String {
+        // Check if there's an exception pending.
+        let ex = match env.exception_occurred() {
+            Ok(ex) if !ex.is_null() => ex,
+            _ => return "Java exception was thrown (no details available)".to_string(),
+        };
+        // Must clear the exception before making JNI calls to inspect it.
+        env.exception_clear().ok();
+
+        // Get the exception's toString() for a one-line summary.
+        let summary = (|| -> Option<String> {
+            let val = env
+                .call_method(&ex, "toString", "()Ljava/lang/String;", &[])
+                .ok()?;
+            let obj = val.l().ok()?;
+            let jstr = env.get_string((&obj).into()).ok()?;
+            Some(jstr.to_string_lossy().into_owned())
+        })()
+        .unwrap_or_else(|| "(unknown exception)".to_string());
+
+        // Get the stack trace via getStackTrace() → StackTraceElement[].
+        let mut trace = String::new();
+        if let Ok(arr_val) = env.call_method(
+            &ex,
+            "getStackTrace",
+            "()[Ljava/lang/StackTraceElement;",
+            &[],
+        ) {
+            if let Ok(arr_obj) = arr_val.l() {
+                let arr: jni::objects::JObjectArray = arr_obj.into();
+                let len = env.get_array_length(&arr).unwrap_or(0);
+                for i in 0..len.min(20) {
+                    // cap at 20 frames
+                    if let Ok(elem) = env.get_object_array_element(&arr, i) {
+                        if let Ok(s) =
+                            env.call_method(&elem, "toString", "()Ljava/lang/String;", &[])
+                        {
+                            if let Ok(obj) = s.l() {
+                                if let Ok(jstr) = env.get_string((&obj).into()) {
+                                    trace.push_str("    at ");
+                                    trace.push_str(&jstr.to_string_lossy());
+                                    trace.push('\n');
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get the cause chain.
+        let mut cause_str = String::new();
+        let mut current_cause = env
+            .call_method(&ex, "getCause", "()Ljava/lang/Throwable;", &[])
+            .ok()
+            .and_then(|v| v.l().ok());
+        while let Some(ref cause) = current_cause {
+            if cause.is_null() {
+                break;
+            }
+            if let Ok(cs) = env.call_method(cause, "toString", "()Ljava/lang/String;", &[]) {
+                if let Ok(obj) = cs.l() {
+                    if let Ok(jstr) = env.get_string((&obj).into()) {
+                        cause_str.push_str("Caused by: ");
+                        cause_str.push_str(&jstr.to_string_lossy());
+                        cause_str.push('\n');
+                    }
+                }
+            }
+            current_cause = env
+                .call_method(cause, "getCause", "()Ljava/lang/Throwable;", &[])
+                .ok()
+                .and_then(|v| v.l().ok());
+        }
+
+        format!("{summary}\n{trace}{cause_str}")
     }
 
     /// Verify the JVM is alive.
