@@ -1,0 +1,2 @@
+status = "supported"
+features = ["enum", "enum-as-type", "when"]

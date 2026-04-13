@@ -8,4 +8,5 @@ description = "Backend-neutral mid-level IR for skotch"
 [dependencies]
 skotch-span  = { workspace = true }
 skotch-types = { workspace = true }
-serde      = { workspace = true }
+serde        = { workspace = true }
+rustc-hash   = { workspace = true }
