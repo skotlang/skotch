@@ -33,6 +33,23 @@ use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
+/// Resolve a type name to a `Ty`, checking built-in types first, then
+/// user-defined classes/enums in the module.
+fn resolve_type(name: &str, module: &MirModule) -> Ty {
+    if let Some(ty) = skotch_types::ty_from_name(name) {
+        return ty;
+    }
+    // Enum names map to String (enum entries are string-based).
+    if module.enum_names.contains(name) {
+        return Ty::String;
+    }
+    // User-defined class or interface.
+    if module.classes.iter().any(|c| c.name == name) {
+        return Ty::Class(name.to_string());
+    }
+    Ty::Any
+}
+
 /// Lower a parsed/resolved/typed file to MIR.
 pub fn lower_file(
     file: &KtFile,
@@ -96,6 +113,20 @@ pub fn lower_file(
             fn_pass1_idx += 1;
         }
     }
+
+    // Collect enum names so they can be recognized as types (mapped to String).
+    let enum_names: rustc_hash::FxHashSet<String> = file
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let Decl::Enum(e) = d {
+                Some(interner.resolve(e.name).to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    module.enum_names = enum_names;
 
     // ─── Pass 2: collect top-level val constants ────────────────────────
     //
@@ -199,7 +230,13 @@ pub fn lower_file(
                 );
             }
             Decl::Enum(e) => {
-                lower_enum(e, &mut name_to_func, &mut module, interner);
+                lower_enum(
+                    e,
+                    &mut name_to_func,
+                    &mut name_to_global,
+                    &mut module,
+                    interner,
+                );
             }
             Decl::Interface(iface) => {
                 lower_interface(
@@ -348,11 +385,17 @@ fn lower_function(
     let return_ty = typed
         .map(|t| t.return_ty.clone())
         .or_else(|| {
-            f.return_ty
-                .as_ref()
-                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            f.return_ty.as_ref().map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
         })
         .unwrap_or(Ty::Unit);
+    // Override enum class return types to String.
+    let return_ty = match &return_ty {
+        Ty::Class(cn) if module.enum_names.contains(cn.as_str()) => Ty::String,
+        _ => return_ty,
+    };
     let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
 
     // Allocate parameter locals first so they get LocalId 0..N.
@@ -361,7 +404,7 @@ fn lower_function(
     // For extension functions: add the receiver as the first parameter.
     // It's accessible as `this` in the function body.
     if let Some(recv) = &f.receiver_ty {
-        let recv_ty = skotch_types::ty_from_name(interner.resolve(recv.name)).unwrap_or(Ty::Any);
+        let recv_ty = resolve_type(interner.resolve(recv.name), module);
         let id = fb.new_local(recv_ty);
         fb.mf.params.push(id);
         let this_sym = interner.intern("this");
@@ -369,14 +412,19 @@ fn lower_function(
     }
 
     for (pi, p) in f.params.iter().enumerate() {
-        let ty = typed
+        let mut ty = typed
             .and_then(|t| {
                 t.param_tys
                     .get(pi + if f.receiver_ty.is_some() { 1 } else { 0 })
                     .cloned()
             })
-            .or_else(|| skotch_types::ty_from_name(interner.resolve(p.ty.name)))
-            .unwrap_or(Ty::Any);
+            .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module));
+        // Override enum class types to String (enums are string-based).
+        if let Ty::Class(ref cn) = ty {
+            if module.enum_names.contains(cn.as_str()) {
+                ty = Ty::String;
+            }
+        }
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
         scope.push((p.name, id));
@@ -743,7 +791,10 @@ fn lower_stmt(
             let return_ty = f
                 .return_ty
                 .as_ref()
-                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+                .map(|tr| {
+                    let resolved = resolve_type(interner.resolve(tr.name), module);
+                    resolved
+                })
                 .unwrap_or(Ty::Unit);
             module.functions.push(MirFunction {
                 id: FuncId(fn_idx as u32),
@@ -2341,17 +2392,16 @@ fn lower_expr(
                 cmp_blks.push(fb.new_block());
                 body_blks.push(fb.new_block());
             }
-            let else_blk = if else_body.is_some() {
-                fb.new_block()
-            } else {
-                0 // unused
-            };
+            // Always create an else block — even without an explicit else body,
+            // we need it to assign a default value so the JVM verifier sees an
+            // initialized result on all paths.
+            let else_blk = fb.new_block();
             let merge_blk = fb.new_block();
 
             // First comparison block
             if !branches.is_empty() {
                 fb.terminate_and_switch(Terminator::Goto(cmp_blks[0]), cmp_blks[0]);
-            } else if else_body.is_some() {
+            } else {
                 fb.terminate_and_switch(Terminator::Goto(else_blk), else_blk);
             }
 
@@ -2433,10 +2483,8 @@ fn lower_expr(
 
                 let fall_through = if i + 1 < branches.len() {
                     cmp_blks[i + 1]
-                } else if else_body.is_some() {
-                    else_blk
                 } else {
-                    merge_blk
+                    else_blk
                 };
 
                 fb.terminate_and_switch(
@@ -2472,10 +2520,8 @@ fn lower_expr(
                 // Goto merge, switch to next comparison block
                 let next = if i + 1 < branches.len() {
                     cmp_blks[i + 1]
-                } else if else_body.is_some() {
-                    else_blk
                 } else {
-                    merge_blk
+                    else_blk
                 };
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), next);
             }
@@ -2501,7 +2547,21 @@ fn lower_expr(
                 }
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
             } else {
-                fb.cur_block = merge_blk;
+                // No else body — assign a default to the result local so the
+                // JVM verifier doesn't see an uninitialized local on the
+                // implicit fall-through path.
+                let result_ty = &fb.mf.locals[result.0 as usize];
+                let default_val = match result_ty {
+                    Ty::Int | Ty::Bool => MirConst::Int(0),
+                    Ty::Long => MirConst::Long(0),
+                    Ty::Double => MirConst::Double(0.0),
+                    _ => MirConst::Null,
+                };
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Const(default_val),
+                });
+                fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
             }
 
             Some(result)
@@ -2511,6 +2571,32 @@ fn lower_expr(
             name,
             span,
         } => {
+            // Check for enum member access: Color.RED.hex → stored constant.
+            if let Expr::Field {
+                name: entry_name, ..
+            } = receiver.as_ref()
+            {
+                let entry_str = interner.resolve(*entry_name);
+                let field_str = interner.resolve(*name);
+                let compound = format!("{}.{}", entry_str, field_str);
+                let compound_sym = interner.intern(&compound);
+                if let Some(c) = name_to_global.get(&compound_sym).cloned() {
+                    let ty = match &c {
+                        MirConst::Int(_) | MirConst::Bool(_) => Ty::Int,
+                        MirConst::Long(_) => Ty::Long,
+                        MirConst::Double(_) => Ty::Double,
+                        MirConst::String(_) => Ty::String,
+                        _ => Ty::Any,
+                    };
+                    let dest = fb.new_local(ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(c),
+                    });
+                    return Some(dest);
+                }
+            }
+
             // Check if this is an enum/object constant access (Color.RED).
             // If the field name is a known zero-arg function, call it.
             if let Some(&fid) = name_to_func.get(name) {
@@ -3209,14 +3295,13 @@ fn extract_qualified_name(expr: &Expr, interner: &Interner) -> Option<String> {
 fn lower_enum(
     e: &skotch_syntax::EnumDecl,
     name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    name_to_global: &mut FxHashMap<Symbol, MirConst>,
     module: &mut MirModule,
     interner: &mut Interner,
 ) {
     let enum_name = interner.resolve(e.name).to_string();
 
     // For each entry, create a function that returns the entry's name as a String.
-    // This is a simplified model — real enums have ordinals and are instances of a
-    // class, but for basic usage (when matching, println, .name) strings suffice.
     for (ordinal, entry) in e.entries.iter().enumerate() {
         let entry_name = interner.resolve(entry.name).to_string();
         let fn_idx = module.functions.len();
@@ -3226,7 +3311,7 @@ fn lower_enum(
         name_to_func.insert(entry.name, fn_id);
 
         let sid = module.intern_string(&entry_name);
-        let mut fb = FnBuilder::new(fn_idx, entry_name, Ty::String);
+        let mut fb = FnBuilder::new(fn_idx, entry_name.clone(), Ty::String);
         let result = fb.new_local(Ty::String);
         fb.push_stmt(MStmt::Assign {
             dest: result,
@@ -3235,7 +3320,19 @@ fn lower_enum(
         fb.set_terminator(Terminator::ReturnValue(result));
         module.add_function(fb.finish());
 
-        let _ = (ordinal, &enum_name); // used later for .ordinal/.value support
+        // Register entry constructor arg values as globals: RED.hex → 16711680
+        for (i, param) in e.constructor_params.iter().enumerate() {
+            if i < entry.args.len() {
+                let field_name = interner.resolve(param.name).to_string();
+                let compound_name = format!("{}.{}", entry_name, field_name);
+                let sym = interner.intern(&compound_name);
+                if let Some(c) = lower_const_init(&entry.args[i], module) {
+                    name_to_global.insert(sym, c);
+                }
+            }
+        }
+
+        let _ = (ordinal, &enum_name);
     }
 }
 
@@ -3278,7 +3375,10 @@ fn lower_object(
         let return_ty = method
             .return_ty
             .as_ref()
-            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
             .unwrap_or(Ty::Unit);
 
         // Register as a top-level function so Singleton.method() resolves.
@@ -3290,7 +3390,7 @@ fn lower_object(
         // Object methods have no `this` — they're effectively static.
         let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
         for p in &method.params {
-            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
             scope.push((p.name, id));
@@ -3332,7 +3432,7 @@ fn lower_class(
     let mut fields = Vec::new();
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
-            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
             fields.push(MirField {
                 name: interner.resolve(p.name).to_string(),
                 ty,
@@ -3343,7 +3443,10 @@ fn lower_class(
         let ty = prop
             .ty
             .as_ref()
-            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
             .unwrap_or(Ty::Int);
         fields.push(MirField {
             name: interner.resolve(prop.name).to_string(),
@@ -3377,7 +3480,7 @@ fn lower_class(
     let mut ctor_param_ids: Vec<(Symbol, LocalId)> = Vec::new();
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
-            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
             let param_id = init_fn.new_local(ty);
             init_fn.params.push(param_id);
             ctor_param_ids.push((p.name, param_id));
@@ -3554,7 +3657,10 @@ fn lower_class(
             let rty = m
                 .return_ty
                 .as_ref()
-                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+                .map(|tr| {
+                    let resolved = resolve_type(interner.resolve(tr.name), module);
+                    resolved
+                })
                 .unwrap_or(Ty::Unit);
             MirFunction {
                 id: FuncId(0),
@@ -3595,7 +3701,10 @@ fn lower_class(
         let return_ty = method
             .return_ty
             .as_ref()
-            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
             .unwrap_or(Ty::Unit);
 
         let fn_idx = module.functions.len() + mir_methods.len();
@@ -3609,7 +3718,7 @@ fn lower_class(
 
         // Add explicit parameters.
         for p in &method.params {
-            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
             scope.push((p.name, id));
@@ -3673,7 +3782,10 @@ fn lower_class(
         let return_ty = method
             .return_ty
             .as_ref()
-            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
             .unwrap_or(Ty::Unit);
 
         let fn_idx = module.functions.len();
@@ -3683,7 +3795,7 @@ fn lower_class(
         let mut fb = FnBuilder::new(fn_idx, method_name, return_ty);
         let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
         for p in &method.params {
-            let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
             scope.push((p.name, id));
@@ -3842,7 +3954,10 @@ fn lower_interface(
             let return_ty = m
                 .return_ty
                 .as_ref()
-                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+                .map(|tr| {
+                    let resolved = resolve_type(interner.resolve(tr.name), module);
+                    resolved
+                })
                 .unwrap_or(Ty::Unit);
             MirFunction {
                 id: FuncId(0),
@@ -3890,7 +4005,10 @@ fn lower_interface(
         let return_ty = method
             .return_ty
             .as_ref()
-            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .map(|tr| {
+                let resolved = resolve_type(interner.resolve(tr.name), module);
+                resolved
+            })
             .unwrap_or(Ty::Unit);
 
         if method.is_abstract {
@@ -3916,7 +4034,7 @@ fn lower_interface(
             let this_sym = interner.intern("this");
             let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
             for p in &method.params {
-                let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+                let ty = resolve_type(interner.resolve(p.ty.name), module);
                 let id = fb.new_local(ty);
                 fb.mf.params.push(id);
                 scope.push((p.name, id));

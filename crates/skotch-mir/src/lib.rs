@@ -284,6 +284,9 @@ pub struct MirModule {
     /// Insertion-order stable string pool. Backends iterate this in
     /// order to lay out their constant pool / string id table.
     pub strings: Vec<String>,
+    /// Names of enum classes (mapped to String type for parameter resolution).
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
+    pub enum_names: rustc_hash::FxHashSet<String>,
 }
 
 impl MirModule {
