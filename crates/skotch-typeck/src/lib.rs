@@ -506,6 +506,11 @@ impl<'a> TypeChecker<'a> {
                     if let Some(ty) = inferred {
                         return ty;
                     }
+                    // For calls on class instances, return Any so the MIR
+                    // lowering can resolve the actual return type.
+                    if matches!(recv_ty, Ty::Class(_)) {
+                        return Ty::Any;
+                    }
                 }
 
                 if let Some(name) = callee_name {
@@ -522,6 +527,9 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     }
+                    // Companion methods and enum entries may not be in
+                    // top_signatures; return Any to let MIR resolve them.
+                    return Ty::Any;
                 }
                 Ty::Unit
             }
