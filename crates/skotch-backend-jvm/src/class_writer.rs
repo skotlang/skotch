@@ -31,6 +31,7 @@ const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
+const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
 
 /// A branch target inside a single block's codegen (from comparison patterns).
@@ -123,20 +124,25 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let _source_file_attr_name_idx = cp.utf8("SourceFile");
     let _source_file_value_idx = cp.utf8(&format!("{}.kt", class.name));
 
+    // Pre-register interface entries in constant pool.
+    let iface_indices: Vec<u16> = class.interfaces.iter().map(|name| cp.class(name)).collect();
+
     // Compile methods.
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
 
-    // <init> constructor.
-    let init_blob = emit_user_method(
-        &class.constructor,
-        module,
-        &class.name,
-        super_name,
-        &mut cp,
-        code_attr_name_idx,
-        true,
-    );
-    method_blobs.push(init_blob);
+    // <init> constructor (skip for interfaces — they have no constructor).
+    if !class.is_interface {
+        let init_blob = emit_user_method(
+            &class.constructor,
+            module,
+            &class.name,
+            super_name,
+            &mut cp,
+            code_attr_name_idx,
+            true,
+        );
+        method_blobs.push(init_blob);
+    }
 
     // Instance methods.
     for method in &class.methods {
@@ -161,12 +167,21 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         .unwrap();
     out.write_u16::<BigEndian>(cp.count()).unwrap();
     cp.write_to(&mut out);
-    let class_flags = ACC_PUBLIC | ACC_SUPER | if class.is_abstract { ACC_ABSTRACT } else { 0 };
+    let class_flags = if class.is_interface {
+        ACC_PUBLIC | ACC_INTERFACE | ACC_ABSTRACT
+    } else {
+        ACC_PUBLIC | ACC_SUPER | if class.is_abstract { ACC_ABSTRACT } else { 0 }
+    };
     out.write_u16::<BigEndian>(class_flags).unwrap();
     out.write_u16::<BigEndian>(this_class_idx).unwrap();
     out.write_u16::<BigEndian>(super_class_idx).unwrap();
-    out.write_u16::<BigEndian>(0).unwrap(); // interfaces
-                                            // Fields.
+    // Interfaces table.
+    out.write_u16::<BigEndian>(iface_indices.len() as u16)
+        .unwrap();
+    for &idx in &iface_indices {
+        out.write_u16::<BigEndian>(idx).unwrap();
+    }
+    // Fields.
     out.write_u16::<BigEndian>(class.fields.len() as u16)
         .unwrap();
     for field in &class.fields {
@@ -199,18 +214,26 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         let d = cp2.utf8(&jvm_type_string(&field.ty));
         field_infos.push((n, d));
     }
+    // Pre-register interface entries.
+    let iface_indices2: Vec<u16> = class
+        .interfaces
+        .iter()
+        .map(|name| cp2.class(name))
+        .collect();
     // Re-compile methods with new CP.
     let mut method_blobs2 = Vec::new();
-    let init2 = emit_user_method(
-        &class.constructor,
-        module,
-        &class.name,
-        super_name,
-        &mut cp2,
-        code2,
-        true,
-    );
-    method_blobs2.push(init2);
+    if !class.is_interface {
+        let init2 = emit_user_method(
+            &class.constructor,
+            module,
+            &class.name,
+            super_name,
+            &mut cp2,
+            code2,
+            true,
+        );
+        method_blobs2.push(init2);
+    }
     for method in &class.methods {
         let blob = emit_user_method(
             method,
@@ -233,10 +256,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         .unwrap();
     out2.write_u16::<BigEndian>(cp2.count()).unwrap();
     cp2.write_to(&mut out2);
-    out2.write_u16::<BigEndian>(ACC_PUBLIC | ACC_SUPER).unwrap();
+    out2.write_u16::<BigEndian>(class_flags).unwrap();
     out2.write_u16::<BigEndian>(this2).unwrap();
     out2.write_u16::<BigEndian>(super2).unwrap();
-    out2.write_u16::<BigEndian>(0).unwrap(); // interfaces
+    out2.write_u16::<BigEndian>(iface_indices2.len() as u16)
+        .unwrap();
+    for &idx in &iface_indices2 {
+        out2.write_u16::<BigEndian>(idx).unwrap();
+    }
     out2.write_u16::<BigEndian>(field_infos.len() as u16)
         .unwrap();
     for (n, d) in &field_infos {
@@ -1453,9 +1480,23 @@ fn walk_block(
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
-                    let mref = cp.methodref(class_name, method_name, &descriptor);
-                    code.push(0xB6); // invokevirtual
-                    code.write_u16::<BigEndian>(mref).unwrap();
+                    // Check if receiver type is an interface — if so, use
+                    // invokeinterface instead of invokevirtual.
+                    let is_iface = module
+                        .classes
+                        .iter()
+                        .any(|c| c.name == *class_name && c.is_interface);
+                    if is_iface {
+                        let imref = cp.interface_methodref(class_name, method_name, &descriptor);
+                        code.push(0xB9); // invokeinterface
+                        code.write_u16::<BigEndian>(imref).unwrap();
+                        code.push(args.len() as u8); // count (nargs including receiver)
+                        code.push(0); // must be zero
+                    } else {
+                        let mref = cp.methodref(class_name, method_name, &descriptor);
+                        code.push(0xB6); // invokevirtual
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                    }
                     let net = if dest_ty == &Ty::Unit {
                         -(args.len() as i32)
                     } else {

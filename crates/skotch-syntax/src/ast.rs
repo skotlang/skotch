@@ -54,11 +54,23 @@ pub enum Decl {
     Object(ObjectDecl),
     /// `enum class Color { RED, GREEN, BLUE }` — enum declaration.
     Enum(EnumDecl),
+    /// `interface Printable { fun prettyPrint(): String }` — interface declaration.
+    Interface(InterfaceDecl),
     /// Recognised but not implemented.
     Unsupported {
         what: &'static str,
         span: Span,
     },
+}
+
+/// An interface declaration.
+#[derive(Clone, Debug)]
+pub struct InterfaceDecl {
+    pub name: Symbol,
+    pub name_span: Span,
+    /// Methods declared in the interface body (abstract by default).
+    pub methods: Vec<FunDecl>,
+    pub span: Span,
 }
 
 /// An enum class declaration.
@@ -128,6 +140,8 @@ pub struct ClassDecl {
     pub constructor_params: Vec<ConstructorParam>,
     /// Superclass clause: `: ParentClass(args)`.
     pub parent_class: Option<SuperClassRef>,
+    /// Implemented interfaces (from `: Interface1, Interface2` after superclass).
+    pub interfaces: Vec<Symbol>,
     /// Properties declared in the class body.
     pub properties: Vec<PropertyDecl>,
     /// Methods declared in the class body.
