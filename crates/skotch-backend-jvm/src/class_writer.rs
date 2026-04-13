@@ -391,8 +391,10 @@ fn emit_user_method(
                 );
                 let ty = &func.locals[local.0 as usize];
                 match ty {
-                    Ty::Int | Ty::Bool => code.push(0xAC),
-                    _ => code.push(0xB0),
+                    Ty::Int | Ty::Bool => code.push(0xAC), // ireturn
+                    Ty::Long => code.push(0xAD),           // lreturn
+                    Ty::Double => code.push(0xAF),         // dreturn
+                    _ => code.push(0xB0),                  // areturn
                 }
             }
             _ => code.push(0xB1), // default return
