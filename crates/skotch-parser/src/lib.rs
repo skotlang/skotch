@@ -1580,6 +1580,11 @@ impl<'a> Parser<'a> {
                 let sym = self.intern_ident_at(idx);
                 Expr::Ident(sym, span)
             }
+            TokenKind::KwSuper => {
+                self.bump();
+                let sym = self.interner.intern("super");
+                Expr::Ident(sym, span)
+            }
             TokenKind::LParen => {
                 self.bump();
                 let inner = self.parse_expr();

@@ -288,7 +288,7 @@ fn emit_user_method(
     func: &MirFunction,
     module: &MirModule,
     class_name: &str,
-    super_name: &str,
+    _super_name: &str,
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
     is_init: bool,
@@ -357,16 +357,8 @@ fn emit_user_method(
         };
     }
 
-    if is_init {
-        // Call super.<init>()
-        code.push(0x19); // aload
-        code.push(0); // slot 0 = this
-        bump(&mut stack, &mut max_stack, 1);
-        let super_init = cp.methodref(super_name, "<init>", "()V");
-        code.push(0xB7); // invokespecial
-        code.write_u16::<BigEndian>(super_init).unwrap();
-        bump(&mut stack, &mut max_stack, -1);
-    }
+    // Super constructor call is now emitted in the MIR body
+    // via CallKind::Constructor, not hardcoded here.
 
     // Emit block statements.
     let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
@@ -944,6 +936,22 @@ fn walk_block(
             }
             Rvalue::Local(src) => {
                 load_local(code, stack, max_stack, slots, *src, &func.locals);
+                // Emit checkcast when narrowing from a wider reference type
+                // (e.g., Any→String for smart casts).
+                let src_ty = &func.locals[src.0 as usize];
+                let dest_ty_here = &func.locals[dest.0 as usize];
+                if matches!(src_ty, Ty::Any | Ty::Class(_)) && !matches!(dest_ty_here, Ty::Any) {
+                    let target = match dest_ty_here {
+                        Ty::String => Some("java/lang/String"),
+                        Ty::Class(name) => Some(name.as_str()),
+                        _ => None,
+                    };
+                    if let Some(t) = target {
+                        let ci = cp.class(t);
+                        code.push(0xC0); // checkcast
+                        code.write_u16::<BigEndian>(ci).unwrap();
+                    }
+                }
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::BinOp { op, lhs, rhs } => {
@@ -1445,22 +1453,45 @@ fn walk_block(
                     }
                 }
                 CallKind::Constructor(class_name) => {
-                    // Stack has [ref, ref] from NewInstance+dup.
-                    // Load constructor args on top: [ref, ref, arg1, ...]
-                    let mut descriptor = String::from("(");
-                    for a in args {
-                        load_local(code, stack, max_stack, slots, *a, &func.locals);
-                        let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_type_string(ty));
+                    // Two cases:
+                    // 1. After NewInstance+dup: stack = [ref, ref], args are the
+                    //    constructor params (not including receiver).
+                    // 2. Super call in <init>: first arg IS the receiver (this),
+                    //    rest are constructor params.
+                    let receiver_in_args = !args.is_empty()
+                        && matches!(func.locals.get(args[0].0 as usize), Some(Ty::Class(_)))
+                        && func.params.first() == Some(&args[0]);
+
+                    if receiver_in_args {
+                        // Super constructor call: load this + args
+                        for a in args {
+                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        }
+                        let mut descriptor = String::from("(");
+                        for a in args.iter().skip(1) {
+                            let ty = &func.locals[a.0 as usize];
+                            descriptor.push_str(&jvm_type_string(ty));
+                        }
+                        descriptor.push_str(")V");
+                        let mref = cp.methodref(class_name, "<init>", &descriptor);
+                        code.push(0xB7); // invokespecial
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                        bump(stack, max_stack, -(args.len() as i32));
+                    } else {
+                        // NewInstance constructor: stack already has [ref, ref]
+                        let mut descriptor = String::from("(");
+                        for a in args {
+                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                            let ty = &func.locals[a.0 as usize];
+                            descriptor.push_str(&jvm_type_string(ty));
+                        }
+                        descriptor.push_str(")V");
+                        let mref = cp.methodref(class_name, "<init>", &descriptor);
+                        code.push(0xB7); // invokespecial
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                        bump(stack, max_stack, -(args.len() as i32) - 1);
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }
-                    descriptor.push_str(")V");
-                    let mref = cp.methodref(class_name, "<init>", &descriptor);
-                    code.push(0xB7); // invokespecial
-                    code.write_u16::<BigEndian>(mref).unwrap();
-                    // invokespecial consumes [ref, args...], leaving [ref] from dup
-                    bump(stack, max_stack, -(args.len() as i32) - 1);
-                    // Store the remaining reference.
-                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
                 }
                 CallKind::Virtual {
                     class_name,
@@ -1497,6 +1528,36 @@ fn walk_block(
                         code.push(0xB6); // invokevirtual
                         code.write_u16::<BigEndian>(mref).unwrap();
                     }
+                    let net = if dest_ty == &Ty::Unit {
+                        -(args.len() as i32)
+                    } else {
+                        -(args.len() as i32) + 1
+                    };
+                    bump(stack, max_stack, net);
+                    if *dest_ty != Ty::Unit {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
+                }
+                CallKind::Super {
+                    class_name,
+                    method_name,
+                } => {
+                    // super.method() — use invokespecial to bypass virtual dispatch.
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    let dest_ty = &func.locals[dest.0 as usize];
+                    let ret_desc = jvm_type_string(dest_ty);
+                    let mut descriptor = String::from("(");
+                    for a in args.iter().skip(1) {
+                        let ty = &func.locals[a.0 as usize];
+                        descriptor.push_str(&jvm_type_string(ty));
+                    }
+                    descriptor.push(')');
+                    descriptor.push_str(&ret_desc);
+                    let mref = cp.methodref(class_name, method_name, &descriptor);
+                    code.push(0xB7); // invokespecial
+                    code.write_u16::<BigEndian>(mref).unwrap();
                     let net = if dest_ty == &Ty::Unit {
                         -(args.len() as i32)
                     } else {

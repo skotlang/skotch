@@ -316,6 +316,7 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
                 | CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
                 | CallKind::Virtual { .. }
+                | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. } => 0,
             };
             needed = needed.max(n);
@@ -933,6 +934,7 @@ fn emit_call(
         CallKind::StaticJava { .. }
         | CallKind::Constructor(_)
         | CallKind::Virtual { .. }
+        | CallKind::Super { .. }
         | CallKind::VirtualJava { .. } => {
             // TODO: class support in DEX backend
             0

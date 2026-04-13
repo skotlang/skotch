@@ -1144,6 +1144,40 @@ fn lower_expr(
                 then_blk,
             );
 
+            // Smart cast: if cond is `x is Type`, narrow x's type in then-branch.
+            // Create a new local with the narrowed type and rebind x in scope.
+            let smart_cast_count = if let Expr::IsCheck {
+                expr: checked,
+                type_name,
+                negated: false,
+                ..
+            } = cond.as_ref()
+            {
+                if let Expr::Ident(var_name, _) = checked.as_ref() {
+                    let type_str = interner.resolve(*type_name);
+                    let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or(Ty::Any);
+                    // Find the variable's current local.
+                    if let Some((_, old_local)) = scope.iter().rev().find(|(s, _)| s == var_name) {
+                        // Create a new local with the narrowed type.
+                        let cast_local = fb.new_local(narrowed_ty);
+                        // Emit a copy from old to new (identity cast for now).
+                        fb.push_stmt(MStmt::Assign {
+                            dest: cast_local,
+                            value: Rvalue::Local(*old_local),
+                        });
+                        // Push new binding that shadows the original.
+                        scope.push((*var_name, cast_local));
+                        1 // we pushed one scope entry to remove later
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
             // Then branch.
             let mut then_val: Option<LocalId> = None;
             let mut then_terminates = false;
@@ -1204,6 +1238,10 @@ fn lower_expr(
                         );
                     }
                 }
+            }
+            // Remove smart cast scope entry.
+            for _ in 0..smart_cast_count {
+                scope.pop();
             }
             // Patch the result local's type to match the then-branch.
             if let Some(val) = then_val {
@@ -1349,6 +1387,79 @@ fn lower_expr(
                             ),
                         ));
                         return None;
+                    }
+                }
+
+                // Check for super.method() BEFORE lowering the receiver.
+                {
+                    let super_sym = interner.intern("super");
+                    if let Expr::Ident(ident_name, _) = receiver.as_ref() {
+                        if *ident_name == super_sym {
+                            let this_sym = interner.intern("this");
+                            // Extract parent class name and return type without
+                            // holding an immutable borrow across lower_expr.
+                            let super_info: Option<(LocalId, String, String, Ty)> = scope
+                                .iter()
+                                .rev()
+                                .find(|(s, _)| *s == this_sym)
+                                .and_then(|(_, this_local)| {
+                                    let this_ty = &fb.mf.locals[this_local.0 as usize];
+                                    if let Ty::Class(cn) = this_ty {
+                                        let cls = module.classes.iter().find(|c| &c.name == cn)?;
+                                        let parent = cls.super_class.as_ref()?.clone();
+                                        let mname = interner.resolve(method_name).to_string();
+                                        let mut ret_ty = Ty::Unit;
+                                        let mut search = Some(parent.clone());
+                                        while let Some(ref cname) = search {
+                                            if let Some(pcls) =
+                                                module.classes.iter().find(|c| &c.name == cname)
+                                            {
+                                                if let Some(m) =
+                                                    pcls.methods.iter().find(|m| m.name == mname)
+                                                {
+                                                    ret_ty = m.return_ty.clone();
+                                                    break;
+                                                }
+                                                search = pcls.super_class.clone();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        Some((*this_local, parent, mname, ret_ty))
+                                    } else {
+                                        None
+                                    }
+                                });
+                            if let Some((this_local, parent, mname, ret_ty)) = super_info {
+                                let mut all_args = vec![this_local];
+                                for a in args {
+                                    let id = lower_expr(
+                                        &a.expr,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    )?;
+                                    all_args.push(id);
+                                }
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::Super {
+                                            class_name: parent,
+                                            method_name: mname,
+                                        },
+                                        args: all_args,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
                     }
                 }
 
@@ -2327,19 +2438,28 @@ fn lower_expr(
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 if let Ty::Class(class_name) = recv_ty {
                     let field_name = interner.resolve(*name).to_string();
-                    let field_ty = module
-                        .classes
-                        .iter()
-                        .find(|c| c.name == class_name)
-                        .and_then(|c| c.fields.iter().find(|f| f.name == field_name))
-                        .map(|f| f.ty.clone())
-                        .unwrap_or(Ty::Any);
+                    // Walk the inheritance chain to find the declaring class.
+                    let mut declaring_class = class_name.clone();
+                    let mut field_ty = Ty::Any;
+                    let mut search = Some(class_name);
+                    while let Some(ref cname) = search {
+                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                            if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
+                                declaring_class = cname.clone();
+                                field_ty = f.ty.clone();
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
                     let dest = fb.new_local(field_ty);
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::GetField {
                             receiver: recv_local,
-                            class_name,
+                            class_name: declaring_class,
                             field_name,
                         },
                     });
@@ -3144,24 +3264,88 @@ fn lower_class(
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
     init_fn.params.push(this_id);
-    // Add constructor params and field assignments.
+
+    // Build a scope for lowering super args (this + constructor params).
+    // We need to add constructor params first so super args like `Base(y)`
+    // can reference them.
+    let mut ctor_param_ids: Vec<(Symbol, LocalId)> = Vec::new();
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
             let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
             let param_id = init_fn.new_local(ty);
             init_fn.params.push(param_id);
-            let field_name = interner.resolve(p.name).to_string();
-            init_fn.blocks[0].stmts.push(MStmt::Assign {
-                dest: this_id, // dummy dest
-                value: Rvalue::PutField {
-                    receiver: this_id,
-                    class_name: class_name.clone(),
-                    field_name,
-                    value: param_id,
-                },
-            });
+            ctor_param_ids.push((p.name, param_id));
         }
     }
+
+    // Emit super constructor call.
+    {
+        let super_class_name = c
+            .parent_class
+            .as_ref()
+            .map(|sc| interner.resolve(sc.name).to_string())
+            .unwrap_or_else(|| "java/lang/Object".to_string());
+        // Lower super args if present.
+        let mut super_arg_ids = vec![this_id]; // receiver is always first
+        if let Some(sc) = &c.parent_class {
+            if !sc.args.is_empty() {
+                // Create a temporary FnBuilder to lower the super args.
+                let tmp_idx = module.functions.len() + 9000;
+                let mut fb = FnBuilder::new(tmp_idx, "<super-args>".to_string(), Ty::Unit);
+                // Copy locals and params from init_fn so scope resolution works.
+                fb.mf.locals = init_fn.locals.clone();
+                fb.mf.params = init_fn.params.clone();
+                let this_sym = interner.intern("this");
+                let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_id)];
+                for (sym, lid) in &ctor_param_ids {
+                    scope.push((*sym, *lid));
+                }
+                for arg in &sc.args {
+                    if let Some(id) = lower_expr(
+                        &arg.expr,
+                        &mut fb,
+                        &mut scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    ) {
+                        super_arg_ids.push(id);
+                    }
+                }
+                // Merge any new locals/stmts back into init_fn.
+                init_fn.locals = fb.mf.locals;
+                for stmt in fb.mf.blocks[0].stmts.drain(..) {
+                    init_fn.blocks[0].stmts.push(stmt);
+                }
+            }
+        }
+        init_fn.blocks[0].stmts.push(MStmt::Assign {
+            dest: this_id, // dummy
+            value: Rvalue::Call {
+                kind: CallKind::Constructor(super_class_name),
+                args: super_arg_ids,
+            },
+        });
+    }
+
+    // Add field assignments for constructor params.
+    for (sym, param_id) in &ctor_param_ids {
+        let field_name = interner.resolve(*sym).to_string();
+        init_fn.blocks[0].stmts.push(MStmt::Assign {
+            dest: this_id, // dummy dest
+            value: Rvalue::PutField {
+                receiver: this_id,
+                class_name: class_name.clone(),
+                field_name,
+                value: *param_id,
+            },
+        });
+    }
+
+    // (val/var constructor params already added above)
     // Initialize body properties with default values.
     for prop in &c.properties {
         let (val, ty) = if let Some(init) = &prop.init {

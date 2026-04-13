@@ -68,6 +68,7 @@ pub enum TokenKind {
     KwFinally,
     KwIs,
     KwAs,
+    KwSuper,
     KwInit,
     KwData,
     KwEnum,
