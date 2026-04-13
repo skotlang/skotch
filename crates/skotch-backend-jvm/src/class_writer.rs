@@ -1093,8 +1093,44 @@ fn walk_block(
                             continue;
                         }
 
+                        // Class equality: use virtual toString().equals()
+                        // so enum instances and other user objects compare by value.
+                        // (Nullable/Any use reference identity to handle null safely.)
+                        if matches!(lhs_ty, Ty::Class(_))
+                            && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                        {
+                            // call toString() on lhs
+                            let ts = cp.methodref(
+                                "java/lang/Object",
+                                "toString",
+                                "()Ljava/lang/String;",
+                            );
+                            code.push(0x5F); // swap: [lhs, rhs] → [rhs, lhs]
+                            code.push(0xB6); // invokevirtual toString
+                            code.write_u16::<BigEndian>(ts).unwrap();
+                            // stack: [rhs, lhs_str]
+                            code.push(0x5F); // swap: [lhs_str, rhs]
+                            code.push(0xB6); // invokevirtual toString
+                            code.write_u16::<BigEndian>(ts).unwrap();
+                            // stack: [lhs_str, rhs_str]
+                            let equals =
+                                cp.methodref("java/lang/String", "equals", "(Ljava/lang/Object;)Z");
+                            code.push(0xB6); // invokevirtual equals
+                            code.write_u16::<BigEndian>(equals).unwrap();
+                            bump(stack, max_stack, -1);
+                            if *op == MBinOp::CmpNe {
+                                code.push(0x04); // iconst_1
+                                bump(stack, max_stack, 1);
+                                code.push(0x5F); // swap
+                                code.push(0x64); // isub
+                                bump(stack, max_stack, -1);
+                            }
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
                         // Comparison → push 0 or 1 (bool).
-                        let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Class(_) | Ty::Any);
+                        let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Any);
                         let is_long = matches!(lhs_ty, Ty::Long);
                         let is_double = matches!(lhs_ty, Ty::Double);
 

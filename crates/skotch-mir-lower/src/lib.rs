@@ -39,9 +39,9 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     if let Some(ty) = skotch_types::ty_from_name(name) {
         return ty;
     }
-    // Enum names map to String (enum entries are string-based).
+    // Enums are real classes now.
     if module.enum_names.contains(name) {
-        return Ty::String;
+        return Ty::Class(name.to_string());
     }
     // User-defined class or interface.
     if module.classes.iter().any(|c| c.name == name) {
@@ -391,11 +391,6 @@ fn lower_function(
             })
         })
         .unwrap_or(Ty::Unit);
-    // Override enum class return types to String.
-    let return_ty = match &return_ty {
-        Ty::Class(cn) if module.enum_names.contains(cn.as_str()) => Ty::String,
-        _ => return_ty,
-    };
     let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
 
     // Allocate parameter locals first so they get LocalId 0..N.
@@ -412,7 +407,7 @@ fn lower_function(
     }
 
     for (pi, p) in f.params.iter().enumerate() {
-        let mut ty = typed
+        let ty = typed
             .and_then(|t| {
                 t.param_tys
                     .get(pi + if f.receiver_ty.is_some() { 1 } else { 0 })
@@ -420,11 +415,6 @@ fn lower_function(
             })
             .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module));
         // Override enum class types to String (enums are string-based).
-        if let Ty::Class(ref cn) = ty {
-            if module.enum_names.contains(cn.as_str()) {
-                ty = Ty::String;
-            }
-        }
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
         scope.push((p.name, id));
@@ -2571,30 +2561,11 @@ fn lower_expr(
             name,
             span,
         } => {
-            // Check for enum member access: Color.RED.hex → stored constant.
-            if let Expr::Field {
-                name: entry_name, ..
-            } = receiver.as_ref()
-            {
-                let entry_str = interner.resolve(*entry_name);
-                let field_str = interner.resolve(*name);
-                let compound = format!("{}.{}", entry_str, field_str);
-                let compound_sym = interner.intern(&compound);
-                if let Some(c) = name_to_global.get(&compound_sym).cloned() {
-                    let ty = match &c {
-                        MirConst::Int(_) | MirConst::Bool(_) => Ty::Int,
-                        MirConst::Long(_) => Ty::Long,
-                        MirConst::Double(_) => Ty::Double,
-                        MirConst::String(_) => Ty::String,
-                        _ => Ty::Any,
-                    };
-                    let dest = fb.new_local(ty);
-                    fb.push_stmt(MStmt::Assign {
-                        dest,
-                        value: Rvalue::Const(c),
-                    });
-                    return Some(dest);
-                }
+            // Field access: Color.RED.hex → lower receiver then GetField.
+            // (Enum member access works via the normal class field path now
+            // that enums are real MirClass instances.)
+            if false {
+                // removed: compound-name hack
             }
 
             // Check if this is an enum/object constant access (Color.RED).
@@ -3295,44 +3266,182 @@ fn extract_qualified_name(expr: &Expr, interner: &Interner) -> Option<String> {
 fn lower_enum(
     e: &skotch_syntax::EnumDecl,
     name_to_func: &mut FxHashMap<Symbol, FuncId>,
-    name_to_global: &mut FxHashMap<Symbol, MirConst>,
+    _name_to_global: &mut FxHashMap<Symbol, MirConst>,
     module: &mut MirModule,
     interner: &mut Interner,
 ) {
     let enum_name = interner.resolve(e.name).to_string();
 
-    // For each entry, create a function that returns the entry's name as a String.
-    for (ordinal, entry) in e.entries.iter().enumerate() {
+    // ── Build enum as a real MirClass ───────────────────────────────────
+    //
+    // Every enum class has an implicit `name` field (the entry name as a
+    // String), plus any user-declared constructor params as additional
+    // fields. The <init> takes (name: String, ...params) and stores them.
+    //
+    // Each entry (e.g., Color.RED) becomes a top-level function that
+    // creates and returns a new instance: `new Color("RED", 16711680)`.
+
+    // Fields: name (implicit) + constructor params.
+    let mut fields = vec![MirField {
+        name: "name".to_string(),
+        ty: Ty::String,
+    }];
+    for param in &e.constructor_params {
+        let ty = resolve_type(interner.resolve(param.ty.name), module);
+        fields.push(MirField {
+            name: interner.resolve(param.name).to_string(),
+            ty,
+        });
+    }
+
+    // <init>(this, name: String, ...params)
+    let mut init_fn = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+    };
+    // this
+    let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
+    init_fn.params.push(this_id);
+    // Super call: java/lang/Object.<init>()V
+    init_fn.blocks[0].stmts.push(MStmt::Assign {
+        dest: this_id,
+        value: Rvalue::Call {
+            kind: CallKind::Constructor("java/lang/Object".to_string()),
+            args: vec![this_id],
+        },
+    });
+    // name param
+    let name_param = init_fn.new_local(Ty::String);
+    init_fn.params.push(name_param);
+    init_fn.blocks[0].stmts.push(MStmt::Assign {
+        dest: this_id,
+        value: Rvalue::PutField {
+            receiver: this_id,
+            class_name: enum_name.clone(),
+            field_name: "name".to_string(),
+            value: name_param,
+        },
+    });
+    // Constructor params
+    for param in &e.constructor_params {
+        let ty = resolve_type(interner.resolve(param.ty.name), module);
+        let pid = init_fn.new_local(ty);
+        init_fn.params.push(pid);
+        init_fn.blocks[0].stmts.push(MStmt::Assign {
+            dest: this_id,
+            value: Rvalue::PutField {
+                receiver: this_id,
+                class_name: enum_name.clone(),
+                field_name: interner.resolve(param.name).to_string(),
+                value: pid,
+            },
+        });
+    }
+
+    // toString() method → returns this.name
+    let mut ts_fn = MirFunction {
+        id: FuncId(0),
+        name: "toString".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::String,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+    };
+    let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
+    ts_fn.params.push(ts_this);
+    let ts_name = ts_fn.new_local(Ty::String);
+    ts_fn.blocks[0].stmts.push(MStmt::Assign {
+        dest: ts_name,
+        value: Rvalue::GetField {
+            receiver: ts_this,
+            class_name: enum_name.clone(),
+            field_name: "name".to_string(),
+        },
+    });
+    ts_fn.blocks[0].terminator = Terminator::ReturnValue(ts_name);
+
+    module.classes.push(MirClass {
+        name: enum_name.clone(),
+        super_class: None,
+        is_open: false,
+        is_abstract: false,
+        is_interface: false,
+        interfaces: Vec::new(),
+        fields,
+        methods: vec![ts_fn],
+        constructor: init_fn,
+    });
+
+    // ── Entry functions ─────────────────────────────────────────────────
+    //
+    // Each entry becomes a top-level function:
+    //   fun RED(): Color = Color("RED", 16711680)
+    for entry in &e.entries {
         let entry_name = interner.resolve(entry.name).to_string();
         let fn_idx = module.functions.len();
         let fn_id = FuncId(fn_idx as u32);
-
-        // Register the entry name so Color.RED resolves.
         name_to_func.insert(entry.name, fn_id);
 
-        let sid = module.intern_string(&entry_name);
-        let mut fb = FnBuilder::new(fn_idx, entry_name.clone(), Ty::String);
-        let result = fb.new_local(Ty::String);
-        fb.push_stmt(MStmt::Assign {
-            dest: result,
-            value: Rvalue::Const(MirConst::String(sid)),
-        });
-        fb.set_terminator(Terminator::ReturnValue(result));
-        module.add_function(fb.finish());
+        let mut fb = FnBuilder::new(fn_idx, entry_name.clone(), Ty::Class(enum_name.clone()));
 
-        // Register entry constructor arg values as globals: RED.hex → 16711680
-        for (i, param) in e.constructor_params.iter().enumerate() {
-            if i < entry.args.len() {
-                let field_name = interner.resolve(param.name).to_string();
-                let compound_name = format!("{}.{}", entry_name, field_name);
-                let sym = interner.intern(&compound_name);
-                if let Some(c) = lower_const_init(&entry.args[i], module) {
-                    name_to_global.insert(sym, c);
-                }
+        // NewInstance + Constructor(enum_name, [name_str, ...args])
+        let inst = fb.new_local(Ty::Class(enum_name.clone()));
+        fb.push_stmt(MStmt::Assign {
+            dest: inst,
+            value: Rvalue::NewInstance(enum_name.clone()),
+        });
+
+        // Build constructor args: ["ENTRY_NAME", ...entry.args]
+        // (inst is NOT included — the JVM backend's NewInstance handler
+        // already has [ref, ref] on the stack from new+dup.)
+        let name_sid = module.intern_string(&entry_name);
+        let name_local = fb.new_local(Ty::String);
+        fb.push_stmt(MStmt::Assign {
+            dest: name_local,
+            value: Rvalue::Const(MirConst::String(name_sid)),
+        });
+        let mut ctor_args = vec![name_local];
+
+        for arg_expr in &entry.args {
+            if let Some(c) = lower_const_init(arg_expr, module) {
+                let ty = const_ty(&c);
+                let arg_local = fb.new_local(ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest: arg_local,
+                    value: Rvalue::Const(c),
+                });
+                ctor_args.push(arg_local);
             }
         }
 
-        let _ = (ordinal, &enum_name);
+        fb.push_stmt(MStmt::Assign {
+            dest: inst,
+            value: Rvalue::Call {
+                kind: CallKind::Constructor(enum_name.clone()),
+                args: ctor_args,
+            },
+        });
+
+        fb.set_terminator(Terminator::ReturnValue(inst));
+        module.add_function(fb.finish());
     }
 }
 
