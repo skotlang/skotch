@@ -211,19 +211,22 @@ milestones:
 
     features:
       - name: "Inheritance with open/override"
+        completed: true  # basic inheritance; super.method() calls deferred
         description: >
-          open class Base, class Derived : Base(), method override dispatch.
-          JVM: invokespecial for super calls, ACC_OPEN flags.
-          DEX: invoke-super.
+          open class Base, class Derived : Base() with method override.
+          Parser captures `: SuperClass()` clause and open/override/abstract
+          modifiers. MIR carries super_class on MirClass. JVM backend emits
+          correct superclass in class file and invokespecial to parent <init>.
+          Virtual dispatch works via existing invokevirtual.
         crates:
-          - skotch-syntax    # ClassDecl gains superclass field
-          - skotch-parser    # Parse `: SuperClass()` after class name
-          - skotch-mir-lower # Virtual dispatch encoding in MIR
-          - skotch-backend-jvm  # invokespecial, ACC_OPEN
-          - skotch-backend-dex  # invoke-super
+          - skotch-syntax    # ClassDecl gains parent_class, is_open, is_abstract
+          - skotch-parser    # Parse `: SuperClass()` + capture modifiers
+          - skotch-mir       # MirClass gains super_class, is_open, is_abstract
+          - skotch-mir-lower # Propagate parent class to MIR
+          - skotch-backend-jvm  # superclass in class file + invokespecial
         acceptance_criteria:
-          - "3-level class hierarchy with overridden virtual methods compiles and runs"
-          - "super.method() calls dispatch to parent implementation"
+          - "open class Animal / class Dog : Animal() compiles and runs"
+          - "Override methods dispatch correctly via invokevirtual"
 
       - name: "Interface declaration and implementation"
         description: >

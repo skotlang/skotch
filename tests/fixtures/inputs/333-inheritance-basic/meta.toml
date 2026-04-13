@@ -1,0 +1,2 @@
+status = "supported"
+features = ["inheritance", "open-class", "override", "virtual-dispatch"]

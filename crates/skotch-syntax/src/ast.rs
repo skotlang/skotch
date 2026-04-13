@@ -91,6 +91,9 @@ pub struct FunDecl {
     /// The receiver becomes accessible as `this` in the function body.
     pub receiver_ty: Option<TypeRef>,
     pub body: Block,
+    pub is_open: bool,
+    pub is_override: bool,
+    pub is_abstract: bool,
     pub span: Span,
 }
 
@@ -117,10 +120,14 @@ pub struct ValDecl {
 #[derive(Clone, Debug)]
 pub struct ClassDecl {
     pub is_data: bool,
+    pub is_open: bool,
+    pub is_abstract: bool,
     pub name: Symbol,
     pub name_span: Span,
     /// Primary constructor parameters (may include `val`/`var` properties).
     pub constructor_params: Vec<ConstructorParam>,
+    /// Superclass clause: `: ParentClass(args)`.
+    pub parent_class: Option<SuperClassRef>,
     /// Properties declared in the class body.
     pub properties: Vec<PropertyDecl>,
     /// Methods declared in the class body.
@@ -130,6 +137,14 @@ pub struct ClassDecl {
     /// Init blocks (statements run in the constructor).
     pub init_blocks: Vec<Block>,
     pub span: Span,
+}
+
+/// Reference to a superclass in a class declaration: `ClassName(args)`.
+#[derive(Clone, Debug)]
+pub struct SuperClassRef {
+    pub name: Symbol,
+    pub name_span: Span,
+    pub args: Vec<CallArg>,
 }
 
 /// A primary constructor parameter, optionally a property (`val`/`var`).

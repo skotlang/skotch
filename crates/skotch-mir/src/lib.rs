@@ -243,6 +243,10 @@ impl MirFunction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MirClass {
     pub name: String,
+    /// JVM internal name of the superclass (e.g. `"Animal"`), or `None` for `java/lang/Object`.
+    pub super_class: Option<String>,
+    pub is_open: bool,
+    pub is_abstract: bool,
     pub fields: Vec<MirField>,
     pub methods: Vec<MirFunction>,
     /// The `<init>` constructor method.

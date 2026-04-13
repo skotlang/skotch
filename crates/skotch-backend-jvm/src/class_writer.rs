@@ -116,7 +116,8 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
 fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u8> {
     let mut cp = ConstantPool::new();
     let this_class_idx = cp.class(&class.name);
-    let super_class_idx = cp.class("java/lang/Object");
+    let super_name = class.super_class.as_deref().unwrap_or("java/lang/Object");
+    let super_class_idx = cp.class(super_name);
     let code_attr_name_idx = cp.utf8("Code");
     let _source_file_attr_name_idx = cp.utf8("SourceFile");
     let _source_file_value_idx = cp.utf8(&format!("{}.kt", class.name));
@@ -129,6 +130,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         &class.constructor,
         module,
         &class.name,
+        super_name,
         &mut cp,
         code_attr_name_idx,
         true,
@@ -141,6 +143,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             method,
             module,
             &class.name,
+            super_name,
             &mut cp,
             code_attr_name_idx,
             false,
@@ -183,7 +186,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // REBUILD: Register all CP entries first, then write.
     let mut cp2 = ConstantPool::new();
     let this2 = cp2.class(&class.name);
-    let super2 = cp2.class("java/lang/Object");
+    let super2 = cp2.class(super_name);
     let code2 = cp2.utf8("Code");
     let sf_name2 = cp2.utf8("SourceFile");
     let sf_val2 = cp2.utf8(&format!("{}.kt", class.name));
@@ -200,13 +203,22 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         &class.constructor,
         module,
         &class.name,
+        super_name,
         &mut cp2,
         code2,
         true,
     );
     method_blobs2.push(init2);
     for method in &class.methods {
-        let blob = emit_user_method(method, module, &class.name, &mut cp2, code2, false);
+        let blob = emit_user_method(
+            method,
+            module,
+            &class.name,
+            super_name,
+            &mut cp2,
+            code2,
+            false,
+        );
         method_blobs2.push(blob);
     }
 
@@ -247,6 +259,7 @@ fn emit_user_method(
     func: &MirFunction,
     module: &MirModule,
     class_name: &str,
+    super_name: &str,
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
     is_init: bool,
@@ -301,7 +314,7 @@ fn emit_user_method(
         code.push(0x19); // aload
         code.push(0); // slot 0 = this
         bump(&mut stack, &mut max_stack, 1);
-        let super_init = cp.methodref("java/lang/Object", "<init>", "()V");
+        let super_init = cp.methodref(super_name, "<init>", "()V");
         code.push(0xB7); // invokespecial
         code.write_u16::<BigEndian>(super_init).unwrap();
         bump(&mut stack, &mut max_stack, -1);

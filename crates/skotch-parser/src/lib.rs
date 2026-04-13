@@ -36,8 +36,8 @@ use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
-    KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, TemplatePart, Token, TokenKind,
-    TypeRef, UnaryOp, ValDecl, WhenBranch,
+    KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, SuperClassRef, TemplatePart, Token,
+    TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -167,6 +167,8 @@ impl<'a> Parser<'a> {
             // Skip modifier keywords that we recognize but don't enforce.
             let mut is_data = false;
             let mut is_enum = false;
+            let mut is_open = false;
+            let mut is_abstract = false;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -179,18 +181,22 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwData
                     | TokenKind::KwEnum
             ) {
-                if self.peek_kind() == TokenKind::KwData {
-                    is_data = true;
-                }
-                if self.peek_kind() == TokenKind::KwEnum {
-                    is_enum = true;
+                match self.peek_kind() {
+                    TokenKind::KwData => is_data = true,
+                    TokenKind::KwEnum => is_enum = true,
+                    TokenKind::KwOpen => is_open = true,
+                    TokenKind::KwAbstract => is_abstract = true,
+                    _ => {}
                 }
                 self.bump();
                 self.skip_trivia();
             }
             match self.peek_kind() {
                 TokenKind::KwFun => {
-                    let f = self.parse_fun_decl();
+                    let mut f = self.parse_fun_decl();
+                    f.is_open = is_open;
+                    f.is_override = false;
+                    f.is_abstract = is_abstract;
                     decls.push(Decl::Fun(f));
                 }
                 TokenKind::KwVal | TokenKind::KwVar => {
@@ -203,6 +209,8 @@ impl<'a> Parser<'a> {
                     } else {
                         let mut cd = self.parse_class_decl();
                         cd.is_data = is_data;
+                        cd.is_open = is_open;
+                        cd.is_abstract = is_abstract;
                         decls.push(Decl::Class(cd));
                     }
                 }
@@ -353,6 +361,43 @@ impl<'a> Parser<'a> {
             self.skip_trivia();
         }
 
+        // Superclass clause: `: ParentClass(args)`
+        let mut parent_class = None;
+        if self.peek_kind() == TokenKind::Colon {
+            self.bump(); // consume ':'
+            self.skip_trivia();
+            let parent_name_idx = self.pos;
+            let parent_name_span = self.peek_span();
+            if self.peek_kind() == TokenKind::Ident {
+                self.bump();
+                let parent_name = self.intern_ident_at(parent_name_idx);
+                self.skip_trivia();
+                let mut args = Vec::new();
+                if self.peek_kind() == TokenKind::LParen {
+                    self.bump();
+                    self.skip_trivia();
+                    if self.peek_kind() != TokenKind::RParen {
+                        loop {
+                            self.skip_trivia();
+                            let expr = self.parse_expr();
+                            args.push(CallArg { name: None, expr });
+                            self.skip_trivia();
+                            if !self.eat(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RParen, ")");
+                    self.skip_trivia();
+                }
+                parent_class = Some(SuperClassRef {
+                    name: parent_name,
+                    name_span: parent_name_span,
+                    args,
+                });
+            }
+        }
+
         // Class body.
         let mut properties = Vec::new();
         let mut methods = Vec::new();
@@ -365,7 +410,10 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
-                // Skip modifier keywords before members.
+                // Capture modifier keywords before members.
+                let mut mem_override = false;
+                let mut mem_open = false;
+                let mut mem_abstract = false;
                 while matches!(
                     self.peek_kind(),
                     TokenKind::KwOverride
@@ -375,12 +423,22 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
                 ) {
+                    match self.peek_kind() {
+                        TokenKind::KwOverride => mem_override = true,
+                        TokenKind::KwOpen => mem_open = true,
+                        TokenKind::KwAbstract => mem_abstract = true,
+                        _ => {}
+                    }
                     self.bump();
                     self.skip_trivia();
                 }
                 match self.peek_kind() {
                     TokenKind::KwFun => {
-                        methods.push(self.parse_fun_decl());
+                        let mut f = self.parse_fun_decl();
+                        f.is_override = mem_override;
+                        f.is_open = mem_open;
+                        f.is_abstract = mem_abstract;
+                        methods.push(f);
                     }
                     TokenKind::KwVal | TokenKind::KwVar => {
                         let prop = self.parse_property_decl();
@@ -438,10 +496,13 @@ impl<'a> Parser<'a> {
         }
 
         ClassDecl {
-            is_data: false, // set by caller if `data` modifier present
+            is_data: false,     // set by caller if `data` modifier present
+            is_open: false,     // set by caller
+            is_abstract: false, // set by caller
             name,
             name_span,
             constructor_params,
+            parent_class,
             properties,
             methods,
             companion_methods,
@@ -673,14 +734,18 @@ impl<'a> Parser<'a> {
         } else {
             self.parse_block()
         };
+        let span = kw.merge(rparen).merge(body.span);
         FunDecl {
             name,
             name_span,
             params,
             return_ty,
             receiver_ty,
-            span: kw.merge(rparen).merge(body.span),
             body,
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
+            span,
         }
     }
 

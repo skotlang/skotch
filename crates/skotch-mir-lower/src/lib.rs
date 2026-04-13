@@ -3390,8 +3390,16 @@ fn lower_class(
         mir_methods.push(ts_fb.finish());
     }
 
+    let super_class = c
+        .parent_class
+        .as_ref()
+        .map(|sc| interner.resolve(sc.name).to_string());
+
     module.classes.push(MirClass {
         name: class_name,
+        super_class,
+        is_open: c.is_open,
+        is_abstract: c.is_abstract,
         fields,
         methods: mir_methods,
         constructor: init_fn,
