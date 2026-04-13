@@ -1648,6 +1648,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwWhen => self.parse_when_expr(),
             TokenKind::KwThrow => self.parse_throw_expr(),
             TokenKind::StringStart => self.parse_string_literal(),
+            TokenKind::LBrace => self.parse_lambda_expr(),
             other => {
                 self.diags.push(Diagnostic::error(
                     span,
@@ -1829,6 +1830,95 @@ impl<'a> Parser<'a> {
                 stmts: vec![Stmt::Expr(expr)],
                 span,
             }
+        }
+    }
+
+    fn parse_lambda_expr(&mut self) -> Expr {
+        let start = self.peek_span();
+        self.bump(); // consume '{'
+        self.skip_trivia();
+
+        // Detect lambda: look for `ident: Type` pattern followed by `->`.
+        // If no `->` is found, this is a bare block (not a lambda in expression position).
+        let mut params = Vec::new();
+        let saved_pos = self.pos;
+        let mut is_lambda = false;
+
+        // Try to parse params: `x: Int, y: String -> ...`
+        if self.peek_kind() == TokenKind::Ident {
+            // Scan ahead for `->` to confirm this is a lambda.
+            let mut scan = self.pos;
+            let mut depth = 0;
+            while scan < self.tokens.len() {
+                match self.tokens[scan].kind {
+                    TokenKind::Arrow if depth == 0 => {
+                        is_lambda = true;
+                        break;
+                    }
+                    TokenKind::LParen => depth += 1,
+                    TokenKind::RParen => depth -= 1,
+                    TokenKind::RBrace | TokenKind::Eof => break,
+                    _ => {}
+                }
+                scan += 1;
+            }
+        }
+
+        if is_lambda {
+            // Parse typed parameters: `x: Int, y: Int`
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Arrow {
+                    break;
+                }
+                params.push(self.parse_param());
+                self.skip_trivia();
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(TokenKind::Arrow, "->");
+            self.skip_trivia();
+        } else {
+            // Not a lambda — restore position and parse as single-expression.
+            // This handles `{ expr }` which is a lambda with no params and
+            // implicit `it` (though `it` support is deferred).
+            self.pos = saved_pos;
+        }
+
+        // Parse body statements.
+        let mut stmts = Vec::new();
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                break;
+            }
+            stmts.push(self.parse_stmt());
+        }
+
+        // The last expression-statement becomes the implicit return value.
+        // Convert it from Stmt::Expr to Stmt::Return.
+        if let Some(last) = stmts.last_mut() {
+            if let Stmt::Expr(e) = last {
+                let span = e.span();
+                let expr = std::mem::replace(e, Expr::IntLit(0, span));
+                *last = Stmt::Return {
+                    value: Some(expr),
+                    span,
+                };
+            }
+        }
+
+        let end = self.expect(TokenKind::RBrace, "}");
+        let body = Block {
+            stmts,
+            span: start.merge(end),
+        };
+
+        Expr::Lambda {
+            params,
+            body,
+            span: start.merge(end),
         }
     }
 
