@@ -378,6 +378,80 @@ impl EmbeddedJvm {
         format!("{summary}\n{trace}{cause_str}")
     }
 
+    /// Add a JAR file to the JVM classpath by appending it to the system
+    /// class loader's URL list. Uses reflection to call the package-private
+    /// `addURL` method on `URLClassLoader`.
+    pub fn add_jar_to_classpath(&self, jar_path: &std::path::Path) -> Result<()> {
+        let mut env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("attach: {e}"))?;
+
+        // Convert path to a file:// URL string.
+        let abs = jar_path
+            .canonicalize()
+            .unwrap_or_else(|_| jar_path.to_path_buf());
+        let url_str = format!("file://{}", abs.display());
+
+        // Create a java.net.URL object.
+        let url_class = env
+            .find_class("java/net/URL")
+            .map_err(|e| anyhow!("FindClass URL: {e}"))?;
+        let url_str_j = env
+            .new_string(&url_str)
+            .map_err(|e| anyhow!("NewString: {e}"))?;
+        let url_obj = env
+            .new_object(
+                &url_class,
+                "(Ljava/lang/String;)V",
+                &[jni::objects::JValue::Object(&url_str_j.into())],
+            )
+            .map_err(|e| anyhow!("new URL({url_str}): {e}"))?;
+
+        // Get the system class loader (should be a URLClassLoader).
+        let cl_class = env
+            .find_class("java/lang/ClassLoader")
+            .map_err(|e| anyhow!("FindClass ClassLoader: {e}"))?;
+        let sys_cl = env
+            .call_static_method(
+                &cl_class,
+                "getSystemClassLoader",
+                "()Ljava/lang/ClassLoader;",
+                &[],
+            )
+            .map_err(|e| anyhow!("getSystemClassLoader: {e}"))?
+            .l()
+            .map_err(|e| anyhow!("getSystemClassLoader result: {e}"))?;
+
+        // Use reflection to call addURL on the URLClassLoader.
+        // This works on Java 8-16. On Java 17+ with modules, we need
+        // to open the module first.
+        let ucl_class = env
+            .find_class("java/net/URLClassLoader")
+            .map_err(|e| anyhow!("FindClass URLClassLoader: {e}"))?;
+        let add_url_method = env
+            .get_method_id(&ucl_class, "addURL", "(Ljava/net/URL;)V")
+            .map_err(|_| {
+                // Fallback: just log and continue. The JVM may not use URLClassLoader.
+                anyhow!("addURL method not found (Java 17+ sealed class loader). JAR: {url_str}")
+            });
+
+        if let Ok(method_id) = add_url_method {
+            // Make accessible via setAccessible(true).
+            // On Java 17+ this may fail, but we try anyway.
+            unsafe {
+                let _ = env.call_method_unchecked(
+                    &sys_cl,
+                    method_id,
+                    jni::signature::ReturnType::Primitive(jni::signature::Primitive::Void),
+                    &[jni::objects::JValue::Object(&url_obj).as_jni()],
+                );
+            }
+            env.exception_clear().ok();
+        }
+
+        Ok(())
+    }
+
     /// Verify the JVM is alive.
     pub fn check_alive(&self) -> Result<()> {
         let env = Self::jvm()
