@@ -1,7 +1,7 @@
 dex_version   035
-strings       19
-types         7
-methods       3
+strings       20
+types         8
+methods       4
 classes       1
 
 --- strings ---
@@ -19,6 +19,7 @@ classes       1
   "Ljava/lang/System;"
   "V"
   "VL"
+  "[Ljava/lang/String;"
   "grade"
   "input.kt"
   "main"
@@ -33,15 +34,18 @@ classes       1
   Ljava/lang/String;
   Ljava/lang/System;
   V
+  [Ljava/lang/String;
 
 --- methods ---
   LInputKt;.grade(I)Ljava/lang/String;
   LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       grade(I)Ljava/lang/String; flags=0x0019 regs=20 ins=1 outs=0 insns=73
+  method       grade(I)Ljava/lang/String; flags=0x0019 regs=22 ins=1 outs=0 insns=71
   method       main()V flags=0x0019 regs=11 ins=0 outs=2 insns=56
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

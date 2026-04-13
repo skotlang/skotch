@@ -1,0 +1,85 @@
+dex_version   035
+strings       30
+types         12
+methods       7
+classes       4
+
+--- strings ---
+  ""
+  "<init>"
+  "D8$$SyntheticClass"
+  "I"
+  "III"
+  "LInputKt$$ExternalSyntheticBackport0;"
+  "LInputKt$$ExternalSyntheticBackport1;"
+  "LInputKt$$ExternalSyntheticBackport2;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/ArithmeticException;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "d1"
+  "d2"
+  "input.kt"
+  "k"
+  "m"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+
+--- types ---
+  I
+  LInputKt$$ExternalSyntheticBackport0;
+  LInputKt$$ExternalSyntheticBackport1;
+  LInputKt$$ExternalSyntheticBackport2;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/ArithmeticException;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$$ExternalSyntheticBackport0;.m(II)I
+  LInputKt$$ExternalSyntheticBackport1;.m(II)I
+  LInputKt$$ExternalSyntheticBackport2;.m(II)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/ArithmeticException;.<init>()V
+
+--- class[0] ---
+  descriptor   LInputKt$$ExternalSyntheticBackport0;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       m(II)I flags=0x1009 regs=6 ins=2 outs=1 insns=16
+
+--- class[1] ---
+  descriptor   LInputKt$$ExternalSyntheticBackport1;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       m(II)I flags=0x1009 regs=6 ins=2 outs=1 insns=17
+
+--- class[2] ---
+  descriptor   LInputKt$$ExternalSyntheticBackport2;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       m(II)I flags=0x1009 regs=6 ins=2 outs=1 insns=16
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=2 ins=0 outs=2 insns=38
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

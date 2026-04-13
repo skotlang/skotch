@@ -59,6 +59,7 @@ const ENDIAN_TAG: u32 = 0x12345678;
 const ACC_PUBLIC: u32 = 0x0001;
 const ACC_STATIC: u32 = 0x0008;
 const ACC_FINAL: u32 = 0x0010;
+const ACC_SYNTHETIC: u32 = 0x1000;
 
 /// Compile a single MIR module to a `.dex` file's bytes.
 pub fn write_dex(module: &MirModule) -> Vec<u8> {
@@ -75,7 +76,8 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     // Source file name string (e.g., "input.kt").
     let source_file_string = pools.intern_string("input.kt");
 
-    let mut method_codes: Vec<(String, String, Vec<&str>, MethodCode)> = Vec::new();
+    let mut method_codes: Vec<(String, String, Vec<&str>, MethodCode, u32)> = Vec::new();
+    let mut has_no_arg_main = false;
     for func in &module.functions {
         let params: Vec<&str> = func
             .params
@@ -87,19 +89,59 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
         // we compute the bytecode (which may also intern call refs).
         pools.intern_method(&class_descriptor, &func.name, ret, &params);
         let mc = lower_function(func, module, &class_descriptor, &mut pools);
-        method_codes.push((func.name.clone(), ret.to_string(), params, mc));
+        let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+        method_codes.push((func.name.clone(), ret.to_string(), params, mc, access));
+
+        if func.name == "main" && func.params.is_empty() {
+            has_no_arg_main = true;
+        }
+    }
+
+    // Synthesize a `main([Ljava/lang/String;)V` bridge that calls `main()V`.
+    // This matches kotlinc/d8's output for Kotlin 2 no-arg `fun main()`.
+    if has_no_arg_main {
+        let bridge_params: Vec<&str> = vec!["[Ljava/lang/String;"];
+        pools.intern_type("[Ljava/lang/String;");
+        let main_void_idx = pools.intern_method(&class_descriptor, "main", "V", &[]);
+        pools.intern_method(&class_descriptor, "main", "V", &bridge_params);
+        // Bytecode: invoke-static {}, main:()V + return-void
+        let insns = vec![
+            0x0071u16, // invoke-static, 0 args
+            0,         // method index placeholder (patched)
+            0,         // no register args
+            0x000E,    // return-void
+        ];
+        let bridge_mc = MethodCode {
+            registers_size: 1, // 1 register for the String[] param
+            ins_size: 1,
+            outs_size: 0,
+            insns,
+            patches: vec![crate::bytecode::Patch {
+                insn_offset: 1, // index of the method index placeholder
+                kind: crate::bytecode::PatchKind::Method,
+                old_idx: main_void_idx,
+            }],
+        };
+        let access = ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC;
+        method_codes.push((
+            "main".to_string(),
+            "V".to_string(),
+            bridge_params,
+            bridge_mc,
+            access,
+        ));
     }
 
     // ─── Phase 2: finalize pools, get sorted indices + remap ─────────────
-    let (final_idx, remap, param_lists) = pools.finalize();
+    let (final_idx, remap, finalized_param_lists) = pools.finalize();
 
     // After remapping, the bytecode patches need to point at the new
     // string/type/method indices.
-    let method_codes: Vec<(String, String, Vec<&str>, MethodCode)> = method_codes
+    let method_codes: Vec<(String, String, Vec<&str>, MethodCode, u32)> = method_codes
         .into_iter()
-        .map(|(n, r, p, mut mc)| {
+        .map(|(n, r, p, mut mc, a)| {
             apply_remap(&mut mc, &remap);
-            (n, r, p, mc)
+            (n, r, p, mc, a)
         })
         .collect();
 
@@ -143,9 +185,10 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     }
 
     // 1. Type lists.
-    let mut type_list_offsets: Vec<u32> = Vec::with_capacity(param_lists.len());
-    let mut type_list_bytes_per_entry: Vec<Vec<u8>> = Vec::with_capacity(param_lists.len());
-    for list in &param_lists {
+    let mut type_list_offsets: Vec<u32> = Vec::with_capacity(finalized_param_lists.len());
+    let mut type_list_bytes_per_entry: Vec<Vec<u8>> =
+        Vec::with_capacity(finalized_param_lists.len());
+    for list in &finalized_param_lists {
         data_cursor = align(data_cursor, 4);
         type_list_offsets.push(data_cursor as u32);
         let mut bytes = Vec::new();
@@ -164,7 +207,7 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     // 2. Code items.
     let mut code_offsets: Vec<u32> = Vec::with_capacity(method_codes.len());
     let mut code_item_blobs: Vec<Vec<u8>> = Vec::with_capacity(method_codes.len());
-    for (_, _, _, mc) in &method_codes {
+    for (_, _, _, mc, _) in &method_codes {
         data_cursor = align(data_cursor, 4);
         code_offsets.push(data_cursor as u32);
         let mut bytes = Vec::new();
@@ -200,13 +243,18 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     let mut encoded: Vec<(u32, u32, u32)> = method_codes
         .iter()
         .enumerate()
-        .map(|(i, (name, ret, params, _mc))| {
+        .map(|(i, (name, ret, params, _mc, access))| {
             // Find this method's final index in final_idx.methods.
-            let final_method_idx =
-                method_idx_for(&final_idx, class_idx_in_types, name, ret, params, &remap);
-            let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+            let final_method_idx = method_idx_for(
+                &final_idx,
+                &finalized_param_lists,
+                class_idx_in_types,
+                name,
+                ret,
+                params,
+            );
             let code_off = code_offsets[i];
-            (final_method_idx, access, code_off)
+            (final_method_idx, *access, code_off)
         })
         .collect();
     encoded.sort_by_key(|&(idx, _, _)| idx);
@@ -474,32 +522,44 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
 /// signature. Used during `class_data_item` emission.
 fn method_idx_for(
     final_idx: &FinalIndices,
+    param_lists: &[Vec<u32>],
     class_idx: u32,
     name: &str,
     ret: &str,
     params: &[&str],
-    _remap: &crate::pools::Remap,
 ) -> u32 {
     let name_string_idx = final_idx
         .strings
         .iter()
         .position(|s| s == name)
         .expect("method name in pool") as u32;
-    // Walk methods linearly — PR #3 fixtures have at most a handful.
+    let ret_string_idx = final_idx.strings.iter().position(|s| s == ret).unwrap() as u32;
+    // Walk methods linearly.
     for (i, m) in final_idx.methods.iter().enumerate() {
-        if m.class_idx as u32 == class_idx && m.name_idx == name_string_idx {
-            // Check the proto matches.
-            let proto = &final_idx.protos[m.proto_idx as usize];
-            if final_idx.type_string_idx[proto.return_type_idx as usize]
-                == final_idx.strings.iter().position(|s| s == ret).unwrap() as u32
-            {
-                // Check parameter list (we don't store the original
-                // parameter list directly here; we'd need to look up
-                // via the type_list pool. For PR #3 method overloads
-                // by parameter list aren't exercised, so the first
-                // (class, name) match is correct.)
-                return i as u32;
-            }
+        if m.class_idx as u32 != class_idx || m.name_idx != name_string_idx {
+            continue;
+        }
+        let proto = &final_idx.protos[m.proto_idx as usize];
+        if final_idx.type_string_idx[proto.return_type_idx as usize] != ret_string_idx {
+            continue;
+        }
+        // Check parameter list matches.
+        let proto_params: Vec<u32> = match proto.parameters_list {
+            Some(list_id) => param_lists[list_id as usize].clone(),
+            None => vec![],
+        };
+        if proto_params.len() != params.len() {
+            continue;
+        }
+        let params_match = params
+            .iter()
+            .zip(proto_params.iter())
+            .all(|(p, &type_idx)| {
+                let p_string_idx = final_idx.strings.iter().position(|s| s == *p).unwrap() as u32;
+                final_idx.type_string_idx[type_idx as usize] == p_string_idx
+            });
+        if params_match {
+            return i as u32;
         }
     }
     panic!("method `{class_idx}.{name}{ret} {params:?}` not found in final_idx");

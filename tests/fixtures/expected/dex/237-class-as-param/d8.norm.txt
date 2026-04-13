@@ -1,0 +1,84 @@
+dex_version   035
+strings       37
+types         11
+methods       9
+classes       2
+
+--- strings ---
+  ""
+  "()I"
+  "(I)V"
+  "<init>"
+  "I"
+  "IL"
+  "LBox;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "b"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "doubleBox"
+  "getValue"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "unbox"
+  "value"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{4}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+  "��\u{14}\n��\n\u{2}\u{10}\u{8}\n��\n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{2}\u{1a}\u{e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{1a}\u{e}\u{10}\u{4}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{1a}\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{6}"
+
+--- types ---
+  I
+  LBox;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBox;.<init>(I)V
+  LBox;.getValue()I
+  LInputKt;.doubleBox(LBox;)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.unbox(LBox;)I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Object;.<init>()V
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LBox;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10001 regs=2 ins=2 outs=1 insns=6
+  method       getValue()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       doubleBox(LBox;)I flags=0x0019 regs=2 ins=1 outs=2 insns=12
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=26
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       unbox(LBox;)I flags=0x0019 regs=2 ins=1 outs=2 insns=10

@@ -1,0 +1,51 @@
+dex_version   035
+strings       20
+types         8
+methods       4
+classes       1
+
+--- strings ---
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "VZ"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "ftp://files.example.com"
+  "http"
+  "https://example.com"
+  "input.kt"
+  "isUrl"
+  "main"
+  "not a url"
+  "out"
+  "println"
+
+--- types ---
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.isUrl(Ljava/lang/String;)Z
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Z)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       isUrl(Ljava/lang/String;)Z flags=0x0019 regs=4 ins=1 outs=0 insns=4
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=34
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

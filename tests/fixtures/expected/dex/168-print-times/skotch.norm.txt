@@ -1,7 +1,7 @@
 dex_version   035
-strings       16
-types         7
-methods       3
+strings       17
+types         8
+methods       4
 classes       1
 
 --- strings ---
@@ -14,6 +14,7 @@ classes       1
   "V"
   "VL"
   "VLI"
+  "[Ljava/lang/String;"
   "hello"
   "input.kt"
   "main"
@@ -30,9 +31,11 @@ classes       1
   Ljava/lang/String;
   Ljava/lang/System;
   V
+  [Ljava/lang/String;
 
 --- methods ---
   LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.printTimes(Ljava/lang/String;I)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
 
@@ -41,4 +44,5 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=13
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
   method       printTimes(Ljava/lang/String;I)V flags=0x0019 regs=10 ins=2 outs=2 insns=23
