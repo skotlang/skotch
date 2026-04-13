@@ -95,6 +95,43 @@ pub fn lower_function(
     }
 
     let num_params = func.params.len() as u16;
+
+    // Count non-unit, non-parameter locals to see if comparisons will
+    // need registers >= 16.  If so, reserve 2 extra scratch registers
+    // so that the comparison operands can be moved into low regs.
+    let num_non_unit_locals: u16 = func
+        .locals
+        .iter()
+        .enumerate()
+        .filter(|(i, ty)| (*i as u16) >= num_params && !matches!(ty, Ty::Unit))
+        .count() as u16;
+    let total_regs = scratch_needed + num_non_unit_locals + num_params;
+    let has_comparisons = func.blocks.iter().any(|b| {
+        b.stmts.iter().any(|s| {
+            let Stmt::Assign { value, .. } = s;
+            matches!(
+                value,
+                Rvalue::BinOp {
+                    op: MBinOp::CmpEq
+                        | MBinOp::CmpNe
+                        | MBinOp::CmpLt
+                        | MBinOp::CmpGe
+                        | MBinOp::CmpGt
+                        | MBinOp::CmpLe,
+                    ..
+                }
+            )
+        })
+    });
+    // If total registers >= 16 and comparisons exist, we need 2 scratch
+    // registers for moving high-register comparison operands into low regs.
+    let cmp_scratch: u16 = if has_comparisons && total_regs >= 16 {
+        2
+    } else {
+        0
+    };
+    scratch_needed += cmp_scratch;
+
     let mut slot: FxHashMap<u32, u16> = FxHashMap::default();
     let mut next_local: u16 = scratch_needed;
     for (i, ty) in func.locals.iter().enumerate() {
@@ -140,6 +177,7 @@ pub fn lower_function(
             &slot,
             &func.locals,
             scratch_needed,
+            cmp_scratch,
             &mut code,
             &mut patches,
             &mut max_outs,
@@ -297,6 +335,7 @@ fn walk_block(
     slot: &FxHashMap<u32, u16>,
     locals: &[Ty],
     scratch_base: u16,
+    cmp_scratch: u16,
     code: &mut Vec<u16>,
     patches: &mut Vec<Patch>,
     max_outs: &mut u16,
@@ -311,7 +350,7 @@ fn walk_block(
                 emit_move(*src, *dest, slot, locals, code);
             }
             Rvalue::BinOp { op, lhs, rhs } => {
-                emit_binop(*op, *lhs, *rhs, *dest, slot, code);
+                emit_binop(*op, *lhs, *rhs, *dest, slot, cmp_scratch, code);
             }
             Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
                 // TODO: class support in DEX backend
@@ -532,10 +571,10 @@ fn emit_move(
         let high = ((src_reg & 0x0F) << 4) | (dest_reg & 0x0F);
         code.push((high << 8) | opcode as u16);
     } else {
-        // Format 32x: move/16 or move-object/16 (16-bit registers)
+        // Format 22x: AA|op BBBB (move/from16 or move-object/from16)
+        // AA = dest (8-bit), BBBB = src (16-bit).
         let opcode: u8 = if is_obj { 0x08 } else { 0x02 };
-        code.push(opcode as u16); // 00|op
-        code.push(dest_reg);
+        code.push(opcode_aa(opcode, dest_reg as u8));
         code.push(src_reg);
     }
 }
@@ -546,6 +585,7 @@ fn emit_binop(
     rhs: LocalId,
     dest: LocalId,
     slot: &FxHashMap<u32, u16>,
+    cmp_scratch: u16,
     code: &mut Vec<u16>,
 ) {
     let l = slot[&lhs.0] as u8;
@@ -601,17 +641,14 @@ fn emit_binop(
         | MBinOp::CmpGe => {
             // DEX integer comparison: if-<op> vA, vB, +offset
             // If true → set dest=1; else dest=0.
-            // We emit:
-            //   const/4 vD, 0         (assume false)
-            //   if-<op> vL, vR, +4    (skip the next 2 insns if true... wait)
             //
-            // Simpler: just set dest=1, then conditionally set to 0.
-            //   const/4 vD, 1
-            //   if-<op> vL, vR, +3    (skip the const/4 0 below)
-            //   const/4 vD, 0
+            //   const/4 vD, 1       (optimistic: true)
+            //   if-<op> vL, vR, +N  (skip the false-correction below)
+            //   const/4 vD, 0       (correction: false)
             //
-            // if-eq is "jump if equal". We want dest=1 when the
-            // comparison is true, so for CmpEq we use if-eq.
+            // Format 22t requires 4-bit registers.  When comparison
+            // operands are >= 16, move them into dedicated comparison
+            // scratch registers (guaranteed < 16) first.
             let cond_op: u8 = match op {
                 MBinOp::CmpEq => 0x32, // if-eq
                 MBinOp::CmpNe => 0x33, // if-ne
@@ -621,14 +658,39 @@ fn emit_binop(
                 MBinOp::CmpLe => 0x37, // if-le
                 _ => unreachable!(),
             };
+
+            let mut l_eff = l as u16;
+            let mut r_eff = r as u16;
+
+            if cmp_scratch >= 2 {
+                // Comparison scratch registers: v(cmp_scratch-2), v(cmp_scratch-1)
+                let cmp0 = cmp_scratch - 2;
+                let cmp1 = cmp_scratch - 1;
+                if l_eff >= 16 {
+                    // move/from16 vCmp0, vL  (format 22x)
+                    code.push(opcode_aa(0x02, cmp0 as u8));
+                    code.push(l_eff);
+                    l_eff = cmp0;
+                }
+                if r_eff >= 16 {
+                    let tmp = if l_eff == cmp0 { cmp1 } else { cmp0 };
+                    // move/from16 vTmp, vR  (format 22x)
+                    code.push(opcode_aa(0x02, tmp as u8));
+                    code.push(r_eff);
+                    r_eff = tmp;
+                }
+            }
+
             // const/4 vD, 1  (optimistic: true)
             emit_const_4_inline(code, d as u16, 1);
-            // if-<op> vL, vR, +3  (skip the const/4 0 that follows)
-            // Format 22t: B|A|op | CCCC
-            let ab = ((r as u16 & 0xF) << 4) | (l as u16 & 0xF);
+            // if-<op> vL, vR, +offset  (format 22t: B|A|op CCCC)
+            let ab = ((r_eff & 0x0F) << 4) | (l_eff & 0x0F);
             code.push((ab << 8) | cond_op as u16);
-            code.push(3i16 as u16); // offset +3 code units
-                                    // const/4 vD, 0  (correction: false)
+            // Offset = 2 (this insn) + correction_size.
+            // emit_const_4_inline is 1 code-unit if d < 16, 2 if d >= 16.
+            let correction_size: i16 = if (d as u16) < 16 { 1 } else { 2 };
+            code.push((2 + correction_size) as u16);
+            // const/4 vD, 0  (correction: false)
             emit_const_4_inline(code, d as u16, 0);
         }
     }

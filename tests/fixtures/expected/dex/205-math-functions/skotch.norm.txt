@@ -1,7 +1,7 @@
 dex_version   035
-strings       18
-types         6
-methods       7
+strings       20
+types         7
+methods       8
 classes       1
 
 --- strings ---
@@ -14,6 +14,8 @@ classes       1
   "Ljava/lang/System;"
   "V"
   "VI"
+  "VL"
+  "[Ljava/lang/String;"
   "abs"
   "gcd"
   "input.kt"
@@ -31,12 +33,14 @@ classes       1
   Ljava/lang/Object;
   Ljava/lang/System;
   V
+  [Ljava/lang/String;
 
 --- methods ---
   LInputKt;.abs(I)I
   LInputKt;.gcd(II)I
   LInputKt;.lcm(II)I
   LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.max(II)I
   LInputKt;.min(II)I
   Ljava/io/PrintStream;.println(I)V
@@ -46,8 +50,9 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       abs(I)I flags=0x0019 regs=9 ins=1 outs=0 insns=18
-  method       gcd(II)I flags=0x0019 regs=18 ins=2 outs=1 insns=37
+  method       gcd(II)I flags=0x0019 regs=20 ins=2 outs=1 insns=38
   method       lcm(II)I flags=0x0019 regs=9 ins=2 outs=2 insns=13
   method       main()V flags=0x0019 regs=15 ins=0 outs=2 insns=58
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
   method       max(II)I flags=0x0019 regs=8 ins=2 outs=0 insns=15
   method       min(II)I flags=0x0019 regs=8 ins=2 outs=0 insns=15

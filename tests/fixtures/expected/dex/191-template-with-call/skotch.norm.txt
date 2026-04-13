@@ -1,0 +1,62 @@
+dex_version   035
+strings       26
+types         9
+methods       8
+classes       1
+
+--- strings ---
+  " * "
+  " = "
+  ") = "
+  "<init>"
+  "I"
+  "II"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "append"
+  "double"
+  "double("
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "toString"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.double(I)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       double(I)I flags=0x0019 regs=4 ins=1 outs=0 insns=5
+  method       main()V flags=0x0019 regs=16 ins=0 outs=2 insns=87
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
