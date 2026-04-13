@@ -202,7 +202,14 @@ pub fn lower_file(
                 lower_enum(e, &mut name_to_func, &mut module, interner);
             }
             Decl::Interface(iface) => {
-                lower_interface(iface, &mut module, interner);
+                lower_interface(
+                    iface,
+                    &mut name_to_func,
+                    &name_to_global,
+                    &mut module,
+                    interner,
+                    diags,
+                );
             }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
@@ -1681,28 +1688,54 @@ fn lower_expr(
                 }
 
                 let (kind, dest_ty) = if let Ty::Class(class_name) = &recv_ty {
-                    // Look up method in class, walking the superclass chain.
+                    // Look up method in class, walking superclass + interfaces.
                     let mut return_ty = Ty::Unit;
+                    let mut found_on_interface = false;
+                    let mut iface_name = String::new();
                     let mut search = Some(class_name.clone());
-                    while let Some(ref cname) = search {
+                    'outer: while let Some(ref cname) = search {
                         if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
                             if let Some(m) = cls.methods.iter().find(|m| m.name == method_name_str)
                             {
                                 return_ty = m.return_ty.clone();
                                 break;
                             }
+                            // Search implemented interfaces.
+                            for iname in &cls.interfaces {
+                                if let Some(icls) = module.classes.iter().find(|c| &c.name == iname)
+                                {
+                                    if let Some(m) =
+                                        icls.methods.iter().find(|m| m.name == method_name_str)
+                                    {
+                                        return_ty = m.return_ty.clone();
+                                        found_on_interface = true;
+                                        iface_name = iname.clone();
+                                        break 'outer;
+                                    }
+                                }
+                            }
                             search = cls.super_class.clone();
                         } else {
                             break;
                         }
                     }
-                    (
-                        CallKind::Virtual {
-                            class_name: class_name.clone(),
-                            method_name: method_name_str,
-                        },
-                        return_ty,
-                    )
+                    if found_on_interface {
+                        (
+                            CallKind::Virtual {
+                                class_name: iface_name,
+                                method_name: method_name_str,
+                            },
+                            return_ty,
+                        )
+                    } else {
+                        (
+                            CallKind::Virtual {
+                                class_name: class_name.clone(),
+                                method_name: method_name_str,
+                            },
+                            return_ty,
+                        )
+                    }
                 } else if let Some(fid) = name_to_func.get(&method_name) {
                     (
                         CallKind::Static(*fid),
@@ -1927,13 +1960,12 @@ fn lower_expr(
                 if let Some((_sym, this_local)) = this_info {
                     let this_ty = &fb.mf.locals[this_local.0 as usize];
                     if let Ty::Class(class_name) = this_ty {
-                        // Look up in this class and superclasses.
+                        // Look up in this class, superclasses, and interfaces.
                         let mut search_class = Some(class_name.clone());
-                        while let Some(ref cname) = search_class {
+                        'search: while let Some(ref cname) = search_class {
                             let found = module.classes.iter().find(|c| &c.name == cname);
                             if let Some(cls) = found {
                                 if cls.methods.iter().any(|m| m.name == callee_str) {
-                                    // Prepend `this` as first arg.
                                     arg_locals.insert(0, *this_local);
                                     let ret_ty = cls
                                         .methods
@@ -1949,6 +1981,26 @@ fn lower_expr(
                                         ret_ty,
                                     ));
                                     break;
+                                }
+                                // Search interfaces.
+                                for iname in &cls.interfaces {
+                                    if let Some(icls) =
+                                        module.classes.iter().find(|c| &c.name == iname)
+                                    {
+                                        if let Some(m) =
+                                            icls.methods.iter().find(|m| m.name == callee_str)
+                                        {
+                                            arg_locals.insert(0, *this_local);
+                                            resolved = Some((
+                                                CallKind::Virtual {
+                                                    class_name: iname.clone(),
+                                                    method_name: callee_str.to_string(),
+                                                },
+                                                m.return_ty.clone(),
+                                            ));
+                                            break 'search;
+                                        }
+                                    }
                                 }
                                 search_class = cls.super_class.clone();
                             } else {
@@ -2224,6 +2276,53 @@ fn lower_expr(
                 loop_ctx,
             )?;
 
+            // Sealed class exhaustiveness check: if the subject is a sealed
+            // class, verify all subclasses are covered by `is` patterns.
+            if !is_subjectless && else_body.is_none() {
+                let subj_ty = &fb.mf.locals[subj.0 as usize];
+                if let Ty::Class(class_name) = subj_ty {
+                    let is_sealed = module
+                        .classes
+                        .iter()
+                        .any(|c| &c.name == class_name && c.is_abstract && !c.is_interface);
+                    if is_sealed {
+                        // Collect all subclasses.
+                        let subclasses: Vec<&str> = module
+                            .classes
+                            .iter()
+                            .filter(|c| c.super_class.as_deref() == Some(class_name.as_str()))
+                            .map(|c| c.name.as_str())
+                            .collect();
+                        // Collect all `is` patterns in the when branches.
+                        let covered: Vec<String> = branches
+                            .iter()
+                            .filter_map(|b| {
+                                if let Expr::IsCheck { type_name, .. } = &b.pattern {
+                                    Some(interner.resolve(*type_name).to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let missing: Vec<&&str> = subclasses
+                            .iter()
+                            .filter(|s| !covered.iter().any(|c| c == **s))
+                            .collect();
+                        if !missing.is_empty() {
+                            let names: Vec<&str> = missing.iter().map(|s| **s).collect();
+                            diags.push(Diagnostic::error(
+                                subject.span(),
+                                format!(
+                                    "'when' on sealed class `{}` is not exhaustive. Missing: {}",
+                                    class_name,
+                                    names.join(", ")
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
+
             let result = fb.new_local(Ty::String); // type patched below
 
             // Pre-allocate ALL blocks so they're in the right order:
@@ -2308,8 +2407,8 @@ fn lower_expr(
                         },
                     });
                     both
-                } else if is_subjectless {
-                    // Subjectless when: the pattern IS the boolean condition.
+                } else if is_subjectless || matches!(&branch.pattern, Expr::IsCheck { .. }) {
+                    // Subjectless when or `is Type` pattern: the pattern IS the condition.
                     pattern_local
                 } else {
                     // Subject when: compare subject == pattern.
@@ -3111,13 +3210,13 @@ fn lower_enum(
     // For each entry, create a function that returns the entry's name as a String.
     // This is a simplified model — real enums have ordinals and are instances of a
     // class, but for basic usage (when matching, println, .name) strings suffice.
-    for (ordinal, &entry_sym) in e.entries.iter().enumerate() {
-        let entry_name = interner.resolve(entry_sym).to_string();
+    for (ordinal, entry) in e.entries.iter().enumerate() {
+        let entry_name = interner.resolve(entry.name).to_string();
         let fn_idx = module.functions.len();
         let fn_id = FuncId(fn_idx as u32);
 
         // Register the entry name so Color.RED resolves.
-        name_to_func.insert(entry_sym, fn_id);
+        name_to_func.insert(entry.name, fn_id);
 
         let sid = module.intern_string(&entry_name);
         let mut fb = FnBuilder::new(fn_idx, entry_name, Ty::String);
@@ -3129,7 +3228,7 @@ fn lower_enum(
         fb.set_terminator(Terminator::ReturnValue(result));
         module.add_function(fb.finish());
 
-        let _ = (ordinal, &enum_name); // used later for .ordinal support
+        let _ = (ordinal, &enum_name); // used later for .ordinal/.value support
     }
 }
 
@@ -3719,13 +3818,16 @@ fn lower_class(
 
 fn lower_interface(
     iface: &skotch_syntax::InterfaceDecl,
+    name_to_func: &mut FxHashMap<Symbol, FuncId>,
+    name_to_global: &FxHashMap<Symbol, MirConst>,
     module: &mut MirModule,
     interner: &mut Interner,
+    diags: &mut Diagnostics,
 ) {
-    let name = interner.resolve(iface.name).to_string();
+    let iface_name = interner.resolve(iface.name).to_string();
 
-    // Interface methods: create MirFunction stubs with is_abstract = true.
-    let methods: Vec<MirFunction> = iface
+    // Pre-register the interface with method stubs for self-resolution.
+    let stub_methods: Vec<MirFunction> = iface
         .methods
         .iter()
         .map(|m| {
@@ -3749,8 +3851,6 @@ fn lower_interface(
             }
         })
         .collect();
-
-    // Interfaces have no constructor — use a dummy.
     let dummy_init = MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
@@ -3763,18 +3863,76 @@ fn lower_interface(
         param_defaults: Vec::new(),
         is_abstract: false,
     };
-
+    let class_idx = module.classes.len();
     module.classes.push(MirClass {
-        name,
+        name: iface_name.clone(),
         super_class: None,
         is_open: true,
         is_abstract: true,
         is_interface: true,
         interfaces: Vec::new(),
         fields: Vec::new(),
-        methods,
-        constructor: dummy_init,
+        methods: stub_methods,
+        constructor: dummy_init.clone(),
     });
+
+    // Lower method bodies for default methods (non-abstract).
+    let mut mir_methods = Vec::new();
+    for method in &iface.methods {
+        let method_name = interner.resolve(method.name).to_string();
+        let return_ty = method
+            .return_ty
+            .as_ref()
+            .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+            .unwrap_or(Ty::Unit);
+
+        if method.is_abstract {
+            // Abstract method — stub only.
+            mir_methods.push(MirFunction {
+                id: FuncId(0),
+                name: method_name,
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: Vec::new(),
+                return_ty,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+            });
+        } else {
+            // Default method — lower the body.
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, method_name.clone(), return_ty);
+            let this_local = fb.new_local(Ty::Class(iface_name.clone()));
+            fb.mf.params.push(this_local);
+            let this_sym = interner.intern("this");
+            let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+            for p in &method.params {
+                let ty = skotch_types::ty_from_name(interner.resolve(p.ty.name)).unwrap_or(Ty::Any);
+                let id = fb.new_local(ty);
+                fb.mf.params.push(id);
+                scope.push((p.name, id));
+            }
+            for s in &method.body.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            mir_methods.push(fb.finish());
+        }
+    }
+
+    // Replace stubs with real methods.
+    module.classes[class_idx].methods = mir_methods;
 }
 
 #[cfg(test)]

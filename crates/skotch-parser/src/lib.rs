@@ -600,6 +600,39 @@ impl<'a> Parser<'a> {
         };
         self.skip_trivia();
 
+        // Optional constructor params: enum class Color(val hex: Int)
+        let mut constructor_params = Vec::new();
+        if self.peek_kind() == TokenKind::LParen {
+            self.bump();
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    let param_start = self.peek_span();
+                    let is_val = self.peek_kind() == TokenKind::KwVal;
+                    let is_var = self.peek_kind() == TokenKind::KwVar;
+                    if is_val || is_var {
+                        self.bump();
+                        self.skip_trivia();
+                    }
+                    let p = self.parse_param();
+                    constructor_params.push(ConstructorParam {
+                        is_val,
+                        is_var,
+                        name: p.name,
+                        ty: p.ty,
+                        span: param_start.merge(p.span),
+                    });
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+        }
+
         let mut entries = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
@@ -611,14 +644,33 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::Ident {
                     let entry_idx = self.pos;
                     self.bump();
-                    entries.push(self.intern_ident_at(entry_idx));
+                    let entry_name = self.intern_ident_at(entry_idx);
+                    // Optional args: RED(0xFF0000)
+                    let mut entry_args = Vec::new();
+                    if self.peek_kind() == TokenKind::LParen {
+                        self.bump();
+                        self.skip_trivia();
+                        if self.peek_kind() != TokenKind::RParen {
+                            loop {
+                                self.skip_trivia();
+                                entry_args.push(self.parse_expr());
+                                self.skip_trivia();
+                                if !self.eat(TokenKind::Comma) {
+                                    break;
+                                }
+                            }
+                        }
+                        self.expect(TokenKind::RParen, ")");
+                    }
+                    entries.push(skotch_syntax::EnumEntry {
+                        name: entry_name,
+                        args: entry_args,
+                    });
                     self.skip_trivia();
-                    // Consume optional comma or semicolon between entries.
                     if self.peek_kind() == TokenKind::Comma {
                         self.bump();
                     } else if self.peek_kind() == TokenKind::Semi {
                         self.bump();
-                        // Semicolon ends the entry list; rest is methods (skip for now).
                         break;
                     }
                 } else {
@@ -637,6 +689,7 @@ impl<'a> Parser<'a> {
         EnumDecl {
             name,
             name_span,
+            constructor_params,
             entries,
             span: kw.merge(name_span),
         }
@@ -1678,7 +1731,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             // Regular branch: pattern[, pattern]* -> body
-            // Patterns can be: expr, in expr..expr (range test)
+            // Patterns can be: expr, `in expr..expr`, `is Type`
             let start = self.peek_span();
             let mut patterns: Vec<(Expr, Option<Expr>)> = Vec::new();
             loop {
@@ -1692,6 +1745,22 @@ impl<'a> Parser<'a> {
                     self.skip_trivia();
                     let range_end = self.parse_expr();
                     patterns.push((range_start, Some(range_end)));
+                } else if self.peek_kind() == TokenKind::KwIs {
+                    // `is Type` pattern: lower as IsCheck on the subject.
+                    let is_span = self.peek_span();
+                    self.bump(); // consume `is`
+                    self.skip_trivia();
+                    let type_idx = self.pos;
+                    let type_span = self.peek_span();
+                    self.expect(TokenKind::Ident, "type name");
+                    let type_name = self.intern_ident_at(type_idx);
+                    let check = Expr::IsCheck {
+                        expr: Box::new(subject.clone()),
+                        type_name,
+                        negated: false,
+                        span: is_span.merge(type_span),
+                    };
+                    patterns.push((check, None));
                 } else {
                     patterns.push((self.parse_expr(), None));
                 }
@@ -1729,9 +1798,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parse a when-branch body — currently single expressions only.
+    /// Parse a when-branch body. Uses additive-level parsing to avoid
+    /// consuming `is`/`!is` tokens from the NEXT branch (which would be
+    /// interpreted as comparison operators on the body expression).
     fn parse_when_body(&mut self) -> Expr {
-        self.parse_expr()
+        self.parse_additive()
     }
 
     /// Parse the body of an `if` branch — either a `{ block }` or a
