@@ -1,4 +1,4 @@
 fun main() {
     val sep = System.lineSeparator()
-    println(sep == "\n")
+    println(sep.isEmpty())
 }

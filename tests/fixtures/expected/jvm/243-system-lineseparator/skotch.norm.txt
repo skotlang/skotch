@@ -3,21 +3,17 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=5
     0000 invokestatic Method(java/lang/System.lineSeparator:()Ljava/lang/String;)
     0003 astore 1
     0005 aload 1
     0007 astore 2
     0009 aload 2
     0011 astore 3
-    0013 ldc "
-"
-    0015 astore 4
-    0017 aload 3
-    0019 aload 4
-    0021 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0024 istore 5
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 iload 5
-    0031 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0034 return
+    0013 aload 3
+    0015 invokevirtual Method(java/lang/String.isEmpty:()Z)
+    0018 istore 4
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload 4
+    0025 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0028 return

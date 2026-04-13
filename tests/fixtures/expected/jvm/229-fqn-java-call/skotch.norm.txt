@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=6
     0000 ldc "file.separator"
     0002 astore 1
     0004 aload 1
@@ -13,13 +13,10 @@ method        main ([Ljava/lang/String;)V 0x0009
     0013 astore 3
     0015 aload 3
     0017 astore 4
-    0019 ldc "/"
-    0021 astore 5
-    0023 aload 4
-    0025 aload 5
-    0027 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0030 istore 6
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 iload 6
-    0037 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0040 return
+    0019 aload 4
+    0021 invokevirtual Method(java/lang/String.length:()I)
+    0024 istore 5
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload 5
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 return
