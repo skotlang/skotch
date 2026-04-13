@@ -270,6 +270,127 @@ pub fn lower_file(
 /// uses of the same text — backends dedupe constant-pool entries
 /// across the whole module, and inlining the global through the same
 /// string pool keeps that dedup correct.
+/// Collect free variables in a lambda body: names that are referenced
+/// but not defined as lambda parameters or known top-level functions.
+fn collect_free_vars(
+    body: &skotch_syntax::Block,
+    param_names: &[Symbol],
+    outer_scope: &[(Symbol, LocalId)],
+    fb: &FnBuilder,
+    _interner: &Interner,
+) -> Vec<(Symbol, LocalId, Ty)> {
+    let mut free = Vec::new();
+    let mut seen = rustc_hash::FxHashSet::default();
+    collect_free_in_block(body, param_names, outer_scope, fb, &mut free, &mut seen);
+    free
+}
+
+fn collect_free_in_block(
+    block: &skotch_syntax::Block,
+    param_names: &[Symbol],
+    outer_scope: &[(Symbol, LocalId)],
+    fb: &FnBuilder,
+    free: &mut Vec<(Symbol, LocalId, Ty)>,
+    seen: &mut rustc_hash::FxHashSet<Symbol>,
+) {
+    for stmt in &block.stmts {
+        match stmt {
+            Stmt::Expr(e) | Stmt::Return { value: Some(e), .. } => {
+                collect_free_in_expr(e, param_names, outer_scope, fb, free, seen);
+            }
+            Stmt::Val(v) => {
+                collect_free_in_expr(&v.init, param_names, outer_scope, fb, free, seen);
+            }
+            Stmt::Assign { value, .. } => {
+                collect_free_in_expr(value, param_names, outer_scope, fb, free, seen);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_free_in_expr(
+    e: &Expr,
+    param_names: &[Symbol],
+    outer_scope: &[(Symbol, LocalId)],
+    fb: &FnBuilder,
+    free: &mut Vec<(Symbol, LocalId, Ty)>,
+    seen: &mut rustc_hash::FxHashSet<Symbol>,
+) {
+    match e {
+        Expr::Ident(name, _) => {
+            if !param_names.contains(name) && !seen.contains(name) {
+                if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
+                    let ty = fb.mf.locals[local_id.0 as usize].clone();
+                    free.push((*name, *local_id, ty));
+                    seen.insert(*name);
+                }
+            }
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            collect_free_in_expr(lhs, param_names, outer_scope, fb, free, seen);
+            collect_free_in_expr(rhs, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::Unary { operand, .. } => {
+            collect_free_in_expr(operand, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::Call { callee, args, .. } => {
+            collect_free_in_expr(callee, param_names, outer_scope, fb, free, seen);
+            for a in args {
+                collect_free_in_expr(&a.expr, param_names, outer_scope, fb, free, seen);
+            }
+        }
+        Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
+            collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_free_in_expr(cond, param_names, outer_scope, fb, free, seen);
+            collect_free_in_block(then_block, param_names, outer_scope, fb, free, seen);
+            if let Some(eb) = else_block {
+                collect_free_in_block(eb, param_names, outer_scope, fb, free, seen);
+            }
+        }
+        Expr::StringTemplate(parts, _) => {
+            for p in parts {
+                match p {
+                    skotch_syntax::TemplatePart::Expr(inner) => {
+                        collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
+                    }
+                    skotch_syntax::TemplatePart::IdentRef(sym, _) => {
+                        if !param_names.contains(sym) && !seen.contains(sym) {
+                            if let Some((_, local_id)) =
+                                outer_scope.iter().rev().find(|(s, _)| s == sym)
+                            {
+                                let ty = fb.mf.locals[local_id.0 as usize].clone();
+                                free.push((*sym, *local_id, ty));
+                                seen.insert(*sym);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Expr::Paren(inner, _)
+        | Expr::NotNullAssert { expr: inner, .. }
+        | Expr::IsCheck { expr: inner, .. }
+        | Expr::AsCast { expr: inner, .. }
+        | Expr::Throw { expr: inner, .. } => {
+            collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::ElvisOp { lhs, rhs, .. } => {
+            collect_free_in_expr(lhs, param_names, outer_scope, fb, free, seen);
+            collect_free_in_expr(rhs, param_names, outer_scope, fb, free, seen);
+        }
+        _ => {}
+    }
+}
+
 fn lower_const_init(e: &Expr, module: &mut MirModule) -> Option<MirConst> {
     match e {
         Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
@@ -1577,9 +1698,68 @@ fn lower_expr(
                     all_args.push(id);
                 }
 
-                // Check if receiver is a class instance for virtual dispatch.
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
+
+                // ── Scope functions (let, also, run, apply) ─────────
+                // Lowered as inline intrinsics: the trailing lambda arg
+                // is invoked with the receiver, and the result depends
+                // on the scope function semantics.
+                if matches!(method_name_str.as_str(), "let" | "also" | "run" | "apply")
+                    && args.len() == 1
+                {
+                    // The single argument should be a lambda.
+                    let lambda_local = all_args.last().copied().unwrap();
+                    let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$"))
+                        || matches!(lambda_ty, Ty::Any);
+                    if is_lambda {
+                        // Invoke the lambda with the receiver as its argument.
+                        let invoke_class = if let Ty::Class(ref cn) = lambda_ty {
+                            cn.clone()
+                        } else {
+                            "java/lang/Object".to_string()
+                        };
+                        let invoke_ret = if let Ty::Class(ref cn) = lambda_ty {
+                            module
+                                .classes
+                                .iter()
+                                .find(|c| &c.name == cn)
+                                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                                .map(|m| m.return_ty.clone())
+                                .unwrap_or(Ty::Any)
+                        } else {
+                            Ty::Any
+                        };
+
+                        let call_args = vec![lambda_local, recv_local];
+                        let call_result = fb.new_local(invoke_ret.clone());
+                        fb.push_stmt(MStmt::Assign {
+                            dest: call_result,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: invoke_class,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: call_args,
+                            },
+                        });
+
+                        return match method_name_str.as_str() {
+                            "let" | "run" => {
+                                // Return the lambda's result.
+                                Some(call_result)
+                            }
+                            "also" | "apply" => {
+                                // Return the original receiver.
+                                Some(recv_local)
+                            }
+                            _ => unreachable!(),
+                        };
+                    }
+                }
+
+                // Check if receiver is a class instance for virtual dispatch.
 
                 // Override table for methods with ambiguous JVM overloads.
                 // These need explicit descriptors because the JVM class has
@@ -2001,6 +2181,110 @@ fn lower_expr(
 
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
+
+            // `repeat(n) { body }` — execute lambda n times.
+            if callee_str == "repeat" && arg_locals.len() == 2 {
+                let count = arg_locals[0];
+                let lambda = arg_locals[1];
+                let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
+                if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                    let cn = if let Ty::Class(ref n) = lambda_ty {
+                        n.clone()
+                    } else {
+                        unreachable!()
+                    };
+                    // var i = 0; while (i < n) { lambda.invoke(i); i++ }
+                    let i_local = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: i_local,
+                        value: Rvalue::Const(MirConst::Int(0)),
+                    });
+                    let cond_blk = fb.new_block();
+                    let body_blk = fb.new_block();
+                    let exit_blk = fb.new_block();
+                    fb.terminate_and_switch(Terminator::Goto(cond_blk), cond_blk);
+                    // Condition: i < n
+                    let cmp = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: cmp,
+                        value: Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpLt,
+                            lhs: i_local,
+                            rhs: count,
+                        },
+                    });
+                    fb.terminate_and_switch(
+                        Terminator::Branch {
+                            cond: cmp,
+                            then_block: body_blk,
+                            else_block: exit_blk,
+                        },
+                        body_blk,
+                    );
+                    // Body: lambda.invoke(i)
+                    let _call_result = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: _call_result,
+                        value: Rvalue::Call {
+                            kind: CallKind::Virtual {
+                                class_name: cn,
+                                method_name: "invoke".to_string(),
+                            },
+                            args: vec![lambda, i_local],
+                        },
+                    });
+                    // i++
+                    let one = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: one,
+                        value: Rvalue::Const(MirConst::Int(1)),
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest: i_local,
+                        value: Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            lhs: i_local,
+                            rhs: one,
+                        },
+                    });
+                    fb.terminate_and_switch(Terminator::Goto(cond_blk), exit_blk);
+                    let result = fb.new_local(Ty::Unit);
+                    return Some(result);
+                }
+            }
+
+            // `with(receiver, lambda)` — invoke lambda with receiver as arg.
+            if callee_str == "with" && arg_locals.len() == 2 {
+                let receiver = arg_locals[0];
+                let lambda = arg_locals[1];
+                let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
+                if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                    let cn = if let Ty::Class(ref n) = lambda_ty {
+                        n.clone()
+                    } else {
+                        unreachable!()
+                    };
+                    let ret = module
+                        .classes
+                        .iter()
+                        .find(|c| c.name == cn)
+                        .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                        .map(|m| m.return_ty.clone())
+                        .unwrap_or(Ty::Any);
+                    let dest = fb.new_local(ret);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Virtual {
+                                class_name: cn,
+                                method_name: "invoke".to_string(),
+                            },
+                            args: vec![lambda, receiver],
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
 
             // Handle stdlib top-level functions as StaticJava calls.
             let stdlib_call = match (callee_str, args.len()) {
@@ -3018,28 +3302,53 @@ fn lower_expr(
         ),
 
         Expr::Lambda { params, body, .. } => {
-            // Generate a synthetic lambda class with an `invoke` method.
             let lambda_idx = module.classes.len();
             let lambda_class_name = format!("$Lambda${lambda_idx}");
 
-            // Build the invoke method. Start with Ty::Int as placeholder return
-            // type — we'll patch it after lowering the body based on what the
-            // ReturnValue terminator actually produces.
+            // ── Capture analysis ────────────────────────────────────
+            // Collect names referenced in the lambda body that are in
+            // the enclosing scope but NOT lambda parameters.
+            let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
+            let free_vars: Vec<(Symbol, LocalId, Ty)> =
+                collect_free_vars(body, &param_names, scope, fb, interner);
+
+            // Fields for captured variables.
+            let capture_fields: Vec<MirField> = free_vars
+                .iter()
+                .map(|(sym, _, ty)| MirField {
+                    name: interner.resolve(*sym).to_string(),
+                    ty: ty.clone(),
+                })
+                .collect();
+
+            // ── Invoke method ───────────────────────────────────────
             let mut invoke_fn = {
                 let fn_idx = module.functions.len() + 1000 + lambda_idx;
                 let mut invoke_fb = FnBuilder::new(fn_idx, "invoke".to_string(), Ty::Int);
-                // `this` parameter.
                 let this_local = invoke_fb.new_local(Ty::Class(lambda_class_name.clone()));
                 invoke_fb.mf.params.push(this_local);
-                // Lambda parameters.
+
                 let mut invoke_scope: Vec<(Symbol, LocalId)> = Vec::new();
+                // Load captured fields into locals.
+                for (sym, _, ty) in &free_vars {
+                    let local = invoke_fb.new_local(ty.clone());
+                    invoke_fb.push_stmt(MStmt::Assign {
+                        dest: local,
+                        value: Rvalue::GetField {
+                            receiver: this_local,
+                            class_name: lambda_class_name.clone(),
+                            field_name: interner.resolve(*sym).to_string(),
+                        },
+                    });
+                    invoke_scope.push((*sym, local));
+                }
+                // Lambda parameters.
                 for p in params {
                     let ty = resolve_type(interner.resolve(p.ty.name), module);
                     let pid = invoke_fb.new_local(ty);
                     invoke_fb.mf.params.push(pid);
                     invoke_scope.push((p.name, pid));
                 }
-                // Lower body.
                 for s in &body.stmts {
                     lower_stmt(
                         s,
@@ -3056,15 +3365,21 @@ fn lower_expr(
                 invoke_fb.finish()
             };
             invoke_fn.is_abstract = false;
-            // Patch return type from the actual ReturnValue terminator.
-            for block in &invoke_fn.blocks {
+            for block in &mut invoke_fn.blocks {
                 if let Terminator::ReturnValue(local) = &block.terminator {
-                    invoke_fn.return_ty = invoke_fn.locals[local.0 as usize].clone();
+                    let ret_ty = invoke_fn.locals[local.0 as usize].clone();
+                    if ret_ty == Ty::Unit {
+                        // Unit-returning lambda: use plain Return, not ReturnValue.
+                        block.terminator = Terminator::Return;
+                        invoke_fn.return_ty = Ty::Unit;
+                    } else {
+                        invoke_fn.return_ty = ret_ty;
+                    }
                     break;
                 }
             }
 
-            // Build trivial <init> constructor.
+            // ── Constructor (takes captured values) ─────────────────
             let mut init_fn = MirFunction {
                 id: FuncId(0),
                 name: "<init>".to_string(),
@@ -3082,7 +3397,6 @@ fn lower_expr(
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
-            // Super call.
             init_fn.blocks[0].stmts.push(MStmt::Assign {
                 dest: init_this,
                 value: Rvalue::Call {
@@ -3090,8 +3404,21 @@ fn lower_expr(
                     args: vec![init_this],
                 },
             });
+            // Constructor params for captures → field assignments.
+            for (sym, _, ty) in &free_vars {
+                let param_id = init_fn.new_local(ty.clone());
+                init_fn.params.push(param_id);
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: init_this,
+                    value: Rvalue::PutField {
+                        receiver: init_this,
+                        class_name: lambda_class_name.clone(),
+                        field_name: interner.resolve(*sym).to_string(),
+                        value: param_id,
+                    },
+                });
+            }
 
-            // Register the lambda class.
             module.classes.push(MirClass {
                 name: lambda_class_name.clone(),
                 super_class: None,
@@ -3099,22 +3426,24 @@ fn lower_expr(
                 is_abstract: false,
                 is_interface: false,
                 interfaces: Vec::new(),
-                fields: Vec::new(),
+                fields: capture_fields,
                 methods: vec![invoke_fn],
                 constructor: init_fn,
             });
 
-            // At the definition site: new $Lambda$N().
+            // ── Instantiate at definition site ──────────────────────
             let inst = fb.new_local(Ty::Class(lambda_class_name.clone()));
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::NewInstance(lambda_class_name.clone()),
             });
+            // Pass captured values as constructor args.
+            let ctor_args: Vec<LocalId> = free_vars.iter().map(|(_, lid, _)| *lid).collect();
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::Call {
                     kind: CallKind::Constructor(lambda_class_name),
-                    args: vec![],
+                    args: ctor_args,
                 },
             });
             Some(inst)

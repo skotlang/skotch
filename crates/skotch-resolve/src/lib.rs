@@ -92,7 +92,7 @@ pub fn resolve_file(
     let print_sym = r.interner.intern("print");
     r.out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
     // Register stdlib top-level functions.
-    for name in &["maxOf", "minOf"] {
+    for name in &["maxOf", "minOf", "with", "repeat"] {
         let sym = r.interner.intern(name);
         r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId
     }

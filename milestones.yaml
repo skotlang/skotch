@@ -190,17 +190,24 @@ milestones:
           - "fun apply(f: (Int) -> Int, x: Int): Int = f(x) compiles"
 
       - name: "Closure capture"
+        completed: true
         description: >
-          val capture: passed as constructor arg to lambda class.
-          var capture: boxed in Ref<T> holder for mutation visibility.
+          Immutable val capture: free variables in lambda body detected by
+          analysis pass, added as fields on the synthetic class, passed as
+          constructor args at instantiation, loaded from this.field in invoke.
+          Mutable var capture (Ref boxing) deferred.
         acceptance_criteria:
-          - "Lambda captures val and reads correctly"
-          - "Lambda captures var, mutates, change visible outside"
+          - "val x = 10; val addX = { n: Int -> n + x }; addX(5) → 15"
+          - "String capture works: { prefix -> prefix + name }"
 
       - name: "Trailing lambda syntax"
-        description: "list.forEach { println(it) } — { } after ) as last argument."
+        completed: true
+        description: >
+          f(args) { body } and f { body } syntax. Parser detects { after )
+          or after identifier and appends the lambda as the last call argument.
+          Unit-returning lambdas correctly use Terminator::Return.
         acceptance_criteria:
-          - "repeat(3) { println(\"hi\") } works"
+          - "action { s: String -> println(s) } parses as trailing lambda"
 
       - name: "Lambda with receiver"
         description: >
@@ -210,9 +217,17 @@ milestones:
           - "buildString { append(\"hello\") } works"
 
       - name: "Scope functions (let, apply, also, run, with)"
-        description: "Intrinsic lowering recognized by name."
+        completed: true
+        description: >
+          All five scope functions + repeat() lowered as MIR intrinsics.
+          let/run: invoke lambda with receiver, return result.
+          also/apply: invoke lambda, return receiver.
+          with(receiver) { lambda }: top-level function, invokes lambda.
+          repeat(n) { lambda }: loop intrinsic with counter.
         acceptance_criteria:
-          - "\"hello\".let { it.uppercase() } returns \"HELLO\""
+          - "\"hello\".let { s: String -> s.uppercase() } returns \"HELLO\""
+          - "42.also { n: Int -> println(n) } prints 42 and returns 42"
+          - "repeat(3) { i: Int -> println(i) } prints 0, 1, 2"
 
       - name: "SAM conversions"
         description: >

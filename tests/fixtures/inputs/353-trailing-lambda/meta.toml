@@ -1,0 +1,2 @@
+status = "supported"
+features = ["lambda", "trailing-lambda-syntax", "unit-return"]

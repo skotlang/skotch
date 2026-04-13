@@ -1,0 +1,2 @@
+status = "supported"
+features = ["scope-functions", "let", "also", "run", "apply", "with"]

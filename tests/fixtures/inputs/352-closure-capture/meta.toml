@@ -1,0 +1,2 @@
+status = "supported"
+features = ["lambda", "closure", "val-capture"]

@@ -1574,10 +1574,38 @@ impl<'a> Parser<'a> {
                         }
                     }
                     let rp = self.expect(TokenKind::RParen, ")");
-                    let span = expr.span().merge(rp);
+                    // Trailing lambda: `f(args) { body }` — the `{` must
+                    // immediately follow `)` (no newline).
+                    if self.peek_kind() == TokenKind::LBrace {
+                        let lambda = self.parse_lambda_expr();
+                        args.push(CallArg {
+                            name: None,
+                            expr: lambda,
+                        });
+                    }
+                    let end = if let Some(last) = args.last() {
+                        last.expr.span()
+                    } else {
+                        rp
+                    };
+                    let span = expr.span().merge(end);
                     expr = Expr::Call {
                         callee: Box::new(expr),
                         args,
+                        span,
+                    };
+                }
+                // Also handle: `f { body }` — call with ONLY a trailing lambda,
+                // no parentheses at all. Only if current expr is an identifier.
+                TokenKind::LBrace if matches!(expr, Expr::Ident(_, _) | Expr::Field { .. }) => {
+                    let lambda = self.parse_lambda_expr();
+                    let span = expr.span().merge(lambda.span());
+                    expr = Expr::Call {
+                        callee: Box::new(expr),
+                        args: vec![CallArg {
+                            name: None,
+                            expr: lambda,
+                        }],
                         span,
                     };
                 }
