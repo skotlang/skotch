@@ -3835,6 +3835,7 @@ fn lower_class(
 
         // Load fields into locals so they're accessible by name in the method body.
         // Track field→local mapping for writeback after the body.
+        // Also load inherited fields from superclasses (read-only).
         let mut field_locals: Vec<(String, LocalId)> = Vec::new();
         for field in &fields {
             let field_sym = interner.intern(&field.name);
@@ -3849,6 +3850,35 @@ fn lower_class(
             });
             scope.push((field_sym, field_local));
             field_locals.push((field.name.clone(), field_local));
+        }
+        // Inherited fields from superclasses.
+        {
+            let mut parent = super_class.clone();
+            while let Some(ref pname) = parent {
+                if let Some(pcls) = module.classes.iter().find(|c| &c.name == pname) {
+                    for pf in &pcls.fields {
+                        // Skip if already shadowed by this class's field.
+                        if fields.iter().any(|f| f.name == pf.name) {
+                            continue;
+                        }
+                        let fsym = interner.intern(&pf.name);
+                        let fl = fb.new_local(pf.ty.clone());
+                        fb.push_stmt(MStmt::Assign {
+                            dest: fl,
+                            value: Rvalue::GetField {
+                                receiver: this_local,
+                                class_name: pname.clone(),
+                                field_name: pf.name.clone(),
+                            },
+                        });
+                        scope.push((fsym, fl));
+                        // Don't add to field_locals — inherited fields aren't written back.
+                    }
+                    parent = pcls.super_class.clone();
+                } else {
+                    break;
+                }
+            }
         }
 
         for s in &method.body.stmts {
