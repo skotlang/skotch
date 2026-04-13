@@ -229,7 +229,7 @@ milestones:
           - "Override methods dispatch correctly via invokevirtual"
 
       - name: "Interface declaration and implementation"
-        completed: true  # basic interfaces; default methods deferred
+        completed: true
         description: >
           interface Greeter { fun greet(): String }. New KwInterface keyword,
           InterfaceDecl AST node, parser handles interface bodies, MirClass
@@ -246,6 +246,8 @@ milestones:
         acceptance_criteria:
           - "Interface with abstract method, two implementing classes, compiles and runs"
           - "invokeinterface dispatch selects correct override at runtime"
+          - "Interface default methods with bodies work on JVM 8+"
+          - "Method resolution walks interfaces for inherited default methods"
 
       - name: "Abstract classes"
         completed: true
@@ -266,27 +268,28 @@ milestones:
           - "Abstract class with concrete subclass compiles; calling abstract method dispatches correctly"
 
       - name: "Sealed classes"
-        completed: true  # basic sealed; exhaustive when checking deferred
+        completed: true
         description: >
-          sealed class Result with subclasses. KwSealed keyword added;
-          sealed modifier treated as abstract + open. Subclass hierarchy
-          works via inheritance + is-check in when expressions.
-          Compile-time exhaustiveness checking deferred.
+          sealed class Result with subclasses. KwSealed keyword, sealed
+          modifier as abstract + open. when (s) { is Sub -> ... } with
+          is-patterns dispatching by runtime type. Compile-time exhaustiveness
+          checking: missing subclass branches produce error diagnostics.
         crates:
           - skotch-syntax   # KwSealed token
           - skotch-lexer    # sealed keyword recognition
           - skotch-parser   # sealed modifier parsed and propagated
         acceptance_criteria:
           - "sealed class Result / class Ok : Result() / class Err : Result()"
-          - "when { r is Ok -> ... r is Err -> ... } dispatches correctly"
+          - "when (s) { is Ok -> ... is Err -> ... } dispatches correctly"
+          - "Missing sealed subclass in when produces compile error"
 
       - name: "Enum classes"
         completed: true
         description: >
-          enum class Direction { NORTH, SOUTH, EAST, WEST }.
-          Entries compiled as string-returning static functions.
-          Color.RED resolves via name_to_func; works with when matching.
-          values()/valueOf()/ordinal deferred to follow-up.
+          enum class Direction { NORTH, SOUTH, EAST, WEST } and
+          enum class Color(val hex: Int) { RED(0xFF0000) } with constructor
+          params and entry args. Entries compiled as string-returning static
+          functions. values()/valueOf()/ordinal deferred.
         crates:
           - skotch-syntax
           - skotch-parser

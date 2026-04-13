@@ -78,9 +78,18 @@ pub struct InterfaceDecl {
 pub struct EnumDecl {
     pub name: Symbol,
     pub name_span: Span,
-    /// Enum constant names in declaration order.
-    pub entries: Vec<Symbol>,
+    /// Constructor params: `enum class Color(val hex: Int)`.
+    pub constructor_params: Vec<ConstructorParam>,
+    /// Enum constant names with optional args in declaration order.
+    pub entries: Vec<EnumEntry>,
     pub span: Span,
+}
+
+/// An enum constant entry, optionally with constructor arguments.
+#[derive(Clone, Debug)]
+pub struct EnumEntry {
+    pub name: Symbol,
+    pub args: Vec<Expr>,
 }
 
 /// An `object` declaration (singleton).
