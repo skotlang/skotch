@@ -517,19 +517,51 @@ fn emit_method(
                 let ty = &func.locals[local.0 as usize];
                 // Insert checkcast if the local is Any/Object but the
                 // function return type is more specific (e.g. String).
-                if matches!(ty, Ty::Any | Ty::Nullable(_))
-                    && matches!(func.return_ty, Ty::String | Ty::Class(_))
-                {
-                    let target_class = match &func.return_ty {
-                        Ty::String => "java/lang/String",
-                        Ty::Class(name) => name.as_str(),
-                        _ => "java/lang/Object",
-                    };
-                    let class_idx = cp.class(target_class);
-                    code.push(0xC0); // checkcast
-                    code.write_u16::<BigEndian>(class_idx).unwrap();
+                // If the local is Any/Object but the function returns a
+                // specific type, insert cast/unbox before returning.
+                if matches!(ty, Ty::Any | Ty::Nullable(_)) && *ty != func.return_ty {
+                    match &func.return_ty {
+                        Ty::Int => {
+                            // Unbox: checkcast Integer; intValue()
+                            let ci = cp.class("java/lang/Integer");
+                            code.push(0xC0); // checkcast
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
+                            code.push(0xB6); // invokevirtual
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Long => {
+                            let ci = cp.class("java/lang/Long");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Double => {
+                            let ci = cp.class("java/lang/Double");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::String => {
+                            let ci = cp.class("java/lang/String");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        Ty::Class(name) => {
+                            let ci = cp.class(name);
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        _ => {}
+                    }
                 }
-                match ty {
+                // Use the FUNCTION's return type for the return opcode,
+                // not the local's type.
+                match &func.return_ty {
                     Ty::Int | Ty::Bool => code.push(0xAC), // ireturn
                     Ty::Long => code.push(0xAD),           // lreturn
                     Ty::Double => code.push(0xAF),         // dreturn
@@ -942,7 +974,9 @@ fn walk_block(
                 // (e.g., Any→String for smart casts).
                 let src_ty = &func.locals[src.0 as usize];
                 let dest_ty_here = &func.locals[dest.0 as usize];
-                if matches!(src_ty, Ty::Any | Ty::Class(_)) && !matches!(dest_ty_here, Ty::Any) {
+                if matches!(src_ty, Ty::Any | Ty::Class(_) | Ty::Nullable(_))
+                    && !matches!(dest_ty_here, Ty::Any | Ty::Nullable(_))
+                {
                     let target = match dest_ty_here {
                         Ty::String => Some("java/lang/String"),
                         Ty::Class(name) => Some(name.as_str()),

@@ -1194,7 +1194,38 @@ fn lower_expr(
 
             // Smart cast: if cond is `x is Type`, narrow x's type in then-branch.
             // Create a new local with the narrowed type and rebind x in scope.
-            let smart_cast_count = if let Expr::IsCheck {
+            let smart_cast_count = if let Expr::Binary {
+                op: BinOp::NotEq,
+                lhs,
+                rhs,
+                ..
+            } = cond.as_ref()
+            {
+                // Null-check smart cast: `x != null` → narrow x from T? to T.
+                if let (Expr::Ident(var_name, _), Expr::NullLit(_))
+                | (Expr::NullLit(_), Expr::Ident(var_name, _)) = (lhs.as_ref(), rhs.as_ref())
+                {
+                    if let Some((_, old_local)) = scope.iter().rev().find(|(s, _)| s == var_name) {
+                        let old_ty = fb.mf.locals[old_local.0 as usize].clone();
+                        let narrowed = if let Ty::Nullable(inner) = old_ty {
+                            *inner
+                        } else {
+                            old_ty
+                        };
+                        let cast_local = fb.new_local(narrowed);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: cast_local,
+                            value: Rvalue::Local(*old_local),
+                        });
+                        scope.push((*var_name, cast_local));
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                }
+            } else if let Expr::IsCheck {
                 expr: checked,
                 type_name,
                 negated: false,
@@ -1993,35 +2024,47 @@ fn lower_expr(
                 return Some(dest);
             }
 
-            // Check if callee is a local variable holding a lambda instance.
+            // Check if callee is a local variable (lambda or callable object).
+            // Handles: val f = { x: Int -> x * 2 }; f(5)
+            // Also: fun apply(f: Any, x: Int) = f(x) when f is a lambda at runtime.
             if let Some((_, local_id)) = scope.iter().rev().find(|(s, _)| *s == callee_name) {
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
-                if let Ty::Class(ref class_name) = local_ty {
-                    if class_name.starts_with("$Lambda$") {
-                        // Lower as: receiver.invoke(args)
-                        let mut all_args = vec![*local_id];
-                        all_args.extend_from_slice(&arg_locals);
-                        // Find invoke return type.
-                        let ret_ty = module
+                let is_lambda_class =
+                    matches!(&local_ty, Ty::Class(n) if n.starts_with("$Lambda$"));
+                let is_callable = is_lambda_class || matches!(local_ty, Ty::Any);
+                if is_callable {
+                    // Lower as: receiver.invoke(args)
+                    let mut all_args = vec![*local_id];
+                    all_args.extend_from_slice(&arg_locals);
+                    // Find invoke return type from class metadata if available.
+                    let ret_ty = if let Ty::Class(ref cn) = local_ty {
+                        module
                             .classes
                             .iter()
-                            .find(|c| &c.name == class_name)
+                            .find(|c| &c.name == cn)
                             .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
                             .map(|m| m.return_ty.clone())
-                            .unwrap_or(Ty::Any);
-                        let dest = fb.new_local(ret_ty);
-                        fb.push_stmt(MStmt::Assign {
-                            dest,
-                            value: Rvalue::Call {
-                                kind: CallKind::Virtual {
-                                    class_name: class_name.clone(),
-                                    method_name: "invoke".to_string(),
-                                },
-                                args: all_args,
+                            .unwrap_or(Ty::Any)
+                    } else {
+                        Ty::Any
+                    };
+                    let dest = fb.new_local(ret_ty);
+                    let invoke_class = if let Ty::Class(ref cn) = local_ty {
+                        cn.clone()
+                    } else {
+                        "java/lang/Object".to_string()
+                    };
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Virtual {
+                                class_name: invoke_class,
+                                method_name: "invoke".to_string(),
                             },
-                        });
-                        return Some(dest);
-                    }
+                            args: all_args,
+                        },
+                    });
+                    return Some(dest);
                 }
             }
 

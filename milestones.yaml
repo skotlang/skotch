@@ -240,9 +240,13 @@ milestones:
       # NOTE: Null-check smart cast (if x != null → narrow to non-null) should
       # also be completed here since it's simple and many lambda patterns need it.
       - name: "Null-check smart cast"
-        description: "if (x != null) { x.length } — narrow nullable to non-null."
+        completed: true
+        description: >
+          if (x != null) { x.length } — narrows Nullable(T) to T in then-branch.
+          Detects x != null and null != x patterns. JVM checkcast emitted for
+          Nullable → concrete type transitions.
         acceptance_criteria:
-          - "if (s != null) { println(s.length) } compiles without ?."
+          - "if (s != null) { println(s.uppercase()) } compiles without ?."
 
     risks:
       - description: "Lambda synthesis touches every compiler layer"

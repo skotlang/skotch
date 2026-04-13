@@ -1,0 +1,2 @@
+status = "supported"
+features = ["lambda", "arithmetic-on-lambda-result"]
