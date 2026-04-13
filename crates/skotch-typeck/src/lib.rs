@@ -123,7 +123,7 @@ pub fn type_check(
                 tc.fn_names.push(c.name);
                 // Do NOT increment fn_idx_pass1 — class indices are separate.
             }
-            Decl::Object(_) | Decl::Enum(_) | Decl::Unsupported { .. } => {}
+            Decl::Object(_) | Decl::Enum(_) | Decl::Interface(_) | Decl::Unsupported { .. } => {}
         }
     }
     // Built-in: println accepts Any? and returns Unit.
@@ -152,7 +152,7 @@ pub fn type_check(
                 val_idx += 1;
             }
             Decl::Class(_) => {} // class type checking during MIR lowering
-            Decl::Object(_) | Decl::Enum(_) | Decl::Unsupported { .. } => {}
+            Decl::Object(_) | Decl::Enum(_) | Decl::Interface(_) | Decl::Unsupported { .. } => {}
         }
     }
     tc.out

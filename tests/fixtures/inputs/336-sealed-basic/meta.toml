@@ -1,0 +1,2 @@
+status = "supported"
+features = ["sealed-class", "inheritance", "is-check", "when"]

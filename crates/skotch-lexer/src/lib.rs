@@ -836,6 +836,8 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "init" => TokenKind::KwInit,
         "data" => TokenKind::KwData,
         "enum" => TokenKind::KwEnum,
+        "interface" => TokenKind::KwInterface,
+        "sealed" => TokenKind::KwSealed,
         "override" => TokenKind::KwOverride,
         "open" => TokenKind::KwOpen,
         "abstract" => TokenKind::KwAbstract,

@@ -201,6 +201,9 @@ pub fn lower_file(
             Decl::Enum(e) => {
                 lower_enum(e, &mut name_to_func, &mut module, interner);
             }
+            Decl::Interface(iface) => {
+                lower_interface(iface, &mut module, interner);
+            }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
                     *span,
@@ -3277,12 +3280,19 @@ fn lower_class(
             }
         })
         .collect();
+    let iface_names: Vec<String> = c
+        .interfaces
+        .iter()
+        .map(|s| interner.resolve(*s).to_string())
+        .collect();
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
         name: class_name.clone(),
         super_class: super_class.clone(),
         is_open: c.is_open,
         is_abstract: c.is_abstract,
+        is_interface: false,
+        interfaces: iface_names.clone(),
         fields: fields.clone(),
         methods: stub_methods,
         constructor: init_fn.clone(),
@@ -3515,10 +3525,72 @@ fn lower_class(
         super_class,
         is_open: c.is_open,
         is_abstract: c.is_abstract,
+        is_interface: false,
+        interfaces: iface_names,
         fields,
         methods: mir_methods,
         constructor: init_fn,
     };
+}
+
+fn lower_interface(
+    iface: &skotch_syntax::InterfaceDecl,
+    module: &mut MirModule,
+    interner: &mut Interner,
+) {
+    let name = interner.resolve(iface.name).to_string();
+
+    // Interface methods: create MirFunction stubs with is_abstract = true.
+    let methods: Vec<MirFunction> = iface
+        .methods
+        .iter()
+        .map(|m| {
+            let mname = interner.resolve(m.name).to_string();
+            let return_ty = m
+                .return_ty
+                .as_ref()
+                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+                .unwrap_or(Ty::Unit);
+            MirFunction {
+                id: FuncId(0),
+                name: mname,
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: Vec::new(),
+                return_ty,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: m.is_abstract,
+            }
+        })
+        .collect();
+
+    // Interfaces have no constructor — use a dummy.
+    let dummy_init = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: Vec::new(),
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+    };
+
+    module.classes.push(MirClass {
+        name,
+        super_class: None,
+        is_open: true,
+        is_abstract: true,
+        is_interface: true,
+        interfaces: Vec::new(),
+        fields: Vec::new(),
+        methods,
+        constructor: dummy_init,
+    });
 }
 
 #[cfg(test)]

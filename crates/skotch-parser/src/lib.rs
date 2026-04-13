@@ -36,8 +36,8 @@ use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
-    KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, SuperClassRef, TemplatePart, Token,
-    TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
+    InterfaceDecl, KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, SuperClassRef,
+    TemplatePart, Token, TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -169,11 +169,13 @@ impl<'a> Parser<'a> {
             let mut is_enum = false;
             let mut is_open = false;
             let mut is_abstract = false;
+            let mut is_sealed = false;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
                     | TokenKind::KwOpen
                     | TokenKind::KwAbstract
+                    | TokenKind::KwSealed
                     | TokenKind::KwPrivate
                     | TokenKind::KwProtected
                     | TokenKind::KwInternal
@@ -186,6 +188,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwEnum => is_enum = true,
                     TokenKind::KwOpen => is_open = true,
                     TokenKind::KwAbstract => is_abstract = true,
+                    TokenKind::KwSealed => is_sealed = true,
                     _ => {}
                 }
                 self.bump();
@@ -209,10 +212,13 @@ impl<'a> Parser<'a> {
                     } else {
                         let mut cd = self.parse_class_decl();
                         cd.is_data = is_data;
-                        cd.is_open = is_open;
-                        cd.is_abstract = is_abstract;
+                        cd.is_open = is_open || is_sealed; // sealed classes are implicitly open
+                        cd.is_abstract = is_abstract || is_sealed; // sealed = abstract
                         decls.push(Decl::Class(cd));
                     }
+                }
+                TokenKind::KwInterface => {
+                    decls.push(Decl::Interface(self.parse_interface_decl()));
                 }
                 TokenKind::KwObject => {
                     decls.push(Decl::Object(self.parse_object_decl()));
@@ -361,8 +367,9 @@ impl<'a> Parser<'a> {
             self.skip_trivia();
         }
 
-        // Superclass clause: `: ParentClass(args)`
+        // Superclass / interface clause: `: ParentClass(args), Interface1, Interface2`
         let mut parent_class = None;
+        let mut interfaces = Vec::new();
         if self.peek_kind() == TokenKind::Colon {
             self.bump(); // consume ':'
             self.skip_trivia();
@@ -372,10 +379,11 @@ impl<'a> Parser<'a> {
                 self.bump();
                 let parent_name = self.intern_ident_at(parent_name_idx);
                 self.skip_trivia();
-                let mut args = Vec::new();
                 if self.peek_kind() == TokenKind::LParen {
+                    // Superclass with constructor call: Name(args)
                     self.bump();
                     self.skip_trivia();
+                    let mut args = Vec::new();
                     if self.peek_kind() != TokenKind::RParen {
                         loop {
                             self.skip_trivia();
@@ -389,12 +397,25 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(TokenKind::RParen, ")");
                     self.skip_trivia();
+                    parent_class = Some(SuperClassRef {
+                        name: parent_name,
+                        name_span: parent_name_span,
+                        args,
+                    });
+                } else {
+                    // No parens → interface implementation (not a superclass call).
+                    interfaces.push(parent_name);
                 }
-                parent_class = Some(SuperClassRef {
-                    name: parent_name,
-                    name_span: parent_name_span,
-                    args,
-                });
+                // Additional interfaces after comma.
+                while self.eat(TokenKind::Comma) {
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Ident {
+                        let iface_idx = self.pos;
+                        self.bump();
+                        interfaces.push(self.intern_ident_at(iface_idx));
+                        self.skip_trivia();
+                    }
+                }
             }
         }
 
@@ -503,6 +524,7 @@ impl<'a> Parser<'a> {
             name_span,
             constructor_params,
             parent_class,
+            interfaces,
             properties,
             methods,
             companion_methods,
@@ -616,6 +638,64 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             entries,
+            span: kw.merge(name_span),
+        }
+    }
+
+    fn parse_interface_decl(&mut self) -> InterfaceDecl {
+        let kw = self.expect(TokenKind::KwInterface, "interface");
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(name_span, "expected interface name"));
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+
+        let mut methods = Vec::new();
+        if self.peek_kind() == TokenKind::LBrace {
+            self.bump();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                // Skip modifiers.
+                while matches!(
+                    self.peek_kind(),
+                    TokenKind::KwOverride
+                        | TokenKind::KwOpen
+                        | TokenKind::KwAbstract
+                        | TokenKind::KwPrivate
+                        | TokenKind::KwProtected
+                        | TokenKind::KwInternal
+                ) {
+                    self.bump();
+                    self.skip_trivia();
+                }
+                if self.peek_kind() == TokenKind::KwFun {
+                    let mut f = self.parse_fun_decl();
+                    // Interface methods without a body are abstract by default.
+                    if f.body.stmts.is_empty() {
+                        f.is_abstract = true;
+                    }
+                    methods.push(f);
+                } else {
+                    self.bump(); // skip unknown
+                }
+            }
+            self.expect(TokenKind::RBrace, "}");
+        }
+
+        InterfaceDecl {
+            name,
+            name_span,
+            methods,
             span: kw.merge(name_span),
         }
     }

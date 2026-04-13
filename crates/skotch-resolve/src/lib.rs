@@ -120,6 +120,11 @@ pub fn resolve_file(
                     .top_level
                     .insert(e.name, DefId::PossibleExternal(e.name));
             }
+            Decl::Interface(iface) => {
+                r.out
+                    .top_level
+                    .insert(iface.name, DefId::PossibleExternal(iface.name));
+            }
             Decl::Unsupported { .. } => {}
         }
     }
@@ -135,7 +140,7 @@ pub fn resolve_file(
                 let rv = r.resolve_top_val(v);
                 r.out.top_vals.push(rv);
             }
-            Decl::Class(_) | Decl::Object(_) | Decl::Enum(_) => {} // resolved during MIR lowering
+            Decl::Class(_) | Decl::Object(_) | Decl::Enum(_) | Decl::Interface(_) => {}
             Decl::Unsupported { .. } => {}
         }
     }

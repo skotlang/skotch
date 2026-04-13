@@ -71,6 +71,8 @@ pub enum TokenKind {
     KwInit,
     KwData,
     KwEnum,
+    KwInterface,
+    KwSealed,
     KwOverride,
     KwOpen,
     KwAbstract,

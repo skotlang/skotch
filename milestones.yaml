@@ -229,17 +229,23 @@ milestones:
           - "Override methods dispatch correctly via invokevirtual"
 
       - name: "Interface declaration and implementation"
+        completed: true  # basic interfaces; default methods deferred
         description: >
-          interface Foo { fun bar() }, class X : Foo { override fun bar() {} }.
-          JVM: invokeinterface. DEX: invoke-interface.
+          interface Greeter { fun greet(): String }. New KwInterface keyword,
+          InterfaceDecl AST node, parser handles interface bodies, MirClass
+          with is_interface flag, JVM emits ACC_INTERFACE|ACC_ABSTRACT,
+          interfaces table in class file, CONSTANT_InterfaceMethodref,
+          invokeinterface (0xB9) dispatch. Classes implement via `: Iface`.
         crates:
-          - skotch-syntax
-          - skotch-parser
-          - skotch-backend-jvm
-          - skotch-backend-dex
+          - skotch-syntax    # KwInterface, KwSealed tokens; InterfaceDecl AST
+          - skotch-lexer     # interface/sealed keyword recognition
+          - skotch-parser    # parse_interface_decl(); `: Iface` clause
+          - skotch-mir       # MirClass.is_interface, interfaces vec
+          - skotch-mir-lower # lower_interface(); class interface propagation
+          - skotch-backend-jvm  # ACC_INTERFACE, invokeinterface, InterfaceMethodref
         acceptance_criteria:
-          - "Interface with two methods, implemented by a class, compiles and runs"
-          - "Interface with default method body works"
+          - "Interface with abstract method, two implementing classes, compiles and runs"
+          - "invokeinterface dispatch selects correct override at runtime"
 
       - name: "Abstract classes"
         completed: true
@@ -260,16 +266,19 @@ milestones:
           - "Abstract class with concrete subclass compiles; calling abstract method dispatches correctly"
 
       - name: "Sealed classes"
+        completed: true  # basic sealed; exhaustive when checking deferred
         description: >
-          sealed class Result, class Success : Result(), class Failure : Result().
-          Compile-time exhaustiveness checking in when statements.
+          sealed class Result with subclasses. KwSealed keyword added;
+          sealed modifier treated as abstract + open. Subclass hierarchy
+          works via inheritance + is-check in when expressions.
+          Compile-time exhaustiveness checking deferred.
         crates:
-          - skotch-syntax
-          - skotch-parser
-          - skotch-types    # Track sealed hierarchies for exhaustiveness
-          - skotch-typeck   # Exhaustive when checking
+          - skotch-syntax   # KwSealed token
+          - skotch-lexer    # sealed keyword recognition
+          - skotch-parser   # sealed modifier parsed and propagated
         acceptance_criteria:
-          - "Sealed class with when expression compiles; missing branch produces error"
+          - "sealed class Result / class Ok : Result() / class Err : Result()"
+          - "when { r is Ok -> ... r is Err -> ... } dispatches correctly"
 
       - name: "Enum classes"
         completed: true

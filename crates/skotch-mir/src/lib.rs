@@ -250,6 +250,10 @@ pub struct MirClass {
     pub super_class: Option<String>,
     pub is_open: bool,
     pub is_abstract: bool,
+    pub is_interface: bool,
+    /// Interfaces this class implements (JVM internal names).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
     pub fields: Vec<MirField>,
     pub methods: Vec<MirFunction>,
     /// The `<init>` constructor method.

@@ -26,6 +26,7 @@ enum Key {
     NameAndType(u16, u16),
     Fieldref(u16, u16),
     Methodref(u16, u16),
+    InterfaceMethodref(u16, u16),
 }
 
 #[derive(Clone, Debug)]
@@ -39,6 +40,7 @@ enum Entry {
     NameAndType(u16, u16),
     Fieldref(u16, u16),
     Methodref(u16, u16),
+    InterfaceMethodref(u16, u16),
     /// Placeholder for the second slot of Double/Long entries.
     WideSlot,
 }
@@ -113,6 +115,20 @@ impl ConstantPool {
         self.add(Key::Methodref(c, nt), Entry::Methodref(c, nt))
     }
 
+    pub fn interface_methodref(
+        &mut self,
+        class_internal: &str,
+        name: &str,
+        descriptor: &str,
+    ) -> u16 {
+        let c = self.class(class_internal);
+        let nt = self.name_and_type(name, descriptor);
+        self.add(
+            Key::InterfaceMethodref(c, nt),
+            Entry::InterfaceMethodref(c, nt),
+        )
+    }
+
     /// Per JVMS 4.1, `constant_pool_count` is the number of entries plus one.
     pub fn count(&self) -> u16 {
         (self.entries.len() + 1) as u16
@@ -157,7 +173,12 @@ impl ConstantPool {
                     out.write_u16::<BigEndian>(*nt).unwrap();
                 }
                 Entry::Methodref(c, nt) => {
-                    out.push(10);
+                    out.push(10); // CONSTANT_Methodref
+                    out.write_u16::<BigEndian>(*c).unwrap();
+                    out.write_u16::<BigEndian>(*nt).unwrap();
+                }
+                Entry::InterfaceMethodref(c, nt) => {
+                    out.push(11); // CONSTANT_InterfaceMethodref
                     out.write_u16::<BigEndian>(*c).unwrap();
                     out.write_u16::<BigEndian>(*nt).unwrap();
                 }
