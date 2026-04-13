@@ -308,6 +308,16 @@ impl<'a> Resolver<'a> {
             | Expr::BoolLit(_, _)
             | Expr::NullLit(_)
             | Expr::StringLit(_, _) => {}
+            Expr::Lambda { params, body, .. } => {
+                let saved = scope.len();
+                for p in params {
+                    scope.push((p.name, DefId::PossibleExternal(p.name)));
+                }
+                for s in &body.stmts {
+                    self.resolve_stmt(fn_idx, s, scope, rf);
+                }
+                scope.truncate(saved);
+            }
             Expr::Ident(name, span) => {
                 let def = lookup(scope, *name).unwrap_or_else(|| {
                     self.out.top_level.get(name).copied().unwrap_or_else(|| {
@@ -476,7 +486,8 @@ impl<'a> Resolver<'a> {
             | Expr::SafeCall { .. }
             | Expr::IsCheck { .. }
             | Expr::AsCast { .. }
-            | Expr::NotNullAssert { .. } => {}
+            | Expr::NotNullAssert { .. }
+            | Expr::Lambda { .. } => {}
         }
     }
 }

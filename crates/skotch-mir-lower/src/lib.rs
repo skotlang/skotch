@@ -1993,6 +1993,38 @@ fn lower_expr(
                 return Some(dest);
             }
 
+            // Check if callee is a local variable holding a lambda instance.
+            if let Some((_, local_id)) = scope.iter().rev().find(|(s, _)| *s == callee_name) {
+                let local_ty = fb.mf.locals[local_id.0 as usize].clone();
+                if let Ty::Class(ref class_name) = local_ty {
+                    if class_name.starts_with("$Lambda$") {
+                        // Lower as: receiver.invoke(args)
+                        let mut all_args = vec![*local_id];
+                        all_args.extend_from_slice(&arg_locals);
+                        // Find invoke return type.
+                        let ret_ty = module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == class_name)
+                            .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                            .map(|m| m.return_ty.clone())
+                            .unwrap_or(Ty::Any);
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: class_name.clone(),
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: all_args,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
+            }
+
             let kind = if callee_str == "println" {
                 CallKind::Println
             } else if callee_str == "print" {
@@ -2930,19 +2962,119 @@ fn lower_expr(
                 loop_ctx,
             )
         }
-        Expr::NotNullAssert { expr: asserted, .. } => {
-            // `!!` is a no-op at MIR level (would need null check + throw KotlinNullPointerException).
-            lower_expr(
-                asserted,
-                fb,
-                scope,
-                module,
-                name_to_func,
-                name_to_global,
-                interner,
-                diags,
-                loop_ctx,
-            )
+        Expr::NotNullAssert { expr: asserted, .. } => lower_expr(
+            asserted,
+            fb,
+            scope,
+            module,
+            name_to_func,
+            name_to_global,
+            interner,
+            diags,
+            loop_ctx,
+        ),
+
+        Expr::Lambda { params, body, .. } => {
+            // Generate a synthetic lambda class with an `invoke` method.
+            let lambda_idx = module.classes.len();
+            let lambda_class_name = format!("$Lambda${lambda_idx}");
+
+            // Build the invoke method. Start with Ty::Int as placeholder return
+            // type — we'll patch it after lowering the body based on what the
+            // ReturnValue terminator actually produces.
+            let mut invoke_fn = {
+                let fn_idx = module.functions.len() + 1000 + lambda_idx;
+                let mut invoke_fb = FnBuilder::new(fn_idx, "invoke".to_string(), Ty::Int);
+                // `this` parameter.
+                let this_local = invoke_fb.new_local(Ty::Class(lambda_class_name.clone()));
+                invoke_fb.mf.params.push(this_local);
+                // Lambda parameters.
+                let mut invoke_scope: Vec<(Symbol, LocalId)> = Vec::new();
+                for p in params {
+                    let ty = resolve_type(interner.resolve(p.ty.name), module);
+                    let pid = invoke_fb.new_local(ty);
+                    invoke_fb.mf.params.push(pid);
+                    invoke_scope.push((p.name, pid));
+                }
+                // Lower body.
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        &mut invoke_fb,
+                        &mut invoke_scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    );
+                }
+                invoke_fb.finish()
+            };
+            invoke_fn.is_abstract = false;
+            // Patch return type from the actual ReturnValue terminator.
+            for block in &invoke_fn.blocks {
+                if let Terminator::ReturnValue(local) = &block.terminator {
+                    invoke_fn.return_ty = invoke_fn.locals[local.0 as usize].clone();
+                    break;
+                }
+            }
+
+            // Build trivial <init> constructor.
+            let mut init_fn = MirFunction {
+                id: FuncId(0),
+                name: "<init>".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+            };
+            let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
+            init_fn.params.push(init_this);
+            // Super call.
+            init_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: init_this,
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor("java/lang/Object".to_string()),
+                    args: vec![init_this],
+                },
+            });
+
+            // Register the lambda class.
+            module.classes.push(MirClass {
+                name: lambda_class_name.clone(),
+                super_class: None,
+                is_open: false,
+                is_abstract: false,
+                is_interface: false,
+                interfaces: Vec::new(),
+                fields: Vec::new(),
+                methods: vec![invoke_fn],
+                constructor: init_fn,
+            });
+
+            // At the definition site: new $Lambda$N().
+            let inst = fb.new_local(Ty::Class(lambda_class_name.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::NewInstance(lambda_class_name.clone()),
+            });
+            fb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(lambda_class_name),
+                    args: vec![],
+                },
+            });
+            Some(inst)
         }
     }
 }

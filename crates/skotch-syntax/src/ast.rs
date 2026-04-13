@@ -359,6 +359,12 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// `{ x: Int -> x * 2 }` — lambda expression.
+    Lambda {
+        params: Vec<Param>,
+        body: Block,
+        span: Span,
+    },
 }
 
 /// A single branch in a `when` expression: `pattern -> body`.
@@ -431,7 +437,8 @@ impl Expr {
             | Expr::SafeCall { span, .. }
             | Expr::IsCheck { span, .. }
             | Expr::AsCast { span, .. }
-            | Expr::NotNullAssert { span, .. } => *span,
+            | Expr::NotNullAssert { span, .. }
+            | Expr::Lambda { span, .. } => *span,
         }
     }
 }
