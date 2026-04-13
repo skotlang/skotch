@@ -91,6 +91,7 @@ pub fn lower_file(
                 required_params: required,
                 param_names,
                 param_defaults,
+                is_abstract: false,
             });
             fn_pass1_idx += 1;
         }
@@ -280,6 +281,7 @@ impl FnBuilder {
             required_params: 0,
             param_names: Vec::new(),
             param_defaults: Vec::new(),
+            is_abstract: false,
         };
         FnBuilder { mf, cur_block: 0 }
     }
@@ -413,6 +415,7 @@ fn lower_function(
             required_params: 0,
             param_names: Vec::new(),
             param_defaults: Vec::new(),
+            is_abstract: false,
         };
     }
 }
@@ -742,6 +745,7 @@ fn lower_stmt(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                is_abstract: false,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -1563,14 +1567,21 @@ fn lower_expr(
                 }
 
                 let (kind, dest_ty) = if let Ty::Class(class_name) = &recv_ty {
-                    // Look up method in class.
-                    let return_ty = module
-                        .classes
-                        .iter()
-                        .find(|c| &c.name == class_name)
-                        .and_then(|c| c.methods.iter().find(|m| m.name == method_name_str))
-                        .map(|m| m.return_ty.clone())
-                        .unwrap_or(Ty::Unit);
+                    // Look up method in class, walking the superclass chain.
+                    let mut return_ty = Ty::Unit;
+                    let mut search = Some(class_name.clone());
+                    while let Some(ref cname) = search {
+                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                            if let Some(m) = cls.methods.iter().find(|m| m.name == method_name_str)
+                            {
+                                return_ty = m.return_ty.clone();
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
                     (
                         CallKind::Virtual {
                             class_name: class_name.clone(),
@@ -1762,7 +1773,8 @@ fn lower_expr(
                 }
             }
 
-            let callee_str = interner.resolve(callee_name);
+            let callee_str = interner.resolve(callee_name).to_string();
+            let callee_str = callee_str.as_str();
 
             // Handle stdlib top-level functions as StaticJava calls.
             let stdlib_call = match (callee_str, args.len()) {
@@ -1793,16 +1805,77 @@ fn lower_expr(
             } else if let Some(fid) = name_to_func.get(&callee_name) {
                 CallKind::Static(*fid)
             } else {
-                diags.push(Diagnostic::error(
-                    *span,
-                    format!("unknown call target `{}`", interner.resolve(callee_name)),
-                ));
-                return None;
+                // Try implicit `this.method()` — if `this` is in scope
+                // and its class has a matching method, emit a virtual call.
+                let this_sym = interner.intern("this");
+                let this_info = scope.iter().rev().find(|(s, _)| *s == this_sym);
+                let mut resolved = None;
+                if let Some((_sym, this_local)) = this_info {
+                    let this_ty = &fb.mf.locals[this_local.0 as usize];
+                    if let Ty::Class(class_name) = this_ty {
+                        // Look up in this class and superclasses.
+                        let mut search_class = Some(class_name.clone());
+                        while let Some(ref cname) = search_class {
+                            let found = module.classes.iter().find(|c| &c.name == cname);
+                            if let Some(cls) = found {
+                                if cls.methods.iter().any(|m| m.name == callee_str) {
+                                    // Prepend `this` as first arg.
+                                    arg_locals.insert(0, *this_local);
+                                    let ret_ty = cls
+                                        .methods
+                                        .iter()
+                                        .find(|m| m.name == callee_str)
+                                        .map(|m| m.return_ty.clone())
+                                        .unwrap_or(Ty::Unit);
+                                    resolved = Some((
+                                        CallKind::Virtual {
+                                            class_name: cname.clone(),
+                                            method_name: callee_str.to_string(),
+                                        },
+                                        ret_ty,
+                                    ));
+                                    break;
+                                }
+                                search_class = cls.super_class.clone();
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if let Some((k, _)) = resolved {
+                    k
+                } else {
+                    diags.push(Diagnostic::error(
+                        *span,
+                        format!("unknown call target `{}`", interner.resolve(callee_name)),
+                    ));
+                    return None;
+                }
             };
 
-            // Use the target function's return type for static calls.
+            // Determine return type from the call kind.
             let dest_ty = match &kind {
                 CallKind::Static(fid) => module.functions[fid.0 as usize].return_ty.clone(),
+                CallKind::Virtual {
+                    class_name,
+                    method_name,
+                } => {
+                    let mut ret = Ty::Unit;
+                    let mut search = Some(class_name.clone());
+                    while let Some(ref cname) = search {
+                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                            if let Some(m) = cls.methods.iter().find(|m| &m.name == method_name) {
+                                ret = m.return_ty.clone();
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
+                    ret
+                }
                 _ => Ty::Unit,
             };
 
@@ -2963,6 +3036,7 @@ fn lower_object(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        is_abstract: false,
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -3062,6 +3136,7 @@ fn lower_class(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        is_abstract: false,
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -3171,6 +3246,48 @@ fn lower_class(
         }
     }
 
+    let super_class = c
+        .parent_class
+        .as_ref()
+        .map(|sc| interner.resolve(sc.name).to_string());
+
+    // Pre-register the class with method stubs so that implicit
+    // `this.method()` resolution works during method body lowering.
+    let stub_methods: Vec<MirFunction> = c
+        .methods
+        .iter()
+        .map(|m| {
+            let mname = interner.resolve(m.name).to_string();
+            let rty = m
+                .return_ty
+                .as_ref()
+                .and_then(|tr| skotch_types::ty_from_name(interner.resolve(tr.name)))
+                .unwrap_or(Ty::Unit);
+            MirFunction {
+                id: FuncId(0),
+                name: mname,
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: Vec::new(),
+                return_ty: rty,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: m.is_abstract,
+            }
+        })
+        .collect();
+    let class_idx = module.classes.len();
+    module.classes.push(MirClass {
+        name: class_name.clone(),
+        super_class: super_class.clone(),
+        is_open: c.is_open,
+        is_abstract: c.is_abstract,
+        fields: fields.clone(),
+        methods: stub_methods,
+        constructor: init_fn.clone(),
+    });
+
     // Lower methods.
     let mut mir_methods = Vec::new();
     for method in &c.methods {
@@ -3244,7 +3361,9 @@ fn lower_class(
             });
         }
 
-        mir_methods.push(fb.finish());
+        let mut finished = fb.finish();
+        finished.is_abstract = method.is_abstract;
+        mir_methods.push(finished);
     }
 
     // Lower companion object methods as top-level static functions.
@@ -3390,12 +3509,8 @@ fn lower_class(
         mir_methods.push(ts_fb.finish());
     }
 
-    let super_class = c
-        .parent_class
-        .as_ref()
-        .map(|sc| interner.resolve(sc.name).to_string());
-
-    module.classes.push(MirClass {
+    // Replace the stub class with the fully-lowered version.
+    module.classes[class_idx] = MirClass {
         name: class_name,
         super_class,
         is_open: c.is_open,
@@ -3403,7 +3518,7 @@ fn lower_class(
         fields,
         methods: mir_methods,
         constructor: init_fn,
-    });
+    };
 }
 
 #[cfg(test)]

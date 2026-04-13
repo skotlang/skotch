@@ -1,0 +1,2 @@
+status = "supported"
+features = ["abstract-class", "abstract-method", "override", "inheritance"]

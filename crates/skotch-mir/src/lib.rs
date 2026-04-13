@@ -226,6 +226,9 @@ pub struct MirFunction {
     /// Default values for optional parameters, indexed by param position.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub param_defaults: Vec<Option<MirConst>>,
+    /// True for abstract methods (no body, no Code attribute on JVM).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_abstract: bool,
 }
 
 impl MirFunction {

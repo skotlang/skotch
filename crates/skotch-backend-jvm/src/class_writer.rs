@@ -31,6 +31,7 @@ const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
+const ACC_ABSTRACT: u16 = 0x0400;
 
 /// A branch target inside a single block's codegen (from comparison patterns).
 /// The comparison `if_icmpXX +7 / iconst_0 / goto +4 / iconst_1` creates
@@ -160,7 +161,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         .unwrap();
     out.write_u16::<BigEndian>(cp.count()).unwrap();
     cp.write_to(&mut out);
-    out.write_u16::<BigEndian>(ACC_PUBLIC | ACC_SUPER).unwrap();
+    let class_flags = ACC_PUBLIC | ACC_SUPER | if class.is_abstract { ACC_ABSTRACT } else { 0 };
+    out.write_u16::<BigEndian>(class_flags).unwrap();
     out.write_u16::<BigEndian>(this_class_idx).unwrap();
     out.write_u16::<BigEndian>(super_class_idx).unwrap();
     out.write_u16::<BigEndian>(0).unwrap(); // interfaces
@@ -287,9 +289,23 @@ fn emit_user_method(
         d
     };
 
-    let access = ACC_PUBLIC;
+    let access = if func.is_abstract {
+        ACC_PUBLIC | ACC_ABSTRACT
+    } else {
+        ACC_PUBLIC
+    };
     let name_idx = cp.utf8(&func.name);
     let desc_idx = cp.utf8(&descriptor);
+
+    // Abstract methods have no Code attribute.
+    if func.is_abstract {
+        let mut method = Vec::<u8>::new();
+        method.write_u16::<BigEndian>(access).unwrap();
+        method.write_u16::<BigEndian>(name_idx).unwrap();
+        method.write_u16::<BigEndian>(desc_idx).unwrap();
+        method.write_u16::<BigEndian>(0).unwrap(); // attributes_count = 0
+        return method;
+    }
 
     // Emit bytecode.
     let mut code = Vec::<u8>::new();
@@ -303,10 +319,15 @@ fn emit_user_method(
         slots.insert(func.params[0].0, 0);
         next_slot = 1;
     }
-    // Assign slots for remaining params.
+    // Assign slots for remaining params (wide types take 2 slots).
     for &p in func.params.iter().skip(1) {
         slots.insert(p.0, next_slot);
-        next_slot += 1;
+        let ty = &func.locals[p.0 as usize];
+        next_slot += if matches!(ty, Ty::Long | Ty::Double) {
+            2
+        } else {
+            1
+        };
     }
 
     if is_init {

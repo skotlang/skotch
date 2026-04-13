@@ -242,13 +242,20 @@ milestones:
           - "Interface with default method body works"
 
       - name: "Abstract classes"
+        completed: true
         description: >
-          abstract class Shape { abstract fun area(): Double }.
-          Straightforward extension of inheritance.
+          abstract class Shape { abstract fun area(): Int }. Parser allows
+          functions with no body (no = or {}). JVM emits ACC_ABSTRACT on
+          class and method, skips Code attribute for abstract methods.
+          MirFunction carries is_abstract flag. Method resolution walks
+          superclass chain for inherited methods. Implicit this.method()
+          calls resolved inside method bodies.
         crates:
           - skotch-syntax
-          - skotch-parser
-          - skotch-backend-jvm
+          - skotch-parser    # abstract fun with no body
+          - skotch-mir       # MirFunction.is_abstract
+          - skotch-mir-lower # superclass method walk + implicit this
+          - skotch-backend-jvm  # ACC_ABSTRACT, skip Code attr
         acceptance_criteria:
           - "Abstract class with concrete subclass compiles; calling abstract method dispatches correctly"
 

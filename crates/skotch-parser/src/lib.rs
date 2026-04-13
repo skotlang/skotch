@@ -718,7 +718,8 @@ impl<'a> Parser<'a> {
             None
         };
         self.skip_trivia();
-        // Support both block body `{ ... }` and expression body `= expr`.
+        // Support block body `{ ... }`, expression body `= expr`, or
+        // no body at all (abstract methods).
         let body = if self.peek_kind() == TokenKind::Eq {
             self.bump(); // consume `=`
             self.skip_trivia();
@@ -731,8 +732,15 @@ impl<'a> Parser<'a> {
                 }],
                 span,
             }
-        } else {
+        } else if self.peek_kind() == TokenKind::LBrace {
             self.parse_block()
+        } else {
+            // Abstract function — no body. Synthesize an empty block.
+            let end = return_ty.as_ref().map(|t| t.span).unwrap_or(rparen);
+            Block {
+                stmts: vec![],
+                span: end,
+            }
         };
         let span = kw.merge(rparen).merge(body.span);
         FunDecl {
