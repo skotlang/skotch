@@ -92,7 +92,7 @@ pub fn run_repl_interactive() -> Result<()> {
     let edit_mode = Box::new(Emacs::new(keybindings));
 
     // Persistent history across REPL sessions (~/.skotch/repl_history).
-    let history_path = dirs_for_history();
+    let history_path = history_path();
     let history: Box<FileBackedHistory> = Box::new(
         FileBackedHistory::with_file(1000, history_path.clone())
             .or_else(|_| FileBackedHistory::new(1000))
@@ -210,12 +210,39 @@ pub fn run_repl_interactive() -> Result<()> {
     }
 }
 
-/// Determine the history file path. Uses `~/.skotch/repl_history`.
-fn dirs_for_history() -> std::path::PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    let dir = std::path::PathBuf::from(home).join(".skotch");
+/// XDG-compliant data directory for skotch.
+///
+/// Uses the `directories` crate to find the right platform path:
+/// - Linux: `$XDG_DATA_HOME/skotch` (default `~/.local/share/skotch`)
+/// - macOS: `~/Library/Application Support/skotch`
+/// - Windows: `{FOLDERID_LocalAppData}/skotch`
+///
+/// Falls back to `~/.skotch` if the platform dirs can't be determined.
+pub fn data_dir() -> std::path::PathBuf {
+    directories::ProjectDirs::from("", "", "skotch")
+        .map(|pd| pd.data_dir().to_path_buf())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| ".".to_string());
+            std::path::PathBuf::from(home).join(".skotch")
+        })
+}
+
+/// XDG-compliant config directory for skotch.
+///
+/// - Linux: `$XDG_CONFIG_HOME/skotch` (default `~/.config/skotch`)
+/// - macOS: `~/Library/Application Support/skotch`
+/// - Windows: `{FOLDERID_RoamingAppData}/skotch`
+pub fn config_dir() -> std::path::PathBuf {
+    directories::ProjectDirs::from("", "", "skotch")
+        .map(|pd| pd.config_dir().to_path_buf())
+        .unwrap_or_else(data_dir)
+}
+
+/// History file path (inside the data directory).
+fn history_path() -> std::path::PathBuf {
+    let dir = data_dir();
     let _ = std::fs::create_dir_all(&dir);
     dir.join("repl_history")
 }
@@ -484,7 +511,13 @@ fn is_local_decl(trimmed: &str) -> bool {
 
 /// Wrap a `.kts` script's body in a synthetic `fun main()`.
 fn wrap_script(source: &str) -> String {
-    format!("fun main() {{\n{source}\n}}\n")
+    // Strip shebang line (e.g., `#!/usr/bin/env skotch`) if present.
+    let body = if source.starts_with("#!") {
+        source.split_once('\n').map(|(_, rest)| rest).unwrap_or("")
+    } else {
+        source
+    };
+    format!("fun main() {{\n{body}\n}}\n")
 }
 
 /// Compile a synthetic source through `skotch-driver`'s JVM target,
