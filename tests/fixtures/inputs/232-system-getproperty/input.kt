@@ -1,4 +1,4 @@
 fun main() {
-    val name = System.getProperty("os.name")
-    println(name)
+    val sep = System.getProperty("file.separator")
+    println(sep.length)
 }
