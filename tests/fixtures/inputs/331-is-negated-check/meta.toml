@@ -1,0 +1,2 @@
+status = "supported"
+features = ["is-check", "negated-is", "Any", "autobox"]

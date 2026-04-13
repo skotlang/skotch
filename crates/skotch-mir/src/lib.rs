@@ -92,6 +92,12 @@ pub enum Rvalue {
         kind: CallKind,
         args: Vec<LocalId>,
     },
+    /// Runtime type check: `obj is Type` → Bool.
+    /// `type_descriptor` is the JVM internal name (e.g. "java/lang/String").
+    InstanceOf {
+        obj: LocalId,
+        type_descriptor: std::string::String,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -355,6 +355,24 @@ fn walk_block(
             Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
                 // TODO: class support in DEX backend
             }
+            Rvalue::InstanceOf {
+                obj,
+                type_descriptor,
+            } => {
+                // instance-of vA, vB, type@CCCC (format 22c, opcode 0x20)
+                // A = dest (4-bit), B = obj (4-bit), CCCC = type index
+                let obj_reg = slot[&obj.0];
+                let dest_reg = slot[&dest.0];
+                let type_idx = pools.intern_type(&format!("L{type_descriptor};"));
+                let ba = ((obj_reg & 0x0F) << 4) | (dest_reg & 0x0F);
+                code.push((ba << 8) | 0x20);
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Type,
+                    old_idx: type_idx,
+                });
+                code.push(0); // placeholder for type index
+            }
             Rvalue::Call { kind, args } => {
                 let used = emit_call(
                     kind,

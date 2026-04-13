@@ -736,8 +736,11 @@ impl<'a> BlockWalker<'a> {
                     }
                 }
             }
-            Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
-                // TODO: class support in LLVM backend
+            Rvalue::NewInstance(_)
+            | Rvalue::GetField { .. }
+            | Rvalue::PutField { .. }
+            | Rvalue::InstanceOf { .. } => {
+                // TODO: class/instanceof support in LLVM backend
             }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println | CallKind::Print => self.lower_println(args),

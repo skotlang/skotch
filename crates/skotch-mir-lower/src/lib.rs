@@ -1805,6 +1805,45 @@ fn lower_expr(
                 CallKind::Static(fid) => module.functions[fid.0 as usize].return_ty.clone(),
                 _ => Ty::Unit,
             };
+
+            // Autobox primitive args when the target parameter is Any.
+            if let CallKind::Static(fid) = &kind {
+                let target = &module.functions[fid.0 as usize];
+                for (i, arg_id) in arg_locals.iter_mut().enumerate() {
+                    if i < target.params.len() {
+                        let param_ty = &target.locals[target.params[i].0 as usize];
+                        let arg_ty = &fb.mf.locals[arg_id.0 as usize];
+                        if matches!(param_ty, Ty::Any)
+                            && !matches!(
+                                arg_ty,
+                                Ty::Any | Ty::String | Ty::Class(_) | Ty::Nullable(_)
+                            )
+                        {
+                            let (box_class, box_desc) = match arg_ty {
+                                Ty::Int => ("java/lang/Integer", "(I)Ljava/lang/Integer;"),
+                                Ty::Bool => ("java/lang/Boolean", "(Z)Ljava/lang/Boolean;"),
+                                Ty::Long => ("java/lang/Long", "(J)Ljava/lang/Long;"),
+                                Ty::Double => ("java/lang/Double", "(D)Ljava/lang/Double;"),
+                                _ => continue,
+                            };
+                            let boxed = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: boxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: box_class.to_string(),
+                                        method_name: "valueOf".to_string(),
+                                        descriptor: box_desc.to_string(),
+                                    },
+                                    args: vec![*arg_id],
+                                },
+                            });
+                            *arg_id = boxed;
+                        }
+                    }
+                }
+            }
+
             let dest = fb.new_local(dest_ty);
             fb.push_stmt(MStmt::Assign {
                 dest,
@@ -2455,9 +2494,13 @@ fn lower_expr(
 
             Some(result)
         }
-        Expr::IsCheck { expr: checked, .. } => {
-            // For now, `is` always returns true (we don't have runtime type info).
-            let _ = lower_expr(
+        Expr::IsCheck {
+            expr: checked,
+            type_name,
+            negated,
+            ..
+        } => {
+            let obj = lower_expr(
                 checked,
                 fb,
                 scope,
@@ -2467,13 +2510,52 @@ fn lower_expr(
                 interner,
                 diags,
                 loop_ctx,
-            );
+            )?;
+            let type_str = interner.resolve(*type_name);
+            // Map Kotlin type names to JVM internal names for instanceof.
+            let jvm_type = match type_str {
+                "String" => "java/lang/String",
+                "Int" => "java/lang/Integer",
+                "Long" => "java/lang/Long",
+                "Double" => "java/lang/Double",
+                "Boolean" => "java/lang/Boolean",
+                "Any" => "java/lang/Object",
+                other => {
+                    // User-defined class — use as-is (single-segment name).
+                    // Leak into a stable &str for the descriptor.
+                    // (For now, assume same-module classes.)
+                    other
+                }
+            };
             let dest = fb.new_local(Ty::Bool);
             fb.push_stmt(MStmt::Assign {
                 dest,
-                value: Rvalue::Const(MirConst::Bool(true)),
+                value: Rvalue::InstanceOf {
+                    obj,
+                    type_descriptor: jvm_type.to_string(),
+                },
             });
-            Some(dest)
+            if *negated {
+                // `!is` — negate the result: dest_neg = (dest == 0)
+                let zero = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: zero,
+                    value: Rvalue::Const(MirConst::Bool(false)),
+                });
+                let neg = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: neg,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpEq,
+                        lhs: dest,
+                        rhs: zero,
+                    },
+                });
+                Some(neg)
+            } else {
+                Some(dest)
+            }
+            // TODO: smart casts — narrow obj's type in the then-branch
         }
         Expr::AsCast { expr: casted, .. } => {
             // For now, `as` is a no-op — just return the expression.

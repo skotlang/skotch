@@ -306,15 +306,21 @@ milestones:
 
       - name: "Smart casts with is checks"
         description: >
-          if (x is String) { x.length }. Type checker narrows type after is.
-          AST already has IsCheck node; typeck needs narrowing logic.
+          Runtime is/!is type checks via instanceof + autoboxing of primitives
+          passed as Any parameters. Flow-sensitive type narrowing (smart casts)
+          is not yet implemented — x.length after is String still requires
+          explicit cast.
+        completed: true  # instanceof + autobox; smart-cast narrowing is deferred
         crates:
-          - skotch-typeck   # Flow-sensitive type narrowing
-          - skotch-mir-lower  # instanceof instruction emission
-          - skotch-backend-jvm  # instanceof opcode
+          - skotch-mir        # InstanceOf rvalue variant
+          - skotch-mir-lower  # instanceof emission + primitive autoboxing
+          - skotch-backend-jvm  # JVM instanceof opcode (0xC1)
+          - skotch-backend-dex  # DEX instance-of opcode (0x20)
         acceptance_criteria:
-          - "if (x is String) { println(x.length) } compiles without cast"
-          - "when (x) { is String -> x.length } works"
+          - "x is String returns true/false at runtime"
+          - "x !is Int negates the check correctly"
+          - "when { obj is Type -> ... } dispatches by runtime type"
+          - "Primitives passed to Any params are autoboxed"
 
     risks:
       - description: "Virtual dispatch table construction is complex for deep hierarchies"

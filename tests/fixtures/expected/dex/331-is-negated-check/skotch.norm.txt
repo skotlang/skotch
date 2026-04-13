@@ -1,0 +1,48 @@
+dex_version   035
+strings       17
+types         8
+methods       4
+classes       1
+
+--- strings ---
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "VZ"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "hello"
+  "input.kt"
+  "main"
+  "notString"
+  "out"
+  "println"
+
+--- types ---
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.notString(Ljava/lang/Object;)Z
+  Ljava/io/PrintStream;.println(Z)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=6 ins=0 outs=2 insns=23
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       notString(Ljava/lang/Object;)Z flags=0x0019 regs=5 ins=1 outs=0 insns=9

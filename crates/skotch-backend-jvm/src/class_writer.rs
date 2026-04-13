@@ -1433,6 +1433,19 @@ fn walk_block(
                     }
                 }
             },
+            Rvalue::InstanceOf {
+                obj,
+                type_descriptor,
+            } => {
+                // Push the object onto the stack, then emit `instanceof`.
+                load_local(code, stack, max_stack, slots, *obj, &func.locals);
+                let class_idx = cp.class(type_descriptor);
+                code.push(0xC1); // instanceof
+                code.push((class_idx >> 8) as u8);
+                code.push(class_idx as u8);
+                // instanceof pops objectref, pushes int (0 or 1): net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
         }
     }
 }
