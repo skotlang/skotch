@@ -4,6 +4,7 @@
 //! merges the resulting MIR modules, and dispatches to the appropriate
 //! backend for packaging (JVM → JAR, Android → APK).
 
+pub mod cache;
 pub mod discover;
 pub mod merge;
 pub mod pipeline;

@@ -21,3 +21,6 @@ skotch-backend-jvm = { workspace = true }
 skotch-backend-dex = { workspace = true }
 anyhow             = { workspace = true }
 walkdir            = { workspace = true }
+rayon              = { workspace = true }
+blake3             = { workspace = true }
+skotch-db          = { workspace = true }

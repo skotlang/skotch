@@ -1,0 +1,18 @@
+[package]
+name        = "skotch-db"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Salsa-based incremental compilation database for skotch"
+
+[dependencies]
+salsa              = { workspace = true }
+blake3             = { workspace = true }
+rayon              = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+skotch-span        = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-diagnostics = { workspace = true }
+skotch-mir         = { workspace = true }
+skotch-driver      = { workspace = true }

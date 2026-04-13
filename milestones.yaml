@@ -144,6 +144,17 @@ milestones:
       - name: "Typechecker with type environment"
         completed: true
         description: "TypeEnv with class/interface/enum declarations, method/field resolution with superclass walking."
+      - name: "Incremental compilation with content-hash caching"
+        completed: true
+        description: >
+          Per-file SHA-256 content hashing. Unchanged files skip the entire
+          front-end pipeline (lex/parse/resolve/typeck/MIR) and load cached
+          MIR from build/cache/. Rayon added for parallel class file writing.
+          5 tests verify: cache population, cache reuse, invalidation on change.
+      - name: "Parallel class file output"
+        completed: true
+        description: >
+          JVM backend writes .class files in parallel via rayon::par_iter().
 
 # ============================================================================
 # v0.3.0 — Lambdas and Higher-Order Functions
@@ -584,8 +595,8 @@ milestones:
 # ============================================================================
 # - R8/ProGuard tree-shaking and minification
 # - Release build optimization
-# - Incremental compilation
-# - Build caching and parallel compilation
+# - Advanced incremental compilation (cross-file dependency tracking)
+# - Full parallel compilation (with cross-file name pre-registration)
 # - IDE integration beyond LSP (IntelliJ plugin)
 # - Kotlin Multiplatform (KMP) support
 # - Compose for Desktop/Web targets

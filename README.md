@@ -118,23 +118,114 @@ the lexer/parser/typeck/MIR/backend pipeline can be exercised directly
 on a single source file. Build orchestration follows once the format
 emitters are stable.
 
-## Architectural rules
+## Architecture
 
-1. The shipping binary never invokes `kotlinc`, `kotlinc-native`, `javac`,
-   `d8`, or `dx`. Reference outputs are produced by `cargo xtask gen-fixtures`
-   (which *does* shell out to those tools) and committed to git, so CI needs
-   no JDK or Android SDK. A `tests/no_external_compiler.rs` test enforces
-   this by grepping the release binary for forbidden tool names.
-2. Parsing and format emission first. Packaging (JAR/APK), signing, and the
-   build orchestrator come after the front-end and emitters are validated by
-   golden fixtures.
-3. Hand-rolled bytecode writers. Constant-pool forward references make
-   `binrw`/`scroll` awkward; `byteorder` is the workhorse for `.class`
-   and `.dex`.
-4. Textual LLVM IR. No `inkwell`/`llvm-sys` dependency — avoids the
-   `libLLVM` system requirement and the long build-time hit.
-5. `clang` is the only external tool the binary invokes. Native linking
-   goes through `clang`; everything else is in-process Rust.
+### Compilation pipeline
+
+Every `.kt` source file flows through a layered pipeline. Each layer is a
+separate crate with no upward dependencies:
+
+```mermaid
+graph TD
+    subgraph "Front-end (per file)"
+        A[".kt source"] -->|skotch-lexer| B["Token stream"]
+        B -->|skotch-parser| C["AST (KtFile)"]
+        C -->|skotch-resolve| D["Resolved AST"]
+        D -->|skotch-typeck| E["Typed AST + TypeEnv"]
+        E -->|skotch-mir-lower| F["MIR module"]
+    end
+
+    subgraph "Incremental DB (skotch-db)"
+        G["salsa::Database"] -->|memoizes| A
+        G -->|blake3 hash| H["content fingerprint"]
+    end
+
+    subgraph "Backends (pluggable)"
+        F -->|skotch-backend-jvm| I[".class (Java 17)"]
+        F -->|skotch-backend-dex| J[".dex (Dalvik v035)"]
+        F -->|skotch-backend-klib| K[".klib (serialized MIR)"]
+        K -->|skotch-backend-llvm| L[".ll (LLVM IR)"]
+        L -->|clang| M["native binary"]
+    end
+
+    subgraph "Packaging"
+        I -->|skotch-jar| N[".jar"]
+        J -->|skotch-apk| O[".apk"]
+        O -->|skotch-sign| P["signed APK"]
+    end
+
+    subgraph "Build orchestration"
+        Q["build.gradle.kts"] -->|skotch-buildscript| R["ProjectModel"]
+        R -->|skotch-build| S["discover sources"]
+        S --> G
+    end
+```
+
+### Incremental compilation (salsa + blake3)
+
+The build pipeline uses [salsa](https://github.com/salsa-rs/salsa) for
+memoized, demand-driven compilation:
+
+```mermaid
+sequenceDiagram
+    participant Build as skotch build
+    participant DB as salsa::Database
+    participant FE as Front-end
+    participant BE as Backend
+
+    Build->>DB: register SourceFile inputs
+    loop for each .kt file
+        Build->>DB: compile_file(file)
+        alt source unchanged (memoized)
+            DB-->>Build: cached MIR (instant)
+        else source changed
+            DB->>FE: lex → parse → resolve → typeck → MIR
+            FE-->>DB: MIR module (cached for next time)
+            DB-->>Build: fresh MIR
+        end
+    end
+    Build->>Build: merge MIR modules
+    Build->>BE: codegen (.class/.dex/.ll)
+    BE->>BE: write outputs (rayon parallel)
+```
+
+**blake3** provides content hashing for file fingerprinting. **rayon**
+parallelizes backend output (writing `.class` files, DEX encoding).
+
+The salsa database is the foundation for future LSP integration — the
+same `Db` instance can be held across edits, giving sub-millisecond
+incremental re-analysis.
+
+### Crate dependency layers
+
+```
+Layer 0  skotch-span, skotch-intern, skotch-config, skotch-diagnostics
+Layer 1  skotch-syntax, skotch-lexer, skotch-parser
+Layer 2  skotch-resolve, skotch-types, skotch-typeck
+Layer 3  skotch-hir, skotch-mir, skotch-mir-lower
+Layer 4  skotch-backend-{jvm,dex,llvm,wasm,klib,native}
+Layer 5  skotch-{classfile,dex,llvm}-norm (golden normalizers)
+Layer 6  skotch-jar, skotch-axml, skotch-apk, skotch-sign, skotch-classinfo
+Layer 7  skotch-db (salsa incremental database)
+Layer 8  skotch-build, skotch-driver, skotch-cli, skotch-repl, skotch-lsp
+```
+
+No crate imports from a higher layer. This strict DAG enables independent
+testing and ensures backend changes can't break the front-end.
+
+### Design principles
+
+1. **No external compilers at runtime.** The binary never invokes `kotlinc`,
+   `javac`, `d8`, or `aapt2`. `clang` is the only exception (native link step).
+2. **Hand-rolled bytecode writers.** JVM constant-pool forward references and
+   DEX section layout make code-gen libraries awkward. `byteorder` drives both
+   the `.class` and `.dex` emitters directly.
+3. **Textual LLVM IR.** No `inkwell`/`llvm-sys` dependency — avoids the
+   `libLLVM` system requirement and compile-time hit.
+4. **MIR is the narrow waist.** Every front-end feature lands in MIR; every
+   backend reads MIR. Adding a target means writing one backend crate.
+5. **Fixture-driven validation.** Every language feature is tested by compiling
+   a `.kt` fixture, running it, and comparing stdout against a committed golden.
 
 ## Fixture-driven validation
 

@@ -42,7 +42,10 @@ members = [
     "crates/skotch-classinfo",
     "crates/skotch-buildscript",
 
-    # Layer 7 — build orchestration + driver + CLI + LSP
+    # Layer 7 — incremental compilation database
+    "crates/skotch-db",
+
+    # Layer 8 — build orchestration + driver + CLI + LSP
     "crates/skotch-build",
     "crates/skotch-driver",
     "crates/skotch-cli",
@@ -56,7 +59,7 @@ members = [
 
 [workspace.package]
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 license      = "Apache-2.0"
 version      = "0.2.0"
 repository   = "https://github.com/skotlang/skotch"
@@ -116,6 +119,11 @@ tower-lsp    = "0.20"
 tokio        = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 dashmap      = "6"
 
+# incremental computation + parallelism
+salsa        = "0.26"
+rayon        = "1.10"
+blake3       = "1"
+
 # xtask
 walkdir      = "2"
 
@@ -147,6 +155,7 @@ skotch-axml            = { path = "crates/skotch-axml" }
 skotch-apk             = { path = "crates/skotch-apk" }
 skotch-sign            = { path = "crates/skotch-sign" }
 skotch-buildscript     = { path = "crates/skotch-buildscript" }
+skotch-db              = { path = "crates/skotch-db" }
 skotch-build           = { path = "crates/skotch-build" }
 skotch-driver          = { path = "crates/skotch-driver" }
 skotch-repl            = { path = "crates/skotch-repl" }
