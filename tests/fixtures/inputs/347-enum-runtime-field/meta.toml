@@ -1,0 +1,2 @@
+status = "supported"
+features = ["enum", "real-class", "runtime-field-access", "constructor-params"]
