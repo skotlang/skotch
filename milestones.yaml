@@ -62,7 +62,6 @@ milestones:
       Full compilation pipeline across five targets, ~55% Kotlin language
       coverage, build system with JAR/APK packaging, REPL with JNI, LSP
       server, and 295+ validated test fixtures.
-    estimated_loc: "23,000 (existing)"
 
     features:
       # ── Compiler infrastructure ──────────────────────────────────────
@@ -201,13 +200,12 @@ milestones:
 
   - version: "0.2.0"
     title: "Object Model Foundation"
-    status: planned
+    status: completed
     depends_on: []
     description: >
       Build the full Kotlin object model on top of existing class support.
       Inheritance, interfaces, sealed/enum classes, object declarations,
       companion objects, and smart casts.
-    estimated_loc: "3,000–4,000"
 
     features:
       - name: "Inheritance with open/override"
@@ -367,7 +365,6 @@ milestones:
       Function types, lambda expressions, closures with capture, trailing
       lambda syntax, lambda with receiver, and scope functions. This is
       the single most important milestone for Compose compatibility.
-    estimated_loc: "4,000–5,000"
 
     features:
       - name: "Lambda expressions"
@@ -460,7 +457,6 @@ milestones:
     description: >
       Type parameters, variance, generic classes and functions, reified types.
       JVM/DEX use type erasure; the compiler inserts casts at erasure boundaries.
-    estimated_loc: "3,000–4,000"
 
     features:
       - name: "Generic function declarations"
@@ -521,7 +517,6 @@ milestones:
     description: >
       Collection types, iteration protocols, varargs, destructuring,
       operator overloading. Builds on generics and lambdas.
-    estimated_loc: "4,000–5,000"
 
     features:
       - name: "Varargs and spread operator"
@@ -593,7 +588,6 @@ milestones:
     description: >
       The hardest language features: coroutine CPS transform and property
       delegation. Also includes secondary constructors and DEX exception tables.
-    estimated_loc: "5,000–7,000"
 
     features:
       - name: "Suspend functions and CPS transform"
@@ -658,7 +652,6 @@ milestones:
     description: >
       Maven dependency fetching, version catalogs, Gradle plugin model,
       AAR handling, and classpath assembly.
-    estimated_loc: "4,000–5,000"
 
     features:
       - name: "Maven dependency resolution"
@@ -724,7 +717,6 @@ milestones:
     description: >
       Resource compilation (aapt2 replacement), R class generation,
       full DEX backend to parity with JVM, multi-DEX, debug APK assembly.
-    estimated_loc: "6,000–8,000"
 
     features:
       - name: "Resource compilation (aapt2 equivalent)"
@@ -797,7 +789,6 @@ milestones:
       The @Composable function transform, state tracking, remember intrinsic,
       and recomposition support. Implemented as a dedicated MIR-to-MIR pass
       rather than a general-purpose compiler plugin API.
-    estimated_loc: "5,000–7,000"
 
     features:
       - name: "Annotation parsing"
@@ -866,7 +857,6 @@ milestones:
     description: >
       End-to-end validation: build every Official Jetpack Compose Sample
       with skotch alone. Fix all compilation gaps found in real-world code.
-    estimated_loc: "3,000–5,000 (fixes)"
 
     features:
       - name: "Build each compose-sample"

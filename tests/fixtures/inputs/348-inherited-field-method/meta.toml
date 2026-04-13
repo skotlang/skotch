@@ -1,0 +1,2 @@
+status = "supported"
+features = ["inheritance", "inherited-field-in-method", "constructor-args"]
