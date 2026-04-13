@@ -17,25 +17,34 @@ method        main ([Ljava/lang/String;)V 0x0009
     0016 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
     0019 astore 3
     0021 aload 3
-    0023 astore 4
-    0025 aload 4
-    0027 astore 5
-    0029 aload 5
-    0031 op_0xB4
-    0032 nop
-    0033 iload 58
-    0035 iconst_3
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 aload 6
-    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0044 aload 4
-    0046 astore 7
-    0048 aload 7
-    0050 op_0xB4
-    0051 nop
-    0052 op_0x25
-    0053 istore 8
-    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0058 iload 8
-    0060 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0063 return
+    0023 op_0xC0
+    0024 nop
+    0025 op_0x0D
+    0026 astore 4
+    0028 aload 4
+    0030 op_0xC0
+    0031 nop
+    0032 op_0x0D
+    0033 astore 5
+    0035 aload 5
+    0037 op_0xB4
+    0038 nop
+    0039 iload 58
+    0041 iconst_3
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 aload 6
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0050 aload 4
+    0052 op_0xC0
+    0053 nop
+    0054 op_0x0D
+    0055 astore 7
+    0057 aload 7
+    0059 op_0xB4
+    0060 nop
+    0061 op_0x25
+    0062 istore 8
+    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0067 iload 8
+    0069 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0072 return

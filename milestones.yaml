@@ -211,13 +211,13 @@ milestones:
 
     features:
       - name: "Inheritance with open/override"
-        completed: true  # basic inheritance; super.method() calls deferred
+        completed: true
         description: >
-          open class Base, class Derived : Base() with method override.
-          Parser captures `: SuperClass()` clause and open/override/abstract
-          modifiers. MIR carries super_class on MirClass. JVM backend emits
-          correct superclass in class file and invokespecial to parent <init>.
-          Virtual dispatch works via existing invokevirtual.
+          open class Base(val x: Int), class Child(val y: Int) : Base(y * 2).
+          Constructor arg forwarding to super. Virtual dispatch via invokevirtual.
+          Inherited method calls (describe() calling abstract area()).
+          super.method() dispatches to parent via invokespecial. Inherited field
+          access walks the class hierarchy to find the declaring class.
         crates:
           - skotch-syntax    # ClassDecl gains parent_class, is_open, is_abstract
           - skotch-parser    # Parse `: SuperClass()` + capture modifiers
@@ -324,21 +324,21 @@ milestones:
           - "Foo.create() dispatches to companion object method"
 
       - name: "Smart casts with is checks"
+        completed: true
         description: >
-          Runtime is/!is type checks via instanceof + autoboxing of primitives
-          passed as Any parameters. Flow-sensitive type narrowing (smart casts)
-          is not yet implemented — x.length after is String still requires
-          explicit cast.
-        completed: true  # instanceof + autobox; smart-cast narrowing is deferred
+          Runtime is/!is type checks via instanceof + autoboxing + flow-sensitive
+          type narrowing. After if (x is String), x.length works in the then-branch
+          via SSA-based scope rebinding with checkcast on JVM.
         crates:
           - skotch-mir        # InstanceOf rvalue variant
-          - skotch-mir-lower  # instanceof emission + primitive autoboxing
-          - skotch-backend-jvm  # JVM instanceof opcode (0xC1)
-          - skotch-backend-dex  # DEX instance-of opcode (0x20)
+          - skotch-mir-lower  # instanceof + autobox + smart cast scope narrowing
+          - skotch-backend-jvm  # instanceof (0xC1), checkcast (0xC0)
+          - skotch-backend-dex  # instance-of (0x20)
         acceptance_criteria:
           - "x is String returns true/false at runtime"
           - "x !is Int negates the check correctly"
           - "when { obj is Type -> ... } dispatches by runtime type"
+          - "if (x is String) { x.length } compiles with smart-cast narrowing"
           - "Primitives passed to Any params are autoboxed"
 
     risks:

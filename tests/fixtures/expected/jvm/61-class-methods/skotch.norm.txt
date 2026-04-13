@@ -11,33 +11,42 @@ method        main ([Ljava/lang/String;)V 0x0009
     0004 invokespecial Method(Calculator.<init>:()V)
     0007 astore 1
     0009 aload 1
-    0011 astore 2
-    0013 aload 2
-    0015 astore 3
-    0017 iconst_2
-    0018 istore 4
-    0020 iconst_3
-    0021 istore 5
-    0023 aload 3
-    0025 iload 4
-    0027 iload 5
-    0029 invokevirtual Method(Calculator.add:(II)I)
-    0032 istore 6
-    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 iload 6
-    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0042 aload 2
-    0044 astore 7
-    0046 iconst_4
-    0047 istore 8
-    0049 iconst_5
-    0050 istore 9
-    0052 aload 7
-    0054 iload 8
-    0056 iload 9
-    0058 invokevirtual Method(Calculator.multiply:(II)I)
-    0061 istore 10
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 iload 10
-    0068 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0071 return
+    0011 op_0xC0
+    0012 nop
+    0013 op_0x0B
+    0014 astore 2
+    0016 aload 2
+    0018 op_0xC0
+    0019 nop
+    0020 op_0x0B
+    0021 astore 3
+    0023 iconst_2
+    0024 istore 4
+    0026 iconst_3
+    0027 istore 5
+    0029 aload 3
+    0031 iload 4
+    0033 iload 5
+    0035 invokevirtual Method(Calculator.add:(II)I)
+    0038 istore 6
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 iload 6
+    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0048 aload 2
+    0050 op_0xC0
+    0051 nop
+    0052 op_0x0B
+    0053 astore 7
+    0055 iconst_4
+    0056 istore 8
+    0058 iconst_5
+    0059 istore 9
+    0061 aload 7
+    0063 iload 8
+    0065 iload 9
+    0067 invokevirtual Method(Calculator.multiply:(II)I)
+    0070 istore 10
+    0072 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0075 iload 10
+    0077 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0080 return

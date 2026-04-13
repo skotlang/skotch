@@ -749,6 +749,7 @@ impl<'a> BlockWalker<'a> {
                 CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
                 | CallKind::Virtual { .. }
+                | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. } => {
                     // TODO: class support in LLVM backend
                 }
@@ -811,6 +812,7 @@ impl<'a> BlockWalker<'a> {
             CallKind::StaticJava { .. }
             | CallKind::Constructor(_)
             | CallKind::Virtual { .. }
+            | CallKind::Super { .. }
             | CallKind::VirtualJava { .. } => {
                 // TODO: class support in LLVM backend
             }

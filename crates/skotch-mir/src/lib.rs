@@ -177,6 +177,12 @@ pub enum CallKind {
         class_name: std::string::String,
         method_name: std::string::String,
     },
+    /// Super method call: `super.method(args)` — dispatches to parent class
+    /// via `invokespecial` instead of `invokevirtual`.
+    Super {
+        class_name: std::string::String,
+        method_name: std::string::String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -17,33 +17,45 @@ method        main ([Ljava/lang/String;)V 0x0009
     0014 invokespecial Method(Point.<init>:(II)V)
     0017 astore 3
     0019 aload 3
-    0021 astore 4
-    0023 aload 4
-    0025 astore 5
-    0027 aload 5
-    0029 invokevirtual Method(Point.distFromOriginSquared:()I)
-    0032 istore 6
-    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 iload 6
-    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0042 aload 4
-    0044 astore 7
-    0046 aload 7
-    0048 op_0xB4
-    0049 nop
-    0050 op_0x23
-    0051 istore 8
-    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0056 iload 8
-    0058 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0061 aload 4
-    0063 astore 9
-    0065 aload 9
-    0067 op_0xB4
-    0068 nop
-    0069 op_0x26
-    0070 istore 10
-    0072 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0075 iload 10
-    0077 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0080 return
+    0021 op_0xC0
+    0022 nop
+    0023 op_0x0B
+    0024 astore 4
+    0026 aload 4
+    0028 op_0xC0
+    0029 nop
+    0030 op_0x0B
+    0031 astore 5
+    0033 aload 5
+    0035 invokevirtual Method(Point.distFromOriginSquared:()I)
+    0038 istore 6
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 iload 6
+    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0048 aload 4
+    0050 op_0xC0
+    0051 nop
+    0052 op_0x0B
+    0053 astore 7
+    0055 aload 7
+    0057 op_0xB4
+    0058 nop
+    0059 op_0x23
+    0060 istore 8
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 iload 8
+    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0070 aload 4
+    0072 op_0xC0
+    0073 nop
+    0074 op_0x0B
+    0075 astore 9
+    0077 aload 9
+    0079 op_0xB4
+    0080 nop
+    0081 op_0x26
+    0082 istore 10
+    0084 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0087 iload 10
+    0089 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0092 return

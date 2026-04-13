@@ -14,13 +14,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0010 invokespecial Method(Greeter.<init>:(Ljava/lang/String;)V)
     0013 astore 2
     0015 aload 2
-    0017 astore 3
-    0019 aload 3
-    0021 astore 4
-    0023 aload 4
-    0025 invokevirtual Method(Greeter.greet:()Ljava/lang/String;)
-    0028 astore 5
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 aload 5
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0038 return
+    0017 op_0xC0
+    0018 nop
+    0019 op_0x0D
+    0020 astore 3
+    0022 aload 3
+    0024 op_0xC0
+    0025 nop
+    0026 op_0x0D
+    0027 astore 4
+    0029 aload 4
+    0031 invokevirtual Method(Greeter.greet:()Ljava/lang/String;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0044 return

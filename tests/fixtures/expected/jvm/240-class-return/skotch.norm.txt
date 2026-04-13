@@ -13,28 +13,37 @@ method        main ([Ljava/lang/String;)V 0x0009
     0012 invokestatic Method(InputKt.makePair:(II)LPair;)
     0015 astore 3
     0017 aload 3
-    0019 astore 4
-    0021 aload 4
-    0023 astore 5
-    0025 aload 5
-    0027 op_0xB4
-    0028 nop
-    0029 op_0x17
-    0030 istore 6
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 iload 6
-    0037 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0040 aload 4
-    0042 astore 7
-    0044 aload 7
-    0046 op_0xB4
-    0047 nop
-    0048 op_0x26
-    0049 istore 8
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 iload 8
-    0056 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0059 return
+    0019 op_0xC0
+    0020 nop
+    0021 op_0x0B
+    0022 astore 4
+    0024 aload 4
+    0026 op_0xC0
+    0027 nop
+    0028 op_0x0B
+    0029 astore 5
+    0031 aload 5
+    0033 op_0xB4
+    0034 nop
+    0035 op_0x17
+    0036 istore 6
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 iload 6
+    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0046 aload 4
+    0048 op_0xC0
+    0049 nop
+    0050 op_0x0B
+    0051 astore 7
+    0053 aload 7
+    0055 op_0xB4
+    0056 nop
+    0057 op_0x26
+    0058 istore 8
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 iload 8
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0068 return
 method        makePair (II)LPair; 0x0009
   code        max_stack=4 max_locals=5
     0000 iload 0
