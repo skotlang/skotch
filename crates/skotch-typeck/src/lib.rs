@@ -387,6 +387,20 @@ impl<'a> TypeChecker<'a> {
     // ── Type reference resolution ───────────────────────────────────────
 
     fn resolve_type_ref(&mut self, tr: &TypeRef) -> Ty {
+        // Function type: (P1, P2) -> R
+        if let Some(ref fparams) = tr.func_params {
+            let params: Vec<Ty> = fparams.iter().map(|p| self.resolve_type_ref(p)).collect();
+            let ret = self.resolve_type_ref(&TypeRef {
+                name: tr.name,
+                nullable: false,
+                func_params: None,
+                span: tr.span,
+            });
+            return Ty::Function {
+                params,
+                ret: Box::new(ret),
+            };
+        }
         let name = self.interner.resolve(tr.name).to_string();
         let base = if let Some(t) = ty_from_name(&name) {
             t
@@ -916,6 +930,15 @@ impl<'a> TypeChecker<'a> {
                 // propagate this so `val f = { x: Int -> x }; f(5)` resolves.
                 let _ = ret;
                 Ty::Any // Lambda type details resolved by MIR lowering
+            }
+
+            Expr::ObjectExpr { super_type, .. } => {
+                let name = self.interner.resolve(*super_type).to_string();
+                if self.env.types.contains_key(&name) {
+                    Ty::Class(name)
+                } else {
+                    Ty::Any
+                }
             }
         }
     }

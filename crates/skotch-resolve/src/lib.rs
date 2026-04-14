@@ -318,6 +318,9 @@ impl<'a> Resolver<'a> {
                 }
                 scope.truncate(saved);
             }
+            Expr::ObjectExpr { .. } => {
+                // Object expression methods are resolved during MIR lowering.
+            }
             Expr::Ident(name, span) => {
                 let def = lookup(scope, *name).unwrap_or_else(|| {
                     self.out.top_level.get(name).copied().unwrap_or_else(|| {
@@ -487,7 +490,8 @@ impl<'a> Resolver<'a> {
             | Expr::IsCheck { .. }
             | Expr::AsCast { .. }
             | Expr::NotNullAssert { .. }
-            | Expr::Lambda { .. } => {}
+            | Expr::Lambda { .. }
+            | Expr::ObjectExpr { .. } => {}
         }
     }
 }

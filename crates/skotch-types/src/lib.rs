@@ -31,6 +31,8 @@ pub enum Ty {
     Nullable(Box<Ty>),
     /// A user-defined class type. Carries the fully-qualified class name.
     Class(std::string::String),
+    /// Function type: `(Int, String) -> Boolean`. Used for lambda parameters.
+    Function { params: Vec<Ty>, ret: Box<Ty> },
     /// Sentinel emitted when type-checking fails for an expression. The
     /// downstream pass should propagate it without complaining.
     Error,
@@ -44,6 +46,19 @@ impl Ty {
             return true;
         }
         if matches!(other, Ty::Any) {
+            return true;
+        }
+        // Any is assignable to Function (lambda can satisfy function type)
+        if matches!(self, Ty::Any) && matches!(other, Ty::Function { .. }) {
+            return true;
+        }
+        // Function is assignable to Any (erased)
+        if matches!(self, Ty::Function { .. }) && matches!(other, Ty::Any) {
+            return true;
+        }
+        // Any Class is assignable to any other Class (subtyping resolved at runtime).
+        // This is permissive — real Kotlin checks the inheritance chain.
+        if matches!(self, Ty::Class(_)) && matches!(other, Ty::Class(_)) {
             return true;
         }
         // Non-nullable T is assignable to nullable T?
@@ -71,6 +86,7 @@ impl Ty {
             Ty::String => "String",
             Ty::Any => "Any",
             Ty::Class(_) => "<class>",
+            Ty::Function { .. } => "<function>",
             Ty::Nullable(_) => "<nullable>",
             Ty::Error => "<error>",
         }

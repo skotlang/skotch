@@ -1,0 +1,2 @@
+status = "supported"
+features = ["function-type", "lambda", "type-annotation"]

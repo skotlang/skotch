@@ -1,0 +1,2 @@
+status = "supported"
+features = ["sam-conversion", "interface", "lambda", "invokeinterface"]

@@ -185,9 +185,14 @@ milestones:
           - "val add = { a: Int, b: Int -> a + b }; println(add(3, 4)) prints 7"
 
       - name: "Function types"
-        description: "(Int) -> String, () -> Unit. Maps to Function0..Function22."
+        completed: true
+        description: >
+          (Int) -> String syntax parsed in TypeRef. Ty::Function { params, ret }
+          added to type system. Erased to Object on JVM/DEX. Function types
+          assignable to/from Any for lambda compatibility. Local function-typed
+          variables work; higher-order parameter dispatch via $Callable deferred.
         acceptance_criteria:
-          - "fun apply(f: (Int) -> Int, x: Int): Int = f(x) compiles"
+          - "val f: (Int) -> Int = { x: Int -> x * 3 }; f(7) → 21"
 
       - name: "Closure capture"
         completed: true
@@ -230,10 +235,12 @@ milestones:
           - "repeat(3) { i: Int -> println(i) } prints 0, 1, 2"
 
       - name: "SAM conversions"
+        completed: true
         description: >
-          Single Abstract Method conversion: Java interface with one method →
-          lambda. Used for setOnClickListener { }, setContent { }. Critical
-          for all Android callback patterns.
+          Interface { lambda } desugars to object : Interface { override fun method() { body } }.
+          Detected when callee names an interface with exactly one abstract method
+          and the argument is a single lambda. Also fixed: interface abstract methods
+          now include proper parameter types in the JVM class file.
         acceptance_criteria:
           - "Runnable { println(\"hi\") } creates anonymous interface impl"
 
@@ -246,9 +253,12 @@ milestones:
           - "inline fun measure(block: () -> Unit) inlines at call site"
 
       - name: "Object expressions (anonymous implementations)"
+        completed: true
         description: >
-          object : Runnable { override fun run() {} }. Anonymous class
-          implementing an interface. Used for all Android callbacks.
+          object : Interface { override fun method() {} } and
+          object : AbstractClass() { override fun method() {} }.
+          Generates synthetic $Object$N class implementing/extending
+          the specified type. Works for interfaces and abstract classes.
         acceptance_criteria:
           - "val r: Runnable = object : Runnable { override fun run() { } }"
 

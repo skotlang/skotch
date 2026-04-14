@@ -199,11 +199,14 @@ pub struct CallArg {
     pub expr: Expr,
 }
 
-/// A surface-level type reference. We don't model generics yet.
+/// A surface-level type reference.
 #[derive(Clone, Debug)]
 pub struct TypeRef {
     pub name: Symbol,
     pub nullable: bool,
+    /// For function types: `(Int, String) -> Boolean`.
+    /// `func_params` holds the parameter types; `name` holds the return type.
+    pub func_params: Option<Vec<TypeRef>>,
     pub span: Span,
 }
 
@@ -365,6 +368,14 @@ pub enum Expr {
         body: Block,
         span: Span,
     },
+    /// `object : InterfaceName { override fun method() { } }` — anonymous object.
+    ObjectExpr {
+        /// The interface or class being implemented.
+        super_type: Symbol,
+        /// Methods declared in the object body.
+        methods: Vec<FunDecl>,
+        span: Span,
+    },
 }
 
 /// A single branch in a `when` expression: `pattern -> body`.
@@ -438,7 +449,8 @@ impl Expr {
             | Expr::IsCheck { span, .. }
             | Expr::AsCast { span, .. }
             | Expr::NotNullAssert { span, .. }
-            | Expr::Lambda { span, .. } => *span,
+            | Expr::Lambda { span, .. }
+            | Expr::ObjectExpr { span, .. } => *span,
         }
     }
 }

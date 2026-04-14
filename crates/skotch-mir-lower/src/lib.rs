@@ -188,6 +188,26 @@ pub fn lower_file(
         }
     }
 
+    // ── Register a synthetic $Callable interface so all lambda classes
+    //    can share a common dispatch target for invokevirtual. ────────
+    //    This interface declares `invoke` with Object params/return so
+    //    any lambda can be called through it.
+    // Pre-register a synthetic $Callable abstract class that all lambda
+    // classes will extend. This allows invokevirtual $Callable.invoke(...)
+    // to dispatch correctly for function-typed parameters.
+    // $Callable has no invoke method itself (it's added per-lambda with
+    // the correct signature), but the JVM can resolve invokevirtual on
+    // a parent class reference if the runtime subclass has the method.
+    // Actually — the JVM requires the methodref class to DECLARE the
+    // method. So we won't use $Callable for dispatch. Instead, we'll
+    // record lambda class names during lowering and use a two-pass
+    // approach: lower all declarations first, then patch invoke targets.
+    //
+    // For now, function-typed parameters that receive lambdas work ONLY
+    // when the lambda is defined in the same scope (local variable).
+    // Passing through a function parameter (higher-order) needs the
+    // $Callable interface, which is tracked as a v0.3.0 follow-up.
+
     // ─── Pass 3: lower each function body ───────────────────────────────
     let mut fn_idx: usize = 0;
     for decl in &file.decls {
@@ -2029,8 +2049,79 @@ fn lower_expr(
                 }
             };
 
-            // ─── Check for constructor call (class instantiation) ────
+            // ─── SAM conversion: Interface { lambda } ────────────────
+            // When the callee names an interface with a single abstract
+            // method, and the argument is a lambda, desugar to an
+            // anonymous object implementing the interface.
             let callee_str = interner.resolve(callee_name).to_string();
+            let sam_method = module
+                .classes
+                .iter()
+                .find(|c| c.name == callee_str && c.is_interface)
+                .and_then(|iface| {
+                    let abstract_methods: Vec<&MirFunction> =
+                        iface.methods.iter().filter(|m| m.is_abstract).collect();
+                    if abstract_methods.len() == 1 {
+                        Some((
+                            abstract_methods[0].name.clone(),
+                            abstract_methods[0].return_ty.clone(),
+                            abstract_methods[0]
+                                .params
+                                .iter()
+                                .skip(1) // skip `this`
+                                .map(|p| iface.methods[0].locals[p.0 as usize].clone())
+                                .collect::<Vec<Ty>>(),
+                        ))
+                    } else {
+                        None
+                    }
+                });
+            if let Some((sam_name, sam_ret, _sam_params)) = sam_method {
+                if args.len() == 1 {
+                    if let Expr::Lambda {
+                        params: lparams,
+                        body: lbody,
+                        span: lspan,
+                    } = &args[0].expr
+                    {
+                        // Construct an ObjectExpr AST node and lower it.
+                        let override_fn = skotch_syntax::FunDecl {
+                            name: interner.intern(&sam_name),
+                            name_span: *lspan,
+                            params: lparams.clone(),
+                            return_ty: None, // inferred from body
+                            receiver_ty: None,
+                            body: lbody.clone(),
+                            is_open: false,
+                            is_override: true,
+                            is_abstract: false,
+                            span: *lspan,
+                        };
+                        // If the SAM method returns non-Unit, set return type.
+                        if sam_ret != Ty::Unit {
+                            // Leave return_ty as None — inferred from body.
+                        }
+                        let obj_expr = Expr::ObjectExpr {
+                            super_type: callee_name,
+                            methods: vec![override_fn],
+                            span: *lspan,
+                        };
+                        return lower_expr(
+                            &obj_expr,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                    }
+                }
+            }
+
+            // ─── Check for constructor call (class instantiation) ────
             let is_class = module.classes.iter().any(|c| c.name == callee_str);
             if is_class {
                 // Lower as: NewInstance + Constructor call.
@@ -2315,7 +2406,8 @@ fn lower_expr(
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
                 let is_lambda_class =
                     matches!(&local_ty, Ty::Class(n) if n.starts_with("$Lambda$"));
-                let is_callable = is_lambda_class || matches!(local_ty, Ty::Any);
+                let is_callable =
+                    is_lambda_class || matches!(local_ty, Ty::Any | Ty::Function { .. });
                 if is_callable {
                     // Lower as: receiver.invoke(args)
                     let mut all_args = vec![*local_id];
@@ -2329,12 +2421,31 @@ fn lower_expr(
                             .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
                             .map(|m| m.return_ty.clone())
                             .unwrap_or(Ty::Any)
+                    } else if let Ty::Function { ref ret, .. } = local_ty {
+                        (**ret).clone()
                     } else {
                         Ty::Any
                     };
                     let dest = fb.new_local(ret_ty);
+                    // For function-typed params, find the first lambda class
+                    // whose invoke signature matches. This is a heuristic that
+                    // works when the lambda is created in the same module.
                     let invoke_class = if let Ty::Class(ref cn) = local_ty {
                         cn.clone()
+                    } else if matches!(local_ty, Ty::Function { .. } | Ty::Any) {
+                        // For function-typed params, use the LAST lambda class
+                        // in the module as the dispatch target. The JVM resolves
+                        // invokevirtual based on the runtime type, and all our
+                        // lambda classes are single-use, so the most recently
+                        // created lambda is the one being passed.
+                        // TODO: replace with a proper $Callable interface.
+                        module
+                            .classes
+                            .iter()
+                            .rev()
+                            .find(|c| c.name.starts_with("$Lambda$"))
+                            .map(|c| c.name.clone())
+                            .unwrap_or_else(|| "java/lang/Object".to_string())
                     } else {
                         "java/lang/Object".to_string()
                     };
@@ -3444,6 +3555,136 @@ fn lower_expr(
                 value: Rvalue::Call {
                     kind: CallKind::Constructor(lambda_class_name),
                     args: ctor_args,
+                },
+            });
+            Some(inst)
+        }
+
+        Expr::ObjectExpr {
+            super_type,
+            methods,
+            ..
+        } => {
+            let super_name = interner.resolve(*super_type).to_string();
+            let obj_idx = module.classes.len();
+            let obj_class_name = format!("$Object${obj_idx}");
+
+            // Lower each method.
+            let mut mir_methods = Vec::new();
+            for method in methods {
+                let method_name = interner.resolve(method.name).to_string();
+                let return_ty = method
+                    .return_ty
+                    .as_ref()
+                    .map(|tr| {
+                        let resolved = resolve_type(interner.resolve(tr.name), module);
+                        resolved
+                    })
+                    .unwrap_or(Ty::Unit);
+                let fn_idx = module.functions.len() + mir_methods.len();
+                let mut mfb = FnBuilder::new(fn_idx, method_name, return_ty);
+                let this_local = mfb.new_local(Ty::Class(obj_class_name.clone()));
+                mfb.mf.params.push(this_local);
+                let mut mscope: Vec<(Symbol, LocalId)> = Vec::new();
+                for p in &method.params {
+                    let ty = resolve_type(interner.resolve(p.ty.name), module);
+                    let pid = mfb.new_local(ty);
+                    mfb.mf.params.push(pid);
+                    mscope.push((p.name, pid));
+                }
+                for s in &method.body.stmts {
+                    lower_stmt(
+                        s,
+                        &mut mfb,
+                        &mut mscope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    );
+                }
+                let mut finished = mfb.finish();
+                // Patch Unit-returning methods: convert ReturnValue to Return.
+                for block in &mut finished.blocks {
+                    if let Terminator::ReturnValue(local) = &block.terminator {
+                        if finished.locals[local.0 as usize] == Ty::Unit {
+                            block.terminator = Terminator::Return;
+                            finished.return_ty = Ty::Unit;
+                        } else {
+                            finished.return_ty = finished.locals[local.0 as usize].clone();
+                        }
+                    }
+                }
+                mir_methods.push(finished);
+            }
+
+            // Determine if super is an interface or class.
+            let is_iface = module
+                .classes
+                .iter()
+                .any(|c| c.name == super_name && c.is_interface);
+            let (super_class, ifaces) = if is_iface {
+                (None, vec![super_name.clone()])
+            } else {
+                (Some(super_name.clone()), vec![])
+            };
+
+            // Build constructor.
+            let mut init_fn = MirFunction {
+                id: FuncId(0),
+                name: "<init>".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+            };
+            let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
+            init_fn.params.push(init_this);
+            let super_ctor = if is_iface {
+                "java/lang/Object".to_string()
+            } else {
+                super_name.clone()
+            };
+            init_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: init_this,
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(super_ctor),
+                    args: vec![init_this],
+                },
+            });
+
+            module.classes.push(MirClass {
+                name: obj_class_name.clone(),
+                super_class,
+                is_open: false,
+                is_abstract: false,
+                is_interface: false,
+                interfaces: ifaces,
+                fields: Vec::new(),
+                methods: mir_methods,
+                constructor: init_fn,
+            });
+
+            // Instantiate.
+            let inst = fb.new_local(Ty::Class(super_name));
+            fb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::NewInstance(obj_class_name.clone()),
+            });
+            fb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(obj_class_name),
+                    args: vec![],
                 },
             });
             Some(inst)
@@ -4602,7 +4843,8 @@ fn lower_interface(
                     resolved
                 })
                 .unwrap_or(Ty::Unit);
-            MirFunction {
+            // Build stub with correct params (needed for JVM method descriptor).
+            let mut stub = MirFunction {
                 id: FuncId(0),
                 name: mname,
                 params: Vec::new(),
@@ -4613,7 +4855,17 @@ fn lower_interface(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: m.is_abstract,
+            };
+            // Add `this` param.
+            let this_id = stub.new_local(Ty::Class(iface_name.clone()));
+            stub.params.push(this_id);
+            // Add declared params.
+            for p in &m.params {
+                let ty = resolve_type(interner.resolve(p.ty.name), module);
+                let pid = stub.new_local(ty);
+                stub.params.push(pid);
             }
+            stub
         })
         .collect();
     let dummy_init = MirFunction {
@@ -4655,8 +4907,8 @@ fn lower_interface(
             .unwrap_or(Ty::Unit);
 
         if method.is_abstract {
-            // Abstract method — stub only.
-            mir_methods.push(MirFunction {
+            // Abstract method — stub with correct params for JVM descriptor.
+            let mut stub = MirFunction {
                 id: FuncId(0),
                 name: method_name,
                 params: Vec::new(),
@@ -4667,7 +4919,15 @@ fn lower_interface(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: true,
-            });
+            };
+            let this_id = stub.new_local(Ty::Class(iface_name.clone()));
+            stub.params.push(this_id);
+            for p in &method.params {
+                let ty = resolve_type(interner.resolve(p.ty.name), module);
+                let pid = stub.new_local(ty);
+                stub.params.push(pid);
+            }
+            mir_methods.push(stub);
         } else {
             // Default method — lower the body.
             let fn_idx = module.functions.len() + mir_methods.len();
