@@ -452,6 +452,8 @@ struct FnBuilder {
     mf: MirFunction,
     /// Index of the block we're currently emitting into.
     cur_block: u32,
+    /// Symbols declared as `var` (mutable) in this function scope.
+    var_syms: rustc_hash::FxHashSet<Symbol>,
 }
 
 impl FnBuilder {
@@ -471,7 +473,11 @@ impl FnBuilder {
             param_defaults: Vec::new(),
             is_abstract: false,
         };
-        FnBuilder { mf, cur_block: 0 }
+        FnBuilder {
+            mf,
+            cur_block: 0,
+            var_syms: rustc_hash::FxHashSet::default(),
+        }
     }
 
     fn new_local(&mut self, ty: Ty) -> LocalId {
@@ -770,15 +776,59 @@ fn lower_stmt(
                 diags,
                 loop_ctx,
             ) {
-                // Find the local for this variable in scope.
-                if let Some((_name, local_id)) =
-                    scope.iter().rev().find(|(name, _)| *name == *target)
+                // Check if this var is ref-boxed (captured mutable var).
+                let ref_holder_name =
+                    interner.intern(&format!("$ref${}", interner.resolve(*target)));
+                if let Some((_, ref_lid)) = scope
+                    .iter()
+                    .rev()
+                    .find(|(name, _)| *name == ref_holder_name)
                 {
-                    let dest = *local_id;
-                    fb.push_stmt(MStmt::Assign {
-                        dest,
-                        value: Rvalue::Local(rhs),
-                    });
+                    let ref_lid = *ref_lid;
+                    // Find the $Ref class name from the local's type.
+                    let ref_class = match &fb.mf.locals[ref_lid.0 as usize] {
+                        Ty::Class(name) => name.clone(),
+                        _ => String::new(),
+                    };
+                    if !ref_class.is_empty() {
+                        // Write through the $Ref: ref.element = rhs
+                        fb.push_stmt(MStmt::Assign {
+                            dest: ref_lid,
+                            value: Rvalue::PutField {
+                                receiver: ref_lid,
+                                class_name: ref_class.clone(),
+                                field_name: "element".to_string(),
+                                value: rhs,
+                            },
+                        });
+                        // In the lambda invoke scope, also update the
+                        // element-typed local copy so subsequent reads
+                        // see the new value.  Skip this in the outer scope
+                        // where the target local IS the $Ref object.
+                        if let Some((_, local_id)) =
+                            scope.iter().rev().find(|(name, _)| *name == *target)
+                        {
+                            let dest = *local_id;
+                            let dest_ty = &fb.mf.locals[dest.0 as usize];
+                            if !matches!(dest_ty, Ty::Class(n) if n.starts_with("$Ref$")) {
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Local(rhs),
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    // Normal (non-ref-boxed) assignment.
+                    if let Some((_name, local_id)) =
+                        scope.iter().rev().find(|(name, _)| *name == *target)
+                    {
+                        let dest = *local_id;
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Local(rhs),
+                        });
+                    }
                 }
             }
             true
@@ -1044,6 +1094,9 @@ fn lower_val_stmt(
         value: Rvalue::Local(rhs),
     });
     scope.push((v.name, dest));
+    if v.is_var {
+        fb.var_syms.insert(v.name);
+    }
     true
 }
 
@@ -1115,6 +1168,28 @@ fn lower_expr(
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| *n == *name) {
                 let src = *id;
                 let ty = fb.mf.locals[src.0 as usize].clone();
+                // Auto-dereference $Ref-boxed vars: read .element field.
+                if let Ty::Class(ref cls) = ty {
+                    if cls.starts_with("$Ref$") {
+                        let elem_ty = module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == cls)
+                            .and_then(|c| c.fields.first())
+                            .map(|f| f.ty.clone())
+                            .unwrap_or(Ty::Any);
+                        let dest = fb.new_local(elem_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::GetField {
+                                receiver: src,
+                                class_name: cls.clone(),
+                                field_name: "element".to_string(),
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
                 let dest = fb.new_local(ty);
                 fb.push_stmt(MStmt::Assign {
                     dest,
@@ -3413,24 +3488,147 @@ fn lower_expr(
         ),
 
         Expr::Lambda { params, body, .. } => {
-            let lambda_idx = module.classes.len();
-            let lambda_class_name = format!("$Lambda${lambda_idx}");
-
             // ── Capture analysis ────────────────────────────────────
-            // Collect names referenced in the lambda body that are in
-            // the enclosing scope but NOT lambda parameters.
             let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
             let free_vars: Vec<(Symbol, LocalId, Ty)> =
                 collect_free_vars(body, &param_names, scope, fb, interner);
 
-            // Fields for captured variables.
+            // Detect which captures need Ref boxing: any `var` declaration
+            // that's captured needs boxing so mutations are visible across
+            // the lambda boundary (both inner writes and outer writes).
+            let mutated: rustc_hash::FxHashSet<Symbol> = free_vars
+                .iter()
+                .filter(|(sym, _, _)| fb.var_syms.contains(sym))
+                .map(|(sym, _, _)| *sym)
+                .collect();
+
+            // For each mutated capture, generate a $Ref class and box the var
+            // in the outer scope so mutations are visible across the boundary.
+            let mut ref_class_names: rustc_hash::FxHashMap<Symbol, String> =
+                rustc_hash::FxHashMap::default();
+            for (sym, outer_lid, ty) in &free_vars {
+                if !mutated.contains(sym) {
+                    continue;
+                }
+                let ref_class_name = format!("$Ref${}", module.classes.len());
+                ref_class_names.insert(*sym, ref_class_name.clone());
+
+                // Generate synthetic $Ref class with `element` field.
+                let mut ref_init = MirFunction {
+                    id: FuncId(0),
+                    name: "<init>".to_string(),
+                    params: Vec::new(),
+                    locals: Vec::new(),
+                    blocks: vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    }],
+                    return_ty: Ty::Unit,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                };
+                let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
+                ref_init.params.push(ref_this);
+                let ref_val_param = ref_init.new_local(ty.clone());
+                ref_init.params.push(ref_val_param);
+                ref_init.blocks[0].stmts.push(MStmt::Assign {
+                    dest: ref_this,
+                    value: Rvalue::Call {
+                        kind: CallKind::Constructor("java/lang/Object".to_string()),
+                        args: vec![ref_this],
+                    },
+                });
+                ref_init.blocks[0].stmts.push(MStmt::Assign {
+                    dest: ref_this,
+                    value: Rvalue::PutField {
+                        receiver: ref_this,
+                        class_name: ref_class_name.clone(),
+                        field_name: "element".to_string(),
+                        value: ref_val_param,
+                    },
+                });
+
+                module.classes.push(MirClass {
+                    name: ref_class_name.clone(),
+                    super_class: None,
+                    is_open: false,
+                    is_abstract: false,
+                    is_interface: false,
+                    interfaces: Vec::new(),
+                    fields: vec![MirField {
+                        name: "element".to_string(),
+                        ty: ty.clone(),
+                    }],
+                    methods: Vec::new(),
+                    constructor: ref_init,
+                });
+
+                // In the outer scope, wrap the var into a $Ref instance.
+                let ref_inst = fb.new_local(Ty::Class(ref_class_name.clone()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: ref_inst,
+                    value: Rvalue::NewInstance(ref_class_name.clone()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: ref_inst,
+                    value: Rvalue::Call {
+                        kind: CallKind::Constructor(ref_class_name.clone()),
+                        args: vec![*outer_lid],
+                    },
+                });
+                // Replace the outer scope binding: var now points to the $Ref.
+                // Add the $ref$ holder so Stmt::Assign can find it.
+                let ref_holder_sym = interner.intern(&format!("$ref${}", interner.resolve(*sym)));
+                scope.push((ref_holder_sym, ref_inst));
+                if let Some(entry) = scope.iter_mut().rev().find(|(s, _)| s == sym) {
+                    entry.1 = ref_inst;
+                }
+            }
+
+            // Fields for captured variables — use $Ref type for mutated captures.
             let capture_fields: Vec<MirField> = free_vars
                 .iter()
-                .map(|(sym, _, ty)| MirField {
-                    name: interner.resolve(*sym).to_string(),
-                    ty: ty.clone(),
+                .map(|(sym, _, ty)| {
+                    let field_ty = if let Some(ref_name) = ref_class_names.get(sym) {
+                        Ty::Class(ref_name.clone())
+                    } else {
+                        ty.clone()
+                    };
+                    MirField {
+                        name: interner.resolve(*sym).to_string(),
+                        ty: field_ty,
+                    }
                 })
                 .collect();
+
+            // Pre-register the lambda class so nested lambdas get unique indices.
+            // (Recalculate lambda_idx since $Ref classes may have been added above.)
+            let lambda_idx = module.classes.len();
+            let lambda_class_name = format!("$Lambda${lambda_idx}");
+            module.classes.push(MirClass {
+                name: lambda_class_name.clone(),
+                super_class: None,
+                is_open: false,
+                is_abstract: false,
+                is_interface: false,
+                interfaces: Vec::new(),
+                fields: capture_fields.clone(),
+                methods: Vec::new(),
+                constructor: MirFunction {
+                    id: FuncId(0),
+                    name: "<init>".to_string(),
+                    params: Vec::new(),
+                    locals: Vec::new(),
+                    blocks: Vec::new(),
+                    return_ty: Ty::Unit,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                },
+            });
 
             // ── Invoke method ───────────────────────────────────────
             let mut invoke_fn = {
@@ -3442,7 +3640,13 @@ fn lower_expr(
                 let mut invoke_scope: Vec<(Symbol, LocalId)> = Vec::new();
                 // Load captured fields into locals.
                 for (sym, _, ty) in &free_vars {
-                    let local = invoke_fb.new_local(ty.clone());
+                    let is_ref_boxed = ref_class_names.contains_key(sym);
+                    let field_ty = if let Some(ref_name) = ref_class_names.get(sym) {
+                        Ty::Class(ref_name.clone())
+                    } else {
+                        ty.clone()
+                    };
+                    let local = invoke_fb.new_local(field_ty);
                     invoke_fb.push_stmt(MStmt::Assign {
                         dest: local,
                         value: Rvalue::GetField {
@@ -3451,7 +3655,29 @@ fn lower_expr(
                             field_name: interner.resolve(*sym).to_string(),
                         },
                     });
-                    invoke_scope.push((*sym, local));
+                    if is_ref_boxed {
+                        // For Ref-boxed captures, read the element into a local
+                        // and put the $Ref local + element local both in scope.
+                        // The $Ref local is stored so Stmt::Assign can PutField.
+                        let ref_class = ref_class_names[sym].clone();
+                        let elem = invoke_fb.new_local(ty.clone());
+                        invoke_fb.push_stmt(MStmt::Assign {
+                            dest: elem,
+                            value: Rvalue::GetField {
+                                receiver: local,
+                                class_name: ref_class,
+                                field_name: "element".to_string(),
+                            },
+                        });
+                        // Push a special scope entry: the $Ref holder is stored
+                        // under a mangled name so Stmt::Assign can find it.
+                        let ref_holder_sym =
+                            interner.intern(&format!("$ref${}", interner.resolve(*sym)));
+                        invoke_scope.push((ref_holder_sym, local));
+                        invoke_scope.push((*sym, elem));
+                    } else {
+                        invoke_scope.push((*sym, local));
+                    }
                 }
                 // Lambda parameters.
                 for p in params {
@@ -3476,18 +3702,24 @@ fn lower_expr(
                 invoke_fb.finish()
             };
             invoke_fn.is_abstract = false;
+            let mut found_return_value = false;
             for block in &mut invoke_fn.blocks {
                 if let Terminator::ReturnValue(local) = &block.terminator {
                     let ret_ty = invoke_fn.locals[local.0 as usize].clone();
                     if ret_ty == Ty::Unit {
-                        // Unit-returning lambda: use plain Return, not ReturnValue.
                         block.terminator = Terminator::Return;
                         invoke_fn.return_ty = Ty::Unit;
                     } else {
                         invoke_fn.return_ty = ret_ty;
                     }
+                    found_return_value = true;
                     break;
                 }
+            }
+            if !found_return_value {
+                // No ReturnValue found — the lambda body is all statements
+                // (e.g. assignments). The return type is Unit.
+                invoke_fn.return_ty = Ty::Unit;
             }
 
             // ── Constructor (takes captured values) ─────────────────
@@ -3517,7 +3749,12 @@ fn lower_expr(
             });
             // Constructor params for captures → field assignments.
             for (sym, _, ty) in &free_vars {
-                let param_id = init_fn.new_local(ty.clone());
+                let field_ty = if let Some(ref_name) = ref_class_names.get(sym) {
+                    Ty::Class(ref_name.clone())
+                } else {
+                    ty.clone()
+                };
+                let param_id = init_fn.new_local(field_ty);
                 init_fn.params.push(param_id);
                 init_fn.blocks[0].stmts.push(MStmt::Assign {
                     dest: init_this,
@@ -3530,7 +3767,8 @@ fn lower_expr(
                 });
             }
 
-            module.classes.push(MirClass {
+            // Replace the pre-registered stub with the real class.
+            module.classes[lambda_idx] = MirClass {
                 name: lambda_class_name.clone(),
                 super_class: None,
                 is_open: false,
@@ -3540,7 +3778,7 @@ fn lower_expr(
                 fields: capture_fields,
                 methods: vec![invoke_fn],
                 constructor: init_fn,
-            });
+            };
 
             // ── Instantiate at definition site ──────────────────────
             let inst = fb.new_local(Ty::Class(lambda_class_name.clone()));
@@ -3549,7 +3787,24 @@ fn lower_expr(
                 value: Rvalue::NewInstance(lambda_class_name.clone()),
             });
             // Pass captured values as constructor args.
-            let ctor_args: Vec<LocalId> = free_vars.iter().map(|(_, lid, _)| *lid).collect();
+            // For ref-boxed captures, pass the $Ref instance (which is now
+            // the outer scope binding after we replaced it above).
+            let ctor_args: Vec<LocalId> = free_vars
+                .iter()
+                .map(|(sym, orig_lid, _)| {
+                    if ref_class_names.contains_key(sym) {
+                        // The outer scope now points to the $Ref instance.
+                        scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| s == sym)
+                            .map(|(_, lid)| *lid)
+                            .unwrap_or(*orig_lid)
+                    } else {
+                        *orig_lid
+                    }
+                })
+                .collect();
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::Call {

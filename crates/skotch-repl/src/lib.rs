@@ -403,6 +403,8 @@ struct ReplState {
     /// Monotonic counter of all turns (declarations + expressions),
     /// used only for unique synthetic class names.
     turn: usize,
+    /// Counter for auto-assigned result variables (res0, res1, ...).
+    res_counter: usize,
 }
 
 impl ReplState {
@@ -411,6 +413,7 @@ impl ReplState {
             top_decls: Vec::new(),
             local_decls: Vec::new(),
             turn: 0,
+            res_counter: 0,
         }
     }
 
@@ -467,13 +470,45 @@ impl ReplState {
             self.local_decls.push(line.to_string());
             Ok(String::new())
         } else {
-            // Expression statement: wrap in main with all prior decls.
+            // Expression: assign to resN, print type + value, store for future use.
             let top = self.top_decls.join("\n");
             let locals = self.local_decls.join("\n    ");
             let body = line.trim_end();
-            let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+
+            // Check if the expression is a bare `println`/`print` call — if so,
+            // just execute it without capturing (it returns Unit).
+            let is_print = body.starts_with("println(") || body.starts_with("print(");
+            if is_print {
+                let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                let class_name = format!("ReplTurn{}Kt", self.turn);
+                return compile_and_run_jni(&source, jvm, &class_name);
+            }
+
+            // Capture the expression result in a resN variable and print it.
+            let res_name = format!("res{}", self.res_counter);
+            let source = format!(
+                "{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
+                 println({res_name})\n}}\n"
+            );
             let class_name = format!("ReplTurn{}Kt", self.turn);
-            compile_and_run_jni(&source, jvm, &class_name)
+
+            match compile_and_run_jni(&source, jvm, &class_name) {
+                Ok(stdout) => {
+                    // Determine the display type from the value.
+                    let value_str = stdout.trim_end();
+                    let type_name = infer_display_type(value_str, body);
+                    self.local_decls.push(format!("val {res_name} = {body}"));
+                    self.res_counter += 1;
+                    Ok(format!("{res_name}: {type_name} = {value_str}\n"))
+                }
+                Err(_) => {
+                    // Fallback: execute as a plain statement (no result capture).
+                    self.turn += 1;
+                    let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                    let class_name = format!("ReplTurn{}Kt", self.turn);
+                    compile_and_run_jni(&source, jvm, &class_name)
+                }
+            }
         }
     }
 }
@@ -485,6 +520,37 @@ impl ReplState {
 /// those) is treated as a declaration. Everything else is treated
 /// as an expression statement.
 /// Strip leading modifier keywords from a declaration line.
+/// Infer a display type name from the printed value and expression text.
+fn infer_display_type(value: &str, expr: &str) -> &'static str {
+    // Try to parse as Int.
+    if value.parse::<i64>().is_ok() && !value.contains('.') {
+        if value.len() > 10 || value.parse::<i64>().unwrap_or(0).abs() > i32::MAX as i64 {
+            return "kotlin.Long";
+        }
+        return "kotlin.Int";
+    }
+    // Try to parse as Double.
+    if value.parse::<f64>().is_ok() && value.contains('.') {
+        return "kotlin.Double";
+    }
+    // Boolean.
+    if value == "true" || value == "false" {
+        return "kotlin.Boolean";
+    }
+    // String (if the expression is a string literal or string operation).
+    if expr.contains('"')
+        || expr.contains(".uppercase")
+        || expr.contains(".lowercase")
+        || expr.contains(".trim")
+        || expr.contains(".let")
+        || expr.contains(" + \"")
+    {
+        return "kotlin.String";
+    }
+    // Default to String (println always produces string output).
+    "kotlin.String"
+}
+
 fn strip_modifiers(trimmed: &str) -> &str {
     let mut s = trimmed;
     loop {
