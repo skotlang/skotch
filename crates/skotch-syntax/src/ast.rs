@@ -151,6 +151,8 @@ pub struct Param {
     pub ty: TypeRef,
     /// Default value expression, e.g. `fun greet(name: String = "world")`.
     pub default: Option<Box<Expr>>,
+    /// True when declared as `vararg numbers: Int`.
+    pub is_vararg: bool,
     pub span: Span,
 }
 
@@ -303,6 +305,20 @@ pub enum Stmt {
     },
     /// `throw expr`
     ThrowStmt { expr: Expr, span: Span },
+    /// `receiver[index] = value` — array/collection index assignment.
+    IndexAssign {
+        receiver: Expr,
+        index: Expr,
+        value: Expr,
+        span: Span,
+    },
+    /// `val (a, b, c) = expr` — destructuring declaration.
+    /// Desugars to `val a = expr.component1()`, `val b = expr.component2()`, etc.
+    Destructure {
+        names: Vec<Symbol>,
+        init: Expr,
+        span: Span,
+    },
 }
 
 /// Expressions exercised by PR #1 fixtures.
@@ -420,6 +436,12 @@ pub enum Expr {
         methods: Vec<FunDecl>,
         span: Span,
     },
+    /// `receiver[index]` — array/collection indexing.
+    Index {
+        receiver: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
 }
 
 /// A single branch in a `when` expression: `pattern -> body`.
@@ -494,7 +516,8 @@ impl Expr {
             | Expr::AsCast { span, .. }
             | Expr::NotNullAssert { span, .. }
             | Expr::Lambda { span, .. }
-            | Expr::ObjectExpr { span, .. } => *span,
+            | Expr::ObjectExpr { span, .. }
+            | Expr::Index { span, .. } => *span,
         }
     }
 }

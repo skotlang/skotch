@@ -300,6 +300,24 @@ impl<'a> Resolver<'a> {
             Stmt::ThrowStmt { expr, .. } => {
                 self.resolve_expr(fn_idx, expr, scope, rf);
             }
+            Stmt::IndexAssign {
+                receiver,
+                index,
+                value,
+                ..
+            } => {
+                self.resolve_expr(fn_idx, receiver, scope, rf);
+                self.resolve_expr(fn_idx, index, scope, rf);
+                self.resolve_expr(fn_idx, value, scope, rf);
+            }
+            Stmt::Destructure { names, init, .. } => {
+                self.resolve_expr(fn_idx, init, scope, rf);
+                for name in names {
+                    let local_idx = rf.locals.len() as u32;
+                    rf.locals.push(*name);
+                    scope.push((*name, DefId::Local(fn_idx, local_idx)));
+                }
+            }
             Stmt::LocalFun(f) => {
                 // Register the local function name in scope so calls
                 // to it resolve correctly. Use a synthetic Function DefId.
@@ -384,6 +402,12 @@ impl<'a> Resolver<'a> {
             }
             Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
                 self.resolve_expr(fn_idx, receiver, scope, rf);
+            }
+            Expr::Index {
+                receiver, index, ..
+            } => {
+                self.resolve_expr(fn_idx, receiver, scope, rf);
+                self.resolve_expr(fn_idx, index, scope, rf);
             }
             Expr::Throw { expr, .. }
             | Expr::NotNullAssert { expr, .. }
@@ -509,7 +533,8 @@ impl<'a> Resolver<'a> {
             | Expr::AsCast { .. }
             | Expr::NotNullAssert { .. }
             | Expr::Lambda { .. }
-            | Expr::ObjectExpr { .. } => {}
+            | Expr::ObjectExpr { .. }
+            | Expr::Index { .. } => {}
         }
     }
 }

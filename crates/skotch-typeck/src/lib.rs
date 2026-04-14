@@ -471,7 +471,14 @@ impl<'a> TypeChecker<'a> {
             params.push(self.type_ref(recv).unwrap_or(Ty::Any));
         }
         for p in &f.params {
-            params.push(self.type_ref(&p.ty).unwrap_or(Ty::Error));
+            let ty = self.type_ref(&p.ty).unwrap_or(Ty::Error);
+            // vararg Int → IntArray on JVM
+            let ty = if p.is_vararg && ty == Ty::Int {
+                Ty::IntArray
+            } else {
+                ty
+            };
+            params.push(ty);
         }
         let ret = match &f.return_ty {
             Some(r) => self.type_ref(r).unwrap_or(Ty::Error),
@@ -581,6 +588,16 @@ impl<'a> TypeChecker<'a> {
                 Stmt::Assign { value, .. } => {
                     self.synth_expr(value, scope);
                 }
+                Stmt::IndexAssign {
+                    receiver,
+                    index,
+                    value,
+                    ..
+                } => {
+                    self.synth_expr(receiver, scope);
+                    self.synth_expr(index, scope);
+                    self.synth_expr(value, scope);
+                }
                 Stmt::Break(_) | Stmt::Continue(_) => {}
                 Stmt::TryStmt {
                     body,
@@ -641,6 +658,13 @@ impl<'a> TypeChecker<'a> {
                     self.out.top_signatures.insert(DefId::Function(fn_idx), sig);
                     self.fn_names.push(f.name);
                 }
+                Stmt::Destructure { names, init, .. } => {
+                    self.synth_expr(init, scope);
+                    for name in names {
+                        local_tys.push(Ty::Any);
+                        scope.push((*name, Ty::Any));
+                    }
+                }
                 Stmt::For {
                     var_name,
                     start: range_start,
@@ -660,10 +684,15 @@ impl<'a> TypeChecker<'a> {
                     body,
                     ..
                 } => {
-                    self.synth_expr(iterable, scope);
-                    // Element type is Any (erased generics on JVM).
-                    local_tys.push(Ty::Any);
-                    scope.push((*var_name, Ty::Any));
+                    let iter_ty = self.synth_expr(iterable, scope);
+                    // If iterating over IntArray, element type is Int.
+                    let elem_ty = if iter_ty == Ty::IntArray {
+                        Ty::Int
+                    } else {
+                        Ty::Any
+                    };
+                    local_tys.push(elem_ty.clone());
+                    scope.push((*var_name, elem_ty));
                     self.check_block(body, scope, local_tys);
                 }
             }
@@ -816,6 +845,10 @@ impl<'a> TypeChecker<'a> {
                     if self.env.types.contains_key(&name_str) {
                         return Ty::Class(name_str);
                     }
+                    // Built-in array constructors.
+                    if name_str == "IntArray" {
+                        return Ty::IntArray;
+                    }
                     // Check if the callee is a local variable with an invoke operator.
                     if let Some((_, Ty::Class(ref class_name))) =
                         scope.iter().rev().find(|(n, _)| *n == name)
@@ -835,6 +868,11 @@ impl<'a> TypeChecker<'a> {
 
                 // Built-in: String.length
                 if recv_ty == Ty::String && field_name == "length" {
+                    return Ty::Int;
+                }
+
+                // Built-in: IntArray.size
+                if recv_ty == Ty::IntArray && field_name == "size" {
                     return Ty::Int;
                 }
 
@@ -1015,6 +1053,17 @@ impl<'a> TypeChecker<'a> {
                     Ty::Class(name)
                 } else {
                     Ty::Any
+                }
+            }
+
+            Expr::Index {
+                receiver, index, ..
+            } => {
+                let recv_ty = self.synth_expr(receiver, scope);
+                let _idx_ty = self.synth_expr(index, scope);
+                match recv_ty {
+                    Ty::IntArray => Ty::Int,
+                    _ => Ty::Any,
                 }
             }
         }

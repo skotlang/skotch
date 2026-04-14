@@ -1,0 +1,4 @@
+name     = "373-destructuring-basic"
+status   = "supported"
+features = ["data-class", "destructuring", "componentN"]
+notes    = "Destructuring declaration val (a, b) = Point(3, 4) desugars to componentN() calls."

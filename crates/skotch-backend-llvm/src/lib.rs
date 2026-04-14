@@ -742,6 +742,12 @@ impl<'a> BlockWalker<'a> {
             | Rvalue::InstanceOf { .. } => {
                 // TODO: class/instanceof support in LLVM backend
             }
+            Rvalue::NewIntArray(_)
+            | Rvalue::ArrayLoad { .. }
+            | Rvalue::ArrayStore { .. }
+            | Rvalue::ArrayLength(_) => {
+                // TODO: IntArray support in LLVM backend
+            }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println | CallKind::Print => self.lower_println(args),
                 CallKind::PrintlnConcat => self.lower_println_concat(args),
@@ -988,6 +994,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::Long => "i64",
         Ty::Double => "double",
         Ty::String => "ptr",
+        Ty::IntArray => "ptr", // int[] → pointer in LLVM
         Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
         Ty::Error => "void",
     }

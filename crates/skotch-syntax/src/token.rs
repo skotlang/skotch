@@ -83,6 +83,7 @@ pub enum TokenKind {
     KwProtected,
     KwInternal,
     KwOperator,
+    KwVararg,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,

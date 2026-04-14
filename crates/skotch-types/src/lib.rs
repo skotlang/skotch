@@ -27,6 +27,8 @@ pub enum Ty {
     String,
     /// `Any` — top type.
     Any,
+    /// `IntArray` — primitive int array (`int[]` on JVM).
+    IntArray,
     /// Nullable wrapper. `String?` ≡ `Nullable(String)`.
     Nullable(Box<Ty>),
     /// A user-defined class type. Carries the fully-qualified class name.
@@ -85,6 +87,7 @@ impl Ty {
             Ty::Double => "Double",
             Ty::String => "String",
             Ty::Any => "Any",
+            Ty::IntArray => "IntArray",
             Ty::Class(_) => "<class>",
             Ty::Function { .. } => "<function>",
             Ty::Nullable(_) => "<nullable>",
@@ -104,6 +107,7 @@ pub fn ty_from_name(name: &str) -> Option<Ty> {
         "Double" => Ty::Double,
         "String" => Ty::String,
         "Any" => Ty::Any,
+        "IntArray" => Ty::IntArray,
         _ => return None,
     })
 }

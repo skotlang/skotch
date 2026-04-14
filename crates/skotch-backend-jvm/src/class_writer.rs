@@ -1422,6 +1422,7 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
         Ty::Any => "Ljava/lang/Object;",
+        Ty::IntArray => "[I",
         Ty::Class(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
         Ty::Nullable(inner) => jvm_type(inner),
@@ -2229,6 +2230,44 @@ fn walk_block(
                 // instanceof pops objectref, pushes int (0 or 1): net 0
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
+            Rvalue::NewIntArray(size) => {
+                // Push size onto the stack, then emit newarray T_INT.
+                load_local(code, stack, max_stack, slots, *size, &func.locals);
+                code.push(0xBC); // newarray
+                code.push(10); // T_INT = 10
+                               // newarray pops int (size), pushes arrayref: net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::ArrayLoad { array, index } => {
+                // Push array ref and index, then emit iaload.
+                load_local(code, stack, max_stack, slots, *array, &func.locals);
+                load_local(code, stack, max_stack, slots, *index, &func.locals);
+                code.push(0x2E); // iaload
+                                 // iaload pops arrayref + index (2), pushes int (1): net -1
+                bump(stack, max_stack, -1);
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::ArrayStore {
+                array,
+                index,
+                value,
+            } => {
+                // Push array ref, index, and value, then emit iastore.
+                load_local(code, stack, max_stack, slots, *array, &func.locals);
+                load_local(code, stack, max_stack, slots, *index, &func.locals);
+                load_local(code, stack, max_stack, slots, *value, &func.locals);
+                code.push(0x4F); // iastore
+                                 // iastore pops arrayref + index + value (3): net -3
+                bump(stack, max_stack, -3);
+                // dest is Unit — nothing to store.
+            }
+            Rvalue::ArrayLength(array) => {
+                // Push array ref, then emit arraylength.
+                load_local(code, stack, max_stack, slots, *array, &func.locals);
+                code.push(0xBE); // arraylength
+                                 // arraylength pops arrayref (1), pushes int (1): net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
         }
     }
 }
@@ -2427,7 +2466,7 @@ fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned
             i += 1;
             #[allow(clippy::match_overlapping_arm)]
             match op {
-                0x10 | 0x12 | 0x15 | 0x19 => i += 1,
+                0x10 | 0x12 | 0x15 | 0x19 | 0xBC => i += 1,
                 0x11 | 0x13 | 0x14 | 0x99 | 0x9A | 0xA7 | 0xB2 | 0xB6 | 0xB7 | 0xB8 | 0xBB => {
                     i += 2
                 }
@@ -2467,6 +2506,11 @@ fn write_slot_verif(
                 Ty::Class(name) => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class(name);
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::IntArray => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("[I");
                     out.write_u16::<BigEndian>(idx).unwrap();
                 }
                 Ty::Nullable(_) | Ty::Any => {

@@ -98,6 +98,25 @@ pub enum Rvalue {
         obj: LocalId,
         type_descriptor: std::string::String,
     },
+    /// Create a new primitive `int[]` of the given size.
+    /// Result type is `Ty::IntArray`.
+    NewIntArray(LocalId),
+    /// Load an element from an `IntArray`: `array[index]`.
+    /// Result type is `Ty::Int`.
+    ArrayLoad {
+        array: LocalId,
+        index: LocalId,
+    },
+    /// Store an element into an `IntArray`: `array[index] = value`.
+    /// Result type is `Ty::Unit` (the dest local is unused).
+    ArrayStore {
+        array: LocalId,
+        index: LocalId,
+        value: LocalId,
+    },
+    /// Get the length of an array: `array.size`.
+    /// Result type is `Ty::Int`.
+    ArrayLength(LocalId),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -235,6 +254,10 @@ pub struct MirFunction {
     /// True for abstract methods (no body, no Code attribute on JVM).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_abstract: bool,
+    /// Index of the vararg parameter (if any). At the call site, all
+    /// arguments from this position onward are packed into an IntArray.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vararg_index: Option<usize>,
     /// Exception handlers (try-catch) for this function.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exception_handlers: Vec<ExceptionHandler>,

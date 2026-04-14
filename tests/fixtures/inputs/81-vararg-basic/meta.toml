@@ -1,4 +1,3 @@
 name   = "81-vararg-basic"
-status = "stub"
+status = "supported"
 features = ["vararg", "for-loop", "array", "int"]
-reason = "Requires vararg parameter lowering to IntArray + for-in loop."

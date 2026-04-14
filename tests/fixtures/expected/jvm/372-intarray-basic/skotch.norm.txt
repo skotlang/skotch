@@ -1,0 +1,86 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=24
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 op_0xBC
+    0006 op_0x0A
+    0007 astore 2
+    0009 aload 2
+    0011 astore 3
+    0013 aload 3
+    0015 astore 4
+    0017 iconst_0
+    0018 istore 5
+    0020 bipush 10
+    0022 istore 6
+    0024 aload 4
+    0026 iload 5
+    0028 iload 6
+    0030 op_0x4F
+    0031 aload 3
+    0033 astore 7
+    0035 iconst_1
+    0036 istore 8
+    0038 bipush 20
+    0040 istore 9
+    0042 aload 7
+    0044 iload 8
+    0046 iload 9
+    0048 op_0x4F
+    0049 aload 3
+    0051 astore 10
+    0053 iconst_2
+    0054 istore 11
+    0056 bipush 30
+    0058 istore 12
+    0060 aload 10
+    0062 iload 11
+    0064 iload 12
+    0066 op_0x4F
+    0067 aload 3
+    0069 astore 13
+    0071 iconst_0
+    0072 istore 14
+    0074 aload 13
+    0076 iload 14
+    0078 op_0x2E
+    0079 istore 15
+    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0084 iload 15
+    0086 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0089 aload 3
+    0091 astore 16
+    0093 iconst_1
+    0094 istore 17
+    0096 aload 16
+    0098 iload 17
+    0100 op_0x2E
+    0101 istore 18
+    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0106 iload 18
+    0108 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0111 aload 3
+    0113 astore 19
+    0115 iconst_2
+    0116 istore 20
+    0118 aload 19
+    0120 iload 20
+    0122 op_0x2E
+    0123 istore 21
+    0125 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0128 iload 21
+    0130 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0133 aload 3
+    0135 astore 22
+    0137 aload 22
+    0139 op_0xBE
+    0140 istore 23
+    0142 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0145 iload 23
+    0147 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0150 return

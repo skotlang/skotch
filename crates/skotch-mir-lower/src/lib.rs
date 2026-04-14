@@ -113,6 +113,7 @@ pub fn lower_file(
                 .iter()
                 .map(|p| interner.resolve(p.name).to_string())
                 .collect();
+            let vararg_index = f.params.iter().position(|p| p.is_vararg);
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -125,6 +126,7 @@ pub fn lower_file(
                 param_defaults,
                 is_abstract: false,
                 exception_handlers: Vec::new(),
+                vararg_index,
             });
             fn_pass1_idx += 1;
         }
@@ -356,6 +358,16 @@ fn collect_free_in_block(
             Stmt::Assign { value, .. } => {
                 collect_free_in_expr(value, param_names, outer_scope, fb, free, seen);
             }
+            Stmt::IndexAssign {
+                receiver,
+                index,
+                value,
+                ..
+            } => {
+                collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
+                collect_free_in_expr(index, param_names, outer_scope, fb, free, seen);
+                collect_free_in_expr(value, param_names, outer_scope, fb, free, seen);
+            }
             _ => {}
         }
     }
@@ -394,6 +406,12 @@ fn collect_free_in_expr(
         }
         Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
             collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::Index {
+            receiver, index, ..
+        } => {
+            collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
+            collect_free_in_expr(index, param_names, outer_scope, fb, free, seen);
         }
         Expr::If {
             cond,
@@ -521,6 +539,7 @@ impl FnBuilder {
             param_defaults: Vec::new(),
             is_abstract: false,
             exception_handlers: Vec::new(),
+            vararg_index: None,
         };
         FnBuilder {
             mf,
@@ -603,13 +622,18 @@ fn lower_function(
     }
 
     for (pi, p) in f.params.iter().enumerate() {
-        let ty = typed
-            .and_then(|t| {
-                t.param_tys
-                    .get(pi + if f.receiver_ty.is_some() { 1 } else { 0 })
-                    .cloned()
-            })
-            .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module));
+        let ty = if p.is_vararg {
+            // vararg Int → IntArray (JVM `int[]`)
+            Ty::IntArray
+        } else {
+            typed
+                .and_then(|t| {
+                    t.param_tys
+                        .get(pi + if f.receiver_ty.is_some() { 1 } else { 0 })
+                        .cloned()
+                })
+                .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module))
+        };
         // Override enum class types to String (enums are string-based).
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
@@ -641,10 +665,12 @@ fn lower_function(
         let saved_defaults = module.functions[fn_idx].param_defaults.clone();
         let saved_required = module.functions[fn_idx].required_params;
         let saved_names = module.functions[fn_idx].param_names.clone();
+        let saved_vararg = module.functions[fn_idx].vararg_index;
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
         module.functions[fn_idx].param_names = saved_names;
+        module.functions[fn_idx].vararg_index = saved_vararg;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -661,6 +687,7 @@ fn lower_function(
             param_defaults: Vec::new(),
             is_abstract: false,
             exception_handlers: Vec::new(),
+            vararg_index: None,
         };
     }
 }
@@ -883,6 +910,58 @@ fn lower_stmt(
             }
             true
         }
+        Stmt::IndexAssign {
+            receiver,
+            index,
+            value,
+            ..
+        } => {
+            let arr = lower_expr(
+                receiver,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            );
+            let idx = lower_expr(
+                index,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            );
+            let val = lower_expr(
+                value,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            );
+            if let (Some(a), Some(i), Some(v)) = (arr, idx, val) {
+                let dest = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::ArrayStore {
+                        array: a,
+                        index: i,
+                        value: v,
+                    },
+                });
+            }
+            true
+        }
         Stmt::For {
             var_name,
             start: range_start,
@@ -1022,8 +1101,6 @@ fn lower_stmt(
             ..
         } => {
             // Desugar: for (x in collection) { body }
-            //   → val iter = collection.iterator()
-            //     while (iter.hasNext()) { val x = iter.next(); body }
             let Some(collection_local) = lower_expr(
                 iterable,
                 fb,
@@ -1038,79 +1115,173 @@ fn lower_stmt(
                 return false;
             };
 
-            // val iter = collection.iterator()
-            let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
-            fb.push_stmt(MStmt::Assign {
-                dest: iter_local,
-                value: Rvalue::Call {
-                    kind: CallKind::VirtualJava {
-                        class_name: "java/util/ArrayList".to_string(),
-                        method_name: "iterator".to_string(),
-                        descriptor: "()Ljava/util/Iterator;".to_string(),
+            let collection_ty = fb.mf.locals[collection_local.0 as usize].clone();
+
+            if matches!(collection_ty, Ty::IntArray) {
+                // IntArray iteration: desugar to index-based loop
+                //   var i = 0
+                //   while (i < array.size) { val x = array[i]; body; i++ }
+                let idx_var = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: idx_var,
+                    value: Rvalue::Const(MirConst::Int(0)),
+                });
+
+                let arr_len = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: arr_len,
+                    value: Rvalue::ArrayLength(collection_local),
+                });
+
+                let cond_block = fb.new_block();
+                let body_block = fb.new_block();
+                let exit_block = fb.new_block();
+
+                fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
+
+                // Condition: i < array.size
+                let cmp = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: cmp,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpLt,
+                        lhs: idx_var,
+                        rhs: arr_len,
                     },
-                    args: vec![collection_local],
-                },
-            });
-
-            let cond_block = fb.new_block();
-            let body_block = fb.new_block();
-            let exit_block = fb.new_block();
-
-            fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
-
-            // Condition: iter.hasNext()
-            let has_next = fb.new_local(Ty::Bool);
-            fb.push_stmt(MStmt::Assign {
-                dest: has_next,
-                value: Rvalue::Call {
-                    kind: CallKind::VirtualJava {
-                        class_name: "java/util/Iterator".to_string(),
-                        method_name: "hasNext".to_string(),
-                        descriptor: "()Z".to_string(),
+                });
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: cmp,
+                        then_block: body_block,
+                        else_block: exit_block,
                     },
-                    args: vec![iter_local],
-                },
-            });
-            fb.terminate_and_switch(
-                Terminator::Branch {
-                    cond: has_next,
-                    then_block: body_block,
-                    else_block: exit_block,
-                },
-                body_block,
-            );
-
-            // Body: val x = iter.next(); <body stmts>
-            let element = fb.new_local(Ty::Any);
-            fb.push_stmt(MStmt::Assign {
-                dest: element,
-                value: Rvalue::Call {
-                    kind: CallKind::VirtualJava {
-                        class_name: "java/util/Iterator".to_string(),
-                        method_name: "next".to_string(),
-                        descriptor: "()Ljava/lang/Object;".to_string(),
-                    },
-                    args: vec![iter_local],
-                },
-            });
-            scope.push((*var_name, element));
-
-            let lctx = Some((cond_block, exit_block));
-            for s in &body.stmts {
-                lower_stmt(
-                    s,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    lctx,
+                    body_block,
                 );
-            }
 
-            fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+                // Body: val x = array[i]
+                let element = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: element,
+                    value: Rvalue::ArrayLoad {
+                        array: collection_local,
+                        index: idx_var,
+                    },
+                });
+                scope.push((*var_name, element));
+
+                let lctx = Some((cond_block, exit_block));
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        lctx,
+                    );
+                }
+
+                // i++
+                let incremented = fb.new_local(Ty::Int);
+                let one = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: one,
+                    value: Rvalue::Const(MirConst::Int(1)),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: incremented,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::AddI,
+                        lhs: idx_var,
+                        rhs: one,
+                    },
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: idx_var,
+                    value: Rvalue::Local(incremented),
+                });
+
+                fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            } else {
+                // Collection iteration via iterator()
+                //   val iter = collection.iterator()
+                //   while (iter.hasNext()) { val x = iter.next(); body }
+                let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: iter_local,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/util/ArrayList".to_string(),
+                            method_name: "iterator".to_string(),
+                            descriptor: "()Ljava/util/Iterator;".to_string(),
+                        },
+                        args: vec![collection_local],
+                    },
+                });
+
+                let cond_block = fb.new_block();
+                let body_block = fb.new_block();
+                let exit_block = fb.new_block();
+
+                fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
+
+                // Condition: iter.hasNext()
+                let has_next = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: has_next,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/util/Iterator".to_string(),
+                            method_name: "hasNext".to_string(),
+                            descriptor: "()Z".to_string(),
+                        },
+                        args: vec![iter_local],
+                    },
+                });
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: has_next,
+                        then_block: body_block,
+                        else_block: exit_block,
+                    },
+                    body_block,
+                );
+
+                // Body: val x = iter.next(); <body stmts>
+                let element = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: element,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/util/Iterator".to_string(),
+                            method_name: "next".to_string(),
+                            descriptor: "()Ljava/lang/Object;".to_string(),
+                        },
+                        args: vec![iter_local],
+                    },
+                });
+                scope.push((*var_name, element));
+
+                let lctx = Some((cond_block, exit_block));
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        lctx,
+                    );
+                }
+
+                fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            }
             true
         }
         Stmt::LocalFun(f) => {
@@ -1137,6 +1308,7 @@ fn lower_stmt(
                 param_defaults: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -1336,6 +1508,59 @@ fn lower_stmt(
         }
         Stmt::ThrowStmt { .. } => {
             // throw is not yet compiled to athrow — skip but don't fail.
+            true
+        }
+        Stmt::Destructure { names, init, .. } => {
+            // Lower the init expression to get the composite value.
+            let Some(init_local) = lower_expr(
+                init,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) else {
+                return false;
+            };
+            // Determine the class name from the init local's type.
+            let init_ty = fb.mf.locals[init_local.0 as usize].clone();
+            let class_name = match &init_ty {
+                Ty::Class(name) => name.clone(),
+                _ => {
+                    diags.push(Diagnostic::error(
+                        init.span(),
+                        "destructuring requires a class type with componentN() methods",
+                    ));
+                    return false;
+                }
+            };
+            // For each name at position i, emit a virtual call to component{i+1}().
+            for (i, name) in names.iter().enumerate() {
+                let method_name = format!("component{}", i + 1);
+                // Determine the return type from the class fields.
+                let field_ty = module
+                    .classes
+                    .iter()
+                    .find(|c| c.name == class_name)
+                    .and_then(|c| c.fields.get(i))
+                    .map(|f| f.ty.clone())
+                    .unwrap_or(Ty::Any);
+                let result = fb.new_local(field_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::Virtual {
+                            class_name: class_name.clone(),
+                            method_name,
+                        },
+                        args: vec![init_local],
+                    },
+                });
+                scope.push((*name, result));
+            }
             true
         }
     }
@@ -2969,6 +3194,48 @@ fn lower_expr(
                 }
             }
 
+            // ─── Vararg packing ──────────────────────────────────────
+            // If the target function has a vararg parameter, pack all
+            // arguments from that index onward into a single IntArray.
+            if let Some(fid) = name_to_func.get(&callee_name) {
+                let vi = module.functions[fid.0 as usize].vararg_index;
+                if let Some(va_idx) = vi {
+                    if arg_locals.len() >= va_idx {
+                        let vararg_args: Vec<LocalId> = arg_locals.drain(va_idx..).collect();
+                        let count = vararg_args.len();
+                        // newarray int[count]
+                        let count_local = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: count_local,
+                            value: Rvalue::Const(MirConst::Int(count as i32)),
+                        });
+                        let arr = fb.new_local(Ty::IntArray);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: arr,
+                            value: Rvalue::NewIntArray(count_local),
+                        });
+                        // Store each element.
+                        for (i, elem) in vararg_args.iter().enumerate() {
+                            let idx_local = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: idx_local,
+                                value: Rvalue::Const(MirConst::Int(i as i32)),
+                            });
+                            let store_dest = fb.new_local(Ty::Unit);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: store_dest,
+                                value: Rvalue::ArrayStore {
+                                    array: arr,
+                                    index: idx_local,
+                                    value: *elem,
+                                },
+                            });
+                        }
+                        arg_locals.push(arr);
+                    }
+                }
+            }
+
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
 
@@ -3069,6 +3336,17 @@ fn lower_expr(
                     });
                 }
                 return Some(list_local);
+            }
+
+            // `IntArray(size)` intrinsic — create a primitive int[].
+            if callee_str == "IntArray" && !arg_locals.is_empty() {
+                let size_local = arg_locals[0];
+                let dest = fb.new_local(Ty::IntArray);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewIntArray(size_local),
+                });
+                return Some(dest);
             }
 
             // `repeat(n) { body }` — execute lambda n times.
@@ -3836,6 +4114,55 @@ fn lower_expr(
 
             Some(result)
         }
+        Expr::Index {
+            receiver,
+            index,
+            span: _,
+        } => {
+            let arr = lower_expr(
+                receiver,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            let idx = lower_expr(
+                index,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            let arr_ty = fb.mf.locals[arr.0 as usize].clone();
+            match arr_ty {
+                Ty::IntArray => {
+                    let dest = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayLoad {
+                            array: arr,
+                            index: idx,
+                        },
+                    });
+                    Some(dest)
+                }
+                _ => {
+                    diags.push(Diagnostic::error(
+                        receiver.span(),
+                        "index operator is only supported on IntArray",
+                    ));
+                    None
+                }
+            }
+        }
         Expr::Field {
             receiver,
             name,
@@ -3942,6 +4269,15 @@ fn lower_expr(
                             },
                             args: vec![recv_local],
                         },
+                    });
+                    return Some(dest);
+                }
+                // IntArray.size → arraylength
+                if matches!(recv_ty, Ty::IntArray) && field_name == "size" {
+                    let dest = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayLength(recv_local),
                     });
                     return Some(dest);
                 }
@@ -4284,6 +4620,7 @@ fn lower_expr(
                     param_defaults: Vec::new(),
                     is_abstract: false,
                     exception_handlers: Vec::new(),
+                    vararg_index: None,
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -4384,6 +4721,7 @@ fn lower_expr(
                     param_defaults: Vec::new(),
                     is_abstract: false,
                     exception_handlers: Vec::new(),
+                    vararg_index: None,
                 },
             });
 
@@ -4495,6 +4833,7 @@ fn lower_expr(
                 param_defaults: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -4660,6 +4999,7 @@ fn lower_expr(
                 param_defaults: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -5069,6 +5409,7 @@ fn lower_enum(
         param_defaults: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
+        vararg_index: None,
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -5125,6 +5466,7 @@ fn lower_enum(
         param_defaults: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
+        vararg_index: None,
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -5234,6 +5576,7 @@ fn lower_object(
         param_defaults: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
+        vararg_index: None,
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -5341,6 +5684,7 @@ fn lower_class(
         param_defaults: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
+        vararg_index: None,
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -5546,6 +5890,7 @@ fn lower_class(
                 param_defaults: Vec::new(),
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             }
         })
         .collect();
@@ -5885,6 +6230,30 @@ fn lower_class(
         mir_methods.push(ts_fb.finish());
     }
 
+    // Synthesize componentN() methods for data classes.
+    if c.is_data && !fields.is_empty() {
+        for (i, field) in fields.iter().enumerate() {
+            let method_name = format!("component{}", i + 1);
+            let comp_idx = module.functions.len() + mir_methods.len();
+            let mut comp_fb = FnBuilder::new(comp_idx, method_name, field.ty.clone());
+            let comp_this = comp_fb.new_local(Ty::Class(class_name.clone()));
+            comp_fb.mf.params.push(comp_this);
+
+            // Load the field and return it.
+            let field_val = comp_fb.new_local(field.ty.clone());
+            comp_fb.push_stmt(MStmt::Assign {
+                dest: field_val,
+                value: Rvalue::GetField {
+                    receiver: comp_this,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            comp_fb.set_terminator(Terminator::ReturnValue(field_val));
+            mir_methods.push(comp_fb.finish());
+        }
+    }
+
     // Replace the stub class with the fully-lowered version.
     module.classes[class_idx] = MirClass {
         name: class_name,
@@ -5936,6 +6305,7 @@ fn lower_interface(
                 param_defaults: Vec::new(),
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -5961,6 +6331,7 @@ fn lower_interface(
         param_defaults: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
+        vararg_index: None,
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -6002,6 +6373,7 @@ fn lower_interface(
                 param_defaults: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
+                vararg_index: None,
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);

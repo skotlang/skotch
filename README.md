@@ -354,16 +354,16 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [listOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/list-of.html) | stdlib | `listOf(1, 2, 3)` → `ArrayList`; `.forEach { }` iterator intrinsic |
 | [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |
 | [Infix functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `infix fun` keyword parsed; dot-call form (`a.op(b)`) works |
+| [IntArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/) | stdlib | `IntArray(n)`, `arr[i]`, `arr[i] = v`, `arr.size` — JVM `newarray`/`iaload`/`iastore`/`arraylength` |
+| [Destructuring](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | §8.1 | `val (a, b) = point` → `component1()`/`component2()` calls; data class componentN auto-generated |
+| [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg numbers: Int)` — args packed into IntArray at call site; for-in over IntArray |
 
 ### Not yet implemented
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Data class equals/hashCode/copy | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Medium | `toString()` works; `equals()`/`hashCode()`/`copy()`/`componentN()` not yet synthesized |
 | Higher-order function dispatch | [§7.2](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | Hard | Passing lambdas as function-typed parameters (needs `$Callable` or invokedynamic) |
 | Collection extensions (map, filter) | stdlib | Medium | `.forEach` works; `.map`, `.filter`, `.fold` not yet implemented |
-| Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
-| Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
 
 ## Running the tests

@@ -1175,6 +1175,11 @@ impl<'a> Parser<'a> {
     fn parse_param(&mut self) -> Param {
         self.skip_trivia();
         self.skip_annotations();
+        // Check for `vararg` modifier before the parameter name.
+        let is_vararg = self.eat(TokenKind::KwVararg);
+        if is_vararg {
+            self.skip_trivia();
+        }
         let name_idx = self.pos;
         let name_span = self.peek_span();
         let name = if self.peek_kind() == TokenKind::Ident {
@@ -1199,6 +1204,7 @@ impl<'a> Parser<'a> {
         Param {
             name,
             default,
+            is_vararg,
             span: name_span.merge(end),
             ty,
         }
@@ -1409,10 +1415,99 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse a brace-delimited block, or a single statement as a block
+    /// (e.g. `for (x in xs) total += x` — no braces).
+    fn parse_block_or_single_stmt(&mut self) -> Block {
+        if self.peek_kind() == TokenKind::LBrace {
+            self.parse_block()
+        } else {
+            let stmt = self.parse_stmt();
+            let span = match &stmt {
+                Stmt::Expr(e) => e.span(),
+                Stmt::Val(v) => v.span,
+                Stmt::Return { span, .. }
+                | Stmt::While { span, .. }
+                | Stmt::DoWhile { span, .. }
+                | Stmt::For { span, .. }
+                | Stmt::ForIn { span, .. }
+                | Stmt::Assign { span, .. }
+                | Stmt::TryStmt { span, .. }
+                | Stmt::ThrowStmt { span, .. }
+                | Stmt::IndexAssign { span, .. }
+                | Stmt::Destructure { span, .. } => *span,
+                Stmt::LocalFun(f) => f.span,
+                Stmt::Break(s) | Stmt::Continue(s) => *s,
+            };
+            Block {
+                stmts: vec![stmt],
+                span,
+            }
+        }
+    }
+
+    /// Peek ahead past trivia (newlines/semicolons) to find the next
+    /// non-trivia token kind at `self.pos + offset_hint` onward.
+    fn peek_kind_skip_trivia_at(&self, start: usize) -> TokenKind {
+        let mut i = start;
+        while i < self.tokens.len() {
+            let k = self.tokens[i].kind;
+            if matches!(k, TokenKind::Newline | TokenKind::Semi) {
+                i += 1;
+            } else {
+                return k;
+            }
+        }
+        TokenKind::Eof
+    }
+
+    fn parse_destructure(&mut self) -> Stmt {
+        let kw = self.peek_span();
+        self.bump(); // val
+        self.skip_trivia();
+        self.expect(TokenKind::LParen, "(");
+        let mut names = Vec::new();
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::RParen {
+                break;
+            }
+            let name_idx = self.pos;
+            let _name_span = self.peek_span();
+            let name = if self.peek_kind() == TokenKind::Ident {
+                self.bump();
+                self.intern_ident_at(name_idx)
+            } else {
+                self.diags.push(Diagnostic::error(
+                    self.peek_span(),
+                    "expected identifier in destructuring declaration",
+                ));
+                self.interner.intern("")
+            };
+            names.push(name);
+            self.skip_trivia();
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen, ")");
+        self.expect(TokenKind::Eq, "=");
+        let init = self.parse_expr();
+        let span = kw.merge(init.span());
+        Stmt::Destructure { names, init, span }
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         self.skip_trivia();
         match self.peek_kind() {
-            TokenKind::KwVal | TokenKind::KwVar => Stmt::Val(self.parse_val_decl()),
+            TokenKind::KwVal | TokenKind::KwVar => {
+                // Check for destructuring: `val (a, b) = expr`
+                let next = self.peek_kind_skip_trivia_at(self.pos + 1);
+                if self.peek_kind() == TokenKind::KwVal && next == TokenKind::LParen {
+                    self.parse_destructure()
+                } else {
+                    Stmt::Val(self.parse_val_decl())
+                }
+            }
             TokenKind::KwReturn => {
                 let kw = self.peek_span();
                 self.bump();
@@ -1491,6 +1586,25 @@ impl<'a> Parser<'a> {
                     _ => None,
                 };
                 if let Some(compound_op) = assign_op {
+                    // arr[i] = v  →  IndexAssign
+                    if let Expr::Index {
+                        receiver,
+                        index,
+                        span: idx_span,
+                    } = expr
+                    {
+                        let start = idx_span;
+                        self.bump(); // consume `=`
+                        self.skip_trivia();
+                        let rhs = self.parse_expr();
+                        let span = start.merge(rhs.span());
+                        return Stmt::IndexAssign {
+                            receiver: *receiver,
+                            index: *index,
+                            value: rhs,
+                            span,
+                        };
+                    }
                     if let Expr::Ident(name, name_span) = &expr {
                         let name = *name;
                         let start = *name_span;
@@ -1656,7 +1770,7 @@ impl<'a> Parser<'a> {
             self.skip_trivia();
             self.expect(TokenKind::RParen, "')' after for range");
             self.skip_trivia();
-            let body = self.parse_block();
+            let body = self.parse_block_or_single_stmt();
             let span = start.merge(body.span);
             Stmt::For {
                 var_name,
@@ -1671,7 +1785,7 @@ impl<'a> Parser<'a> {
             // Collection iteration: `for (x in collection) { body }`
             self.expect(TokenKind::RParen, "')' after for-in expression");
             self.skip_trivia();
-            let body = self.parse_block();
+            let body = self.parse_block_or_single_stmt();
             let span = start.merge(body.span);
             Stmt::ForIn {
                 var_name,
@@ -2093,6 +2207,20 @@ impl<'a> Parser<'a> {
                         callee: Box::new(expr),
                         args,
                         type_args: Vec::new(),
+                        span,
+                    };
+                }
+                // Array/collection indexing: `expr[index]`.
+                TokenKind::LBracket => {
+                    self.bump(); // consume `[`
+                    self.skip_trivia();
+                    let index = self.parse_expr();
+                    self.skip_trivia();
+                    let rb = self.expect(TokenKind::RBracket, "']'");
+                    let span = expr.span().merge(rb);
+                    expr = Expr::Index {
+                        receiver: Box::new(expr),
+                        index: Box::new(index),
                         span,
                     };
                 }
@@ -2559,6 +2687,7 @@ impl<'a> Parser<'a> {
                         span: start,
                     },
                     default: None,
+                    is_vararg: false,
                     span: start,
                 });
             }

@@ -849,6 +849,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "protected" => TokenKind::KwProtected,
         "internal" => TokenKind::KwInternal,
         "operator" => TokenKind::KwOperator,
+        "vararg" => TokenKind::KwVararg,
         _ => return None,
     })
 }
