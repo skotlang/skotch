@@ -176,6 +176,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwOpen
                     | TokenKind::KwAbstract
                     | TokenKind::KwSealed
+                    | TokenKind::KwInline
                     | TokenKind::KwPrivate
                     | TokenKind::KwProtected
                     | TokenKind::KwInternal
@@ -964,6 +965,46 @@ impl<'a> Parser<'a> {
                 .push(Diagnostic::error(span, "expected type name"));
             self.interner.intern("")
         };
+        // Check for receiver function type: `Type.() -> ReturnType`
+        if self.peek_kind() == TokenKind::Dot && self.peek_kind_at(1) == TokenKind::LParen {
+            self.bump(); // consume `.`
+            self.bump(); // consume `(`
+            self.skip_trivia();
+            let mut param_types = Vec::new();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    param_types.push(self.parse_type_ref());
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+            self.expect(TokenKind::Arrow, "->");
+            self.skip_trivia();
+            let ret = self.parse_type_ref();
+            let end = ret.span;
+            // Encode receiver type as the first func_param with a special
+            // marker: the `name` field holds the receiver type name.
+            let receiver_type = TypeRef {
+                name,
+                nullable: false,
+                func_params: None,
+                span,
+            };
+            let mut all_params = vec![receiver_type];
+            all_params.extend(param_types);
+            return TypeRef {
+                name: ret.name,
+                nullable: false,
+                func_params: Some(all_params),
+                span: span.merge(end),
+            };
+        }
+
         let mut end = span;
         let nullable = if self.peek_kind() == TokenKind::Question {
             end = self.peek_span();
