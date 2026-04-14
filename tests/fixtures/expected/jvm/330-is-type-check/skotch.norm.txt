@@ -1,0 +1,107 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 ldc "hello"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.typeOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0009 astore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0019 bipush 42
+    0021 istore 3
+    0023 iload 3
+    0025 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0028 astore 4
+    0030 aload 4
+    0032 invokestatic Method(InputKt.typeOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0035 astore 5
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 aload 5
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0045 iconst_1
+    0046 istore 6
+    0048 iload 6
+    0050 invokestatic Method(java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;)
+    0053 astore 7
+    0055 aload 7
+    0057 invokestatic Method(InputKt.typeOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0060 astore 8
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 aload 8
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0070 return
+method        typeOf (Ljava/lang/Object;)Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=13
+    0000 iconst_1
+    0001 istore 1
+    0003 op_0xA7
+    0004 nop
+    0005 iconst_0
+    0006 aload 0
+    0008 astore 2
+    0010 aload 2
+    0012 op_0xC1
+    0013 nop
+    0014 op_0x0B
+    0015 istore 3
+    0017 iload 3
+    0019 op_0x99
+    0020 nop
+    0021 op_0x0E
+    0022 ldc "String"
+    0024 astore 4
+    0026 aload 4
+    0028 astore 5
+    0030 op_0xA7
+    0031 nop
+    0032 op_0x44
+    0033 aload 0
+    0035 astore 6
+    0037 aload 6
+    0039 op_0xC1
+    0040 nop
+    0041 op_0x0F
+    0042 istore 7
+    0044 iload 7
+    0046 op_0x99
+    0047 nop
+    0048 op_0x0E
+    0049 ldc "Int"
+    0051 astore 8
+    0053 aload 8
+    0055 astore 5
+    0057 op_0xA7
+    0058 nop
+    0059 op_0x29
+    0060 aload 0
+    0062 astore 9
+    0064 aload 9
+    0066 op_0xC1
+    0067 nop
+    0068 ldc_w #13834
+    0071 iload 10
+    0073 op_0x99
+    0074 nop
+    0075 op_0x0E
+    0076 ldc "Boolean"
+    0078 astore 11
+    0080 aload 11
+    0082 astore 5
+    0084 op_0xA7
+    0085 nop
+    0086 op_0x0E
+    0087 ldc "Other"
+    0089 astore 12
+    0091 aload 12
+    0093 astore 5
+    0095 op_0xA7
+    0096 nop
+    0097 iconst_0
+    0098 aload 5
+    0100 op_0xB0
+    sub_attr  StackMapTable (93 bytes)

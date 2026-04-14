@@ -1,0 +1,81 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=29
+    0000 ldc "42"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
+    0009 istore 2
+    0011 iload 2
+    0013 istore 3
+    0015 iload 3
+    0017 istore 4
+    0019 bipush 8
+    0021 istore 5
+    0023 iload 4
+    0025 iload 5
+    0027 iadd
+    0028 istore 6
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 6
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 ldc "3.14"
+    0040 astore 7
+    0042 aload 7
+    0044 invokestatic Method(java/lang/Double.parseDouble:(Ljava/lang/String;)D)
+    0047 op_0x39
+    0048 iconst_5
+    0049 op_0x18
+    0050 iconst_5
+    0051 op_0x39
+    0052 op_0x0A
+    0053 op_0x18
+    0054 op_0x0A
+    0055 op_0x39
+    0056 op_0x0C
+    0057 op_0x14
+    0058 nop
+    0059 op_0x26
+    0060 op_0x39
+    0061 op_0x0E
+    0062 op_0x18
+    0063 op_0x0C
+    0064 op_0x18
+    0065 op_0x0E
+    0066 op_0x63
+    0067 op_0x39
+    0068 bipush -78
+    0070 nop
+    0071 op_0x17
+    0072 op_0x18
+    0073 bipush -74
+    0075 nop
+    0076 op_0x2A
+    0077 ldc "100"
+    0079 astore 18
+    0081 aload 18
+    0083 invokestatic Method(java/lang/Long.parseLong:(Ljava/lang/String;)J)
+    0086 op_0x37
+    0087 ldc_w #5651
+    0090 op_0x37
+    0091 iload 22
+    0093 iload 55
+    0095 op_0x17
+    0096 op_0x14
+    0097 nop
+    0098 op_0x33
+    0099 op_0x37
+    0100 aload 22
+    0102 op_0x17
+    0103 op_0x16
+    0104 aload 105
+    0106 op_0x37
+    0107 op_0x1B
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 op_0x16
+    0112 op_0x1B
+    0113 invokevirtual Method(java/io/PrintStream.println:(J)V)
+    0116 return

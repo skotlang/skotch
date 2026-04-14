@@ -1,0 +1,47 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=10
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 invokespecial Method($Lambda$0.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 op_0xC0
+    0012 nop
+    0013 op_0x0B
+    0014 astore 2
+    0016 iconst_5
+    0017 istore 3
+    0019 aload 2
+    0021 iload 3
+    0023 invokevirtual Method($Lambda$0.invoke:(I)L$Lambda$1;)
+    0026 astore 4
+    0028 aload 4
+    0030 op_0xC0
+    0031 nop
+    0032 iload 58
+    0034 iconst_2
+    0035 iconst_3
+    0036 istore 6
+    0038 aload 5
+    0040 iload 6
+    0042 invokevirtual Method($Lambda$1.invoke:(I)I)
+    0045 istore 7
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 iload 7
+    0052 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0055 bipush 10
+    0057 istore 8
+    0059 aload 5
+    0061 iload 8
+    0063 invokevirtual Method($Lambda$1.invoke:(I)I)
+    0066 istore 9
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 iload 9
+    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0076 return

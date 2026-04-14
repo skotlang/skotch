@@ -1,0 +1,55 @@
+class_version major=61 minor=0
+this_class    Stack
+super_class   java/lang/Object
+access_flags  0x0031
+field         items : I 0x0002
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        getItems ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 bipush -84
+method        pop ()V 0x0011
+  code        max_stack=3 max_locals=2
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 bipush 60
+    0005 op_0x2A
+    0006 op_0x1B
+    0007 iconst_m1
+    0008 iadd
+    0009 op_0xB5
+    0010 nop
+    0011 bipush -79
+method        push ()V 0x0011
+  code        max_stack=3 max_locals=2
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 bipush 60
+    0005 op_0x2A
+    0006 op_0x1B
+    0007 iconst_1
+    0008 iadd
+    0009 op_0xB5
+    0010 nop
+    0011 bipush -79
+method        setItems (I)V 0x0011
+  code        max_stack=2 max_locals=2
+    0000 op_0x2A
+    0001 op_0x1B
+    0002 op_0xB5
+    0003 nop
+    0004 bipush -79
+method        size ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 bipush -84

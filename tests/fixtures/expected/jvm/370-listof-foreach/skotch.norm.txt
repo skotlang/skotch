@@ -1,0 +1,87 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=17
+    0000 iconst_1
+    0001 istore 1
+    0003 iconst_2
+    0004 istore 2
+    0006 iconst_3
+    0007 istore 3
+    0009 op_0xBB
+    0010 nop
+    0011 op_0x0B
+    0012 op_0x59
+    0013 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0016 astore 4
+    0018 iload 1
+    0020 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0023 astore 5
+    0025 aload 4
+    0027 aload 5
+    0029 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0032 istore 6
+    0034 iload 2
+    0036 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0039 astore 7
+    0041 aload 4
+    0043 aload 7
+    0045 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0048 istore 8
+    0050 iload 3
+    0052 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0055 astore 9
+    0057 aload 4
+    0059 aload 9
+    0061 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0064 istore 10
+    0066 aload 4
+    0068 op_0xC0
+    0069 nop
+    0070 op_0x0B
+    0071 astore 11
+    0073 aload 11
+    0075 op_0xC0
+    0076 nop
+    0077 op_0x0B
+    0078 astore 12
+    0080 op_0xBB
+    0081 nop
+    0082 op_0x1B
+    0083 op_0x59
+    0084 invokespecial Method($Lambda$0.<init>:()V)
+    0087 astore 13
+    0089 aload 12
+    0091 invokevirtual Method(java/util/ArrayList.iterator:()Ljava/util/Iterator;)
+    0094 astore 14
+    0096 op_0xA7
+    0097 nop
+    0098 iconst_0
+    0099 aload 14
+    0101 op_0xB9
+    0102 nop
+    0103 op_0x26
+    0104 aconst_null
+    0105 nop
+    0106 istore 15
+    0108 iload 15
+    0110 op_0x99
+    0111 nop
+    0112 op_0x16
+    0113 aload 14
+    0115 op_0xB9
+    0116 nop
+    0117 op_0x2A
+    0118 aconst_null
+    0119 nop
+    0120 astore 16
+    0122 aload 13
+    0124 aload 16
+    0126 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0129 op_0xA7
+    0130 op_0xFF
+    0131 op_0xE2
+    0132 return
+    sub_attr  StackMapTable (83 bytes)

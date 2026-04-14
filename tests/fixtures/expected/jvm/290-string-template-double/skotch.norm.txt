@@ -1,0 +1,61 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=15
+    0000 op_0x14
+    0001 nop
+    0002 op_0x0A
+    0003 op_0x39
+    0004 aconst_null
+    0005 op_0x18
+    0006 aconst_null
+    0007 op_0x39
+    0008 iconst_0
+    0009 ldc "Pi is approximately "
+    0011 astore 5
+    0013 op_0x18
+    0014 iconst_0
+    0015 op_0x39
+    0016 iconst_3
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 op_0xBB
+    0021 nop
+    0022 iload 89
+    0024 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0027 aload 5
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 op_0x18
+    0033 iconst_3
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(D)Ljava/lang/StringBuilder;)
+    0037 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0043 op_0x14
+    0044 nop
+    0045 op_0x2B
+    0046 op_0x39
+    0047 iconst_5
+    0048 op_0x18
+    0049 iconst_5
+    0050 op_0x39
+    0051 op_0x0A
+    0052 ldc "e is approximately "
+    0054 astore 12
+    0056 op_0x18
+    0057 op_0x0A
+    0058 op_0x39
+    0059 op_0x0D
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 op_0xBB
+    0064 nop
+    0065 iload 89
+    0067 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0070 aload 12
+    0072 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0075 op_0x18
+    0076 op_0x0D
+    0077 invokevirtual Method(java/lang/StringBuilder.append:(D)Ljava/lang/StringBuilder;)
+    0080 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0083 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0086 return

@@ -1,0 +1,111 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        DIME ()LCoin; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 ldc "DIME"
+    0006 astore 1
+    0008 bipush 10
+    0010 istore 2
+    0012 aload 1
+    0014 iload 2
+    0016 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0019 astore 0
+    0021 aload 0
+    0023 op_0xB0
+method        NICKEL ()LCoin; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 ldc "NICKEL"
+    0006 astore 1
+    0008 iconst_5
+    0009 istore 2
+    0011 aload 1
+    0013 iload 2
+    0015 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0018 astore 0
+    0020 aload 0
+    0022 op_0xB0
+method        PENNY ()LCoin; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 ldc "PENNY"
+    0006 astore 1
+    0008 iconst_1
+    0009 istore 2
+    0011 aload 1
+    0013 iload 2
+    0015 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0018 astore 0
+    0020 aload 0
+    0022 op_0xB0
+method        QUARTER ()LCoin; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 ldc "QUARTER"
+    0006 astore 1
+    0008 bipush 25
+    0010 istore 2
+    0012 aload 1
+    0014 iload 2
+    0016 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0019 astore 0
+    0021 aload 0
+    0023 op_0xB0
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=7
+    0000 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0003 astore 1
+    0005 aload 1
+    0007 invokestatic Method(InputKt.value:(LCoin;)I)
+    0010 istore 2
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 iload 2
+    0017 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0020 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0023 astore 3
+    0025 aload 3
+    0027 invokestatic Method(InputKt.value:(LCoin;)I)
+    0030 istore 4
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 iload 4
+    0037 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0040 invokestatic Method(InputKt.DIME:()LCoin;)
+    0043 astore 5
+    0045 aload 5
+    0047 op_0xB4
+    0048 nop
+    0049 op_0x0F
+    0050 istore 6
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 iload 6
+    0057 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0060 return
+method        value (LCoin;)I 0x0009
+  code        max_stack=1 max_locals=3
+    0000 aload 0
+    0002 op_0xC0
+    0003 nop
+    0004 op_0x0B
+    0005 astore 1
+    0007 aload 1
+    0009 op_0xB4
+    0010 nop
+    0011 op_0x0F
+    0012 istore 2
+    0014 iload 2
+    0016 op_0xAC

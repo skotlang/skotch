@@ -1,0 +1,49 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 invokespecial Method(Dog.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 op_0xC0
+    0012 nop
+    0013 op_0x0B
+    0014 astore 2
+    0016 op_0xBB
+    0017 nop
+    0018 sipush 22967
+    0021 nop
+    0022 ldc #58
+    0024 iconst_0
+    0025 aload 3
+    0027 op_0xC0
+    0028 nop
+    0029 sipush 14852
+    0032 aload 2
+    0034 op_0xC0
+    0035 nop
+    0036 op_0x0B
+    0037 astore 5
+    0039 aload 5
+    0041 invokevirtual Method(Dog.speak:()Ljava/lang/String;)
+    0044 astore 6
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 aload 6
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0054 aload 4
+    0056 op_0xC0
+    0057 nop
+    0058 sipush 14855
+    0061 aload 7
+    0063 invokevirtual Method(Cat.speak:()Ljava/lang/String;)
+    0066 astore 8
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 aload 8
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0076 return

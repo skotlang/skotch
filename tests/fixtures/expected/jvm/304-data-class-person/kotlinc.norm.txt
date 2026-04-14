@@ -1,0 +1,181 @@
+class_version major=61 minor=0
+this_class    Person
+super_class   java/lang/Object
+access_flags  0x0031
+field         age : I 0x0012
+field         name : Ljava/lang/String; 0x0012
+method        <init> (Ljava/lang/String;I)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 op_0x2B
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 invokespecial Method(java/lang/Object.<init>:()V)
+    0010 op_0x2A
+    0011 op_0x2B
+    0012 op_0xB5
+    0013 nop
+    0014 iload 42
+    0016 op_0x1C
+    0017 op_0xB5
+    0018 nop
+    0019 aload 177
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        component1 ()Ljava/lang/String; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 176
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        component2 ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 aload 172
+method        copy (Ljava/lang/String;I)LPerson; 0x0011
+  code        max_stack=4 max_locals=3
+    0000 op_0x2B
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0xBB
+    0007 nop
+    0008 iconst_m1
+    0009 op_0x59
+    0010 op_0x2B
+    0011 op_0x1C
+    0012 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
+    0015 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        copy$default (LPerson;Ljava/lang/String;IILjava/lang/Object;)LPerson; 0x1009
+  code        max_stack=3 max_locals=5
+    0000 op_0x1D
+    0001 iconst_1
+    0002 op_0x7E
+    0003 op_0x99
+    0004 nop
+    0005 iconst_5
+    0006 op_0x2A
+    0007 op_0xB4
+    0008 nop
+    0009 iload 76
+    0011 op_0x1D
+    0012 iconst_2
+    0013 op_0x7E
+    0014 op_0x99
+    0015 nop
+    0016 iconst_5
+    0017 op_0x2A
+    0018 op_0xB4
+    0019 nop
+    0020 aload 61
+    0022 op_0x2A
+    0023 op_0x2B
+    0024 op_0x1C
+    0025 invokevirtual Method(Person.copy:(Ljava/lang/String;I)LPerson;)
+    0028 op_0xB0
+    sub_attr  StackMapTable (4 bytes)
+method        equals (Ljava/lang/Object;)Z 0x0001
+  code        max_stack=2 max_locals=3
+    0000 op_0x2A
+    0001 op_0x2B
+    0002 op_0xA6
+    0003 nop
+    0004 iconst_2
+    0005 iconst_1
+    0006 op_0xAC
+    0007 op_0x2B
+    0008 op_0xC1
+    0009 nop
+    0010 iconst_m1
+    0011 op_0x9A
+    0012 nop
+    0013 iconst_2
+    0014 iconst_0
+    0015 op_0xAC
+    0016 op_0x2B
+    0017 op_0xC0
+    0018 nop
+    0019 iconst_m1
+    0020 op_0x4D
+    0021 op_0x2A
+    0022 op_0xB4
+    0023 nop
+    0024 iload 44
+    0026 op_0xB4
+    0027 nop
+    0028 iload 184
+    0030 nop
+    0031 op_0x48
+    0032 op_0x9A
+    0033 nop
+    0034 iconst_2
+    0035 iconst_0
+    0036 op_0xAC
+    0037 op_0x2A
+    0038 op_0xB4
+    0039 nop
+    0040 aload 44
+    0042 op_0xB4
+    0043 nop
+    0044 aload 159
+    0046 nop
+    0047 iconst_2
+    0048 iconst_0
+    0049 op_0xAC
+    0050 iconst_1
+    0051 op_0xAC
+    sub_attr  StackMapTable (11 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        getAge ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 aload 172
+method        getName ()Ljava/lang/String; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 176
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        hashCode ()I 0x0001
+  code        max_stack=2 max_locals=2
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 182
+    0005 nop
+    0006 op_0x3B
+    0007 op_0x3C
+    0008 op_0x1B
+    0009 bipush 31
+    0011 imul
+    0012 op_0x2A
+    0013 op_0xB4
+    0014 nop
+    0015 aload 184
+    0017 nop
+    0018 op_0x40
+    0019 iadd
+    0020 op_0x3C
+    0021 op_0x1B
+    0022 op_0xAC
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 42
+    0005 op_0xB4
+    0006 nop
+    0007 aload 186
+    0009 nop
+    0010 istore 0
+    0012 nop
+    0013 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

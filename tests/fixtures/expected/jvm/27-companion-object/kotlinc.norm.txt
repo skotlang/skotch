@@ -1,0 +1,19 @@
+class_version major=61 minor=0
+this_class    Counter$Companion
+super_class   java/lang/Object
+access_flags  0x0031
+method        <init> ()V 0x0002
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        <init> (Lkotlin/jvm/internal/DefaultConstructorMarker;)V 0x1001
+  code        max_stack=1 max_locals=2
+    0000 op_0x2A
+    0001 invokespecial Method(Counter$Companion.<init>:()V)
+    0004 return
+method        zero ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 iconst_0
+    0001 op_0xAC
+class_attr    InnerClasses (10 bytes)

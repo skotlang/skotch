@@ -1,0 +1,16 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet ()V 0x0009
+  code        max_stack=2 max_locals=1
+    0000 ldc "hi from singleton"
+    0002 astore 0
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 0
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 return
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.greet:()V)
+    0003 return

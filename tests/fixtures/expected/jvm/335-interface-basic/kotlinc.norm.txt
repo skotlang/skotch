@@ -1,0 +1,15 @@
+class_version major=61 minor=0
+this_class    ByeGreeter
+super_class   java/lang/Object
+access_flags  0x0031
+interfaces    [Greeter]
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        greet ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 ldc "Goodbye!"
+    0002 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)

@@ -1,0 +1,38 @@
+class_version major=61 minor=0
+this_class    Logger
+super_class   java/lang/Object
+access_flags  0x0031
+field         INSTANCE : LLogger; 0x0019
+method        <clinit> ()V 0x0008
+  code        max_stack=2 max_locals=0
+    0000 op_0xBB
+    0001 nop
+    0002 iconst_m1
+    0003 op_0x59
+    0004 invokespecial Method(Logger.<init>:()V)
+    0007 op_0xB3
+    0008 nop
+    0009 op_0x33
+    0010 return
+method        <init> ()V 0x0002
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        info (Ljava/lang/String;)V 0x0011
+  code        max_stack=2 max_locals=2
+    0000 op_0x2B
+    0001 ldc "msg"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2B
+    0007 op_0xBA
+    0008 nop
+    0009 op_0x21
+    0010 nop
+    0011 nop
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 op_0x5F
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 return
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    BootstrapMethods (8 bytes)

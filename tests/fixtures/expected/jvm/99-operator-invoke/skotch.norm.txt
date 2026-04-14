@@ -1,0 +1,39 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=8
+    0000 iconst_2
+    0001 istore 1
+    0003 op_0xBB
+    0004 nop
+    0005 op_0x0B
+    0006 op_0x59
+    0007 iload 1
+    0009 invokespecial Method(Multiplier.<init>:(I)V)
+    0012 astore 2
+    0014 aload 2
+    0016 op_0xC0
+    0017 nop
+    0018 op_0x0B
+    0019 astore 3
+    0021 iconst_5
+    0022 istore 4
+    0024 aload 3
+    0026 iload 4
+    0028 invokevirtual Method(Multiplier.invoke:(I)I)
+    0031 istore 5
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 iload 5
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 bipush 21
+    0043 istore 6
+    0045 aload 3
+    0047 iload 6
+    0049 invokevirtual Method(Multiplier.invoke:(I)I)
+    0052 istore 7
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 iload 7
+    0059 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0062 return

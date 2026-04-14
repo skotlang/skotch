@@ -1,0 +1,24 @@
+class_version major=61 minor=0
+this_class    InputKt$main$h$1
+super_class   Handler
+access_flags  0x0031
+method        <init> ()V 0x0000
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(Handler.<init>:()V)
+    0004 return
+method        handle (Ljava/lang/String;)Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 op_0x2B
+    0001 ldc "msg"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2B
+    0007 op_0xBA
+    0008 nop
+    0009 op_0x1F
+    0010 nop
+    0011 nop
+    0012 op_0xB0
+class_attr    InnerClasses (10 bytes)
+class_attr    EnclosingMethod (4 bytes)
+class_attr    BootstrapMethods (8 bytes)

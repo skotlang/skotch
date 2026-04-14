@@ -1,0 +1,2 @@
+status = "supported"
+features = ["for-in", "listOf", "break", "collection", "iterator", "comparison"]

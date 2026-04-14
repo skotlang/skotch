@@ -1,0 +1,38 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(Coin.PENNY:LCoin;)
+    0003 invokestatic Method(InputKt.value:(LCoin;)I)
+    0006 op_0x3B
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 op_0x1A
+    0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0014 getstatic Field(Coin.QUARTER:LCoin;)
+    0017 invokestatic Method(InputKt.value:(LCoin;)I)
+    0020 op_0x3B
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 op_0x1A
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 getstatic Field(Coin.DIME:LCoin;)
+    0031 invokevirtual Method(Coin.getCents:()I)
+    0034 op_0x3B
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 op_0x1A
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        value (LCoin;)I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0x2A
+    0001 ldc "c"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 invokevirtual Method(Coin.getCents:()I)
+    0010 op_0xAC
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

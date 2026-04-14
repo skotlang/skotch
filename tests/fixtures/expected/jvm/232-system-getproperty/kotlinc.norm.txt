@@ -3,14 +3,17 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=1
-    0000 ldc "os.name"
+  code        max_stack=2 max_locals=2
+    0000 ldc "file.separator"
     0002 invokestatic Method(java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;)
     0005 op_0x4B
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x2A
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0013 return
+    0006 op_0x2A
+    0007 invokevirtual Method(java/lang/String.length:()I)
+    0010 op_0x3C
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 op_0x1B
+    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0018 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

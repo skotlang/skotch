@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    Rect
+super_class   Shape
+access_flags  0x0031
+field         h : I 0x0012
+field         w : I 0x0012
+method        <init> (II)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 op_0x2A
+    0001 invokespecial Method(Shape.<init>:()V)
+    0004 op_0x2A
+    0005 op_0x1B
+    0006 op_0xB5
+    0007 nop
+    0008 op_0x0D
+    0009 op_0x2A
+    0010 op_0x1C
+    0011 op_0xB5
+    0012 nop
+    0013 bipush -79
+method        area ()I 0x0001
+  code        max_stack=2 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 op_0x0D
+    0004 op_0x2A
+    0005 op_0xB4
+    0006 nop
+    0007 bipush 104
+    0009 op_0xAC
+method        getH ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 bipush -84
+method        getW ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 op_0x0D
+    0004 op_0xAC

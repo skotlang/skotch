@@ -1,0 +1,120 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=51
+    0000 op_0x14
+    0001 nop
+    0002 op_0x0A
+    0003 op_0x39
+    0004 aconst_null
+    0005 op_0x18
+    0006 aconst_null
+    0007 op_0x39
+    0008 iconst_0
+    0009 op_0x14
+    0010 nop
+    0011 op_0x0A
+    0012 op_0x39
+    0013 iconst_2
+    0014 op_0x18
+    0015 iconst_2
+    0016 op_0x39
+    0017 iconst_4
+    0018 op_0x14
+    0019 nop
+    0020 op_0x0C
+    0021 op_0x39
+    0022 op_0x09
+    0023 op_0x18
+    0024 op_0x09
+    0025 op_0x39
+    0026 op_0x0B
+    0027 op_0x14
+    0028 nop
+    0029 op_0x0E
+    0030 op_0x39
+    0031 op_0x0D
+    0032 op_0x18
+    0033 op_0x0D
+    0034 op_0x39
+    0035 op_0x0F
+    0036 op_0x18
+    0037 op_0x0B
+    0038 op_0x39
+    0039 sipush 6147
+    0042 op_0x39
+    0043 ldc_w #6161
+    0046 op_0x18
+    0047 ldc_w #26425
+    0050 iload 24
+    0052 iload 57
+    0054 op_0x17
+    0055 op_0x18
+    0056 op_0x0F
+    0057 op_0x39
+    0058 aload 24
+    0060 iconst_4
+    0061 op_0x39
+    0062 op_0x1B
+    0063 op_0x18
+    0064 aload 24
+    0066 op_0x1B
+    0067 op_0x67
+    0068 op_0x39
+    0069 op_0x1D
+    0070 op_0x18
+    0071 op_0x1D
+    0072 op_0x39
+    0073 op_0x1F
+    0074 op_0x18
+    0075 op_0x17
+    0076 op_0x39
+    0077 op_0x21
+    0078 op_0x18
+    0079 op_0x17
+    0080 op_0x39
+    0081 op_0x23
+    0082 op_0x18
+    0083 op_0x21
+    0084 op_0x18
+    0085 op_0x23
+    0086 op_0x6B
+    0087 op_0x39
+    0088 op_0x25
+    0089 op_0x18
+    0090 op_0x1F
+    0091 op_0x39
+    0092 op_0x27
+    0093 op_0x18
+    0094 op_0x1F
+    0095 op_0x39
+    0096 op_0x29
+    0097 op_0x18
+    0098 op_0x27
+    0099 op_0x18
+    0100 op_0x29
+    0101 op_0x6B
+    0102 op_0x39
+    0103 op_0x2B
+    0104 op_0x18
+    0105 op_0x25
+    0106 op_0x18
+    0107 op_0x2B
+    0108 op_0x63
+    0109 op_0x39
+    0110 op_0x2D
+    0111 op_0x18
+    0112 op_0x2D
+    0113 op_0x39
+    0114 op_0x2F
+    0115 op_0x18
+    0116 op_0x2F
+    0117 op_0x39
+    0118 op_0x31
+    0119 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0122 op_0x18
+    0123 op_0x31
+    0124 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0127 return

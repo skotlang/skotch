@@ -1,0 +1,54 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 iconst_5
+    0001 op_0xBC
+    0002 op_0x0A
+    0003 op_0x4B
+    0004 op_0x2A
+    0005 iconst_0
+    0006 bipush 10
+    0008 op_0x4F
+    0009 op_0x2A
+    0010 iconst_1
+    0011 bipush 20
+    0013 op_0x4F
+    0014 op_0x2A
+    0015 iconst_2
+    0016 bipush 30
+    0018 op_0x4F
+    0019 op_0x2A
+    0020 iconst_0
+    0021 op_0x2E
+    0022 op_0x3C
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 op_0x1B
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 op_0x2A
+    0031 iconst_1
+    0032 op_0x2E
+    0033 op_0x3C
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 op_0x1B
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 op_0x2A
+    0042 iconst_2
+    0043 op_0x2E
+    0044 op_0x3C
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 op_0x1B
+    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0052 op_0x2A
+    0053 op_0xBE
+    0054 op_0x3C
+    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0058 op_0x1B
+    0059 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0062 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

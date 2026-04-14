@@ -1,0 +1,37 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=0
+    0000 op_0xBB
+    0001 nop
+    0002 ldc #89
+    0004 bipush 42
+    0006 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0009 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
+    0012 invokestatic Method(InputKt.printHolder:(LHolder;)V)
+    0015 op_0xBB
+    0016 nop
+    0017 ldc #89
+    0019 ldc "hello"
+    0021 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
+    0024 invokestatic Method(InputKt.printHolder:(LHolder;)V)
+    0027 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        printHolder (LHolder;)V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0x2A
+    0001 ldc "h"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 invokevirtual Method(Holder.getValue:()Ljava/lang/Object;)
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 op_0x5F
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 return
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

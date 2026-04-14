@@ -1,0 +1,40 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        appName ()Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=1
+    0000 ldc "MyApp"
+    0002 astore 0
+    0004 aload 0
+    0006 op_0xB0
+method        info (Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=3
+    0000 ldc "[INFO] "
+    0002 astore 1
+    0004 aload 0
+    0006 astore 2
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 op_0xBB
+    0012 nop
+    0013 op_0x1D
+    0014 op_0x59
+    0015 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0018 aload 1
+    0020 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0023 aload 2
+    0025 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0028 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0034 return
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=1 max_locals=3
+    0000 ldc "started"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.info:(Ljava/lang/String;)V)
+    0009 invokestatic Method(InputKt.appName:()Ljava/lang/String;)
+    0012 astore 2
+    0014 aload 2
+    0016 invokestatic Method(InputKt.info:(Ljava/lang/String;)V)
+    0019 return

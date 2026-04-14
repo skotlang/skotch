@@ -1,0 +1,26 @@
+class_version major=61 minor=0
+this_class    Err
+super_class   Result
+access_flags  0x0031
+field         message : Ljava/lang/String; 0x0012
+method        <init> (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 op_0x2B
+    0001 ldc "message"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 aconst_null
+    0008 invokespecial Method(Result.<init>:(Lkotlin/jvm/internal/DefaultConstructorMarker;)V)
+    0011 op_0x2A
+    0012 op_0x2B
+    0013 op_0xB5
+    0014 nop
+    0015 iload 177
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        getMessage ()Ljava/lang/String; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 176
+  attr        RuntimeInvisibleAnnotations (6 bytes)

@@ -1,0 +1,10 @@
+class_version major=61 minor=0
+this_class    Rect
+super_class   Shape
+access_flags  0x0031
+method        <init> ()V 0x0001
+  code        max_stack=2 max_locals=1
+    0000 op_0x2A
+    0001 aconst_null
+    0002 invokespecial Method(Shape.<init>:(Lkotlin/jvm/internal/DefaultConstructorMarker;)V)
+    0005 return

@@ -1,0 +1,51 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        configure (Ljava/lang/String;I)V 0x0009
+  code        max_stack=3 max_locals=5
+    0000 aload 0
+    0002 astore 2
+    0004 ldc ":"
+    0006 astore 3
+    0008 iload 1
+    0010 istore 4
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 op_0xBB
+    0016 nop
+    0017 ldc_w #22967
+    0020 nop
+    0021 op_0x17
+    0022 aload 2
+    0024 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0027 aload 3
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 iload 4
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0037 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0043 return
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=7
+    0000 ldc "localhost"
+    0002 astore 1
+    0004 sipush 8080
+    0007 istore 2
+    0009 aload 1
+    0011 iload 2
+    0013 invokestatic Method(InputKt.configure:(Ljava/lang/String;I)V)
+    0016 ldc "example.com"
+    0018 astore 3
+    0020 sipush 8080
+    0023 istore 4
+    0025 aload 3
+    0027 iload 4
+    0029 invokestatic Method(InputKt.configure:(Ljava/lang/String;I)V)
+    0032 ldc "example.com"
+    0034 astore 5
+    0036 sipush 443
+    0039 istore 6
+    0041 aload 5
+    0043 iload 6
+    0045 invokestatic Method(InputKt.configure:(Ljava/lang/String;I)V)
+    0048 return

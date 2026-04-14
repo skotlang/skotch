@@ -1,0 +1,51 @@
+class_version major=61 minor=0
+this_class    Greeter
+super_class   java/lang/Object
+access_flags  0x0031
+field         name : Ljava/lang/String; 0x0012
+method        <init> (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 op_0x2B
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 invokespecial Method(java/lang/Object.<init>:()V)
+    0010 op_0x2A
+    0011 op_0x2B
+    0012 op_0xB5
+    0013 nop
+    0014 iload 0
+    0016 op_0x2A
+    0017 op_0xB4
+    0018 nop
+    0019 iload 186
+    0021 nop
+    0022 op_0x21
+    0023 nop
+    0024 nop
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 op_0x5F
+    0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0032 nop
+    0033 return
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        getName ()Ljava/lang/String; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 176
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        greet ()Ljava/lang/String; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 iload 186
+    0005 nop
+    0006 op_0x35
+    0007 nop
+    0008 nop
+    0009 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (14 bytes)

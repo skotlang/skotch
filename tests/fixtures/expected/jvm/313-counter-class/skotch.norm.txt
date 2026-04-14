@@ -1,0 +1,92 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=14
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 invokespecial Method(Counter.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 op_0xC0
+    0012 nop
+    0013 op_0x0B
+    0014 astore 2
+    0016 aload 2
+    0018 op_0xC0
+    0019 nop
+    0020 op_0x0B
+    0021 astore 3
+    0023 aload 3
+    0025 invokevirtual Method(Counter.increment:()V)
+    0028 aload 2
+    0030 op_0xC0
+    0031 nop
+    0032 op_0x0B
+    0033 astore 4
+    0035 aload 4
+    0037 invokevirtual Method(Counter.increment:()V)
+    0040 aload 2
+    0042 op_0xC0
+    0043 nop
+    0044 op_0x0B
+    0045 astore 5
+    0047 aload 5
+    0049 invokevirtual Method(Counter.increment:()V)
+    0052 aload 2
+    0054 op_0xC0
+    0055 nop
+    0056 op_0x0B
+    0057 astore 6
+    0059 aload 6
+    0061 op_0xB4
+    0062 nop
+    0063 op_0x16
+    0064 istore 7
+    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0069 iload 7
+    0071 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0074 aload 2
+    0076 op_0xC0
+    0077 nop
+    0078 op_0x0B
+    0079 astore 8
+    0081 aload 8
+    0083 invokevirtual Method(Counter.decrement:()V)
+    0086 aload 2
+    0088 op_0xC0
+    0089 nop
+    0090 op_0x0B
+    0091 astore 9
+    0093 aload 9
+    0095 op_0xB4
+    0096 nop
+    0097 op_0x16
+    0098 istore 10
+    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0103 iload 10
+    0105 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0108 aload 2
+    0110 op_0xC0
+    0111 nop
+    0112 op_0x0B
+    0113 astore 11
+    0115 aload 11
+    0117 invokevirtual Method(Counter.reset:()V)
+    0120 aload 2
+    0122 op_0xC0
+    0123 nop
+    0124 op_0x0B
+    0125 astore 12
+    0127 aload 12
+    0129 op_0xB4
+    0130 nop
+    0131 op_0x16
+    0132 istore 13
+    0134 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0137 iload 13
+    0139 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0142 return

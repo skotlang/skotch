@@ -1,0 +1,25 @@
+class_version major=61 minor=0
+this_class    Producer
+super_class   java/lang/Object
+access_flags  0x0031
+field         value : Ljava/lang/Object; 0x0012
+method        <init> (Ljava/lang/Object;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 op_0x2A
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 op_0x2A
+    0005 op_0x2B
+    0006 op_0xB5
+    0007 nop
+    0008 op_0x0F
+    0009 return
+  attr        Signature (2 bytes)
+method        getValue ()Ljava/lang/Object; 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 op_0x0F
+    0004 op_0xB0
+  attr        Signature (2 bytes)
+class_attr    Signature (2 bytes)
