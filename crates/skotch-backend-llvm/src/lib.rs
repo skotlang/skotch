@@ -988,7 +988,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::Long => "i64",
         Ty::Double => "double",
         Ty::String => "ptr",
-        Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "ptr",
+        Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
         Ty::Error => "void",
     }
 }

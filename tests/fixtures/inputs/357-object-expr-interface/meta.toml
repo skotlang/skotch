@@ -1,0 +1,2 @@
+status = "supported"
+features = ["object-expression", "interface", "anonymous-class"]

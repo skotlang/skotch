@@ -809,6 +809,7 @@ impl<'a> Parser<'a> {
                 receiver_ty = Some(TypeRef {
                     name: recv_name,
                     nullable: false,
+                    func_params: None,
                     span: recv_span,
                 });
                 self.bump(); // consume `.`
@@ -923,8 +924,38 @@ impl<'a> Parser<'a> {
 
     fn parse_type_ref(&mut self) -> TypeRef {
         self.skip_trivia();
-        let idx = self.pos;
         let span = self.peek_span();
+
+        // Function type: `(Type, Type) -> ReturnType`
+        if self.peek_kind() == TokenKind::LParen {
+            self.bump();
+            self.skip_trivia();
+            let mut param_types = Vec::new();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    param_types.push(self.parse_type_ref());
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+            self.expect(TokenKind::Arrow, "->");
+            self.skip_trivia();
+            let ret = self.parse_type_ref();
+            let end = ret.span;
+            return TypeRef {
+                name: ret.name,
+                nullable: false,
+                func_params: Some(param_types),
+                span: span.merge(end),
+            };
+        }
+
+        let idx = self.pos;
         let name = if self.peek_kind() == TokenKind::Ident {
             self.bump();
             self.intern_ident_at(idx)
@@ -944,6 +975,7 @@ impl<'a> Parser<'a> {
         TypeRef {
             name,
             nullable,
+            func_params: None,
             span: span.merge(end),
         }
     }
@@ -1677,6 +1709,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwThrow => self.parse_throw_expr(),
             TokenKind::StringStart => self.parse_string_literal(),
             TokenKind::LBrace => self.parse_lambda_expr(),
+            TokenKind::KwObject => self.parse_object_expr(),
             other => {
                 self.diags.push(Diagnostic::error(
                     span,
@@ -1858,6 +1891,72 @@ impl<'a> Parser<'a> {
                 stmts: vec![Stmt::Expr(expr)],
                 span,
             }
+        }
+    }
+
+    fn parse_object_expr(&mut self) -> Expr {
+        let start = self.peek_span();
+        self.bump(); // consume 'object'
+        self.skip_trivia();
+        self.expect(TokenKind::Colon, ":");
+        self.skip_trivia();
+        let type_idx = self.pos;
+        let type_span = self.peek_span();
+        let super_type = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(type_idx)
+        } else {
+            self.diags
+                .push(Diagnostic::error(type_span, "expected type name"));
+            self.interner.intern("")
+        };
+        self.skip_trivia();
+        // Optional constructor call parens: `object : Type()`
+        if self.peek_kind() == TokenKind::LParen {
+            self.bump();
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+        }
+        // Body: { override fun method() { } }
+        let mut methods = Vec::new();
+        if self.peek_kind() == TokenKind::LBrace {
+            self.bump();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                // Skip modifiers.
+                let mut is_override = false;
+                while matches!(
+                    self.peek_kind(),
+                    TokenKind::KwOverride
+                        | TokenKind::KwOpen
+                        | TokenKind::KwPrivate
+                        | TokenKind::KwProtected
+                        | TokenKind::KwInternal
+                ) {
+                    if self.peek_kind() == TokenKind::KwOverride {
+                        is_override = true;
+                    }
+                    self.bump();
+                    self.skip_trivia();
+                }
+                if self.peek_kind() == TokenKind::KwFun {
+                    let mut f = self.parse_fun_decl();
+                    f.is_override = is_override;
+                    methods.push(f);
+                } else {
+                    self.bump();
+                }
+            }
+            self.expect(TokenKind::RBrace, "}");
+        }
+        let end = self.peek_span();
+        Expr::ObjectExpr {
+            super_type,
+            methods,
+            span: start.merge(end),
         }
     }
 

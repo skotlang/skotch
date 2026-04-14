@@ -932,7 +932,8 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
         Ty::Any => "Ljava/lang/Object;",
-        Ty::Class(_) => "Ljava/lang/Object;", // TODO: proper class descriptor
+        Ty::Class(_) => "Ljava/lang/Object;",
+        Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
         Ty::Nullable(inner) => jvm_type(inner),
         Ty::Error => "V",
     }
