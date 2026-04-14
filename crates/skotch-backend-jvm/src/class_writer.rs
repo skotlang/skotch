@@ -1658,9 +1658,48 @@ fn walk_block(
                         }
 
                         // Comparison → push 0 or 1 (bool).
+                        let rhs_ty = &func.locals[rhs.0 as usize];
                         let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Any);
                         let is_long = matches!(lhs_ty, Ty::Long);
                         let is_double = matches!(lhs_ty, Ty::Double);
+
+                        // Mixed ref/primitive comparison: when one side is a
+                        // reference type (Any/Nullable from e.g. iterator.next())
+                        // and the other is a primitive int, autobox the primitive
+                        // and compare via Object.equals() to avoid a JVM
+                        // VerifyError ("Bad type on operand stack" at if_acmpeq).
+                        if is_ref
+                            && matches!(rhs_ty, Ty::Int | Ty::Bool)
+                            && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                        {
+                            // Stack: [lhs_ref, rhs_int]
+                            // Box the int on top of stack → Integer object.
+                            let valueof = cp.methodref(
+                                "java/lang/Integer",
+                                "valueOf",
+                                "(I)Ljava/lang/Integer;",
+                            );
+                            code.push(0xB8); // invokestatic Integer.valueOf
+                            code.write_u16::<BigEndian>(valueof).unwrap();
+                            // Stack: [lhs_ref, rhs_Integer] (net 0 change: pop int, push ref)
+
+                            // Use Object.equals(Object) for the comparison.
+                            let equals =
+                                cp.methodref("java/lang/Object", "equals", "(Ljava/lang/Object;)Z");
+                            code.push(0xB6); // invokevirtual equals
+                            code.write_u16::<BigEndian>(equals).unwrap();
+                            bump(stack, max_stack, -1); // pops receiver + arg, pushes boolean
+                            if *op == MBinOp::CmpNe {
+                                // Invert: 1 - result
+                                code.push(0x04); // iconst_1
+                                bump(stack, max_stack, 1);
+                                code.push(0x5F); // swap
+                                code.push(0x64); // isub
+                                bump(stack, max_stack, -1);
+                            }
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
 
                         if is_long || is_double {
                             // Long/Double comparison: emit lcmp/dcmpg then if<cond>

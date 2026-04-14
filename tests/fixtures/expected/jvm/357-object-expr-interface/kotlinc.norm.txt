@@ -1,0 +1,6 @@
+class_version major=61 minor=0
+this_class    Greeter
+super_class   java/lang/Object
+access_flags  0x0601
+method        greet ()Ljava/lang/String; 0x0401
+  attr        RuntimeInvisibleAnnotations (6 bytes)

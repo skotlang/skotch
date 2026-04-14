@@ -1,0 +1,55 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=6 max_locals=2
+    0000 ldc "banana"
+    0002 op_0x4B
+    0003 op_0x2A
+    0004 op_0xC0
+    0005 nop
+    0006 op_0x0A
+    0007 ldc "ana"
+    0009 iconst_0
+    0010 iconst_0
+    0011 bipush 6
+    0013 aconst_null
+    0014 invokestatic Method(kotlin/text/StringsKt.indexOf$default:(Ljava/lang/CharSequence;Ljava/lang/String;IZILjava/lang/Object;)I)
+    0017 op_0x3C
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 op_0x1B
+    0022 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0025 op_0x2A
+    0026 op_0xC0
+    0027 nop
+    0028 op_0x0A
+    0029 ldc "a"
+    0031 iconst_0
+    0032 iconst_0
+    0033 bipush 6
+    0035 aconst_null
+    0036 invokestatic Method(kotlin/text/StringsKt.lastIndexOf$default:(Ljava/lang/CharSequence;Ljava/lang/String;IZILjava/lang/Object;)I)
+    0039 op_0x3C
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 op_0x1B
+    0044 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0047 op_0x2A
+    0048 op_0xC0
+    0049 nop
+    0050 op_0x0A
+    0051 ldc "xyz"
+    0053 iconst_0
+    0054 iconst_0
+    0055 bipush 6
+    0057 aconst_null
+    0058 invokestatic Method(kotlin/text/StringsKt.indexOf$default:(Ljava/lang/CharSequence;Ljava/lang/String;IZILjava/lang/Object;)I)
+    0061 op_0x3C
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 op_0x1B
+    0066 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0069 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

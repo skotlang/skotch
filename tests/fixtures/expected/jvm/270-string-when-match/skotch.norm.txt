@@ -1,0 +1,132 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=16
+    0000 aload 0
+    0002 astore 1
+    0004 op_0xA7
+    0005 nop
+    0006 iconst_0
+    0007 ldc "en"
+    0009 astore 2
+    0011 aload 1
+    0013 aload 2
+    0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0018 istore 3
+    0020 iload 3
+    0022 op_0x99
+    0023 nop
+    0024 op_0x0E
+    0025 ldc "Hello"
+    0027 astore 4
+    0029 aload 4
+    0031 astore 5
+    0033 op_0xA7
+    0034 nop
+    0035 op_0x65
+    0036 ldc "es"
+    0038 astore 6
+    0040 aload 1
+    0042 aload 6
+    0044 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0047 istore 7
+    0049 iload 7
+    0051 op_0x99
+    0052 nop
+    0053 op_0x0E
+    0054 ldc "Hola"
+    0056 astore 8
+    0058 aload 8
+    0060 astore 5
+    0062 op_0xA7
+    0063 nop
+    0064 op_0x48
+    0065 ldc "fr"
+    0067 astore 9
+    0069 aload 1
+    0071 aload 9
+    0073 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0076 istore 10
+    0078 iload 10
+    0080 op_0x99
+    0081 nop
+    0082 op_0x0E
+    0083 ldc "Bonjour"
+    0085 astore 11
+    0087 aload 11
+    0089 astore 5
+    0091 op_0xA7
+    0092 nop
+    0093 op_0x2B
+    0094 ldc "de"
+    0096 astore 12
+    0098 aload 1
+    0100 aload 12
+    0102 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0105 istore 13
+    0107 iload 13
+    0109 op_0x99
+    0110 nop
+    0111 op_0x0E
+    0112 ldc "Hallo"
+    0114 astore 14
+    0116 aload 14
+    0118 astore 5
+    0120 op_0xA7
+    0121 nop
+    0122 op_0x0E
+    0123 ldc "Hi"
+    0125 astore 15
+    0127 aload 15
+    0129 astore 5
+    0131 op_0xA7
+    0132 nop
+    0133 iconst_0
+    0134 aload 5
+    0136 op_0xB0
+    sub_attr  StackMapTable (137 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=11
+    0000 ldc "en"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0009 astore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0019 ldc "es"
+    0021 astore 3
+    0023 aload 3
+    0025 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 astore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 aload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0038 ldc "fr"
+    0040 astore 5
+    0042 aload 5
+    0044 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0047 astore 6
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 aload 6
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0057 ldc "de"
+    0059 astore 7
+    0061 aload 7
+    0063 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0066 astore 8
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 aload 8
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0076 ldc "ja"
+    0078 astore 9
+    0080 aload 9
+    0082 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0085 astore 10
+    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0090 aload 10
+    0092 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0095 return

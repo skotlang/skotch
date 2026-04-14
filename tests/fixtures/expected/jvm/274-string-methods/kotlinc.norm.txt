@@ -1,0 +1,80 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 ldc "Hello, World!"
+    0002 op_0x4B
+    0003 op_0x2A
+    0004 invokevirtual Method(java/lang/String.length:()I)
+    0007 op_0x3C
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 op_0x1B
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 op_0x2A
+    0016 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0019 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0022 op_0x59
+    0023 ldc "toUpperCase(...)"
+    0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0028 op_0x4C
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 op_0x2B
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 op_0x2A
+    0037 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0040 invokevirtual Method(java/lang/String.toLowerCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0043 op_0x59
+    0044 ldc "toLowerCase(...)"
+    0046 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0049 op_0x4C
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 op_0x2B
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0057 op_0x2A
+    0058 op_0xC0
+    0059 nop
+    0060 istore 185
+    0062 nop
+    0063 op_0x37
+    0064 aconst_null
+    0065 nop
+    0066 op_0x9A
+    0067 nop
+    0068 iconst_4
+    0069 iconst_1
+    0070 op_0xA7
+    0071 nop
+    0072 iconst_1
+    0073 iconst_0
+    0074 op_0x3C
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 op_0x1B
+    0079 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0082 ldc ""
+    0084 op_0xC0
+    0085 nop
+    0086 istore 185
+    0088 nop
+    0089 op_0x37
+    0090 aconst_null
+    0091 nop
+    0092 op_0x9A
+    0093 nop
+    0094 iconst_4
+    0095 iconst_1
+    0096 op_0xA7
+    0097 nop
+    0098 iconst_1
+    0099 iconst_0
+    0100 op_0x3C
+    0101 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0104 op_0x1B
+    0105 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0108 return
+    sub_attr  StackMapTable (26 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

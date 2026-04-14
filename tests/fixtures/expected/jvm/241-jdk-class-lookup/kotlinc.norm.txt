@@ -4,24 +4,26 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
-    0000 ldc "os.name"
+    0000 ldc "file.separator"
     0002 invokestatic Method(java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;)
-    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 op_0x5F
-    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0012 ldc "100"
-    0014 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
-    0017 op_0x3B
-    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 op_0x1A
-    0022 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0025 bipush -99
-    0027 invokestatic Method(java/lang/Math.abs:(I)I)
-    0030 op_0x3B
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 op_0x1A
-    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0038 return
+    0005 invokevirtual Method(java/lang/String.length:()I)
+    0008 op_0x3B
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 op_0x1A
+    0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0016 ldc "100"
+    0018 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
+    0021 op_0x3B
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 op_0x1A
+    0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0029 bipush -99
+    0031 invokestatic Method(java/lang/Math.abs:(I)I)
+    0034 op_0x3B
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 op_0x1A
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -1,0 +1,45 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=1
+    0000 op_0x2A
+    0001 op_0xC6
+    0002 nop
+    0003 op_0x16
+    0004 op_0x2A
+    0005 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0008 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0011 op_0x59
+    0012 ldc "toUpperCase(...)"
+    0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0017 op_0xBA
+    0018 nop
+    0019 op_0x27
+    0020 nop
+    0021 nop
+    0022 op_0xB0
+    0023 ldc "Hello, stranger"
+    0025 op_0xB0
+    sub_attr  StackMapTable (3 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 ldc "world"
+    0002 invokestatic Method(InputKt.greet:(Ljava/lang/String;)Ljava/lang/String;)
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 op_0x5F
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 aconst_null
+    0013 invokestatic Method(InputKt.greet:(Ljava/lang/String;)Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 op_0x5F
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

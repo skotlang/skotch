@@ -1,0 +1,61 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=21
+    0000 ldc "Value: "
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 op_0x14
+    0009 nop
+    0010 op_0x0C
+    0011 op_0x37
+    0012 iconst_0
+    0013 op_0x16
+    0014 iconst_0
+    0015 op_0x37
+    0016 iconst_2
+    0017 aload 2
+    0019 astore 7
+    0021 op_0x16
+    0022 iconst_2
+    0023 op_0x37
+    0024 iconst_5
+    0025 op_0x16
+    0026 iconst_5
+    0027 invokestatic Method(java/lang/Long.toString:(J)Ljava/lang/String;)
+    0030 astore 10
+    0032 aload 7
+    0034 aload 10
+    0036 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0039 astore 11
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 aload 11
+    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0049 op_0x14
+    0050 nop
+    0051 op_0x26
+    0052 op_0x37
+    0053 op_0x0C
+    0054 op_0x16
+    0055 op_0x0C
+    0056 op_0x37
+    0057 op_0x0E
+    0058 ldc "Count = "
+    0060 astore 16
+    0062 op_0x16
+    0063 op_0x0E
+    0064 op_0x37
+    0065 sipush 5649
+    0068 invokestatic Method(java/lang/Long.toString:(J)Ljava/lang/String;)
+    0071 astore 19
+    0073 aload 16
+    0075 aload 19
+    0077 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0080 astore 20
+    0082 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0085 aload 20
+    0087 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0090 return

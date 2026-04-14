@@ -1,0 +1,27 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 ldc "before"
+    0002 astore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 ldc "in try"
+    0014 astore 2
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 aload 2
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0024 ldc "in finally"
+    0026 astore 3
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 aload 3
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0036 ldc "after"
+    0038 astore 4
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 aload 4
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0048 return

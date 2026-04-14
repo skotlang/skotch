@@ -1,0 +1,58 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=11
+    0000 bipush 42
+    0002 istore 1
+    0004 op_0xBB
+    0005 nop
+    0006 op_0x0B
+    0007 op_0x59
+    0008 iload 1
+    0010 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0013 invokespecial Method(Box.<init>:(Ljava/lang/Object;)V)
+    0016 astore 2
+    0018 aload 2
+    0020 op_0xC0
+    0021 nop
+    0022 op_0x0B
+    0023 astore 3
+    0025 ldc "hello"
+    0027 astore 4
+    0029 op_0xBB
+    0030 nop
+    0031 op_0x0B
+    0032 op_0x59
+    0033 aload 4
+    0035 invokespecial Method(Box.<init>:(Ljava/lang/Object;)V)
+    0038 astore 5
+    0040 aload 5
+    0042 op_0xC0
+    0043 nop
+    0044 op_0x0B
+    0045 astore 6
+    0047 aload 3
+    0049 op_0xC0
+    0050 nop
+    0051 op_0x0B
+    0052 astore 7
+    0054 aload 7
+    0056 invokevirtual Method(Box.get:()Ljava/lang/Object;)
+    0059 astore 8
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 aload 8
+    0066 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0069 aload 6
+    0071 op_0xC0
+    0072 nop
+    0073 op_0x0B
+    0074 astore 9
+    0076 aload 9
+    0078 invokevirtual Method(Box.get:()Ljava/lang/Object;)
+    0081 astore 10
+    0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0086 aload 10
+    0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0091 return

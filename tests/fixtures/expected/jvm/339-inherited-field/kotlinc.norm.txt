@@ -1,0 +1,25 @@
+class_version major=61 minor=0
+this_class    Child
+super_class   Base
+access_flags  0x0031
+field         y : I 0x0012
+method        <init> (I)V 0x0001
+  code        max_stack=3 max_locals=2
+    0000 op_0x2A
+    0001 op_0x1B
+    0002 iconst_2
+    0003 imul
+    0004 invokespecial Method(Base.<init>:(I)V)
+    0007 op_0x2A
+    0008 op_0x1B
+    0009 op_0xB5
+    0010 nop
+    0011 op_0x0C
+    0012 return
+method        getY ()I 0x0011
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 op_0xB4
+    0002 nop
+    0003 op_0x0C
+    0004 op_0xAC

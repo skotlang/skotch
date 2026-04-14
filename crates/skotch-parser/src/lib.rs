@@ -2652,7 +2652,7 @@ impl<'a> Parser<'a> {
                 // - Otherwise → Int (most common case)
                 // TODO: proper inference from val annotation / function param type.
                 let it_sym = self.interner.intern("it");
-                let mut it_type_name = "Int";
+                let mut it_type_name = "Any";
                 {
                     let mut scan = self.pos;
                     while scan < self.tokens.len() {

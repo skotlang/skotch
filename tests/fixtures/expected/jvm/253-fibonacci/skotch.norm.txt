@@ -1,0 +1,151 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        fibonacci (I)I 0x0009
+  code        max_stack=3 max_locals=22
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_1
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 op_0xA4
+    0012 nop
+    0013 iconst_4
+    0014 iconst_0
+    0015 op_0xA7
+    0016 nop
+    0017 iconst_1
+    0018 iconst_1
+    0019 istore 3
+    0021 iload 3
+    0023 op_0x99
+    0024 nop
+    0025 op_0x0A
+    0026 iload 0
+    0028 istore 4
+    0030 iload 4
+    0032 op_0xAC
+    0033 op_0xA7
+    0034 nop
+    0035 iconst_0
+    0036 iconst_0
+    0037 istore 5
+    0039 iload 5
+    0041 istore 6
+    0043 iconst_1
+    0044 istore 7
+    0046 iload 7
+    0048 istore 8
+    0050 iconst_2
+    0051 istore 9
+    0053 iload 0
+    0055 istore 10
+    0057 iload 9
+    0059 istore 11
+    0061 op_0xA7
+    0062 nop
+    0063 iconst_0
+    0064 iload 11
+    0066 iload 10
+    0068 op_0xA4
+    0069 nop
+    0070 iconst_4
+    0071 iconst_0
+    0072 op_0xA7
+    0073 nop
+    0074 iconst_1
+    0075 iconst_1
+    0076 istore 12
+    0078 iload 12
+    0080 op_0x99
+    0081 nop
+    0082 astore 21
+    0084 iconst_3
+    0085 istore 13
+    0087 iload 8
+    0089 istore 14
+    0091 iload 13
+    0093 iload 14
+    0095 iadd
+    0096 istore 15
+    0098 iload 15
+    0100 istore 16
+    0102 iload 8
+    0104 istore 17
+    0106 iload 17
+    0108 istore 6
+    0110 iload 16
+    0112 istore 18
+    0114 iload 18
+    0116 istore 8
+    0118 op_0xA7
+    0119 nop
+    0120 iconst_0
+    0121 iconst_1
+    0122 istore 19
+    0124 iload 11
+    0126 iload 19
+    0128 iadd
+    0129 istore 20
+    0131 iload 20
+    0133 istore 11
+    0135 op_0xA7
+    0136 op_0xFF
+    0137 op_0xB9
+    0138 iload 8
+    0140 istore 21
+    0142 iload 21
+    0144 op_0xAC
+    sub_attr  StackMapTable (149 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 iconst_0
+    0001 istore 1
+    0003 bipush 10
+    0005 istore 2
+    0007 iload 1
+    0009 istore 3
+    0011 op_0xA7
+    0012 nop
+    0013 iconst_0
+    0014 iload 3
+    0016 iload 2
+    0018 op_0xA4
+    0019 nop
+    0020 iconst_4
+    0021 iconst_0
+    0022 op_0xA7
+    0023 nop
+    0024 iconst_1
+    0025 iconst_1
+    0026 istore 4
+    0028 iload 4
+    0030 op_0x99
+    0031 nop
+    0032 op_0x2A
+    0033 iload 3
+    0035 istore 5
+    0037 iload 5
+    0039 invokestatic Method(InputKt.fibonacci:(I)I)
+    0042 istore 6
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 iload 6
+    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0052 op_0xA7
+    0053 nop
+    0054 iconst_0
+    0055 iconst_1
+    0056 istore 7
+    0058 iload 3
+    0060 iload 7
+    0062 iadd
+    0063 istore 8
+    0065 iload 8
+    0067 istore 3
+    0069 op_0xA7
+    0070 op_0xFF
+    0071 op_0xC9
+    0072 return
+    sub_attr  StackMapTable (72 bytes)

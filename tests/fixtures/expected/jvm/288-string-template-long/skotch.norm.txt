@@ -1,0 +1,69 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=18
+    0000 op_0x14
+    0001 nop
+    0002 op_0x0A
+    0003 op_0x37
+    0004 aconst_null
+    0005 op_0x16
+    0006 aconst_null
+    0007 op_0x37
+    0008 iconst_0
+    0009 ldc "The number is "
+    0011 astore 5
+    0013 op_0x16
+    0014 iconst_0
+    0015 op_0x37
+    0016 iconst_3
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 op_0xBB
+    0021 nop
+    0022 iload 89
+    0024 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0027 aload 5
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 op_0x16
+    0033 iconst_3
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;)
+    0037 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0043 op_0x14
+    0044 nop
+    0045 op_0x2B
+    0046 op_0x37
+    0047 iconst_5
+    0048 op_0x16
+    0049 iconst_5
+    0050 op_0x37
+    0051 op_0x0A
+    0052 ldc "items"
+    0054 astore 12
+    0056 aload 12
+    0058 astore 13
+    0060 op_0x16
+    0061 op_0x0A
+    0062 op_0x37
+    0063 op_0x0E
+    0064 ldc " "
+    0066 astore 16
+    0068 aload 13
+    0070 astore 17
+    0072 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0075 op_0xBB
+    0076 nop
+    0077 iload 89
+    0079 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0082 op_0x16
+    0083 op_0x0E
+    0084 invokevirtual Method(java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;)
+    0087 aload 16
+    0089 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0092 aload 17
+    0094 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0097 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0100 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0103 return

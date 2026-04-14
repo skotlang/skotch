@@ -1886,7 +1886,17 @@ fn lower_expr(
                             });
                             return Some(dest);
                         } else {
-                            let dest = fb.new_local(ret_ty);
+                            // Use the method's declared return type when
+                            // available; fall back to the receiver's class
+                            // type so chained operators (a + b + c) keep the
+                            // correct type even when the method stub has not
+                            // yet been replaced with the fully-inferred body.
+                            let effective_ret = if ret_ty == Ty::Unit {
+                                Ty::Class(class_name.clone())
+                            } else {
+                                ret_ty
+                            };
+                            let dest = fb.new_local(effective_ret);
                             fb.push_stmt(MStmt::Assign {
                                 dest,
                                 value: Rvalue::Call {
@@ -2575,6 +2585,23 @@ fn lower_expr(
                                 });
                                 unboxed
                             }
+                            Ty::Bool => {
+                                let unboxed = fb.new_local(Ty::Bool);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: unboxed,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: "java/lang/Boolean".to_string(),
+                                            method_name: "booleanValue".to_string(),
+                                            descriptor: "()Z".to_string(),
+                                        },
+                                        args: vec![element_obj],
+                                    },
+                                });
+                                unboxed
+                            }
+                            // For String, Any, Class, etc. — pass the Object
+                            // directly without unboxing.
                             _ => element_obj,
                         };
                         // lambda.invoke(element)
@@ -4243,6 +4270,25 @@ fn lower_expr(
                             });
                             return Some(dest);
                         }
+                    }
+                    // ArrayList/List .size → invokevirtual ArrayList.size()I
+                    if field_name == "size"
+                        && (declaring_class.contains("ArrayList")
+                            || declaring_class.contains("List"))
+                    {
+                        let dest = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/ArrayList".to_string(),
+                                    method_name: "size".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![recv_local],
+                            },
+                        });
+                        return Some(dest);
                     }
                     let dest = fb.new_local(field_ty);
                     fb.push_stmt(MStmt::Assign {

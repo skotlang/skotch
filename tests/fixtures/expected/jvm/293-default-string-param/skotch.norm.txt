@@ -1,0 +1,37 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=4
+    0000 ldc "Hello, "
+    0002 astore 1
+    0004 aload 0
+    0006 astore 2
+    0008 ldc "!"
+    0010 astore 3
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 op_0xBB
+    0016 nop
+    0017 iload 89
+    0019 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0022 aload 1
+    0024 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0027 aload 2
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 aload 3
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0037 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0043 return
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=1 max_locals=3
+    0000 ldc "World"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.greet:(Ljava/lang/String;)V)
+    0009 ldc "Kotlin"
+    0011 astore 2
+    0013 aload 2
+    0015 invokestatic Method(InputKt.greet:(Ljava/lang/String;)V)
+    0018 return

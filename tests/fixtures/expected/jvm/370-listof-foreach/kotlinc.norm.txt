@@ -1,0 +1,84 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=7
+    0000 iconst_3
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_5
+    0004 op_0x4C
+    0005 op_0x2B
+    0006 iconst_0
+    0007 iconst_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 op_0x53
+    0012 op_0x2B
+    0013 iconst_1
+    0014 iconst_2
+    0015 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0018 op_0x53
+    0019 op_0x2B
+    0020 iconst_2
+    0021 iconst_3
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 op_0x53
+    0026 op_0x2B
+    0027 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0030 op_0x4B
+    0031 op_0x2A
+    0032 op_0xC0
+    0033 nop
+    0034 op_0x14
+    0035 op_0x4C
+    0036 iconst_0
+    0037 op_0x3D
+    0038 op_0x2B
+    0039 op_0xB9
+    0040 nop
+    0041 op_0x18
+    0042 aconst_null
+    0043 nop
+    0044 op_0x4E
+    0045 op_0x2D
+    0046 op_0xB9
+    0047 nop
+    0048 op_0x1E
+    0049 aconst_null
+    0050 nop
+    0051 op_0x99
+    0052 nop
+    0053 op_0x25
+    0054 op_0x2D
+    0055 op_0xB9
+    0056 nop
+    0057 op_0x22
+    0058 aconst_null
+    0059 nop
+    0060 astore 4
+    0062 aload 4
+    0064 op_0xC0
+    0065 nop
+    0066 op_0x24
+    0067 invokevirtual Method(java/lang/Number.intValue:()I)
+    0070 istore 5
+    0072 iconst_0
+    0073 istore 6
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 iload 5
+    0080 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0083 nop
+    0084 nop
+    0085 op_0xA7
+    0086 op_0xFF
+    0087 op_0xD8
+    0088 nop
+    0089 return
+    sub_attr  StackMapTable (20 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    SourceDebugExtension (199 bytes)
+class_attr    RuntimeInvisibleAnnotations (14 bytes)

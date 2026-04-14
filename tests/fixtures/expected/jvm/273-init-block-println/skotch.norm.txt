@@ -1,0 +1,31 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=6
+    0000 ldc "APP"
+    0002 astore 1
+    0004 op_0xBB
+    0005 nop
+    0006 op_0x0D
+    0007 op_0x59
+    0008 aload 1
+    0010 invokespecial Method(Logger.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 op_0xC0
+    0018 nop
+    0019 op_0x0D
+    0020 astore 3
+    0022 aload 3
+    0024 op_0xC0
+    0025 nop
+    0026 op_0x0D
+    0027 astore 4
+    0029 ldc "started"
+    0031 astore 5
+    0033 aload 4
+    0035 aload 5
+    0037 invokevirtual Method(Logger.log:(Ljava/lang/String;)V)
+    0040 return

@@ -1,0 +1,55 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=15
+    0000 ldc "Hello, World!"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 aload 2
+    0010 astore 3
+    0012 ldc "World"
+    0014 astore 4
+    0016 aload 3
+    0018 aload 4
+    0020 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
+    0023 istore 5
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload 5
+    0030 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0033 aload 2
+    0035 astore 6
+    0037 ldc "Kotlin"
+    0039 astore 7
+    0041 aload 6
+    0043 aload 7
+    0045 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
+    0048 istore 8
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 iload 8
+    0055 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0058 aload 2
+    0060 astore 9
+    0062 ldc "Hello"
+    0064 astore 10
+    0066 aload 9
+    0068 aload 10
+    0070 invokevirtual Method(java/lang/String.startsWith:(Ljava/lang/String;)Z)
+    0073 istore 11
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 iload 11
+    0080 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0083 aload 2
+    0085 astore 12
+    0087 ldc "!"
+    0089 astore 13
+    0091 aload 12
+    0093 aload 13
+    0095 invokevirtual Method(java/lang/String.endsWith:(Ljava/lang/String;)Z)
+    0098 istore 14
+    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0103 iload 14
+    0105 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0108 return

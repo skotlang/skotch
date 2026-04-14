@@ -1,0 +1,94 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        describe (LResult;)Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=10
+    0000 iconst_1
+    0001 istore 1
+    0003 op_0xA7
+    0004 nop
+    0005 iconst_0
+    0006 aload 0
+    0008 op_0xC0
+    0009 nop
+    0010 op_0x0B
+    0011 astore 2
+    0013 aload 2
+    0015 op_0xC1
+    0016 nop
+    0017 op_0x0D
+    0018 istore 3
+    0020 iload 3
+    0022 op_0x99
+    0023 nop
+    0024 op_0x0E
+    0025 ldc "ok"
+    0027 astore 4
+    0029 aload 4
+    0031 astore 5
+    0033 op_0xA7
+    0034 nop
+    0035 op_0x2C
+    0036 aload 0
+    0038 op_0xC0
+    0039 nop
+    0040 op_0x0B
+    0041 astore 6
+    0043 aload 6
+    0045 op_0xC1
+    0046 nop
+    0047 sipush 13831
+    0050 iload 7
+    0052 op_0x99
+    0053 nop
+    0054 op_0x0E
+    0055 ldc "err"
+    0057 astore 8
+    0059 aload 8
+    0061 astore 5
+    0063 op_0xA7
+    0064 nop
+    0065 op_0x0E
+    0066 ldc "unknown"
+    0068 astore 9
+    0070 aload 9
+    0072 astore 5
+    0074 op_0xA7
+    0075 nop
+    0076 iconst_0
+    0077 aload 5
+    0079 op_0xB0
+    sub_attr  StackMapTable (67 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=7
+    0000 bipush 42
+    0002 istore 1
+    0004 op_0xBB
+    0005 nop
+    0006 op_0x0D
+    0007 op_0x59
+    0008 iload 1
+    0010 invokespecial Method(Ok.<init>:(I)V)
+    0013 astore 2
+    0015 aload 2
+    0017 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0020 astore 3
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 3
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 ldc "fail"
+    0032 astore 4
+    0034 op_0xBB
+    0035 nop
+    0036 sipush 22809
+    0039 iconst_1
+    0040 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
+    0043 astore 5
+    0045 aload 5
+    0047 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0050 astore 6
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 aload 6
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0060 return

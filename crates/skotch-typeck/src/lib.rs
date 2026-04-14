@@ -754,7 +754,14 @@ impl<'a> TypeChecker<'a> {
                                 _ => unreachable!(),
                             };
                             if let Some(m) = self.env.lookup_method(class_name, op_method) {
-                                m.ret.clone()
+                                // When the return type is Unit (unresolved
+                                // expression-body), assume operators return the
+                                // receiver type so chained expressions type-check.
+                                if m.ret == Ty::Unit {
+                                    lt.clone()
+                                } else {
+                                    m.ret.clone()
+                                }
                             } else {
                                 self.diags.push(Diagnostic::error(
                                     *span,

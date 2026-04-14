@@ -1,0 +1,42 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        isUrl (Ljava/lang/String;)Z 0x0019
+  code        max_stack=5 max_locals=1
+    0000 op_0x2A
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 ldc "http"
+    0009 iconst_0
+    0010 iconst_2
+    0011 aconst_null
+    0012 invokestatic Method(kotlin/text/StringsKt.startsWith$default:(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z)
+    0015 op_0xAC
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 ldc "https://example.com"
+    0002 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
+    0005 op_0x3B
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 op_0x1A
+    0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0013 ldc "ftp://files.example.com"
+    0015 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
+    0018 op_0x3B
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 op_0x1A
+    0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0026 ldc "not a url"
+    0028 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
+    0031 op_0x3B
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 op_0x1A
+    0036 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0039 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1,0 +1,70 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        BLUE ()LColor; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x21
+    0003 op_0x59
+    0004 ldc "BLUE"
+    0006 astore 1
+    0008 sipush 255
+    0011 istore 2
+    0013 aload 1
+    0015 iload 2
+    0017 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
+    0020 astore 0
+    0022 aload 0
+    0024 op_0xB0
+method        GREEN ()LColor; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x21
+    0003 op_0x59
+    0004 ldc "GREEN"
+    0006 astore 1
+    0008 ldc int(65280)
+    0010 istore 2
+    0012 aload 1
+    0014 iload 2
+    0016 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
+    0019 astore 0
+    0021 aload 0
+    0023 op_0xB0
+method        RED ()LColor; 0x0009
+  code        max_stack=4 max_locals=3
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x21
+    0003 op_0x59
+    0004 ldc "RED"
+    0006 astore 1
+    0008 ldc int(16711680)
+    0010 istore 2
+    0012 aload 1
+    0014 iload 2
+    0016 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
+    0019 astore 0
+    0021 aload 0
+    0023 op_0xB0
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=4
+    0000 invokestatic Method(InputKt.RED:()LColor;)
+    0003 astore 1
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 aload 1
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 invokestatic Method(InputKt.GREEN:()LColor;)
+    0016 astore 2
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 aload 2
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 invokestatic Method(InputKt.BLUE:()LColor;)
+    0029 astore 3
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 aload 3
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 return

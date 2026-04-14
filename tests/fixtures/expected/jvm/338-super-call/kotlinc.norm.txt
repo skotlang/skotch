@@ -1,0 +1,21 @@
+class_version major=61 minor=0
+this_class    Child
+super_class   Base
+access_flags  0x0031
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(Base.<init>:()V)
+    0004 return
+method        greet ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokespecial Method(Base.greet:()Ljava/lang/String;)
+    0004 op_0xBA
+    0005 nop
+    0006 op_0x1B
+    0007 nop
+    0008 nop
+    0009 op_0xB0
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

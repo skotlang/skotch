@@ -1,0 +1,27 @@
+class_version major=61 minor=0
+this_class    Greeter$DefaultImpls
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (LGreeter;Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=2
+    0000 op_0x2B
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 op_0x2A
+    0007 op_0x2B
+    0008 invokestatic InterfaceMethod(Greeter.access$greet$jd:(LGreeter;Ljava/lang/String;)Ljava/lang/String;)
+    0011 op_0xB0
+  attr        Deprecated (0 bytes)
+  attr        RuntimeVisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        greeting (LGreeter;)Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=1
+    0000 op_0x2A
+    0001 invokestatic InterfaceMethod(Greeter.access$greeting$jd:(LGreeter;)Ljava/lang/String;)
+    0004 op_0xB0
+  attr        Deprecated (0 bytes)
+  attr        RuntimeVisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    InnerClasses (10 bytes)
