@@ -923,6 +923,43 @@ fn jvm_descriptor(func: &MirFunction) -> String {
     s
 }
 
+/// Emit autoboxing bytecode: int→Integer, bool→Boolean, etc.
+/// No-op if the type is already a reference type.
+fn autobox(
+    code: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    ty: &Ty,
+) {
+    match ty {
+        Ty::Int => {
+            let m = cp.methodref("java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;");
+            code.push(0xB8); // invokestatic
+            code.write_u16::<BigEndian>(m).unwrap();
+            // stack: consumed int, pushed Integer → net 0
+        }
+        Ty::Bool => {
+            let m = cp.methodref("java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+        }
+        Ty::Long => {
+            let m = cp.methodref("java/lang/Long", "valueOf", "(J)Ljava/lang/Long;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+            bump(stack, max_stack, -1); // long takes 2 slots, Long takes 1
+        }
+        Ty::Double => {
+            let m = cp.methodref("java/lang/Double", "valueOf", "(D)Ljava/lang/Double;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+            bump(stack, max_stack, -1); // double takes 2 slots, Double takes 1
+        }
+        _ => {} // already a reference type
+    }
+}
+
 fn jvm_type(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "V",
@@ -1285,7 +1322,13 @@ fn walk_block(
                 let fr = cp.fieldref(class_name, field_name, &descriptor);
                 code.push(0xB4); // getfield
                 code.write_u16::<BigEndian>(fr).unwrap();
-                // getfield pops receiver, pushes value → net 0
+                // getfield pops receiver (1), pushes value (1 or 2 for wide).
+                let field_width = if matches!(field_ty, Ty::Long | Ty::Double) {
+                    2
+                } else {
+                    1
+                };
+                bump(stack, max_stack, field_width - 1); // net = pushed - popped_receiver
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::PutField {
@@ -1370,10 +1413,21 @@ fn walk_block(
                     let _ = dest;
                 }
                 CallKind::Static(target_id) => {
-                    for a in args {
-                        load_local(code, stack, max_stack, slots, *a, &func.locals);
-                    }
                     let target = &module.functions[target_id.0 as usize];
+                    for (i, a) in args.iter().enumerate() {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        // Autobox primitives when target param expects Object.
+                        let arg_ty = &func.locals[a.0 as usize];
+                        let param_ty = target
+                            .params
+                            .get(i)
+                            .and_then(|p| target.locals.get(p.0 as usize));
+                        if let Some(p_ty) = param_ty {
+                            if matches!(p_ty, Ty::Any) {
+                                autobox(code, cp, stack, max_stack, arg_ty);
+                            }
+                        }
+                    }
                     let descriptor = jvm_descriptor(target);
                     let mref = cp.methodref(class_name, &target.name, &descriptor);
                     code.push(0xB8); // invokestatic
@@ -1552,11 +1606,33 @@ fn walk_block(
                         bump(stack, max_stack, -(args.len() as i32));
                     } else {
                         // NewInstance constructor: stack already has [ref, ref]
+                        // Look up the target class constructor to get expected param types.
+                        let ctor_params: Vec<Ty> = module
+                            .classes
+                            .iter()
+                            .find(|c| c.name == *class_name)
+                            .map(|c| {
+                                c.constructor
+                                    .params
+                                    .iter()
+                                    .skip(1) // skip `this`
+                                    .map(|p| c.constructor.locals[p.0 as usize].clone())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         let mut descriptor = String::from("(");
-                        for a in args {
+                        for (i, a) in args.iter().enumerate() {
                             load_local(code, stack, max_stack, slots, *a, &func.locals);
-                            let ty = &func.locals[a.0 as usize];
-                            descriptor.push_str(&jvm_type_string(ty));
+                            let arg_ty = &func.locals[a.0 as usize];
+                            // Autobox if constructor param expects Object but arg is primitive.
+                            if let Some(param_ty) = ctor_params.get(i) {
+                                if matches!(param_ty, Ty::Any) {
+                                    autobox(code, cp, stack, max_stack, arg_ty);
+                                }
+                                descriptor.push_str(&jvm_type_string(param_ty));
+                            } else {
+                                descriptor.push_str(&jvm_type_string(arg_ty));
+                            }
                         }
                         descriptor.push_str(")V");
                         let mref = cp.methodref(class_name, "<init>", &descriptor);

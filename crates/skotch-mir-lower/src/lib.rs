@@ -64,6 +64,17 @@ pub fn lower_file(
         ..MirModule::default()
     };
 
+    // ─── Pass 0: collect type aliases ─────────────────────────────────
+    let mut type_aliases: FxHashMap<String, String> = FxHashMap::default();
+    for decl in &file.decls {
+        if let Decl::TypeAlias(ta) = decl {
+            let alias_name = interner.resolve(ta.name).to_string();
+            let target_name = interner.resolve(ta.target.name).to_string();
+            type_aliases.insert(alias_name, target_name);
+        }
+    }
+    let _ = &type_aliases; // suppress unused warning if no aliases used yet
+
     // ─── Pass 1: register top-level functions ───────────────────────────
     //
     // Pre-allocate a `FuncId` for every top-level `fun` in source order
@@ -267,6 +278,10 @@ pub fn lower_file(
                     interner,
                     diags,
                 );
+            }
+            Decl::TypeAlias(_) => {
+                // Type aliases are resolved at parse/type-check time;
+                // no MIR lowering needed.
             }
             Decl::Unsupported { what, span } => {
                 diags.push(Diagnostic::error(
@@ -2163,6 +2178,7 @@ fn lower_expr(
                         let override_fn = skotch_syntax::FunDecl {
                             name: interner.intern(&sam_name),
                             name_span: *lspan,
+                            type_params: Vec::new(),
                             params: lparams.clone(),
                             return_ty: None, // inferred from body
                             receiver_ty: None,
@@ -3160,6 +3176,26 @@ fn lower_expr(
                             search = cls.super_class.clone();
                         } else {
                             break;
+                        }
+                    }
+                    // Check if this is a computed property (getter method).
+                    let getter_name =
+                        format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
+                    if let Some(cls) = module.classes.iter().find(|c| c.name == declaring_class) {
+                        if let Some(getter) = cls.methods.iter().find(|m| m.name == getter_name) {
+                            let ret_ty = getter.return_ty.clone();
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: declaring_class.clone(),
+                                        method_name: getter_name,
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
                         }
                     }
                     let dest = fb.new_local(field_ty);
@@ -4912,6 +4948,53 @@ fn lower_class(
         let mut finished = fb.finish();
         finished.is_abstract = method.is_abstract;
         mir_methods.push(finished);
+    }
+
+    // Lower property getters as synthetic methods.
+    for prop in &c.properties {
+        if let Some(getter_body) = &prop.getter {
+            let prop_name = interner.resolve(prop.name).to_string();
+            let getter_name = format!("get{}{}", &prop_name[..1].to_uppercase(), &prop_name[1..]);
+            let return_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Any);
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, getter_name, return_ty);
+            let this_local = fb.new_local(Ty::Class(class_name.clone()));
+            fb.mf.params.push(this_local);
+            let this_sym = interner.intern("this");
+            let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+            // Load fields into scope.
+            for field in &fields {
+                let field_sym = interner.intern(&field.name);
+                let field_local = fb.new_local(field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: field_local,
+                    value: Rvalue::GetField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                    },
+                });
+                scope.push((field_sym, field_local));
+            }
+            for s in &getter_body.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            mir_methods.push(fb.finish());
+        }
     }
 
     // Lower companion object methods as top-level static functions.

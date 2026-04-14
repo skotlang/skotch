@@ -235,11 +235,10 @@ impl EmbeddedJvm {
             .l()
             .map_err(|e| anyhow!("getSystemClassLoader result: {e}"))?;
         let jni_name = class_name.replace('.', "/");
-        env.define_class(&jni_name, &loader, class_bytes)
-            .map_err(|e| {
-                let _ = env.exception_clear();
-                anyhow!("DefineClass `{jni_name}` failed: {e}")
-            })?;
+        if env.define_class(&jni_name, &loader, class_bytes).is_err() {
+            let detail = Self::extract_exception_detail(env);
+            return Err(anyhow!("DefineClass `{jni_name}` failed:\n{detail}"));
+        }
         Ok(())
     }
 
@@ -264,12 +263,13 @@ impl EmbeddedJvm {
             .map_err(|e| anyhow!("getSystemClassLoader result: {e}"))?;
 
         let jni_name = class_name.replace('.', "/");
-        let defined = env
-            .define_class(&jni_name, &loader, class_bytes)
-            .map_err(|e| {
-                let _ = env.exception_clear();
-                anyhow!("DefineClass `{jni_name}` failed: {e}")
-            })?;
+        let defined = match env.define_class(&jni_name, &loader, class_bytes) {
+            Ok(cls) => cls,
+            Err(_) => {
+                let detail = Self::extract_exception_detail(env);
+                return Err(anyhow!("DefineClass `{jni_name}` failed:\n{detail}"));
+            }
+        };
 
         let string_class = env
             .find_class("java/lang/String")
@@ -279,9 +279,14 @@ impl EmbeddedJvm {
             .map_err(|e| anyhow!("new String[0]: {e}"))?;
 
         unsafe {
-            let main_id = env
-                .get_static_method_id(&defined, "main", "([Ljava/lang/String;)V")
-                .map_err(|e| anyhow!("GetStaticMethodID main: {e}"))?;
+            let main_id = match env.get_static_method_id(&defined, "main", "([Ljava/lang/String;)V")
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    let detail = Self::extract_exception_detail(env);
+                    return Err(anyhow!("GetStaticMethodID main failed:\n{detail}"));
+                }
+            };
             let result = env.call_static_method_unchecked(
                 &defined,
                 main_id,

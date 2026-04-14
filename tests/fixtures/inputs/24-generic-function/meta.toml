@@ -1,3 +1,2 @@
-name   = "24-generic-function"
-status = "stub"
-reason = "Generics need type erasure and Signature attribute support."
+status = "supported"
+features = ["generic-function", "type-erasure"]

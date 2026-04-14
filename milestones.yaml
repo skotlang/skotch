@@ -291,7 +291,7 @@ milestones:
 
   - version: "0.4.0"
     title: "Generics and Type Erasure"
-    status: planned
+    status: in_progress
     depends_on: ["0.3.0"]
     description: >
       Type parameters, variance, generic classes/functions, reified types.
@@ -299,12 +299,20 @@ milestones:
 
     features:
       - name: "Generic functions"
-        description: "fun <T> identity(x: T): T = x. Erased to Object on JVM."
+        completed: true
+        description: >
+          fun <T> identity(x: T): T = x. Type parameters parsed in <...> after
+          fun keyword. Erased to Any (Object on JVM). Autoboxing at call sites
+          for primitive args. Fixture: 24-generic-function.
         acceptance_criteria:
           - "identity(42) and identity(\"hi\") both work"
 
       - name: "Generic classes"
-        description: "class Box<T>(val value: T). Fields erased + synthetic bridge methods."
+        completed: true
+        description: >
+          class Box<T>(val value: T). Type parameters parsed after class name.
+          Fields and constructor params erased to Object. Autoboxing at
+          constructor call sites. Fixture: 93-generic-class.
         acceptance_criteria:
           - "Box(42).value returns 42 with correct cast"
 
@@ -327,13 +335,20 @@ milestones:
           - "Reified is-check works at runtime"
 
       - name: "Type aliases"
-        description: "typealias StringList = List<String>."
+        completed: true
+        description: >
+          typealias Name = TargetType. Parsed as soft keyword, stored in AST,
+          resolved to target type name during MIR lowering. Type parameters
+          on aliases parsed but not substituted (erased).
 
       - name: "Property getters and setters"
+        completed: true
         description: >
-          val x: Int get() = compute(). var y: Int set(v) { _y = v }.
-          Properties desugar to backing field + accessor methods. Used
-          extensively in Kotlin patterns and required for many stdlib types.
+          val x: Int get() = compute(). Custom getter parsed as expression
+          body or block body, lowered to synthetic getPropertyName() method.
+          Property access dispatches to getter method when no backing field
+          exists. Setter parsing implemented but codegen deferred.
+          Fixture: 104-property-getter-setter.
         acceptance_criteria:
           - "Custom getter works; custom setter persists value"
 

@@ -37,7 +37,8 @@ use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
     InterfaceDecl, KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, SuperClassRef,
-    TemplatePart, Token, TokenKind, TypeRef, UnaryOp, ValDecl, WhenBranch,
+    TemplatePart, Token, TokenKind, TypeAliasDecl, TypeParam, TypeRef, UnaryOp, ValDecl,
+    WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -128,6 +129,14 @@ impl<'a> Parser<'a> {
             true
         } else {
             false
+        }
+    }
+
+    /// Get the string content of an Ident token at a given index.
+    fn lexeme_str(&self, idx: usize) -> &str {
+        match self.payload(idx) {
+            Some(TokenPayload::Ident(s)) => s.as_str(),
+            _ => "",
         }
     }
 
@@ -223,6 +232,9 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::KwObject => {
                     decls.push(Decl::Object(self.parse_object_decl()));
+                }
+                TokenKind::Ident if self.lexeme_str(self.pos) == "typealias" => {
+                    decls.push(Decl::TypeAlias(self.parse_typealias_decl()));
                 }
                 _ => {
                     let span = self.peek_span();
@@ -332,6 +344,10 @@ impl<'a> Parser<'a> {
                 .push(Diagnostic::error(name_span, "expected class name"));
             self.interner.intern("")
         };
+        self.skip_trivia();
+
+        // Type parameters: `class Box<T>(...)`.
+        let type_params = self.parse_type_params();
         self.skip_trivia();
 
         // Primary constructor parameters.
@@ -523,6 +539,7 @@ impl<'a> Parser<'a> {
             is_abstract: false, // set by caller
             name,
             name_span,
+            type_params,
             constructor_params,
             parent_class,
             interfaces,
@@ -531,6 +548,32 @@ impl<'a> Parser<'a> {
             companion_methods,
             init_blocks,
             span: kw.merge(name_span),
+        }
+    }
+
+    fn parse_typealias_decl(&mut self) -> TypeAliasDecl {
+        let start = self.peek_span();
+        self.bump(); // consume `typealias` ident
+        self.skip_trivia();
+        let name_idx = self.pos;
+        let name_span = self.peek_span();
+        let name = if self.peek_kind() == TokenKind::Ident {
+            self.bump();
+            self.intern_ident_at(name_idx)
+        } else {
+            self.interner.intern("")
+        };
+        let type_params = self.parse_type_params();
+        self.skip_trivia();
+        self.expect(TokenKind::Eq, "=");
+        self.skip_trivia();
+        let target = self.parse_type_ref();
+        TypeAliasDecl {
+            name,
+            name_span,
+            type_params,
+            target,
+            span: start.merge(name_span),
         }
     }
 
@@ -781,19 +824,177 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        // Check for custom getter: `get() = expr` or `get() { ... }`.
+        self.skip_trivia();
+        let getter = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "get" {
+            self.bump(); // consume `get`
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::LParen {
+                self.bump(); // (
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RParen {
+                    self.bump(); // )
+                }
+            }
+            self.skip_trivia();
+            if self.eat(TokenKind::Eq) {
+                self.skip_trivia();
+                let expr = self.parse_expr();
+                let sp = expr.span();
+                Some(Block {
+                    stmts: vec![Stmt::Return {
+                        value: Some(expr),
+                        span: sp,
+                    }],
+                    span: sp,
+                })
+            } else if self.peek_kind() == TokenKind::LBrace {
+                Some(self.parse_block())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        // Check for custom setter: `set(value) { ... }` or `set(value) = expr`.
+        self.skip_trivia();
+        let setter = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "set" {
+            self.bump(); // consume `set`
+            self.skip_trivia();
+            let setter_param = if self.peek_kind() == TokenKind::LParen {
+                self.bump(); // (
+                self.skip_trivia();
+                let p_idx = self.pos;
+                let p = if self.peek_kind() == TokenKind::Ident {
+                    self.bump();
+                    self.intern_ident_at(p_idx)
+                } else {
+                    self.interner.intern("value")
+                };
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RParen {
+                    self.bump(); // )
+                }
+                p
+            } else {
+                self.interner.intern("value")
+            };
+            self.skip_trivia();
+            let body = if self.eat(TokenKind::Eq) {
+                self.skip_trivia();
+                let expr = self.parse_expr();
+                let sp = expr.span();
+                Block {
+                    stmts: vec![Stmt::Expr(expr)],
+                    span: sp,
+                }
+            } else if self.peek_kind() == TokenKind::LBrace {
+                self.parse_block()
+            } else {
+                Block {
+                    stmts: Vec::new(),
+                    span: start,
+                }
+            };
+            Some((setter_param, body))
+        } else {
+            None
+        };
         PropertyDecl {
             is_var,
             name,
             name_span,
             ty,
             init,
+            getter,
+            setter,
             span: start.merge(name_span),
         }
+    }
+
+    /// Parse `<T, R : Comparable<R>>` type parameter list.  Returns empty
+    /// vec if no `<` follows.
+    fn parse_type_params(&mut self) -> Vec<TypeParam> {
+        self.skip_trivia();
+        if self.peek_kind() != TokenKind::Lt {
+            return Vec::new();
+        }
+        self.bump(); // consume `<`
+        let mut params = Vec::new();
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::Gt {
+                break;
+            }
+            let tp_span = self.peek_span();
+            let tp_idx = self.pos;
+            // Optional variance: `out` or `in` (soft keywords — just skip).
+            if self.peek_kind() == TokenKind::Ident {
+                let text = self.lexeme_str(self.pos);
+                if text == "out" || text == "in" {
+                    self.bump();
+                    self.skip_trivia();
+                }
+            }
+            let tp_name = if self.peek_kind() == TokenKind::Ident {
+                self.bump();
+                self.intern_ident_at(tp_idx)
+            } else {
+                self.interner.intern("")
+            };
+            self.skip_trivia();
+            let bound = if self.eat(TokenKind::Colon) {
+                self.skip_trivia();
+                let bound_idx = self.pos;
+                if self.peek_kind() == TokenKind::Ident {
+                    self.bump();
+                    let b = self.intern_ident_at(bound_idx);
+                    // Skip type arguments on bound: `Comparable<T>`.
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Lt {
+                        let mut depth = 1u32;
+                        self.bump();
+                        while depth > 0 && self.peek_kind() != TokenKind::Eof {
+                            match self.peek_kind() {
+                                TokenKind::Lt => depth += 1,
+                                TokenKind::Gt => depth -= 1,
+                                _ => {}
+                            }
+                            self.bump();
+                        }
+                    }
+                    Some(b)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            params.push(TypeParam {
+                name: tp_name,
+                bound,
+                span: tp_span,
+            });
+            self.skip_trivia();
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.skip_trivia();
+        if self.peek_kind() == TokenKind::Gt {
+            self.bump();
+        }
+        params
     }
 
     fn parse_fun_decl(&mut self) -> FunDecl {
         let kw = self.expect(TokenKind::KwFun, "fun");
         self.skip_trivia();
+
+        // Type parameters: `fun <T> identity(x: T): T`.
+        let type_params = self.parse_type_params();
+        self.skip_trivia();
+
         let name_idx = self.pos;
         let name_span = self.peek_span();
 
@@ -811,6 +1012,7 @@ impl<'a> Parser<'a> {
                     name: recv_name,
                     nullable: false,
                     func_params: None,
+                    type_args: Vec::new(),
                     span: recv_span,
                 });
                 self.bump(); // consume `.`
@@ -881,6 +1083,7 @@ impl<'a> Parser<'a> {
         FunDecl {
             name,
             name_span,
+            type_params,
             params,
             return_ty,
             receiver_ty,
@@ -957,6 +1160,7 @@ impl<'a> Parser<'a> {
                     name: ret.name,
                     nullable: false,
                     func_params: Some(param_types),
+                    type_args: Vec::new(),
                     span: span.merge(end),
                 };
             }
@@ -1006,6 +1210,7 @@ impl<'a> Parser<'a> {
                 name,
                 nullable: false,
                 func_params: None,
+                type_args: Vec::new(),
                 span,
             };
             let mut all_params = vec![receiver_type];
@@ -1014,9 +1219,47 @@ impl<'a> Parser<'a> {
                 name: ret.name,
                 nullable: false,
                 func_params: Some(all_params),
+                type_args: Vec::new(),
                 span: span.merge(end),
             };
         }
+
+        // Type arguments: `List<Int>`, `Map<String, Int>`.
+        let type_args = if self.peek_kind() == TokenKind::Lt {
+            self.bump(); // consume `<`
+            let mut args = Vec::new();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Gt {
+                    break;
+                }
+                // Handle star projection: `List<*>`.
+                if self.peek_kind() == TokenKind::Star {
+                    let star_span = self.peek_span();
+                    self.bump();
+                    args.push(TypeRef {
+                        name: self.interner.intern("*"),
+                        nullable: false,
+                        func_params: None,
+                        type_args: Vec::new(),
+                        span: star_span,
+                    });
+                } else {
+                    args.push(self.parse_type_ref());
+                }
+                self.skip_trivia();
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::Gt {
+                self.bump();
+            }
+            args
+        } else {
+            Vec::new()
+        };
 
         let mut end = span;
         let nullable = if self.peek_kind() == TokenKind::Question {
@@ -1030,6 +1273,7 @@ impl<'a> Parser<'a> {
             name,
             nullable,
             func_params: None,
+            type_args,
             span: span.merge(end),
         }
     }
@@ -2123,6 +2367,7 @@ impl<'a> Parser<'a> {
                         name: type_sym,
                         nullable: false,
                         func_params: None,
+                        type_args: Vec::new(),
                         span: start,
                     },
                     default: None,

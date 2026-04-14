@@ -1,4 +1,2 @@
-name   = "104-property-getter-setter"
-status = "stub"
-features = ["property", "getter", "setter", "double", "class"]
-reason = "Requires custom property getter with computed value."
+status = "supported"
+features = ["property", "getter", "double", "class"]

@@ -56,11 +56,25 @@ pub enum Decl {
     Enum(EnumDecl),
     /// `interface Printable { fun prettyPrint(): String }` — interface declaration.
     Interface(InterfaceDecl),
+    /// `typealias Name = UnderlyingType`.
+    TypeAlias(TypeAliasDecl),
     /// Recognised but not implemented.
     Unsupported {
         what: &'static str,
         span: Span,
     },
+}
+
+/// A type alias declaration: `typealias StringList = List<String>`.
+#[derive(Clone, Debug)]
+pub struct TypeAliasDecl {
+    pub name: Symbol,
+    pub name_span: Span,
+    /// Type parameters: `typealias Predicate<T> = (T) -> Boolean`.
+    pub type_params: Vec<TypeParam>,
+    /// The underlying type this alias resolves to.
+    pub target: TypeRef,
+    pub span: Span,
 }
 
 /// An interface declaration.
@@ -106,6 +120,8 @@ pub struct ObjectDecl {
 pub struct FunDecl {
     pub name: Symbol,
     pub name_span: Span,
+    /// Type parameters: `fun <T, R> map(...)`.
+    pub type_params: Vec<TypeParam>,
     pub params: Vec<Param>,
     pub return_ty: Option<TypeRef>,
     /// For extension functions: the receiver type (e.g. `String` in `fun String.exclaim()`).
@@ -115,6 +131,15 @@ pub struct FunDecl {
     pub is_open: bool,
     pub is_override: bool,
     pub is_abstract: bool,
+    pub span: Span,
+}
+
+/// A type parameter declaration: `T`, `T : Comparable<T>`, `out T`, `in T`.
+#[derive(Clone, Debug)]
+pub struct TypeParam {
+    pub name: Symbol,
+    /// Upper bound: `T : Comparable<T>` → bound is `Comparable`.
+    pub bound: Option<Symbol>,
     pub span: Span,
 }
 
@@ -145,6 +170,8 @@ pub struct ClassDecl {
     pub is_abstract: bool,
     pub name: Symbol,
     pub name_span: Span,
+    /// Type parameters: `class Box<T>(...)`.
+    pub type_params: Vec<TypeParam>,
     /// Primary constructor parameters (may include `val`/`var` properties).
     pub constructor_params: Vec<ConstructorParam>,
     /// Superclass clause: `: ParentClass(args)`.
@@ -188,6 +215,10 @@ pub struct PropertyDecl {
     pub name_span: Span,
     pub ty: Option<TypeRef>,
     pub init: Option<Expr>,
+    /// Custom getter: `val x: Int get() = expr`.
+    pub getter: Option<Block>,
+    /// Custom setter: `var x: Int set(value) { ... }`.
+    pub setter: Option<(Symbol, Block)>,
     pub span: Span,
 }
 
@@ -207,6 +238,8 @@ pub struct TypeRef {
     /// For function types: `(Int, String) -> Boolean`.
     /// `func_params` holds the parameter types; `name` holds the return type.
     pub func_params: Option<Vec<TypeRef>>,
+    /// Generic type arguments: `List<Int>`, `Map<String, Int>`.
+    pub type_args: Vec<TypeRef>,
     pub span: Span,
 }
 

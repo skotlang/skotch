@@ -161,6 +161,7 @@ pub fn type_check(
         out: TypedFile::default(),
         fn_names: Vec::new(),
         env: TypeEnv::default(),
+        type_params: Vec::new(),
     };
 
     // ── Build type environment from all declarations ────────────────────
@@ -179,11 +180,17 @@ pub fn type_check(
     for decl in &file.decls {
         match decl {
             Decl::Fun(f) => {
+                tc.type_params = f
+                    .type_params
+                    .iter()
+                    .map(|tp| tc.interner.resolve(tp.name).to_string())
+                    .collect();
                 let sig = tc.signature_for_fun(f);
                 tc.out
                     .top_signatures
                     .insert(DefId::Function(fn_idx_pass1), sig);
                 tc.fn_names.push(f.name);
+                tc.type_params.clear();
                 fn_idx_pass1 += 1;
             }
             Decl::Val(v) => {
@@ -209,7 +216,11 @@ pub fn type_check(
                     .insert(DefId::Function(class_idx), sig);
                 tc.fn_names.push(c.name);
             }
-            Decl::Object(_) | Decl::Enum(_) | Decl::Interface(_) | Decl::Unsupported { .. } => {}
+            Decl::Object(_)
+            | Decl::Enum(_)
+            | Decl::Interface(_)
+            | Decl::TypeAlias(_)
+            | Decl::Unsupported { .. } => {}
         }
     }
     tc.out.top_signatures.insert(
@@ -226,9 +237,16 @@ pub fn type_check(
     for decl in &file.decls {
         match decl {
             Decl::Fun(f) => {
+                // Set type params in scope for this function.
+                tc.type_params = f
+                    .type_params
+                    .iter()
+                    .map(|tp| tc.interner.resolve(tp.name).to_string())
+                    .collect();
                 let rf = &resolved.functions[fn_idx as usize];
                 let typed = tc.check_function(fn_idx, f, rf);
                 tc.out.functions.push(typed);
+                tc.type_params.clear();
                 fn_idx += 1;
             }
             Decl::Val(v) => {
@@ -240,6 +258,7 @@ pub fn type_check(
             | Decl::Object(_)
             | Decl::Enum(_)
             | Decl::Interface(_)
+            | Decl::TypeAlias(_)
             | Decl::Unsupported { .. } => {}
         }
     }
@@ -254,6 +273,8 @@ struct TypeChecker<'a> {
     out: TypedFile,
     fn_names: Vec<Symbol>,
     env: TypeEnv,
+    /// Type parameter names currently in scope (e.g. "T", "R").
+    type_params: Vec<String>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -394,6 +415,7 @@ impl<'a> TypeChecker<'a> {
                 name: tr.name,
                 nullable: false,
                 func_params: None,
+                type_args: Vec::new(),
                 span: tr.span,
             });
             return Ty::Function {
@@ -404,6 +426,9 @@ impl<'a> TypeChecker<'a> {
         let name = self.interner.resolve(tr.name).to_string();
         let base = if let Some(t) = ty_from_name(&name) {
             t
+        } else if self.type_params.contains(&name) {
+            // Type parameter: erase to Any (Object on JVM).
+            Ty::Any
         } else if self.env.types.contains_key(&name)
             || name.chars().next().is_some_and(|c| c.is_uppercase())
         {
