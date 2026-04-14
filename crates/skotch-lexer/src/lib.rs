@@ -850,6 +850,8 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "internal" => TokenKind::KwInternal,
         "operator" => TokenKind::KwOperator,
         "vararg" => TokenKind::KwVararg,
+        "constructor" => TokenKind::KwConstructor,
+        "lateinit" => TokenKind::KwLateinit,
         _ => return None,
     })
 }

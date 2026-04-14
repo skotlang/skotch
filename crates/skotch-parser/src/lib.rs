@@ -36,9 +36,9 @@ use skotch_lexer::{LexedFile, TokenPayload};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
-    InterfaceDecl, KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, Stmt, SuperClassRef,
-    TemplatePart, Token, TokenKind, TypeAliasDecl, TypeParam, TypeRef, UnaryOp, ValDecl,
-    WhenBranch,
+    InterfaceDecl, KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, SecondaryConstructor,
+    Stmt, SuperClassRef, TemplatePart, Token, TokenKind, TypeAliasDecl, TypeParam, TypeRef,
+    UnaryOp, ValDecl, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -430,8 +430,10 @@ impl<'a> Parser<'a> {
         }
 
         // Superclass / interface clause: `: ParentClass(args), Interface1, Interface2`
+        // Also handles interface delegation: `: Base by b`
         let mut parent_class = None;
         let mut interfaces = Vec::new();
+        let mut interface_delegates = Vec::new();
         if self.peek_kind() == TokenKind::Colon {
             self.bump(); // consume ':'
             self.skip_trivia();
@@ -464,6 +466,17 @@ impl<'a> Parser<'a> {
                         name_span: parent_name_span,
                         args,
                     });
+                } else if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
+                {
+                    // Interface delegation: `Base by b`
+                    self.bump(); // consume 'by'
+                    self.skip_trivia();
+                    let delegate_idx = self.pos;
+                    self.expect(TokenKind::Ident, "delegate parameter name");
+                    let delegate_name = self.intern_ident_at(delegate_idx);
+                    interfaces.push(parent_name);
+                    interface_delegates.push((parent_name, delegate_name));
+                    self.skip_trivia();
                 } else {
                     // No parens → interface implementation (not a superclass call).
                     interfaces.push(parent_name);
@@ -474,7 +487,19 @@ impl<'a> Parser<'a> {
                     if self.peek_kind() == TokenKind::Ident {
                         let iface_idx = self.pos;
                         self.bump();
-                        interfaces.push(self.intern_ident_at(iface_idx));
+                        let iface_name = self.intern_ident_at(iface_idx);
+                        self.skip_trivia();
+                        // Check for delegation: `Interface by param`
+                        if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
+                        {
+                            self.bump(); // consume 'by'
+                            self.skip_trivia();
+                            let delegate_idx = self.pos;
+                            self.expect(TokenKind::Ident, "delegate parameter name");
+                            let delegate_name = self.intern_ident_at(delegate_idx);
+                            interface_delegates.push((iface_name, delegate_name));
+                        }
+                        interfaces.push(iface_name);
                         self.skip_trivia();
                     }
                 }
@@ -486,6 +511,7 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
         let mut companion_methods = Vec::new();
         let mut init_blocks = Vec::new();
+        let mut secondary_constructors = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
             loop {
@@ -498,6 +524,7 @@ impl<'a> Parser<'a> {
                 // Capture modifier keywords before members.
                 let mut mem_override = false;
                 let mut mem_open = false;
+                let mut mem_lateinit = false;
                 let mut mem_abstract = false;
                 while matches!(
                     self.peek_kind(),
@@ -509,11 +536,13 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
                         | TokenKind::KwOperator
+                        | TokenKind::KwLateinit
                 ) {
                     match self.peek_kind() {
                         TokenKind::KwOverride => mem_override = true,
                         TokenKind::KwOpen => mem_open = true,
                         TokenKind::KwAbstract => mem_abstract = true,
+                        TokenKind::KwLateinit => mem_lateinit = true,
                         _ => {}
                     }
                     self.bump();
@@ -528,13 +557,17 @@ impl<'a> Parser<'a> {
                         methods.push(f);
                     }
                     TokenKind::KwVal | TokenKind::KwVar => {
-                        let prop = self.parse_property_decl();
+                        let mut prop = self.parse_property_decl();
+                        prop.is_lateinit = mem_lateinit;
                         properties.push(prop);
                     }
                     TokenKind::KwInit => {
                         self.bump(); // consume 'init'
                         self.skip_trivia();
                         init_blocks.push(self.parse_block());
+                    }
+                    TokenKind::KwConstructor => {
+                        secondary_constructors.push(self.parse_secondary_constructor());
                     }
                     TokenKind::Ident => {
                         // Check for `companion object { ... }`.
@@ -593,11 +626,83 @@ impl<'a> Parser<'a> {
             constructor_params,
             parent_class,
             interfaces,
+            interface_delegates,
             properties,
             methods,
             companion_methods,
             init_blocks,
+            secondary_constructors,
             span: kw.merge(name_span),
+        }
+    }
+
+    /// Parse a secondary constructor: `constructor(params) : this(args) { body }`.
+    fn parse_secondary_constructor(&mut self) -> SecondaryConstructor {
+        let start = self.expect(TokenKind::KwConstructor, "constructor");
+        self.skip_trivia();
+
+        // Parse parameter list.
+        let mut params = Vec::new();
+        self.expect(TokenKind::LParen, "(");
+        self.skip_trivia();
+        if self.peek_kind() != TokenKind::RParen {
+            loop {
+                self.skip_trivia();
+                params.push(self.parse_param());
+                self.skip_trivia();
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+        self.expect(TokenKind::RParen, ")");
+        self.skip_trivia();
+
+        // Parse optional delegation: `: this(args)`.
+        let mut delegate_args = Vec::new();
+        let mut has_delegation = false;
+        if self.eat(TokenKind::Colon) {
+            has_delegation = true;
+            self.skip_trivia();
+            // Expect `this`.
+            if self.peek_kind() == TokenKind::Ident || self.peek_kind() == TokenKind::KwConstructor
+            {
+                // In Kotlin, `this` is a keyword-like identifier here.
+                // The lexer emits it as Ident. Consume it.
+                self.bump();
+                self.skip_trivia();
+            }
+            // Parse delegate call args.
+            self.expect(TokenKind::LParen, "(");
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    delegate_args.push(self.parse_expr());
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+        }
+
+        // Parse optional body block.
+        let body = if self.peek_kind() == TokenKind::LBrace {
+            Some(self.parse_block())
+        } else {
+            None
+        };
+
+        let end = body.as_ref().map(|b| b.span).unwrap_or(self.peek_span());
+        SecondaryConstructor {
+            params,
+            has_delegation,
+            delegate_args,
+            body,
+            span: start.merge(end),
         }
     }
 
@@ -874,6 +979,26 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        // Check for `by lazy { ... }` delegation.
+        self.skip_trivia();
+        let delegate = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
+        {
+            self.bump(); // consume `by`
+            self.skip_trivia();
+            // Expect `lazy { ... }` — consume the `lazy` identifier.
+            if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "lazy" {
+                self.bump(); // consume `lazy`
+                self.skip_trivia();
+            }
+            // Parse the trailing lambda block `{ ... }`.
+            if self.peek_kind() == TokenKind::LBrace {
+                Some(Box::new(self.parse_block()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         self.skip_trivia();
         let init = if self.eat(TokenKind::Eq) {
             self.skip_trivia();
@@ -959,10 +1084,12 @@ impl<'a> Parser<'a> {
         };
         PropertyDecl {
             is_var,
+            is_lateinit: false, // set by caller when `lateinit` modifier present
             name,
             name_span,
             ty,
             init,
+            delegate,
             getter,
             setter,
             span: start.merge(name_span),

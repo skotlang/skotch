@@ -182,6 +182,9 @@ pub struct ClassDecl {
     pub parent_class: Option<SuperClassRef>,
     /// Implemented interfaces (from `: Interface1, Interface2` after superclass).
     pub interfaces: Vec<Symbol>,
+    /// Interface delegation: `class Derived(b: Base) : Base by b`.
+    /// Each entry is `(interface_name, delegate_param_name)`.
+    pub interface_delegates: Vec<(Symbol, Symbol)>,
     /// Properties declared in the class body.
     pub properties: Vec<PropertyDecl>,
     /// Methods declared in the class body.
@@ -190,6 +193,21 @@ pub struct ClassDecl {
     pub companion_methods: Vec<FunDecl>,
     /// Init blocks (statements run in the constructor).
     pub init_blocks: Vec<Block>,
+    /// Secondary constructors: `constructor(params) : this(args) { body }`.
+    pub secondary_constructors: Vec<SecondaryConstructor>,
+    pub span: Span,
+}
+
+/// A secondary constructor declared in the class body.
+#[derive(Clone, Debug)]
+pub struct SecondaryConstructor {
+    pub params: Vec<Param>,
+    /// True when the constructor has an explicit `: this(args)` delegation.
+    pub has_delegation: bool,
+    /// Arguments passed to the delegate constructor call (`this(args)`).
+    pub delegate_args: Vec<Expr>,
+    /// Optional body block.
+    pub body: Option<Block>,
     pub span: Span,
 }
 
@@ -215,10 +233,15 @@ pub struct ConstructorParam {
 #[derive(Clone, Debug)]
 pub struct PropertyDecl {
     pub is_var: bool,
+    /// `lateinit var` — no initializer required; field starts as null on JVM.
+    pub is_lateinit: bool,
     pub name: Symbol,
     pub name_span: Span,
     pub ty: Option<TypeRef>,
     pub init: Option<Expr>,
+    /// Delegate expression: `val x by lazy { ... }`.
+    /// Stores the body of the `lazy` lambda for eager desugaring.
+    pub delegate: Option<Box<Block>>,
     /// Custom getter: `val x: Int get() = expr`.
     pub getter: Option<Block>,
     /// Custom setter: `var x: Int set(value) { ... }`.

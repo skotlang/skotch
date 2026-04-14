@@ -1,4 +1,4 @@
 name   = "96-delegated-property-lazy"
-status = "stub"
-features = ["delegated-property", "lazy", "by", "stdlib"]
-reason = "Requires delegated property (by lazy) with getValue operator convention."
+status = "supported"
+features = ["delegated-property", "lazy", "by", "class"]
+notes = "Desugars `by lazy { }` to eager initialization in the class constructor."

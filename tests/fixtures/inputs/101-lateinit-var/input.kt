@@ -1,11 +1,11 @@
 class Service {
     lateinit var name: String
 
-    fun init(n: String) { name = n }
+    fun setup(n: String) { name = n }
 }
 
 fun main() {
     val s = Service()
-    s.init("myService")
+    s.setup("myService")
     println(s.name)
 }

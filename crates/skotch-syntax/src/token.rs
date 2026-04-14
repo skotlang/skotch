@@ -84,6 +84,8 @@ pub enum TokenKind {
     KwInternal,
     KwOperator,
     KwVararg,
+    KwConstructor,
+    KwLateinit,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,

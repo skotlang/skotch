@@ -127,21 +127,46 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // Pre-register interface entries in constant pool.
     let iface_indices: Vec<u16> = class.interfaces.iter().map(|name| cp.class(name)).collect();
 
+    // Check if primary constructor would conflict with a secondary constructor.
+    // This happens when the class has no explicit primary constructor params
+    // and a secondary constructor has the same number of params.
+    let primary_param_count = class.constructor.params.len().saturating_sub(1);
+    let primary_conflicts = !class.secondary_constructors.is_empty()
+        && class
+            .secondary_constructors
+            .iter()
+            .any(|sec| sec.params.len().saturating_sub(1) == primary_param_count);
+
     // Compile methods.
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
 
     // <init> constructor (skip for interfaces — they have no constructor).
     if !class.is_interface {
-        let init_blob = emit_user_method(
-            &class.constructor,
-            module,
-            &class.name,
-            super_name,
-            &mut cp,
-            code_attr_name_idx,
-            true,
-        );
-        method_blobs.push(init_blob);
+        if !primary_conflicts {
+            let init_blob = emit_user_method(
+                &class.constructor,
+                module,
+                &class.name,
+                super_name,
+                &mut cp,
+                code_attr_name_idx,
+                true,
+            );
+            method_blobs.push(init_blob);
+        }
+        // Secondary constructors — additional <init> methods.
+        for sec_ctor in &class.secondary_constructors {
+            let blob = emit_user_method(
+                sec_ctor,
+                module,
+                &class.name,
+                super_name,
+                &mut cp,
+                code_attr_name_idx,
+                true,
+            );
+            method_blobs.push(blob);
+        }
     }
 
     // Instance methods.
@@ -223,16 +248,31 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // Re-compile methods with new CP.
     let mut method_blobs2 = Vec::new();
     if !class.is_interface {
-        let init2 = emit_user_method(
-            &class.constructor,
-            module,
-            &class.name,
-            super_name,
-            &mut cp2,
-            code2,
-            true,
-        );
-        method_blobs2.push(init2);
+        if !primary_conflicts {
+            let init2 = emit_user_method(
+                &class.constructor,
+                module,
+                &class.name,
+                super_name,
+                &mut cp2,
+                code2,
+                true,
+            );
+            method_blobs2.push(init2);
+        }
+        // Secondary constructors — additional <init> methods.
+        for sec_ctor in &class.secondary_constructors {
+            let blob = emit_user_method(
+                sec_ctor,
+                module,
+                &class.name,
+                super_name,
+                &mut cp2,
+                code2,
+                true,
+            );
+            method_blobs2.push(blob);
+        }
     }
     for method in &class.methods {
         let blob = emit_user_method(
@@ -2145,15 +2185,41 @@ fn walk_block(
                     } else {
                         // NewInstance constructor: stack already has [ref, ref]
                         // Look up the target class constructor to get expected param types.
+                        // Check primary and secondary constructors, picking the one
+                        // whose param count (excluding `this`) matches the arg count.
                         let ctor_params: Vec<Ty> = module
                             .classes
                             .iter()
                             .find(|c| c.name == *class_name)
                             .map(|c| {
+                                // Try primary constructor first.
+                                let primary_count = c.constructor.params.len().saturating_sub(1);
+                                if primary_count == args.len() {
+                                    return c
+                                        .constructor
+                                        .params
+                                        .iter()
+                                        .skip(1)
+                                        .map(|p| c.constructor.locals[p.0 as usize].clone())
+                                        .collect();
+                                }
+                                // Check secondary constructors.
+                                for sec in &c.secondary_constructors {
+                                    let sec_count = sec.params.len().saturating_sub(1);
+                                    if sec_count == args.len() {
+                                        return sec
+                                            .params
+                                            .iter()
+                                            .skip(1)
+                                            .map(|p| sec.locals[p.0 as usize].clone())
+                                            .collect();
+                                    }
+                                }
+                                // Fallback to primary.
                                 c.constructor
                                     .params
                                     .iter()
-                                    .skip(1) // skip `this`
+                                    .skip(1)
                                     .map(|p| c.constructor.locals[p.0 as usize].clone())
                                     .collect()
                             })

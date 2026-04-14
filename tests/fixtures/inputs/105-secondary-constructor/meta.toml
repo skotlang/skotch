@@ -1,4 +1,3 @@
 name   = "105-secondary-constructor"
-status = "stub"
+status = "supported"
 features = ["secondary-constructor", "constructor-delegation", "class"]
-reason = "Requires secondary constructor with `this()` delegation."

@@ -304,8 +304,11 @@ pub struct MirClass {
     pub interfaces: Vec<String>,
     pub fields: Vec<MirField>,
     pub methods: Vec<MirFunction>,
-    /// The `<init>` constructor method.
+    /// The `<init>` constructor method (primary constructor).
     pub constructor: MirFunction,
+    /// Secondary constructors — additional `<init>` methods with different signatures.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secondary_constructors: Vec<MirFunction>,
 }
 
 /// A field in a MIR class.

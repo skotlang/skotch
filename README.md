@@ -357,6 +357,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [IntArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/) | stdlib | `IntArray(n)`, `arr[i]`, `arr[i] = v`, `arr.size` — JVM `newarray`/`iaload`/`iastore`/`arraylength` |
 | [Destructuring](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | §8.1 | `val (a, b) = point` → `component1()`/`component2()` calls; data class componentN auto-generated |
 | [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg numbers: Int)` — args packed into IntArray at call site; for-in over IntArray |
+| [Lateinit var](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `lateinit var name: String` — declared without init, field defaults to null |
+| [Secondary constructors](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5.2 | `constructor(x: Int) : this(x, 0)` — multiple `<init>` methods, delegation chain |
 
 ### Not yet implemented
 

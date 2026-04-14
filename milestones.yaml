@@ -507,7 +507,7 @@ milestones:
 
   - version: "0.6.0"
     title: "Coroutines, Suspend Functions, and Property Delegation"
-    status: planned
+    status: in_progress
     depends_on: ["0.5.0"]
     description: >
       The hardest language features: coroutine CPS transform, property
@@ -530,10 +530,20 @@ milestones:
           - "by remember { mutableStateOf(0) } pattern works"
 
       - name: "Lateinit var"
-        description: "lateinit var name: String. Throws on early access."
+        completed: true
+        description: >
+          lateinit var name: String. Keyword parsed and accepted. Property
+          declared with no initializer, field defaults to null on JVM.
+          Assigned later via method. Fixture: 101-lateinit-var.
 
       - name: "Secondary constructors"
-        description: "constructor(x: Int) : this(x, 0). Chains to primary."
+        completed: true
+        description: >
+          constructor(params) : this(args) { body }. Parsed in class body.
+          MIR lowers to additional <init> methods that delegate to primary.
+          JVM backend emits multiple <init> with different descriptors.
+          Call site selects constructor by argument count.
+          Fixture: 105-secondary-constructor.
 
       - name: "Interface delegation"
         description: >

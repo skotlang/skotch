@@ -1,0 +1,41 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=7
+    0000 op_0xBB
+    0001 nop
+    0002 op_0x0B
+    0003 op_0x59
+    0004 invokespecial Method(Service.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 op_0xC0
+    0012 nop
+    0013 op_0x0B
+    0014 astore 2
+    0016 aload 2
+    0018 op_0xC0
+    0019 nop
+    0020 op_0x0B
+    0021 astore 3
+    0023 ldc "myService"
+    0025 astore 4
+    0027 aload 3
+    0029 aload 4
+    0031 invokevirtual Method(Service.setup:(Ljava/lang/String;)V)
+    0034 aload 2
+    0036 op_0xC0
+    0037 nop
+    0038 op_0x0B
+    0039 astore 5
+    0041 aload 5
+    0043 op_0xB4
+    0044 nop
+    0045 aload 58
+    0047 iconst_3
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 aload 6
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0056 return

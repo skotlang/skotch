@@ -4702,6 +4702,7 @@ fn lower_expr(
                     }],
                     methods: Vec::new(),
                     constructor: ref_init,
+                    secondary_constructors: Vec::new(),
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -4769,6 +4770,7 @@ fn lower_expr(
                     exception_handlers: Vec::new(),
                     vararg_index: None,
                 },
+                secondary_constructors: Vec::new(),
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -4921,6 +4923,7 @@ fn lower_expr(
                 fields: capture_fields,
                 methods: vec![invoke_fn],
                 constructor: init_fn,
+                secondary_constructors: Vec::new(),
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -5072,6 +5075,7 @@ fn lower_expr(
                 fields: Vec::new(),
                 methods: mir_methods,
                 constructor: init_fn,
+                secondary_constructors: Vec::new(),
             });
 
             // Instantiate.
@@ -5537,6 +5541,7 @@ fn lower_enum(
         fields,
         methods: vec![ts_fn],
         constructor: init_fn,
+        secondary_constructors: Vec::new(),
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -5699,6 +5704,24 @@ fn lower_class(
             });
         }
     }
+    // Add delegate parameters as fields (for interface delegation: `Base by b`).
+    // These are constructor params that are not val/var but are referenced as
+    // delegates — the delegate value must be stored in a field so forwarding
+    // methods can access it.
+    let delegate_param_names: rustc_hash::FxHashSet<Symbol> = c
+        .interface_delegates
+        .iter()
+        .map(|(_, param)| *param)
+        .collect();
+    for p in &c.constructor_params {
+        if !p.is_val && !p.is_var && delegate_param_names.contains(&p.name) {
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
+            fields.push(MirField {
+                name: interner.resolve(p.name).to_string(),
+                ty,
+            });
+        }
+    }
     for prop in &c.properties {
         let ty = prop
             .ty
@@ -5742,6 +5765,16 @@ fn lower_class(
     let mut ctor_param_ids: Vec<(Symbol, LocalId)> = Vec::new();
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
+            let param_id = init_fn.new_local(ty);
+            init_fn.params.push(param_id);
+            ctor_param_ids.push((p.name, param_id));
+        }
+    }
+    // Add delegate parameters (non-val/var) as constructor params and track them
+    // for field assignment.
+    for p in &c.constructor_params {
+        if !p.is_val && !p.is_var && delegate_param_names.contains(&p.name) {
             let ty = resolve_type(interner.resolve(p.ty.name), module);
             let param_id = init_fn.new_local(ty);
             init_fn.params.push(param_id);
@@ -5818,7 +5851,14 @@ fn lower_class(
 
     // (val/var constructor params already added above)
     // Initialize body properties with default values.
+    // Properties with `by lazy { ... }` delegates are lowered eagerly:
+    // the lambda body is evaluated during construction and stored in the field.
+    let mut delegate_props: Vec<&skotch_syntax::PropertyDecl> = Vec::new();
     for prop in &c.properties {
+        if prop.delegate.is_some() {
+            delegate_props.push(prop);
+            continue;
+        }
         let (val, ty) = if let Some(init) = &prop.init {
             match init {
                 Expr::IntLit(v, _) => (Some(MirConst::Int(*v as i32)), Ty::Int),
@@ -5850,6 +5890,94 @@ fn lower_class(
                     value: val_id,
                 },
             });
+        }
+    }
+
+    // Eagerly lower `by lazy { ... }` delegate bodies in the constructor.
+    // Each delegate block is executed during construction; the last
+    // expression's value is stored into the backing field.
+    if !delegate_props.is_empty() {
+        let init_fn_idx = module.functions.len() + 2000; // temporary index
+        let mut fb = FnBuilder::new(init_fn_idx, "<init-delegate>".to_string(), Ty::Unit);
+        fb.mf.locals = init_fn.locals.clone();
+        fb.mf.params = init_fn.params.clone();
+        fb.mf.blocks[0].stmts = init_fn.blocks[0].stmts.clone();
+
+        let this_sym = interner.intern("this");
+        let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_id)];
+        for (sym, lid) in &ctor_param_ids {
+            scope.push((*sym, *lid));
+        }
+
+        for prop in &delegate_props {
+            let block = prop.delegate.as_ref().unwrap();
+            let field_name = interner.resolve(prop.name).to_string();
+            // Lower all statements in the delegate body.
+            // The last statement, if it is an expression, produces the
+            // result value for the field.
+            let mut result_local: Option<LocalId> = None;
+            for (i, s) in block.stmts.iter().enumerate() {
+                let is_last = i + 1 == block.stmts.len();
+                if is_last {
+                    // The last statement should be an expression whose value
+                    // we capture for the field.
+                    if let Stmt::Expr(e) = s {
+                        result_local = lower_expr(
+                            e,
+                            &mut fb,
+                            &mut scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            None,
+                        );
+                    } else {
+                        lower_stmt(
+                            s,
+                            &mut fb,
+                            &mut scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            None,
+                        );
+                    }
+                } else {
+                    lower_stmt(
+                        s,
+                        &mut fb,
+                        &mut scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    );
+                }
+            }
+            // Store the result into the field.
+            if let Some(val_id) = result_local {
+                fb.push_stmt(MStmt::Assign {
+                    dest: this_id,
+                    value: Rvalue::PutField {
+                        receiver: this_id,
+                        class_name: class_name.clone(),
+                        field_name,
+                        value: val_id,
+                    },
+                });
+            }
+        }
+        // Transfer lowered results back to init_fn.
+        init_fn.locals = fb.mf.locals;
+        init_fn.blocks = fb.mf.blocks;
+        if let Some(last) = init_fn.blocks.last_mut() {
+            last.terminator = Terminator::Return;
         }
     }
 
@@ -5956,6 +6084,7 @@ fn lower_class(
         fields: fields.clone(),
         methods: stub_methods,
         constructor: init_fn.clone(),
+        secondary_constructors: Vec::new(),
     });
 
     // Lower methods.
@@ -6300,6 +6429,234 @@ fn lower_class(
         }
     }
 
+    // Lower secondary constructors.
+    let mut mir_secondary_ctors = Vec::new();
+    for sec_ctor in &c.secondary_constructors {
+        let mut sec_fn = MirFunction {
+            id: FuncId(0),
+            name: "<init>".to_string(),
+            params: Vec::new(),
+            locals: Vec::new(),
+            blocks: vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            exception_handlers: Vec::new(),
+            vararg_index: None,
+        };
+        // Add 'this' as local 0.
+        let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
+        sec_fn.params.push(sec_this);
+
+        // Add secondary constructor parameters.
+        let this_sym = interner.intern("this");
+        let mut sec_scope: Vec<(Symbol, LocalId)> = vec![(this_sym, sec_this)];
+        for p in &sec_ctor.params {
+            let ty = resolve_type(interner.resolve(p.ty.name), module);
+            let param_id = sec_fn.new_local(ty);
+            sec_fn.params.push(param_id);
+            sec_scope.push((p.name, param_id));
+            sec_fn
+                .param_names
+                .push(interner.resolve(p.name).to_string());
+        }
+
+        // Emit delegation call.
+        if sec_ctor.has_delegation {
+            // `: this(args)` — delegate to another constructor of the same class.
+            let tmp_idx = module.functions.len() + 8000;
+            let mut fb = FnBuilder::new(tmp_idx, "<sec-init>".to_string(), Ty::Unit);
+            fb.mf.locals = sec_fn.locals.clone();
+            fb.mf.params = sec_fn.params.clone();
+            let mut delegate_arg_ids = vec![sec_this]; // receiver
+            for arg_expr in &sec_ctor.delegate_args {
+                if let Some(id) = lower_expr(
+                    arg_expr,
+                    &mut fb,
+                    &mut sec_scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                ) {
+                    delegate_arg_ids.push(id);
+                }
+            }
+            sec_fn.locals = fb.mf.locals;
+            for stmt in fb.mf.blocks[0].stmts.drain(..) {
+                sec_fn.blocks[0].stmts.push(stmt);
+            }
+            // Call the delegate constructor (this class's <init> matching the delegate args).
+            sec_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: sec_this, // dummy
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(class_name.clone()),
+                    args: delegate_arg_ids,
+                },
+            });
+        } else {
+            // No explicit delegation — call super constructor.
+            let super_class_name = c
+                .parent_class
+                .as_ref()
+                .map(|sc| interner.resolve(sc.name).to_string())
+                .unwrap_or_else(|| "java/lang/Object".to_string());
+            sec_fn.blocks[0].stmts.push(MStmt::Assign {
+                dest: sec_this, // dummy
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(super_class_name),
+                    args: vec![sec_this],
+                },
+            });
+        }
+
+        // Lower optional body.
+        if let Some(body) = &sec_ctor.body {
+            let tmp_idx = module.functions.len() + 8001;
+            let mut fb = FnBuilder::new(tmp_idx, "<sec-init-body>".to_string(), Ty::Unit);
+            fb.mf.locals = sec_fn.locals.clone();
+            fb.mf.params = sec_fn.params.clone();
+            fb.mf.blocks[0].stmts = sec_fn.blocks[0].stmts.clone();
+            // Add fields to scope for body access, track for writeback.
+            let mut field_locals: Vec<(String, LocalId)> = Vec::new();
+            for field in &fields {
+                let field_sym = interner.intern(&field.name);
+                let fl = fb.new_local(field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: fl,
+                    value: Rvalue::GetField {
+                        receiver: sec_this,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                    },
+                });
+                sec_scope.push((field_sym, fl));
+                field_locals.push((field.name.clone(), fl));
+            }
+            for s in &body.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut sec_scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            // Write back fields to the object.
+            for (field_name, field_local) in &field_locals {
+                fb.push_stmt(MStmt::Assign {
+                    dest: sec_this, // dummy dest
+                    value: Rvalue::PutField {
+                        receiver: sec_this,
+                        class_name: class_name.clone(),
+                        field_name: field_name.clone(),
+                        value: *field_local,
+                    },
+                });
+            }
+            sec_fn.locals = fb.mf.locals;
+            sec_fn.blocks = fb.mf.blocks;
+            if let Some(last) = sec_fn.blocks.last_mut() {
+                last.terminator = Terminator::Return;
+            }
+        }
+
+        mir_secondary_ctors.push(sec_fn);
+    }
+
+    // Generate forwarding methods for interface delegation (`Base by b`).
+    for (iface_sym, delegate_sym) in &c.interface_delegates {
+        let iface_name = interner.resolve(*iface_sym).to_string();
+        let delegate_field = interner.resolve(*delegate_sym).to_string();
+        // Look up the interface in already-lowered MIR classes.
+        let iface_methods: Vec<(String, Ty, Vec<Ty>)> = module
+            .classes
+            .iter()
+            .find(|cls| cls.name == iface_name && cls.is_interface)
+            .map(|cls| {
+                cls.methods
+                    .iter()
+                    .map(|m| {
+                        // Collect param types (skip `this` at index 0).
+                        let param_tys: Vec<Ty> = m
+                            .params
+                            .iter()
+                            .skip(1)
+                            .map(|pid| m.locals[pid.0 as usize].clone())
+                            .collect();
+                        (m.name.clone(), m.return_ty.clone(), param_tys)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        for (method_name, return_ty, param_tys) in &iface_methods {
+            // Skip if the class already defines this method explicitly.
+            if mir_methods.iter().any(|m| m.name == *method_name) {
+                continue;
+            }
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, method_name.clone(), return_ty.clone());
+
+            // `this` parameter.
+            let this_local = fb.new_local(Ty::Class(class_name.clone()));
+            fb.mf.params.push(this_local);
+
+            // Additional method parameters (mirror the interface signature).
+            let mut fwd_args = Vec::new();
+            for pty in param_tys {
+                let pid = fb.new_local(pty.clone());
+                fb.mf.params.push(pid);
+                fwd_args.push(pid);
+            }
+
+            // Load the delegate field: `this.<delegate_field>`
+            let delegate_local = fb.new_local(Ty::Class(iface_name.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: delegate_local,
+                value: Rvalue::GetField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: delegate_field.clone(),
+                },
+            });
+
+            // Call the interface method on the delegate.
+            let mut call_args = vec![delegate_local];
+            call_args.extend(fwd_args);
+            let result_local = fb.new_local(return_ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: result_local,
+                value: Rvalue::Call {
+                    kind: CallKind::Virtual {
+                        class_name: iface_name.clone(),
+                        method_name: method_name.clone(),
+                    },
+                    args: call_args,
+                },
+            });
+
+            if *return_ty == Ty::Unit {
+                fb.set_terminator(Terminator::Return);
+            } else {
+                fb.set_terminator(Terminator::ReturnValue(result_local));
+            }
+
+            mir_methods.push(fb.finish());
+        }
+    }
+
     // Replace the stub class with the fully-lowered version.
     module.classes[class_idx] = MirClass {
         name: class_name,
@@ -6311,6 +6668,7 @@ fn lower_class(
         fields,
         methods: mir_methods,
         constructor: init_fn,
+        secondary_constructors: mir_secondary_ctors,
     };
 }
 
@@ -6390,6 +6748,7 @@ fn lower_interface(
         fields: Vec::new(),
         methods: stub_methods,
         constructor: dummy_init.clone(),
+        secondary_constructors: Vec::new(),
     });
 
     // Lower method bodies for default methods (non-abstract).
