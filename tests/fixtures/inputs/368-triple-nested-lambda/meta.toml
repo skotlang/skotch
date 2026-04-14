@@ -1,0 +1,2 @@
+status = "supported"
+features = ["lambda", "nested-closure", "closure-capture"]

@@ -1,0 +1,87 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 op_0xBA
+    0001 nop
+    0002 op_0x1A
+    0003 nop
+    0004 nop
+    0005 op_0x4B
+    0006 op_0x2A
+    0007 iconst_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 op_0xB9
+    0012 nop
+    0013 op_0x24
+    0014 iconst_m1
+    0015 nop
+    0016 op_0xC0
+    0017 nop
+    0018 op_0x26
+    0019 invokevirtual Method(java/lang/Number.intValue:()I)
+    0022 op_0x3C
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 op_0x1B
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (I)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 op_0x1A
+    0001 op_0xBA
+    0002 nop
+    0003 op_0x53
+    0004 nop
+    0005 nop
+    0006 op_0x4C
+    0007 op_0x2B
+    0008 iconst_2
+    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0012 op_0xB9
+    0013 nop
+    0014 op_0x24
+    0015 iconst_m1
+    0016 nop
+    0017 op_0xC0
+    0018 nop
+    0019 op_0x26
+    0020 invokevirtual Method(java/lang/Number.intValue:()I)
+    0023 op_0xAC
+method        main$lambda$0$0 (II)I 0x001A
+  code        max_stack=2 max_locals=3
+    0000 op_0x1A
+    0001 op_0x1B
+    0002 op_0xBA
+    0003 nop
+    0004 op_0x4B
+    0005 nop
+    0006 nop
+    0007 op_0x4D
+    0008 op_0x2C
+    0009 iconst_3
+    0010 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0013 op_0xB9
+    0014 nop
+    0015 op_0x24
+    0016 iconst_m1
+    0017 nop
+    0018 op_0xC0
+    0019 nop
+    0020 op_0x26
+    0021 invokevirtual Method(java/lang/Number.intValue:()I)
+    0024 op_0xAC
+method        main$lambda$0$0$0 (III)I 0x001A
+  code        max_stack=2 max_locals=3
+    0000 op_0x1A
+    0001 op_0x1B
+    0002 iadd
+    0003 op_0x1C
+    0004 iadd
+    0005 op_0xAC
+class_attr    BootstrapMethods (32 bytes)

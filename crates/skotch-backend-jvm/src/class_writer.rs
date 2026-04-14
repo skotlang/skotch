@@ -360,9 +360,21 @@ fn emit_user_method(
     // Super constructor call is now emitted in the MIR body
     // via CallKind::Constructor, not hardcoded here.
 
-    // Emit block statements.
+    // ── Two-pass multi-block codegen (same approach as emit_method) ──
+    struct JumpPatch {
+        offset_pos: usize,
+        insn_pos: usize,
+        target_block: u32,
+    }
+
+    let mut block_offsets: Vec<usize> = Vec::with_capacity(func.blocks.len());
+    let mut patches: Vec<JumpPatch> = Vec::new();
+    let mut is_target = vec![false; func.blocks.len()];
     let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+
     for (bi, block) in func.blocks.iter().enumerate() {
+        block_offsets.push(code.len());
+
         walk_block(
             block,
             bi,
@@ -377,9 +389,10 @@ fn emit_user_method(
             &mut next_slot,
             &mut cmp_targets,
         );
+
         // Emit terminator.
         match &block.terminator {
-            Terminator::Return => code.push(0xB1),
+            Terminator::Return => code.push(0xB1), // return (void)
             Terminator::ReturnValue(local) => {
                 load_local(
                     &mut code,
@@ -390,18 +403,329 @@ fn emit_user_method(
                     &func.locals,
                 );
                 let ty = &func.locals[local.0 as usize];
-                match ty {
+                // Insert checkcast/unbox if the local is Any/Object but
+                // the function return type is more specific.
+                if matches!(ty, Ty::Any | Ty::Nullable(_)) && *ty != func.return_ty {
+                    match &func.return_ty {
+                        Ty::Int => {
+                            let ci = cp.class("java/lang/Integer");
+                            code.push(0xC0); // checkcast
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
+                            code.push(0xB6); // invokevirtual
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Long => {
+                            let ci = cp.class("java/lang/Long");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Double => {
+                            let ci = cp.class("java/lang/Double");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::String => {
+                            let ci = cp.class("java/lang/String");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        Ty::Class(name) => {
+                            let ci = cp.class(name);
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+                // Use the FUNCTION's return type for the return opcode.
+                match &func.return_ty {
                     Ty::Int | Ty::Bool => code.push(0xAC), // ireturn
                     Ty::Long => code.push(0xAD),           // lreturn
                     Ty::Double => code.push(0xAF),         // dreturn
                     _ => code.push(0xB0),                  // areturn
                 }
             }
-            _ => code.push(0xB1), // default return
+            Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                load_local(
+                    code.as_mut(),
+                    &mut stack,
+                    &mut max_stack,
+                    &mut slots,
+                    *cond,
+                    &func.locals,
+                );
+                let insn_pos = code.len();
+                code.push(0x99); // ifeq
+                let offset_pos = code.len();
+                code.write_i16::<BigEndian>(0).unwrap(); // placeholder
+                bump(&mut stack, &mut max_stack, -1);
+                patches.push(JumpPatch {
+                    offset_pos,
+                    insn_pos,
+                    target_block: *else_block,
+                });
+                is_target[*else_block as usize] = true;
+                if *then_block as usize != bi + 1 {
+                    let insn2 = code.len();
+                    code.push(0xA7); // goto
+                    let off2 = code.len();
+                    code.write_i16::<BigEndian>(0).unwrap();
+                    patches.push(JumpPatch {
+                        offset_pos: off2,
+                        insn_pos: insn2,
+                        target_block: *then_block,
+                    });
+                    is_target[*then_block as usize] = true;
+                }
+            }
+            Terminator::Goto(target) => {
+                let insn_pos = code.len();
+                code.push(0xA7); // goto
+                let offset_pos = code.len();
+                code.write_i16::<BigEndian>(0).unwrap();
+                patches.push(JumpPatch {
+                    offset_pos,
+                    insn_pos,
+                    target_block: *target,
+                });
+                is_target[*target as usize] = true;
+            }
         }
     }
 
+    // Pass 2: patch jump offsets.
+    for patch in &patches {
+        let target_off = block_offsets[patch.target_block as usize];
+        let relative = (target_off as i32) - (patch.insn_pos as i32);
+        let bytes = (relative as i16).to_be_bytes();
+        code[patch.offset_pos] = bytes[0];
+        code[patch.offset_pos + 1] = bytes[1];
+    }
+
     let max_locals = next_slot as u16;
+
+    // ── StackMapTable ───────────────────────────────────────────────
+    let initial_locals_count: u16 = func.params.len() as u16;
+    let max_slots = next_slot as usize;
+
+    let mut slot_to_local: Vec<Option<u32>> = vec![None; max_slots];
+    for (&mir_id, &jvm_slot) in slots.iter() {
+        slot_to_local[jvm_slot as usize] = Some(mir_id);
+    }
+
+    // Per-block slot sets (fixed-point iteration for loops).
+    let mut live_at_end: Vec<Vec<bool>> = vec![vec![true; max_slots]; func.blocks.len()];
+    let mut inherited_per_block: Vec<Vec<bool>> = vec![vec![false; max_slots]; func.blocks.len()];
+    for _iteration in 0..4 {
+        let mut changed = false;
+        for (bi, _) in func.blocks.iter().enumerate() {
+            let mut inherited = vec![true; max_slots];
+            let mut has_pred = false;
+            for (pi, pblk) in func.blocks.iter().enumerate() {
+                let is_pred = match &pblk.terminator {
+                    Terminator::Branch {
+                        then_block,
+                        else_block,
+                        ..
+                    } => *then_block as usize == bi || *else_block as usize == bi,
+                    Terminator::Goto(t) => *t as usize == bi,
+                    _ => false,
+                };
+                if is_pred {
+                    has_pred = true;
+                    for s in 0..max_slots {
+                        inherited[s] = inherited[s] && live_at_end[pi][s];
+                    }
+                }
+            }
+            if !has_pred && bi == 0 {
+                for (s, val) in inherited.iter_mut().enumerate() {
+                    *val = s < (initial_locals_count as usize);
+                }
+            } else if !has_pred {
+                inherited = vec![false; max_slots];
+            }
+            inherited_per_block[bi] = inherited.clone();
+
+            let start = block_offsets[bi];
+            let end = if bi + 1 < block_offsets.len() {
+                block_offsets[bi + 1]
+            } else {
+                code.len()
+            };
+            let mut assigned = inherited;
+            scan_stores(&code[..end], start, end, max_slots, &mut assigned);
+            if assigned != live_at_end[bi] {
+                live_at_end[bi] = assigned;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    // Collect all target offsets.
+    enum TargetSource {
+        Block(usize),
+        Cmp(usize),
+    }
+    let mut all_targets: Vec<(usize, TargetSource)> = Vec::new();
+    for (bi, &is_tgt) in is_target.iter().enumerate() {
+        if is_tgt && bi < block_offsets.len() {
+            all_targets.push((block_offsets[bi], TargetSource::Block(bi)));
+        }
+    }
+    for (ci, ct) in cmp_targets.iter().enumerate() {
+        all_targets.push((ct.offset, TargetSource::Cmp(ci)));
+    }
+    all_targets.sort_by_key(|&(off, _)| off);
+    all_targets.dedup_by_key(|t| t.0);
+
+    let mut stack_map_entries: Vec<u8> = Vec::new();
+    let mut smt_count: u16 = 0;
+    let mut prev_offset: i32 = -1;
+
+    for &(off, ref source) in &all_targets {
+        let delta = if prev_offset < 0 {
+            off as i32
+        } else {
+            (off as i32) - prev_offset - 1
+        };
+        prev_offset = off as i32;
+        smt_count += 1;
+
+        match source {
+            TargetSource::Block(target_bi) => {
+                let mut merged = vec![true; max_slots];
+                let mut any_pred = false;
+                for (pi, pblk) in func.blocks.iter().enumerate() {
+                    let is_pred = match &pblk.terminator {
+                        Terminator::Branch {
+                            then_block,
+                            else_block,
+                            ..
+                        } => {
+                            *then_block as usize == *target_bi || *else_block as usize == *target_bi
+                        }
+                        Terminator::Goto(t) => *t as usize == *target_bi,
+                        _ => false,
+                    };
+                    if is_pred {
+                        any_pred = true;
+                        for s in 0..max_slots {
+                            merged[s] = merged[s] && live_at_end[pi][s];
+                        }
+                    }
+                }
+                if !any_pred {
+                    merged = vec![false; max_slots];
+                }
+
+                let num_locals = merged
+                    .iter()
+                    .rposition(|&live| live)
+                    .map(|i| (i + 1) as u16)
+                    .unwrap_or(initial_locals_count);
+
+                stack_map_entries.push(255); // full_frame
+                stack_map_entries
+                    .write_u16::<BigEndian>(delta as u16)
+                    .unwrap();
+                let mut verif_count = 0u16;
+                let mut verif_entries = Vec::new();
+                {
+                    let mut s = 0usize;
+                    while s < num_locals as usize {
+                        let live = merged.get(s).copied().unwrap_or(false);
+                        let mut entry_buf = Vec::new();
+                        write_slot_verif(&mut entry_buf, cp, s, live, &slot_to_local, func);
+                        verif_entries.extend_from_slice(&entry_buf);
+                        verif_count += 1;
+                        let is_wide = if live {
+                            slot_to_local
+                                .get(s)
+                                .copied()
+                                .flatten()
+                                .map(|mir_id| {
+                                    matches!(func.locals[mir_id as usize], Ty::Long | Ty::Double)
+                                })
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        s += if is_wide { 2 } else { 1 };
+                    }
+                }
+                stack_map_entries
+                    .write_u16::<BigEndian>(verif_count)
+                    .unwrap();
+                stack_map_entries.extend_from_slice(&verif_entries);
+                stack_map_entries.write_u16::<BigEndian>(0).unwrap();
+            }
+            TargetSource::Cmp(ci) => {
+                let ct = &cmp_targets[*ci];
+                let mut live = inherited_per_block[ct.block_idx].clone();
+                let blk_start = block_offsets[ct.block_idx];
+                scan_stores(&code, blk_start, ct.cmp_start, max_slots, &mut live);
+
+                let num_locals = live
+                    .iter()
+                    .rposition(|&v| v)
+                    .map(|i| (i + 1) as u16)
+                    .unwrap_or(initial_locals_count);
+
+                stack_map_entries.push(255); // full_frame
+                stack_map_entries
+                    .write_u16::<BigEndian>(delta as u16)
+                    .unwrap();
+                let mut cmp_verif_count = 0u16;
+                let mut cmp_verif_entries = Vec::new();
+                {
+                    let mut s = 0usize;
+                    while s < num_locals as usize {
+                        let lv = live.get(s).copied().unwrap_or(false);
+                        write_slot_verif(&mut cmp_verif_entries, cp, s, lv, &slot_to_local, func);
+                        cmp_verif_count += 1;
+                        let is_wide = if lv {
+                            slot_to_local
+                                .get(s)
+                                .copied()
+                                .flatten()
+                                .map(|mid| {
+                                    matches!(func.locals[mid as usize], Ty::Long | Ty::Double)
+                                })
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        s += if is_wide { 2 } else { 1 };
+                    }
+                }
+                stack_map_entries
+                    .write_u16::<BigEndian>(cmp_verif_count)
+                    .unwrap();
+                stack_map_entries.extend_from_slice(&cmp_verif_entries);
+                stack_map_entries
+                    .write_u16::<BigEndian>(ct.stack_count)
+                    .unwrap();
+                stack_map_entries.extend(std::iter::repeat_n(1u8, ct.stack_count as usize));
+            }
+        }
+    }
+
+    // Build the Code attribute.
     let mut code_attr = Vec::<u8>::new();
     code_attr
         .write_u16::<BigEndian>(max_stack.max(1) as u16)
@@ -409,8 +733,19 @@ fn emit_user_method(
     code_attr.write_u16::<BigEndian>(max_locals.max(1)).unwrap();
     code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
     code_attr.write_all(&code).unwrap();
-    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table
-    code_attr.write_u16::<BigEndian>(0).unwrap(); // code attributes
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+
+    if smt_count > 0 {
+        let smt_name_idx = cp.utf8("StackMapTable");
+        code_attr.write_u16::<BigEndian>(1).unwrap(); // attributes_count = 1
+        code_attr.write_u16::<BigEndian>(smt_name_idx).unwrap();
+        let smt_len = 2 + stack_map_entries.len();
+        code_attr.write_u32::<BigEndian>(smt_len as u32).unwrap();
+        code_attr.write_u16::<BigEndian>(smt_count).unwrap();
+        code_attr.write_all(&stack_map_entries).unwrap();
+    } else {
+        code_attr.write_u16::<BigEndian>(0).unwrap(); // attributes_count = 0
+    }
 
     let mut method = Vec::<u8>::new();
     method.write_u16::<BigEndian>(access).unwrap();
