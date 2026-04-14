@@ -333,32 +333,35 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Init blocks](https://kotlinlang.org/spec/declarations.html#class-initialization) | §4.5.2 | `init { }` blocks execute during construction, access constructor params |
 | [`print()`](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/print.html) | stdlib | `print()` without trailing newline — all type overloads |
 | Language Server Protocol | — | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions via `skotch lsp` |
+| [Inheritance](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | `open class`, `override fun`, `super` calls, 3-level chains, inherited fields |
+| [Interfaces](https://kotlinlang.org/spec/declarations.html#interface-declaration) | §4.5.3 | Declaration, implementation, abstract + default methods, `invokeinterface` |
+| [Abstract classes](https://kotlinlang.org/spec/declarations.html#abstract-classes) | §4.5.1 | `abstract class` with `abstract fun`, template method pattern |
+| [Sealed classes](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | §4.5.5 | Sealed hierarchies, exhaustive `when` + `is` patterns, smart cast narrowing |
+| [Enum classes](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | §4.5.7 | Real MirClass with constructor params, `.name`, `when` matching |
+| [Smart casts](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `is`/`!is` type checks (instanceof + checkcast), null-check narrowing |
+| [Lambda expressions](https://kotlinlang.org/spec/expressions.html#lambda-literals) | §7.2.10 | Closure capture (val + var with Ref boxing), trailing lambda, `it`, nested lambdas |
+| [Function types](https://kotlinlang.org/spec/type-system.html#function-types) | §3.5 | `(Int) -> String` syntax, receiver types, erased to Object on JVM |
+| [Scope functions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/let.html) | stdlib | `let`, `also`, `run`, `apply`, `with`, `repeat` — MIR intrinsics |
+| [SAM conversions](https://kotlinlang.org/spec/expressions.html#sam-conversions) | §7.2.10.2 | `Interface { lambda }` → anonymous `object : Interface` |
+| [Object expressions](https://kotlinlang.org/spec/expressions.html#object-literal) | §7.1.8 | `object : Interface { override fun ... }` |
+| [Generics](https://kotlinlang.org/spec/declarations.html#type-parameters) | §4.6 | Generic functions/classes, upper bounds, variance (`in`/`out`), star projection, type erasure |
+| [Reified type params](https://kotlinlang.org/spec/declarations.html#type-parameters) | §4.6 | `inline fun <reified T>` with `is T` check inlined at call site |
+| [Type aliases](https://kotlinlang.org/spec/declarations.html#type-alias) | §4.7 | `typealias Name = Type` — parsed and resolved |
+| [Property getters](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val x: Int get() = expr` — custom getters compiled as synthetic methods |
 
 ### Not yet implemented
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Inheritance & override | [§4.5](https://kotlinlang.org/spec/declarations.html#class-declaration) | Hard | `open class`, `override fun`, `super` calls |
 | Data class equals/hashCode/copy | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Medium | `toString()` works; `equals()`/`hashCode()`/`copy()`/`componentN()` not yet synthesized |
-| Interfaces | [§4.5.3](https://kotlinlang.org/spec/declarations.html#interface-declaration) | Hard | Declaration, implementation, default methods |
-| Enums | [§4.5.7](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | Medium | Enum constants, entries, values() |
-| Sealed classes | [§4.5.5](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | Hard | Sealed hierarchies, exhaustive when |
-| Generics | [§4.6](https://kotlinlang.org/spec/declarations.html#type-parameters) | Hard | Type parameters, bounds, variance |
-| Lambdas | [§7.2.10](https://kotlinlang.org/spec/expressions.html#lambda-literals) | Hard | Lambda literals, closures, `it` parameter |
-| Safe call (`?.`) | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Medium | Parsed; needs field/method dispatch on nullable receiver |
-| Non-null assert (`!!`) | [§3.3](https://kotlinlang.org/spec/type-system.html#nullable-types) | Easy | Parsed; passthrough (no NullPointerException yet) |
-| Type checks (`is`/`!is`) | [§7.6.3](https://kotlinlang.org/spec/expressions.html#type-checking-and-containment-checking-expressions) | Medium | Parsed; MIR lowered as stub (always true) |
-| Type casts (`as`/`as?`) | [§7.6.4](https://kotlinlang.org/spec/expressions.html#cast-expression) | Medium | Parsed; MIR lowered as no-op passthrough |
+| Higher-order function dispatch | [§7.2](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | Hard | Passing lambdas as function-typed parameters (needs `$Callable` or invokedynamic) |
 | Try/catch | [§7.4.5](https://kotlinlang.org/spec/expressions.html#try-expression) | Medium | Parsed; catch blocks need JVM exception tables |
-| Throw expression | [§7.4.6](https://kotlinlang.org/spec/expressions.html#throw-expressions) | Medium | Parsed; needs `athrow` opcode |
-| Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` (needs generics + lambdas) |
+| Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` |
 | Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
-| Type aliases | [§4.7](https://kotlinlang.org/spec/declarations.html#type-alias) | Easy | `typealias` erased at compile time |
 | Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
 | Annotations | [§4.8](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | Medium | Declaration, retention, reflection |
 | Operator overloading | [§7.5](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | Medium | `plus`, `minus`, `compareTo`, `invoke` |
-| `else if` chains with return | — | Medium | All-branches-return in nested if (use `when` as workaround) |
 
 ## Running the tests
 

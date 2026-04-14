@@ -140,6 +140,8 @@ pub struct TypeParam {
     pub name: Symbol,
     /// Upper bound: `T : Comparable<T>` → bound is `Comparable`.
     pub bound: Option<Symbol>,
+    /// `reified T` — type is available at runtime (inline functions only).
+    pub is_reified: bool,
     pub span: Span,
 }
 
@@ -314,6 +316,8 @@ pub enum Expr {
     Call {
         callee: Box<Expr>,
         args: Vec<CallArg>,
+        /// Explicit type arguments: `f<String>(arg)`.
+        type_args: Vec<TypeRef>,
         span: Span,
     },
     Binary {

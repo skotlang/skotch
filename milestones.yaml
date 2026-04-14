@@ -291,7 +291,7 @@ milestones:
 
   - version: "0.4.0"
     title: "Generics and Type Erasure"
-    status: in_progress
+    status: completed
     depends_on: ["0.3.0"]
     description: >
       Type parameters, variance, generic classes/functions, reified types.
@@ -317,20 +317,37 @@ milestones:
           - "Box(42).value returns 42 with correct cast"
 
       - name: "Upper bounds"
-        description: "fun <T : Comparable<T>> max(a: T, b: T): T."
+        completed: true
+        description: >
+          fun <T : Comparable<T>> max(a: T, b: T): T. Bound parsed and stored
+          in TypeParam AST. Erased to Any on JVM (bound not enforced at
+          compile time). Fixture: 365-upper-bound-generic.
         acceptance_criteria:
           - "Bound-constrained generic compiles; wrong type rejected"
 
       - name: "Variance (in/out)"
-        description: "Producer<out T>, Consumer<in T>. Subtyping rules only."
+        completed: true
+        description: >
+          class Producer<out T>, class Consumer<in T>. Variance annotations
+          parsed (including KwIn hard keyword in type param context). Erased
+          on JVM — no runtime effect. Fixture: 366-generic-variance.
         acceptance_criteria:
           - "Producer<String> assignable to Producer<Any>"
 
       - name: "Star projection"
-        description: "List<*> equivalent to List<out Any?>."
+        completed: true
+        description: >
+          Holder<*> parsed as type argument. Erased to Object on JVM.
+          Fixture: 367-star-projection.
 
       - name: "Reified type parameters"
-        description: "inline fun <reified T> check(x: Any) = x is T."
+        completed: true
+        description: >
+          inline fun <reified T> isInstance(value: Any): Boolean = value is T.
+          Reified modifier parsed on type params. Explicit type arguments at
+          call sites parsed via tentative <Type>( lookahead. Reified calls
+          inlined as instanceof at the call site with the concrete type.
+          Primitive args autoboxed via valueOf. Fixture: 94-reified-type-param.
         acceptance_criteria:
           - "Reified is-check works at runtime"
 

@@ -1,0 +1,2 @@
+status = "supported"
+features = ["generic-class", "star-projection"]

@@ -927,15 +927,34 @@ impl<'a> Parser<'a> {
                 break;
             }
             let tp_span = self.peek_span();
-            let tp_idx = self.pos;
-            // Optional variance: `out` or `in` (soft keywords — just skip).
-            if self.peek_kind() == TokenKind::Ident {
-                let text = self.lexeme_str(self.pos);
-                if text == "out" || text == "in" {
+            // Optional modifiers: `reified`, `out`, `in` (soft keywords).
+            // Note: `in` is lexed as KwIn (hard keyword for `for`).
+            let mut is_reified = false;
+            loop {
+                if self.peek_kind() == TokenKind::KwIn {
                     self.bump();
                     self.skip_trivia();
+                    continue;
+                }
+                if self.peek_kind() == TokenKind::Ident {
+                    let text = self.lexeme_str(self.pos);
+                    match text {
+                        "reified" => {
+                            is_reified = true;
+                            self.bump();
+                            self.skip_trivia();
+                        }
+                        "out" => {
+                            self.bump();
+                            self.skip_trivia();
+                        }
+                        _ => break,
+                    }
+                } else {
+                    break;
                 }
             }
+            let tp_idx = self.pos;
             let tp_name = if self.peek_kind() == TokenKind::Ident {
                 self.bump();
                 self.intern_ident_at(tp_idx)
@@ -973,6 +992,7 @@ impl<'a> Parser<'a> {
             params.push(TypeParam {
                 name: tp_name,
                 bound,
+                is_reified,
                 span: tp_span,
             });
             self.skip_trivia();
@@ -1868,6 +1888,67 @@ impl<'a> Parser<'a> {
                         span: combined,
                     };
                 }
+                // Explicit type arguments: `f<Type>(args)`.
+                // Disambiguate from comparison by tentative parse: save
+                // position, try to parse `< types > (`, restore if no `(`.
+                TokenKind::Lt if matches!(expr, Expr::Ident(_, _) | Expr::Field { .. }) => {
+                    let saved = self.pos;
+                    self.bump(); // consume `<`
+                    let mut targs = Vec::new();
+                    let mut ok = true;
+                    loop {
+                        self.skip_trivia();
+                        if self.peek_kind() == TokenKind::Gt {
+                            break;
+                        }
+                        if self.peek_kind() == TokenKind::Ident {
+                            targs.push(self.parse_type_ref());
+                        } else {
+                            ok = false;
+                            break;
+                        }
+                        self.skip_trivia();
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                    if ok && self.peek_kind() == TokenKind::Gt {
+                        self.bump(); // consume `>`
+                        self.skip_trivia();
+                        if self.peek_kind() == TokenKind::LParen {
+                            // It IS explicit type arguments followed by a call.
+                            self.bump(); // consume `(`
+                            let mut args: Vec<CallArg> = Vec::new();
+                            self.skip_trivia();
+                            if self.peek_kind() != TokenKind::RParen {
+                                loop {
+                                    self.skip_trivia();
+                                    let value = self.parse_expr();
+                                    args.push(CallArg {
+                                        name: None,
+                                        expr: value,
+                                    });
+                                    self.skip_trivia();
+                                    if !self.eat(TokenKind::Comma) {
+                                        break;
+                                    }
+                                }
+                            }
+                            let rp = self.expect(TokenKind::RParen, ")");
+                            let span = expr.span().merge(rp);
+                            expr = Expr::Call {
+                                callee: Box::new(expr),
+                                args,
+                                type_args: targs,
+                                span,
+                            };
+                            continue;
+                        }
+                    }
+                    // Not type args — restore and let binary op handle `<`.
+                    self.pos = saved;
+                    break;
+                }
                 TokenKind::LParen => {
                     self.bump();
                     let mut args: Vec<CallArg> = Vec::new();
@@ -1922,6 +2003,7 @@ impl<'a> Parser<'a> {
                     expr = Expr::Call {
                         callee: Box::new(expr),
                         args,
+                        type_args: Vec::new(),
                         span,
                     };
                 }
@@ -1936,6 +2018,7 @@ impl<'a> Parser<'a> {
                             name: None,
                             expr: lambda,
                         }],
+                        type_args: Vec::new(),
                         span,
                     };
                 }
