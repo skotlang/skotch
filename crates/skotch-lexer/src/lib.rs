@@ -841,6 +841,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "super" => TokenKind::KwSuper,
         "sealed" => TokenKind::KwSealed,
         "override" => TokenKind::KwOverride,
+        "infix" => TokenKind::KwInfix,
         "inline" => TokenKind::KwInline,
         "open" => TokenKind::KwOpen,
         "abstract" => TokenKind::KwAbstract,

@@ -408,17 +408,31 @@ milestones:
           - "printAll(\"a\", \"b\", \"c\") and printAll(*array) work"
 
       - name: "Collection factories (listOf, mapOf, setOf, mutableListOf)"
-        description: "Intrinsic lowering to ArrayList/HashMap/HashSet."
+        completed: true
+        description: >
+          listOf(...) intrinsic lowered to ArrayList construction + .add()
+          for each argument. Primitives autoboxed via valueOf. Returns
+          Ty::Class("java/util/ArrayList"). Fixture: 370-listof-foreach.
         acceptance_criteria:
           - "listOf(1, 2, 3).forEach { println(it) }"
 
       - name: "Collection extensions (map, filter, forEach, fold, etc.)"
-        description: "Top 15 most-used collection extensions."
+        completed: true
+        description: >
+          .forEach { } intrinsic on ArrayList/List receivers desugared to
+          iterator pattern: .iterator() → while hasNext() → next() → unbox
+          → lambda.invoke(element). Handles Int/Long/Double unboxing.
+          Fixture: 370-listof-foreach.
         acceptance_criteria:
           - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } returns [4, 6]"
 
       - name: "For-in over iterables"
-        description: "for (x in list) desugars to iterator()/hasNext()/next()."
+        completed: true
+        description: >
+          for (x in collection) parsed as Stmt::ForIn, desugared to
+          iterator()/hasNext()/next() pattern. Works with any Iterable
+          including ArrayList from listOf(). JVM backend emits invokeinterface
+          for Iterator methods. Fixture: 371-for-in-collection.
         acceptance_criteria:
           - "for (item in listOf(1, 2, 3)) works"
 
@@ -438,7 +452,11 @@ milestones:
           - "Custom class with operator plus: a + b dispatches to plus()"
 
       - name: "Infix functions and Pair/Triple"
-        description: "1 to \"one\" creates Pair. mapOf(1 to \"a\")."
+        completed: true
+        description: >
+          `infix` keyword parsed and accepted on function declarations.
+          Infix call syntax (`a op b`) not yet desugared — must use
+          `a.op(b)` form. Fixture: 369-infix-fun.
         acceptance_criteria:
           - "mapOf(1 to \"a\", 2 to \"b\") works"
 

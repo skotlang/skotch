@@ -1,0 +1,4 @@
+name   = "369-infix-fun"
+status = "supported"
+features = ["infix", "extension-function"]
+reason = "Requires infix keyword parsing on extension function declarations."

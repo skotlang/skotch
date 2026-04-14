@@ -1,0 +1,2 @@
+status = "supported"
+features = ["listOf", "forEach", "lambda", "collection"]

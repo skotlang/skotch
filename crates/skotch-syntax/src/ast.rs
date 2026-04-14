@@ -279,6 +279,13 @@ pub enum Stmt {
         body: Block,
         span: Span,
     },
+    /// `for (name in collection) { body }` — collection iteration.
+    ForIn {
+        var_name: Symbol,
+        iterable: Expr,
+        body: Block,
+        span: Span,
+    },
     /// `lhs = rhs` reassignment (for `var` targets).
     Assign {
         target: Symbol,

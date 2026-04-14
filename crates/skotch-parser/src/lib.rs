@@ -227,6 +227,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwOpen
                     | TokenKind::KwAbstract
                     | TokenKind::KwSealed
+                    | TokenKind::KwInfix
                     | TokenKind::KwInline
                     | TokenKind::KwPrivate
                     | TokenKind::KwProtected
@@ -503,6 +504,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwOverride
                         | TokenKind::KwOpen
                         | TokenKind::KwAbstract
+                        | TokenKind::KwInfix
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
@@ -821,6 +823,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwOverride
                         | TokenKind::KwOpen
                         | TokenKind::KwAbstract
+                        | TokenKind::KwInfix
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
@@ -1587,7 +1590,7 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         self.expect(TokenKind::LParen, "'(' after 'for'");
         self.skip_trivia();
-        // Parse: varName in start..end
+        // Parse: varName in start..end  OR  varName in collection
         let var_name_idx = self.pos;
         let var_span = self.peek_span();
         let var_name = if self.peek_kind() == TokenKind::Ident {
@@ -1603,48 +1606,79 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let range_start = self.parse_expr();
         self.skip_trivia();
-        // Range operator: .. (inclusive), until (exclusive), downTo (descending)
-        let mut exclusive = false;
-        let mut descending = false;
-        if self.peek_kind() == TokenKind::DotDot {
-            self.bump();
-        } else if self.peek_kind() == TokenKind::Ident {
-            let idx = self.pos;
-            let text = match self.payload(idx) {
-                Some(TokenPayload::Ident(s)) => s.clone(),
-                _ => String::new(),
+
+        // Determine if this is a range-based for or a collection-based for-in.
+        // If the next token is `)`, this is `for (x in collection)`.
+        let is_range = self.peek_kind() == TokenKind::DotDot || {
+            if self.peek_kind() == TokenKind::Ident {
+                let idx = self.pos;
+                match self.payload(idx) {
+                    Some(TokenPayload::Ident(s)) => {
+                        matches!(s.as_str(), "until" | "downTo")
+                    }
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        };
+
+        if is_range {
+            // Range operator: .. (inclusive), until (exclusive), downTo (descending)
+            let mut exclusive = false;
+            let mut descending = false;
+            if self.peek_kind() == TokenKind::DotDot {
+                self.bump();
+            } else if self.peek_kind() == TokenKind::Ident {
+                let idx = self.pos;
+                let text = match self.payload(idx) {
+                    Some(TokenPayload::Ident(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                match text.as_str() {
+                    "until" => {
+                        self.bump();
+                        exclusive = true;
+                    }
+                    "downTo" => {
+                        self.bump();
+                        descending = true;
+                    }
+                    _ => {
+                        self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
+                    }
+                }
+            } else {
+                self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
             };
-            match text.as_str() {
-                "until" => {
-                    self.bump();
-                    exclusive = true;
-                }
-                "downTo" => {
-                    self.bump();
-                    descending = true;
-                }
-                _ => {
-                    self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
-                }
+            self.skip_trivia();
+            let range_end = self.parse_expr();
+            self.skip_trivia();
+            self.expect(TokenKind::RParen, "')' after for range");
+            self.skip_trivia();
+            let body = self.parse_block();
+            let span = start.merge(body.span);
+            Stmt::For {
+                var_name,
+                start: range_start,
+                end: range_end,
+                exclusive,
+                descending,
+                body,
+                span,
             }
         } else {
-            self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
-        };
-        self.skip_trivia();
-        let range_end = self.parse_expr();
-        self.skip_trivia();
-        self.expect(TokenKind::RParen, "')' after for range");
-        self.skip_trivia();
-        let body = self.parse_block();
-        let span = start.merge(body.span);
-        Stmt::For {
-            var_name,
-            start: range_start,
-            end: range_end,
-            exclusive,
-            descending,
-            body,
-            span,
+            // Collection iteration: `for (x in collection) { body }`
+            self.expect(TokenKind::RParen, "')' after for-in expression");
+            self.skip_trivia();
+            let body = self.parse_block();
+            let span = start.merge(body.span);
+            Stmt::ForIn {
+                var_name,
+                iterable: range_start,
+                body,
+                span,
+            }
         }
     }
 

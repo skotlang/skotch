@@ -1015,6 +1015,104 @@ fn lower_stmt(
             fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
             true
         }
+        Stmt::ForIn {
+            var_name,
+            iterable,
+            body,
+            ..
+        } => {
+            // Desugar: for (x in collection) { body }
+            //   → val iter = collection.iterator()
+            //     while (iter.hasNext()) { val x = iter.next(); body }
+            let Some(collection_local) = lower_expr(
+                iterable,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) else {
+                return false;
+            };
+
+            // val iter = collection.iterator()
+            let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
+            fb.push_stmt(MStmt::Assign {
+                dest: iter_local,
+                value: Rvalue::Call {
+                    kind: CallKind::VirtualJava {
+                        class_name: "java/util/ArrayList".to_string(),
+                        method_name: "iterator".to_string(),
+                        descriptor: "()Ljava/util/Iterator;".to_string(),
+                    },
+                    args: vec![collection_local],
+                },
+            });
+
+            let cond_block = fb.new_block();
+            let body_block = fb.new_block();
+            let exit_block = fb.new_block();
+
+            fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
+
+            // Condition: iter.hasNext()
+            let has_next = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: has_next,
+                value: Rvalue::Call {
+                    kind: CallKind::VirtualJava {
+                        class_name: "java/util/Iterator".to_string(),
+                        method_name: "hasNext".to_string(),
+                        descriptor: "()Z".to_string(),
+                    },
+                    args: vec![iter_local],
+                },
+            });
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: has_next,
+                    then_block: body_block,
+                    else_block: exit_block,
+                },
+                body_block,
+            );
+
+            // Body: val x = iter.next(); <body stmts>
+            let element = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: element,
+                value: Rvalue::Call {
+                    kind: CallKind::VirtualJava {
+                        class_name: "java/util/Iterator".to_string(),
+                        method_name: "next".to_string(),
+                        descriptor: "()Ljava/lang/Object;".to_string(),
+                    },
+                    args: vec![iter_local],
+                },
+            });
+            scope.push((*var_name, element));
+
+            let lctx = Some((cond_block, exit_block));
+            for s in &body.stmts {
+                lower_stmt(
+                    s,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    lctx,
+                );
+            }
+
+            fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            true
+        }
         Stmt::LocalFun(f) => {
             // Lower local function as a synthetic top-level function.
             let fn_idx = module.functions.len();
@@ -2119,6 +2217,159 @@ fn lower_expr(
                     }
                 }
 
+                // ── `.forEach { }` on ArrayList/List collections ──────
+                if method_name_str == "forEach"
+                    && args.len() == 1
+                    && matches!(&recv_ty, Ty::Class(n) if n.contains("ArrayList") || n.contains("List"))
+                {
+                    let lambda_local = all_args[1]; // all_args = [receiver, lambda]
+                    let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                    if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                        let cn = if let Ty::Class(ref n) = lambda_ty {
+                            n.clone()
+                        } else {
+                            unreachable!()
+                        };
+                        // val iter = collection.iterator()
+                        let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: iter_local,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/ArrayList".to_string(),
+                                    method_name: "iterator".to_string(),
+                                    descriptor: "()Ljava/util/Iterator;".to_string(),
+                                },
+                                args: vec![recv_local],
+                            },
+                        });
+                        // while (iter.hasNext())
+                        let cond_blk = fb.new_block();
+                        let body_blk = fb.new_block();
+                        let exit_blk = fb.new_block();
+                        fb.terminate_and_switch(Terminator::Goto(cond_blk), cond_blk);
+                        let has_next = fb.new_local(Ty::Bool);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: has_next,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/Iterator".to_string(),
+                                    method_name: "hasNext".to_string(),
+                                    descriptor: "()Z".to_string(),
+                                },
+                                args: vec![iter_local],
+                            },
+                        });
+                        fb.terminate_and_switch(
+                            Terminator::Branch {
+                                cond: has_next,
+                                then_block: body_blk,
+                                else_block: exit_blk,
+                            },
+                            body_blk,
+                        );
+                        // val element = iter.next()
+                        let element_obj = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: element_obj,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/Iterator".to_string(),
+                                    method_name: "next".to_string(),
+                                    descriptor: "()Ljava/lang/Object;".to_string(),
+                                },
+                                args: vec![iter_local],
+                            },
+                        });
+                        // Look up the lambda's invoke param type. If it's a
+                        // primitive, unbox the Object returned by next() so the
+                        // invokevirtual descriptor matches the real method.
+                        let invoke_param_ty = module
+                            .classes
+                            .iter()
+                            .find(|c| c.name == cn)
+                            .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                            .and_then(|m| m.params.get(1)) // skip `this`
+                            .map(|p| {
+                                module
+                                    .classes
+                                    .iter()
+                                    .find(|c| c.name == cn)
+                                    .unwrap()
+                                    .methods
+                                    .iter()
+                                    .find(|m| m.name == "invoke")
+                                    .unwrap()
+                                    .locals[p.0 as usize]
+                                    .clone()
+                            })
+                            .unwrap_or(Ty::Any);
+                        let element = match &invoke_param_ty {
+                            Ty::Int => {
+                                let unboxed = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: unboxed,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: "java/lang/Integer".to_string(),
+                                            method_name: "intValue".to_string(),
+                                            descriptor: "()I".to_string(),
+                                        },
+                                        args: vec![element_obj],
+                                    },
+                                });
+                                unboxed
+                            }
+                            Ty::Long => {
+                                let unboxed = fb.new_local(Ty::Long);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: unboxed,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: "java/lang/Long".to_string(),
+                                            method_name: "longValue".to_string(),
+                                            descriptor: "()J".to_string(),
+                                        },
+                                        args: vec![element_obj],
+                                    },
+                                });
+                                unboxed
+                            }
+                            Ty::Double => {
+                                let unboxed = fb.new_local(Ty::Double);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: unboxed,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: "java/lang/Double".to_string(),
+                                            method_name: "doubleValue".to_string(),
+                                            descriptor: "()D".to_string(),
+                                        },
+                                        args: vec![element_obj],
+                                    },
+                                });
+                                unboxed
+                            }
+                            _ => element_obj,
+                        };
+                        // lambda.invoke(element)
+                        let _call_result = fb.new_local(Ty::Unit);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: _call_result,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: cn,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: vec![lambda_local, element],
+                            },
+                        });
+                        fb.terminate_and_switch(Terminator::Goto(cond_blk), exit_blk);
+                        let result = fb.new_local(Ty::Unit);
+                        return Some(result);
+                    }
+                }
+
                 // Check if receiver is a class instance for virtual dispatch.
 
                 // Override table for methods with ambiguous JVM overloads.
@@ -2720,6 +2971,105 @@ fn lower_expr(
 
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
+
+            // `listOf(...)` intrinsic — create an ArrayList with elements.
+            if callee_str == "listOf" {
+                // new ArrayList
+                let list_local = fb.new_local(Ty::Class("java/util/ArrayList".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: list_local,
+                    value: Rvalue::NewInstance("java/util/ArrayList".to_string()),
+                });
+                // <init>()V
+                fb.push_stmt(MStmt::Assign {
+                    dest: list_local,
+                    value: Rvalue::Call {
+                        kind: CallKind::Constructor("java/util/ArrayList".to_string()),
+                        args: vec![],
+                    },
+                });
+                // .add(element) for each arg
+                for &arg in &arg_locals {
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    // Autobox primitives for Object parameter.
+                    let boxed_arg = match arg_ty {
+                        Ty::Int => {
+                            let boxed = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: boxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "java/lang/Integer".to_string(),
+                                        method_name: "valueOf".to_string(),
+                                        descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                                    },
+                                    args: vec![arg],
+                                },
+                            });
+                            boxed
+                        }
+                        Ty::Long => {
+                            let boxed = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: boxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "java/lang/Long".to_string(),
+                                        method_name: "valueOf".to_string(),
+                                        descriptor: "(J)Ljava/lang/Long;".to_string(),
+                                    },
+                                    args: vec![arg],
+                                },
+                            });
+                            boxed
+                        }
+                        Ty::Double => {
+                            let boxed = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: boxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "java/lang/Double".to_string(),
+                                        method_name: "valueOf".to_string(),
+                                        descriptor: "(D)Ljava/lang/Double;".to_string(),
+                                    },
+                                    args: vec![arg],
+                                },
+                            });
+                            boxed
+                        }
+                        Ty::Bool => {
+                            let boxed = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: boxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "java/lang/Boolean".to_string(),
+                                        method_name: "valueOf".to_string(),
+                                        descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
+                                    },
+                                    args: vec![arg],
+                                },
+                            });
+                            boxed
+                        }
+                        _ => arg,
+                    };
+                    let _add_result = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: _add_result,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/ArrayList".to_string(),
+                                method_name: "add".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Z".to_string(),
+                            },
+                            args: vec![list_local, boxed_arg],
+                        },
+                    });
+                }
+                return Some(list_local);
+            }
 
             // `repeat(n) { body }` — execute lambda n times.
             if callee_str == "repeat" && arg_locals.len() == 2 {

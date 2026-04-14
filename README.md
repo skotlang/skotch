@@ -351,6 +351,9 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Operator overloading](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | §7.5 | `operator fun plus`, `operator fun invoke` — `a + b` desugars to `a.plus(b)`, `obj(x)` to `obj.invoke(x)` |
 | [Try-catch](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | Full JVM exception tables; `catch (e: ArithmeticException) { }` |
 | [Annotations](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | §4.8 | `@Suppress`, `@Deprecated`, `@field:JvmField` — parsed and accepted (no codegen effect yet) |
+| [listOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/list-of.html) | stdlib | `listOf(1, 2, 3)` → `ArrayList`; `.forEach { }` iterator intrinsic |
+| [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |
+| [Infix functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `infix fun` keyword parsed; dot-call form (`a.op(b)`) works |
 
 ### Not yet implemented
 
@@ -358,7 +361,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 |---|---|---|---|
 | Data class equals/hashCode/copy | [§4.5.6](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | Medium | `toString()` works; `equals()`/`hashCode()`/`copy()`/`componentN()` not yet synthesized |
 | Higher-order function dispatch | [§7.2](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | Hard | Passing lambdas as function-typed parameters (needs `$Callable` or invokedynamic) |
-| Collections | stdlib | Hard | `listOf`, `map`, `filter`, `fold` |
+| Collection extensions (map, filter) | stdlib | Medium | `.forEach` works; `.map`, `.filter`, `.fold` not yet implemented |
 | Varargs | [§4.1.2](https://kotlinlang.org/spec/declarations.html#function-declaration) | Medium | `vararg` parameter, spread `*` |
 | Destructuring | [§8.1](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | Medium | `val (a, b) = pair` via `componentN()` |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |

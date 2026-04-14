@@ -654,6 +654,18 @@ impl<'a> TypeChecker<'a> {
                     scope.push((*var_name, Ty::Int));
                     self.check_block(body, scope, local_tys);
                 }
+                Stmt::ForIn {
+                    var_name,
+                    iterable,
+                    body,
+                    ..
+                } => {
+                    self.synth_expr(iterable, scope);
+                    // Element type is Any (erased generics on JVM).
+                    local_tys.push(Ty::Any);
+                    scope.push((*var_name, Ty::Any));
+                    self.check_block(body, scope, local_tys);
+                }
             }
         }
         scope.truncate(saved);
