@@ -928,7 +928,10 @@ impl<'a> Parser<'a> {
         let span = self.peek_span();
 
         // Function type: `(Type, Type) -> ReturnType`
+        // Disambiguate from parenthesized type `(Type)` by checking for `->`
+        // after the closing `)`.
         if self.peek_kind() == TokenKind::LParen {
+            let saved_pos = self.pos;
             self.bump();
             self.skip_trivia();
             let mut param_types = Vec::new();
@@ -944,16 +947,26 @@ impl<'a> Parser<'a> {
             }
             self.expect(TokenKind::RParen, ")");
             self.skip_trivia();
-            self.expect(TokenKind::Arrow, "->");
-            self.skip_trivia();
-            let ret = self.parse_type_ref();
-            let end = ret.span;
-            return TypeRef {
-                name: ret.name,
-                nullable: false,
-                func_params: Some(param_types),
-                span: span.merge(end),
-            };
+            if self.peek_kind() == TokenKind::Arrow {
+                // It IS a function type: `(P1, P2) -> R`
+                self.bump(); // consume `->`
+                self.skip_trivia();
+                let ret = self.parse_type_ref();
+                let end = ret.span;
+                return TypeRef {
+                    name: ret.name,
+                    nullable: false,
+                    func_params: Some(param_types),
+                    span: span.merge(end),
+                };
+            }
+            // No `->` found: this is a parenthesized type like `(Int)`.
+            // Return the inner type (must be exactly one).
+            if param_types.len() == 1 {
+                return param_types.into_iter().next().unwrap();
+            }
+            // Multiple types without `->` is invalid, but recover gracefully.
+            self.pos = saved_pos + 1; // reset after `(`
         }
 
         let idx = self.pos;
@@ -2048,10 +2061,74 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::Arrow, "->");
             self.skip_trivia();
         } else {
-            // Not a lambda — restore position and parse as single-expression.
-            // This handles `{ expr }` which is a lambda with no params and
-            // implicit `it` (though `it` support is deferred).
+            // No `->` found — this is a lambda with implicit `it` parameter.
+            // `{ it + 1 }` is shorthand for `{ it: Any -> it + 1 }`.
+            // Scan for references to `it` in the body to decide if we need it.
             self.pos = saved_pos;
+            let mut uses_it = false;
+            {
+                let mut scan = self.pos;
+                while scan < self.tokens.len() {
+                    match self.tokens[scan].kind {
+                        TokenKind::RBrace | TokenKind::Eof => break,
+                        TokenKind::Ident => {
+                            if let Some(skotch_lexer::TokenPayload::Ident(ref s)) =
+                                self.payloads.get(scan).and_then(|p| p.as_ref())
+                            {
+                                if s == "it" {
+                                    uses_it = true;
+                                    break;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    scan += 1;
+                }
+            }
+            if uses_it {
+                // Infer `it` type from usage in the body:
+                // - If `it` appears next to `.` (method call) → String
+                // - Otherwise → Int (most common case)
+                // TODO: proper inference from val annotation / function param type.
+                let it_sym = self.interner.intern("it");
+                let mut it_type_name = "Int";
+                {
+                    let mut scan = self.pos;
+                    while scan < self.tokens.len() {
+                        match self.tokens[scan].kind {
+                            TokenKind::RBrace | TokenKind::Eof => break,
+                            TokenKind::Ident => {
+                                if let Some(skotch_lexer::TokenPayload::Ident(ref s)) =
+                                    self.payloads.get(scan).and_then(|p| p.as_ref())
+                                {
+                                    if s == "it"
+                                        && scan + 1 < self.tokens.len()
+                                        && self.tokens[scan + 1].kind == TokenKind::Dot
+                                    {
+                                        it_type_name = "String";
+                                        break;
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        scan += 1;
+                    }
+                }
+                let type_sym = self.interner.intern(it_type_name);
+                params.push(Param {
+                    name: it_sym,
+                    ty: TypeRef {
+                        name: type_sym,
+                        nullable: false,
+                        func_params: None,
+                        span: start,
+                    },
+                    default: None,
+                    span: start,
+                });
+            }
         }
 
         // Parse body statements.

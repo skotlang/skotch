@@ -1,0 +1,2 @@
+status = "supported"
+features = ["lambda", "var-capture", "ref-boxing"]
