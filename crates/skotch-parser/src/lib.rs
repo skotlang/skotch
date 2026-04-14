@@ -97,6 +97,46 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Skip annotation(s) like `@Suppress("unused")`, `@JvmStatic`,
+    /// `@field:JvmField`, etc. Annotations don't affect codegen yet.
+    fn skip_annotations(&mut self) {
+        while self.peek_kind() == TokenKind::At {
+            self.bump(); // consume '@'
+                         // Consume annotation name (identifier).
+            if self.peek_kind() == TokenKind::Ident {
+                self.bump();
+                // Handle use-site target: `@field:JvmField` — the colon
+                // followed by another ident.
+                if self.peek_kind() == TokenKind::Colon && self.peek_kind_at(1) == TokenKind::Ident
+                {
+                    self.bump(); // consume ':'
+                    self.bump(); // consume target ident
+                }
+            }
+            // Optionally consume parenthesized arguments.
+            if self.peek_kind() == TokenKind::LParen {
+                self.bump(); // consume '('
+                let mut depth = 1u32;
+                while depth > 0 && self.peek_kind() != TokenKind::Eof {
+                    match self.peek_kind() {
+                        TokenKind::LParen => {
+                            depth += 1;
+                            self.bump();
+                        }
+                        TokenKind::RParen => {
+                            depth -= 1;
+                            self.bump();
+                        }
+                        _ => {
+                            self.bump();
+                        }
+                    }
+                }
+            }
+            self.skip_trivia();
+        }
+    }
+
     /// Consume one token regardless of kind.
     fn bump(&mut self) -> Token {
         let t = self.tokens[self.pos];
@@ -173,6 +213,8 @@ impl<'a> Parser<'a> {
             if self.peek_kind() == TokenKind::Eof {
                 break;
             }
+            // Skip annotations before declarations.
+            self.skip_annotations();
             // Skip modifier keywords that we recognize but don't enforce.
             let mut is_data = false;
             let mut is_enum = false;
@@ -192,6 +234,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwOverride
                     | TokenKind::KwData
                     | TokenKind::KwEnum
+                    | TokenKind::KwOperator
             ) {
                 match self.peek_kind() {
                     TokenKind::KwData => is_data = true,
@@ -358,6 +401,7 @@ impl<'a> Parser<'a> {
             if self.peek_kind() != TokenKind::RParen {
                 loop {
                     self.skip_trivia();
+                    self.skip_annotations();
                     let param_start = self.peek_span();
                     // Check for val/var prefix.
                     let is_val = self.peek_kind() == TokenKind::KwVal;
@@ -448,6 +492,8 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
+                // Skip annotations before class members.
+                self.skip_annotations();
                 // Capture modifier keywords before members.
                 let mut mem_override = false;
                 let mut mem_open = false;
@@ -460,6 +506,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
+                        | TokenKind::KwOperator
                 ) {
                     match self.peek_kind() {
                         TokenKind::KwOverride => mem_override = true,
@@ -510,6 +557,7 @@ impl<'a> Parser<'a> {
                                         {
                                             break;
                                         }
+                                        self.skip_annotations();
                                         if self.peek_kind() == TokenKind::KwFun {
                                             companion_methods.push(self.parse_fun_decl());
                                         } else {
@@ -600,6 +648,8 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
+                // Skip annotations before object members.
+                self.skip_annotations();
                 // Skip modifier keywords.
                 while matches!(
                     self.peek_kind(),
@@ -652,6 +702,7 @@ impl<'a> Parser<'a> {
             if self.peek_kind() != TokenKind::RParen {
                 loop {
                     self.skip_trivia();
+                    self.skip_annotations();
                     let param_start = self.peek_span();
                     let is_val = self.peek_kind() == TokenKind::KwVal;
                     let is_var = self.peek_kind() == TokenKind::KwVar;
@@ -762,6 +813,8 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
+                // Skip annotations before interface members.
+                self.skip_annotations();
                 // Skip modifiers.
                 while matches!(
                     self.peek_kind(),
@@ -771,6 +824,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
+                        | TokenKind::KwOperator
                 ) {
                     self.bump();
                     self.skip_trivia();
@@ -1117,6 +1171,7 @@ impl<'a> Parser<'a> {
 
     fn parse_param(&mut self) -> Param {
         self.skip_trivia();
+        self.skip_annotations();
         let name_idx = self.pos;
         let name_span = self.peek_span();
         let name = if self.peek_kind() == TokenKind::Ident {
@@ -2321,6 +2376,8 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
+                // Skip annotations before object expression members.
+                self.skip_annotations();
                 // Skip modifiers.
                 let mut is_override = false;
                 while matches!(
@@ -2777,6 +2834,55 @@ mod tests {
     // TODO: parse_when_expr            — `when (x) { 1 -> "a"; else -> "b" }`
     // TODO: parse_lambda               — `{ x: Int -> x + 1 }`
     // TODO: parse_imports              — `import kotlin.math.PI`
-    // TODO: parse_annotation           — `@Test fun foo() {}`
     // TODO: parse_visibility_modifiers — `private fun foo()`
+
+    #[test]
+    fn parse_annotation_on_fun() {
+        let src = r#"
+            @Suppress("unused")
+            fun helper(): Int = 42
+
+            fun main() {
+                println(helper())
+            }
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 2);
+        assert!(matches!(file.decls[0], Decl::Fun(_)));
+        assert!(matches!(file.decls[1], Decl::Fun(_)));
+    }
+
+    #[test]
+    fn parse_annotation_no_args() {
+        let src = r#"
+            @JvmStatic
+            fun foo(): Int = 1
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 1);
+    }
+
+    #[test]
+    fn parse_annotation_use_site_target() {
+        let src = r#"
+            class Cfg(@field:JvmField val x: Int)
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 1);
+    }
+
+    #[test]
+    fn parse_annotation_complex_args() {
+        let src = r#"
+            @Target(AnnotationTarget.CLASS)
+            @Deprecated("use X")
+            fun old(): Int = 0
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 1);
+    }
 }

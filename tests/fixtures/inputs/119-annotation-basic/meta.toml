@@ -1,4 +1,4 @@
 name   = "119-annotation-basic"
-status = "stub"
-features = ["annotation", "reflection", "KClass", "class-literal"]
-reason = "Requires annotation declaration + retention + reflection access."
+status = "supported"
+features = ["annotation"]
+reason = "Basic annotation parsing — annotations are parsed and ignored."

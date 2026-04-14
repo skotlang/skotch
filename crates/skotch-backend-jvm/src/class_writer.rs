@@ -21,8 +21,8 @@ use rustc_hash::FxHashMap;
 use skotch_config::jvm;
 use skotch_intern::Interner;
 use skotch_mir::{
-    BasicBlock, BinOp as MBinOp, CallKind, LocalId, MirConst, MirFunction, MirModule, Rvalue, Stmt,
-    Terminator,
+    BasicBlock, BinOp as MBinOp, CallKind, ExceptionHandler, LocalId, MirConst, MirFunction,
+    MirModule, Rvalue, Stmt, Terminator,
 };
 use skotch_types::Ty;
 use std::io::Write;
@@ -370,13 +370,56 @@ fn emit_user_method(
     let mut block_offsets: Vec<usize> = Vec::with_capacity(func.blocks.len());
     let mut patches: Vec<JumpPatch> = Vec::new();
     let mut is_target = vec![false; func.blocks.len()];
+    let mut is_handler_um = vec![false; func.blocks.len()];
     let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+
+    for eh in &func.exception_handlers {
+        is_target[eh.handler_block as usize] = true;
+        is_handler_um[eh.handler_block as usize] = true;
+    }
 
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
 
+        let skip_first_um = if is_handler_um[bi] && !block.stmts.is_empty() {
+            if let Stmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Null),
+            } = &block.stmts[0]
+            {
+                stack = 1;
+                if stack > max_stack {
+                    max_stack = stack;
+                }
+                store_local(
+                    &mut code,
+                    &mut stack,
+                    &mut slots,
+                    &mut next_slot,
+                    *dest,
+                    &func.locals,
+                );
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let trimmed_um;
+        let walk_ref_um = if skip_first_um {
+            trimmed_um = BasicBlock {
+                stmts: block.stmts[1..].to_vec(),
+                terminator: block.terminator.clone(),
+            };
+            &trimmed_um
+        } else {
+            block
+        };
+
         walk_block(
-            block,
+            walk_ref_um,
             bi,
             cp,
             module,
@@ -672,7 +715,21 @@ fn emit_user_method(
                     .write_u16::<BigEndian>(verif_count)
                     .unwrap();
                 stack_map_entries.extend_from_slice(&verif_entries);
-                stack_map_entries.write_u16::<BigEndian>(0).unwrap();
+
+                // Exception handlers not yet in MIR.
+                if is_handler_um.get(*target_bi).copied().unwrap_or(false) {
+                    stack_map_entries.write_u16::<BigEndian>(1).unwrap();
+                    let hc = func
+                        .exception_handlers
+                        .iter()
+                        .find(|eh| eh.handler_block as usize == *target_bi)
+                        .and_then(|eh| eh.catch_type.as_deref());
+                    stack_map_entries.push(7);
+                    let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
+                    stack_map_entries.write_u16::<BigEndian>(ci).unwrap();
+                } else {
+                    stack_map_entries.write_u16::<BigEndian>(0).unwrap();
+                }
             }
             TargetSource::Cmp(ci) => {
                 let ct = &cmp_targets[*ci];
@@ -733,7 +790,7 @@ fn emit_user_method(
     code_attr.write_u16::<BigEndian>(max_locals.max(1)).unwrap();
     code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
     code_attr.write_all(&code).unwrap();
-    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    emit_exception_table(&mut code_attr, &func.exception_handlers, &block_offsets, cp);
 
     if smt_count > 0 {
         let smt_name_idx = cp.utf8("StackMapTable");
@@ -817,14 +874,61 @@ fn emit_method(
     let mut patches: Vec<JumpPatch> = Vec::new();
     // Which blocks are branch/goto targets (need a StackMapTable entry).
     let mut is_target = vec![false; func.blocks.len()];
+    let mut is_handler = vec![false; func.blocks.len()];
+    // Which blocks are exception handler entry points.
     // Comparison-internal branch targets (L_true / L_end from if_icmpXX patterns).
     let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+
+    for eh in &func.exception_handlers {
+        is_target[eh.handler_block as usize] = true;
+        is_handler[eh.handler_block as usize] = true;
+    }
 
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
 
+        // Exception handler blocks: the JVM pushes the exception object
+        // onto the operand stack at handler entry. The first MIR stmt is
+        // a Const(Null) placeholder — skip it and emit astore directly.
+        let skip_first = if is_handler[bi] && !block.stmts.is_empty() {
+            if let Stmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Null),
+            } = &block.stmts[0]
+            {
+                stack = 1;
+                if stack > max_stack {
+                    max_stack = stack;
+                }
+                store_local(
+                    &mut code,
+                    &mut stack,
+                    &mut slots,
+                    &mut next_slot,
+                    *dest,
+                    &func.locals,
+                );
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let trimmed_block;
+        let walk_ref = if skip_first {
+            trimmed_block = BasicBlock {
+                stmts: block.stmts[1..].to_vec(),
+                terminator: block.terminator.clone(),
+            };
+            &trimmed_block
+        } else {
+            block
+        };
+
         walk_block(
-            block,
+            walk_ref,
             bi,
             cp,
             module,
@@ -1153,8 +1257,20 @@ fn emit_method(
                     .unwrap();
                 stack_map_entries.extend_from_slice(&verif_entries);
 
-                // Emit stack items (always 0 for block targets).
-                stack_map_entries.write_u16::<BigEndian>(0).unwrap();
+                // Exception handlers not yet in MIR.
+                if is_handler.get(*target_bi).copied().unwrap_or(false) {
+                    stack_map_entries.write_u16::<BigEndian>(1).unwrap();
+                    let hc = func
+                        .exception_handlers
+                        .iter()
+                        .find(|eh| eh.handler_block as usize == *target_bi)
+                        .and_then(|eh| eh.catch_type.as_deref());
+                    stack_map_entries.push(7);
+                    let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
+                    stack_map_entries.write_u16::<BigEndian>(ci).unwrap();
+                } else {
+                    stack_map_entries.write_u16::<BigEndian>(0).unwrap();
+                }
             }
             TargetSource::Cmp(ci) => {
                 let ct = &cmp_targets[*ci];
@@ -1216,7 +1332,9 @@ fn emit_method(
     code_attr.write_u16::<BigEndian>(max_locals.max(1)).unwrap();
     code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
     code_attr.write_all(&code).unwrap();
-    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+
+    // Exception table (stub — exception_handlers not yet in MIR).
+    emit_exception_table(&mut code_attr, &func.exception_handlers, &block_offsets, cp);
 
     // Sub-attributes: StackMapTable if we have branch targets.
     if smt_count > 0 {
@@ -2321,6 +2439,29 @@ fn write_slot_verif(
     }
 }
 
+/// Emit the exception_table portion of a JVM Code attribute.
+fn emit_exception_table(
+    out: &mut Vec<u8>,
+    handlers: &[ExceptionHandler],
+    block_offsets: &[usize],
+    cp: &mut ConstantPool,
+) {
+    out.write_u16::<BigEndian>(handlers.len() as u16).unwrap();
+    for eh in handlers {
+        let start_pc = block_offsets[eh.try_start_block as usize] as u16;
+        let end_pc = block_offsets[eh.try_end_block as usize] as u16;
+        let handler_pc = block_offsets[eh.handler_block as usize] as u16;
+        let catch_type_idx = match &eh.catch_type {
+            Some(name) => cp.class(name),
+            None => 0,
+        };
+        out.write_u16::<BigEndian>(start_pc).unwrap();
+        out.write_u16::<BigEndian>(end_pc).unwrap();
+        out.write_u16::<BigEndian>(handler_pc).unwrap();
+        out.write_u16::<BigEndian>(catch_type_idx).unwrap();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2390,4 +2531,27 @@ mod tests {
     // TODO: emit_class_with_long_constant_pool
     // TODO: emit_top_level_val_with_clinit
     // TODO: emit_class_with_string_template
+
+    #[test]
+    fn emit_try_catch_has_exception_table() {
+        let src = r#"
+fun main() {
+    try {
+        val x = 10 / 0
+        println(x)
+    } catch (e: ArithmeticException) {
+        println("caught: division by zero")
+    }
+}
+"#;
+        let (results, _diags) = compile(src);
+        assert!(!results.is_empty());
+        let (_, bytes) = &results[0];
+        assert_eq!(&bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
+        let s = String::from_utf8_lossy(bytes);
+        assert!(
+            s.contains("ArithmeticException"),
+            "class file should reference ArithmeticException"
+        );
+    }
 }

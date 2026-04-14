@@ -235,6 +235,25 @@ pub struct MirFunction {
     /// True for abstract methods (no body, no Code attribute on JVM).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_abstract: bool,
+    /// Exception handlers (try-catch) for this function.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exception_handlers: Vec<ExceptionHandler>,
+}
+
+/// An exception handler entry, mapping a range of try-body blocks to a
+/// catch handler block. Backends translate block indices to bytecode
+/// offsets when emitting exception tables.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExceptionHandler {
+    /// First block of the try body (inclusive).
+    pub try_start_block: u32,
+    /// Block immediately after the last try-body block (exclusive).
+    pub try_end_block: u32,
+    /// Block index of the catch handler.
+    pub handler_block: u32,
+    /// JVM internal name of the caught exception class, e.g.
+    /// `"java/lang/ArithmeticException"`. `None` means catch-all.
+    pub catch_type: Option<String>,
 }
 
 impl MirFunction {

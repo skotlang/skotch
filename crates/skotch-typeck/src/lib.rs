@@ -214,17 +214,8 @@ pub fn type_check(
                 );
                 val_idx_pass1 += 1;
             }
-            Decl::Class(c) => {
-                let class_idx = 10000 + tc.fn_names.len() as u32;
-                let name = tc.interner.resolve(c.name).to_string();
-                let sig = Signature {
-                    params: vec![],
-                    ret: Ty::Class(name),
-                };
-                tc.out
-                    .top_signatures
-                    .insert(DefId::Function(class_idx), sig);
-                tc.fn_names.push(c.name);
+            Decl::Class(_) => {
+                // Constructor calls are resolved via env.types in synth_expr.
             }
             Decl::Object(_)
             | Decl::Enum(_)
@@ -711,6 +702,29 @@ impl<'a> TypeChecker<'a> {
                             Ty::String
                         } else if lt == Ty::Error || rt == Ty::Error {
                             Ty::Error
+                        } else if let Ty::Class(ref class_name) = lt {
+                            // Operator overloading: check for plus/minus/times methods.
+                            let op_method = match op {
+                                BinOp::Add => "plus",
+                                BinOp::Sub => "minus",
+                                BinOp::Mul => "times",
+                                BinOp::Div => "div",
+                                BinOp::Mod => "rem",
+                                _ => unreachable!(),
+                            };
+                            if let Some(m) = self.env.lookup_method(class_name, op_method) {
+                                m.ret.clone()
+                            } else {
+                                self.diags.push(Diagnostic::error(
+                                    *span,
+                                    format!(
+                                        "arithmetic on {} and {} not supported",
+                                        lt.display_name(),
+                                        rt.display_name()
+                                    ),
+                                ));
+                                Ty::Error
+                            }
                         } else {
                             self.diags.push(Diagnostic::error(
                                 *span,
@@ -789,6 +803,14 @@ impl<'a> TypeChecker<'a> {
                     }
                     if self.env.types.contains_key(&name_str) {
                         return Ty::Class(name_str);
+                    }
+                    // Check if the callee is a local variable with an invoke operator.
+                    if let Some((_, Ty::Class(ref class_name))) =
+                        scope.iter().rev().find(|(n, _)| *n == name)
+                    {
+                        if let Some(m) = self.env.lookup_method(class_name, "invoke") {
+                            return m.ret.clone();
+                        }
                     }
                     return Ty::Any;
                 }
@@ -1080,6 +1102,22 @@ mod tests {
         );
         assert!(d.is_empty(), "{:?}", d);
         assert_eq!(tf.functions.len(), 1);
+    }
+
+    #[test]
+    fn operator_plus_type() {
+        let src = r#"
+data class Vec2(val x: Int, val y: Int) {
+    operator fun plus(other: Vec2) = Vec2(x + other.x, y + other.y)
+}
+fun main() {
+    val a = Vec2(1, 2)
+    val b = Vec2(3, 4)
+    println(a + b)
+}
+"#;
+        let (_tf, d) = run(src);
+        assert!(d.is_empty(), "diagnostics: {:?}", d);
     }
 
     #[test]

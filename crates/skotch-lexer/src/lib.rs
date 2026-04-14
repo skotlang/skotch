@@ -288,6 +288,7 @@ impl<'a> Lexer<'a> {
             b'?' => Some(TokenKind::Question),
             b'<' => Some(TokenKind::Lt),
             b'>' => Some(TokenKind::Gt),
+            b'@' => Some(TokenKind::At),
             _ => None,
         };
         if let Some(k) = single {
@@ -846,6 +847,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "private" => TokenKind::KwPrivate,
         "protected" => TokenKind::KwProtected,
         "internal" => TokenKind::KwInternal,
+        "operator" => TokenKind::KwOperator,
         _ => return None,
     })
 }

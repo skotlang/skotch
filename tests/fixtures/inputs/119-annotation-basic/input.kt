@@ -1,9 +1,6 @@
-annotation class Fancy(val value: String)
-
-@Fancy("important")
-class MyClass
+@Suppress("unused")
+fun helper(): Int = 42
 
 fun main() {
-    val ann = MyClass::class.annotations.first() as Fancy
-    println(ann.value)
+    println(helper())
 }

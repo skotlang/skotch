@@ -25,8 +25,8 @@ use rustc_hash::FxHashMap;
 use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_mir::{
-    BasicBlock, BinOp as MBinOp, CallKind, FuncId, LocalId, MirClass, MirConst, MirField,
-    MirFunction, MirModule, Rvalue, Stmt as MStmt, Terminator,
+    BasicBlock, BinOp as MBinOp, CallKind, ExceptionHandler, FuncId, LocalId, MirClass, MirConst,
+    MirField, MirFunction, MirModule, Rvalue, Stmt as MStmt, Terminator,
 };
 use skotch_resolve::ResolvedFile;
 use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
@@ -124,6 +124,7 @@ pub fn lower_file(
                 param_names,
                 param_defaults,
                 is_abstract: false,
+                exception_handlers: Vec::new(),
             });
             fn_pass1_idx += 1;
         }
@@ -519,6 +520,7 @@ impl FnBuilder {
             param_names: Vec::new(),
             param_defaults: Vec::new(),
             is_abstract: false,
+            exception_handlers: Vec::new(),
         };
         FnBuilder {
             mf,
@@ -658,6 +660,7 @@ fn lower_function(
             param_names: Vec::new(),
             param_defaults: Vec::new(),
             is_abstract: false,
+            exception_handlers: Vec::new(),
         };
     }
 }
@@ -1035,6 +1038,7 @@ fn lower_stmt(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: false,
+                exception_handlers: Vec::new(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -1064,27 +1068,138 @@ fn lower_stmt(
             true
         }
         Stmt::TryStmt {
-            body, finally_body, ..
+            body,
+            catch_param,
+            catch_type,
+            catch_body,
+            finally_body,
+            ..
         } => {
-            // Simplified: execute body, then finally (no catch/exception tables yet).
-            for s in &body.stmts {
-                let terminated = lower_stmt(
-                    s,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    loop_ctx,
-                );
-                if terminated {
-                    break;
+            if catch_body.is_some() {
+                // ── try-catch lowering ──────────────────────────────────
+                //
+                // Layout:
+                //   current_block → goto try_block
+                //   try_block: <try body stmts> → goto after_block
+                //   catch_block: astore catch_param; <catch body> → goto after_block
+                //   after_block: <continues>
+                //
+                // Exception handler: [try_block .. catch_block) → catch_block
+                let try_block = fb.new_block();
+                let catch_block = fb.new_block();
+                let after_block = fb.new_block();
+
+                // Jump from current block into the try body.
+                fb.terminate_and_switch(Terminator::Goto(try_block), try_block);
+
+                // Lower the try body.
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
                 }
-            }
-            if let Some(fb_block) = finally_body {
-                for s in &fb_block.stmts {
+                fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
+
+                // The catch handler block receives the exception on the
+                // JVM operand stack. We allocate a local to store it.
+                if let Some(param_sym) = catch_param {
+                    let exc_local = fb.new_local(Ty::Any);
+                    scope.push((*param_sym, exc_local));
+                    // Placeholder assignment — the JVM backend will emit
+                    // astore at handler entry instead of aconst_null.
+                    fb.push_stmt(MStmt::Assign {
+                        dest: exc_local,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                }
+
+                // Lower the catch body.
+                if let Some(cb) = catch_body {
+                    for s in &cb.stmts {
+                        lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                    }
+                }
+                fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
+
+                // Record exception handler.
+                let jvm_catch_type = catch_type.map(|sym| {
+                    let name = interner.resolve(sym).to_string();
+                    match name.as_str() {
+                        "Exception" => "java/lang/Exception".to_string(),
+                        "RuntimeException" => "java/lang/RuntimeException".to_string(),
+                        "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
+                        "NullPointerException" => "java/lang/NullPointerException".to_string(),
+                        "IllegalArgumentException" => {
+                            "java/lang/IllegalArgumentException".to_string()
+                        }
+                        "IllegalStateException" => "java/lang/IllegalStateException".to_string(),
+                        "IndexOutOfBoundsException" => {
+                            "java/lang/IndexOutOfBoundsException".to_string()
+                        }
+                        "ClassCastException" => "java/lang/ClassCastException".to_string(),
+                        "NumberFormatException" => "java/lang/NumberFormatException".to_string(),
+                        "UnsupportedOperationException" => {
+                            "java/lang/UnsupportedOperationException".to_string()
+                        }
+                        "Throwable" => "java/lang/Throwable".to_string(),
+                        "Error" => "java/lang/Error".to_string(),
+                        other => {
+                            if other.contains('/') {
+                                other.to_string()
+                            } else {
+                                format!("java/lang/{other}")
+                            }
+                        }
+                    }
+                });
+
+                fb.mf.exception_handlers.push(ExceptionHandler {
+                    try_start_block: try_block,
+                    try_end_block: catch_block,
+                    handler_block: catch_block,
+                    catch_type: jvm_catch_type,
+                });
+
+                // Finally block (if present) is inlined after the catch.
+                if let Some(fb_block) = finally_body {
+                    for s in &fb_block.stmts {
+                        let terminated = lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                        if terminated {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // No catch — just try + finally (original simplified path).
+                for s in &body.stmts {
                     let terminated = lower_stmt(
                         s,
                         fb,
@@ -1098,6 +1213,24 @@ fn lower_stmt(
                     );
                     if terminated {
                         break;
+                    }
+                }
+                if let Some(fb_block) = finally_body {
+                    for s in &fb_block.stmts {
+                        let terminated = lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                        if terminated {
+                            break;
+                        }
                     }
                 }
             }
@@ -1367,6 +1500,86 @@ fn lower_expr(
             )?;
             let lhs_ty = &fb.mf.locals[l.0 as usize];
             let rhs_ty = &fb.mf.locals[r.0 as usize];
+
+            // ── Operator overloading for class types ────────────────
+            // When the LHS is a class instance, check if it has an
+            // operator method (plus, minus, times, compareTo) and
+            // desugar to a virtual call instead of a primitive op.
+            if let Ty::Class(class_name) = lhs_ty {
+                let op_method = match op {
+                    BinOp::Add => Some("plus"),
+                    BinOp::Sub => Some("minus"),
+                    BinOp::Mul => Some("times"),
+                    BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq => Some("compareTo"),
+                    _ => None,
+                };
+                if let Some(method_name) = op_method {
+                    let mut found: Option<(String, Ty)> = None;
+                    let mut search = Some(class_name.clone());
+                    while let Some(ref cname) = search {
+                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                            if let Some(m) = cls.methods.iter().find(|m| m.name == method_name) {
+                                found = Some((cname.clone(), m.return_ty.clone()));
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
+                    if let Some((found_class, ret_ty)) = found {
+                        if method_name == "compareTo" {
+                            let cmp_result = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: cmp_result,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: found_class,
+                                        method_name: "compareTo".to_string(),
+                                    },
+                                    args: vec![l, r],
+                                },
+                            });
+                            let zero = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: zero,
+                                value: Rvalue::Const(MirConst::Int(0)),
+                            });
+                            let cmp_op = match op {
+                                BinOp::Lt => MBinOp::CmpLt,
+                                BinOp::Gt => MBinOp::CmpGt,
+                                BinOp::LtEq => MBinOp::CmpLe,
+                                BinOp::GtEq => MBinOp::CmpGe,
+                                _ => unreachable!(),
+                            };
+                            let dest = fb.new_local(Ty::Bool);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::BinOp {
+                                    op: cmp_op,
+                                    lhs: cmp_result,
+                                    rhs: zero,
+                                },
+                            });
+                            return Some(dest);
+                        } else {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: found_class,
+                                        method_name: method_name.to_string(),
+                                    },
+                                    args: vec![l, r],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                }
+            }
+
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
             let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
             let (mop, result_ty) = match op {
@@ -2641,8 +2854,20 @@ fn lower_expr(
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
                 let is_lambda_class =
                     matches!(&local_ty, Ty::Class(n) if n.starts_with("$Lambda$"));
-                let is_callable =
-                    is_lambda_class || matches!(local_ty, Ty::Any | Ty::Function { .. });
+                // Check if this is a class with an `invoke` operator method.
+                let has_invoke_method = if let Ty::Class(ref cn) = local_ty {
+                    module
+                        .classes
+                        .iter()
+                        .find(|c| &c.name == cn)
+                        .map(|c| c.methods.iter().any(|m| m.name == "invoke"))
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                let is_callable = is_lambda_class
+                    || has_invoke_method
+                    || matches!(local_ty, Ty::Any | Ty::Function { .. });
                 if is_callable {
                     // Lower as: receiver.invoke(args)
                     let mut all_args = vec![*local_id];
@@ -3708,6 +3933,7 @@ fn lower_expr(
                     param_names: Vec::new(),
                     param_defaults: Vec::new(),
                     is_abstract: false,
+                    exception_handlers: Vec::new(),
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -3807,6 +4033,7 @@ fn lower_expr(
                     param_names: Vec::new(),
                     param_defaults: Vec::new(),
                     is_abstract: false,
+                    exception_handlers: Vec::new(),
                 },
             });
 
@@ -3917,6 +4144,7 @@ fn lower_expr(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: false,
+                exception_handlers: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -4081,6 +4309,7 @@ fn lower_expr(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: false,
+                exception_handlers: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -4489,6 +4718,7 @@ fn lower_enum(
         param_names: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
+        exception_handlers: Vec::new(),
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -4544,6 +4774,7 @@ fn lower_enum(
         param_names: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
+        exception_handlers: Vec::new(),
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -4652,6 +4883,7 @@ fn lower_object(
         param_names: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
+        exception_handlers: Vec::new(),
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -4758,6 +4990,7 @@ fn lower_class(
         param_names: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
+        exception_handlers: Vec::new(),
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -4962,6 +5195,7 @@ fn lower_class(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: m.is_abstract,
+                exception_handlers: Vec::new(),
             }
         })
         .collect();
@@ -5091,6 +5325,20 @@ fn lower_class(
 
         let mut finished = fb.finish();
         finished.is_abstract = method.is_abstract;
+        // Infer return type from body if not explicitly annotated.
+        // Expression-body methods (= expr) set ReturnValue as the
+        // terminator, and the returned local's type is the actual
+        // return type.
+        if finished.return_ty == Ty::Unit {
+            if let Some(last_block) = finished.blocks.last() {
+                if let Terminator::ReturnValue(ret_local) = &last_block.terminator {
+                    let inferred = finished.locals[ret_local.0 as usize].clone();
+                    if inferred != Ty::Unit {
+                        finished.return_ty = inferred;
+                    }
+                }
+            }
+        }
         mir_methods.push(finished);
     }
 
@@ -5337,6 +5585,7 @@ fn lower_interface(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: m.is_abstract,
+                exception_handlers: Vec::new(),
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -5361,6 +5610,7 @@ fn lower_interface(
         param_names: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
+        exception_handlers: Vec::new(),
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -5401,6 +5651,7 @@ fn lower_interface(
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: true,
+                exception_handlers: Vec::new(),
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);

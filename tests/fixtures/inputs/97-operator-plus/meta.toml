@@ -1,4 +1,4 @@
 name   = "97-operator-plus"
-status = "stub"
+status = "supported"
 features = ["operator", "plus", "data-class", "overloading"]
 reason = "Requires operator overloading (+ desugars to .plus() call)."

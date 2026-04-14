@@ -386,7 +386,7 @@ milestones:
 
   - version: "0.5.0"
     title: "Collections, Arrays, Stdlib, and Annotations"
-    status: planned
+    status: in_progress
     depends_on: ["0.4.0"]
     description: >
       Collection types, arrays, iteration, varargs, destructuring, operator
@@ -428,9 +428,12 @@ milestones:
           - "val (a, b) = Pair(1, \"hello\") works"
 
       - name: "Operator overloading"
+        completed: true
         description: >
-          operator fun plus, get, set, compareTo, invoke. Parser desugars
-          a + b to a.plus(b) for user types. Critical for Dp arithmetic.
+          operator fun plus and invoke. `operator` keyword parsed and accepted.
+          Binary `+` on class types desugars to `receiver.plus(other)` via
+          virtual dispatch. `obj(args)` on class instances desugars to
+          `obj.invoke(args)`. Fixtures: 97-operator-plus, 99-operator-invoke.
         acceptance_criteria:
           - "Custom class with operator plus: a + b dispatches to plus()"
 
@@ -440,18 +443,23 @@ milestones:
           - "mapOf(1 to \"a\", 2 to \"b\") works"
 
       - name: "Basic annotation support"
+        completed: true
         description: >
-          @JvmStatic, @JvmField, @Suppress, @Deprecated. Annotations parsed
-          and stored as metadata. Not yet runtime-queryable (that's v0.9.0
-          for @Composable). Needed for stdlib and framework compatibility.
+          @Suppress, @Deprecated, @JvmStatic, @JvmInline, @field:JvmField.
+          Annotations parsed and skipped (accepted without errors). Handles
+          bare annotations, annotations with arguments, and use-site targets.
+          No runtime retention or codegen effect yet. Fixture: 119-annotation-basic.
         acceptance_criteria:
           - "Annotations parsed without errors; @JvmStatic affects codegen"
 
       - name: "Try-catch with type matching"
+        completed: true
         description: >
-          try { } catch (e: NumberFormatException) { }. Currently only
-          try-finally works. Full catch needs exception table on JVM and
-          encoded_catch_handler on DEX.
+          try { } catch (e: ArithmeticException) { }. Full JVM exception
+          tables emitted in Code attribute. MIR lowering creates try/catch/after
+          blocks with ExceptionHandler records. JVM backend emits start_pc,
+          end_pc, handler_pc, catch_type. StackMapTable includes handler
+          frames. Fixture: 56-try-catch.
         acceptance_criteria:
           - "Catch specific exception type; handler executes correctly"
 

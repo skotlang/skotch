@@ -81,6 +81,7 @@ pub enum TokenKind {
     KwPrivate,
     KwProtected,
     KwInternal,
+    KwOperator,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,
@@ -101,6 +102,7 @@ pub enum TokenKind {
     Percent,
     Bang,
     Question,
+    At, // @
 
     // ─── multi-character punctuation ─────────────────────────────────────
     Arrow,       // ->
