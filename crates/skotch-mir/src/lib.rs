@@ -287,6 +287,9 @@ pub struct MirModule {
     /// Names of enum classes (mapped to String type for parameter resolution).
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
     pub enum_names: rustc_hash::FxHashSet<String>,
+    /// Type alias mappings: alias name → target type name.
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
+    pub type_aliases: rustc_hash::FxHashMap<String, String>,
 }
 
 impl MirModule {

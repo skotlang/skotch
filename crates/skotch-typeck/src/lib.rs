@@ -162,7 +162,17 @@ pub fn type_check(
         fn_names: Vec::new(),
         env: TypeEnv::default(),
         type_params: Vec::new(),
+        type_aliases: FxHashMap::default(),
     };
+
+    // ── Collect type aliases ───────────────────────────────────────────
+    for decl in &file.decls {
+        if let Decl::TypeAlias(ta) = decl {
+            let alias_name = tc.interner.resolve(ta.name).to_string();
+            let target_name = tc.interner.resolve(ta.target.name).to_string();
+            tc.type_aliases.insert(alias_name, target_name);
+        }
+    }
 
     // ── Build type environment from all declarations ────────────────────
     for decl in &file.decls {
@@ -275,6 +285,8 @@ struct TypeChecker<'a> {
     env: TypeEnv,
     /// Type parameter names currently in scope (e.g. "T", "R").
     type_params: Vec<String>,
+    /// Type alias mappings: alias name → target type name.
+    type_aliases: FxHashMap<String, String>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -423,7 +435,13 @@ impl<'a> TypeChecker<'a> {
                 ret: Box::new(ret),
             };
         }
-        let name = self.interner.resolve(tr.name).to_string();
+        let raw_name = self.interner.resolve(tr.name).to_string();
+        // Resolve type aliases.
+        let name = if let Some(target) = self.type_aliases.get(&raw_name) {
+            target.clone()
+        } else {
+            raw_name
+        };
         let base = if let Some(t) = ty_from_name(&name) {
             t
         } else if self.type_params.contains(&name) {
@@ -986,7 +1004,9 @@ impl<'a> TypeChecker<'a> {
             (Ty::String, "toInt") => Some(Ty::Int),
             (Ty::String, "toLong") => Some(Ty::Long),
             (Ty::String, "toDouble") => Some(Ty::Double),
-            (Ty::Int | Ty::Long | Ty::Double, "toString") => Some(Ty::String),
+            (_, "toString") => Some(Ty::String),
+            (_, "hashCode") => Some(Ty::Int),
+            (_, "equals") => Some(Ty::Bool),
             (_, "coerceAtLeast" | "coerceAtMost") => Some(recv_ty.clone()),
             _ => None,
         }

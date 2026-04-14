@@ -345,9 +345,12 @@ milestones:
         description: >
           inline fun <reified T> isInstance(value: Any): Boolean = value is T.
           Reified modifier parsed on type params. Explicit type arguments at
-          call sites parsed via tentative <Type>( lookahead. Reified calls
-          inlined as instanceof at the call site with the concrete type.
-          Primitive args autoboxed via valueOf. Fixture: 94-reified-type-param.
+          call sites parsed via tentative <Type>( lookahead. Single-param
+          reified `is T` calls inlined as instanceof at the call site with the
+          concrete type. Primitive args autoboxed via valueOf.
+          Limitation: multi-reified-param functions (e.g. <reified A, reified B>)
+          are not yet inlined — requires full function body inlining.
+          Fixture: 94-reified-type-param.
         acceptance_criteria:
           - "Reified is-check works at runtime"
 

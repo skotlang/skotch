@@ -36,16 +36,22 @@ use skotch_types::Ty;
 /// Resolve a type name to a `Ty`, checking built-in types first, then
 /// user-defined classes/enums in the module.
 fn resolve_type(name: &str, module: &MirModule) -> Ty {
-    if let Some(ty) = skotch_types::ty_from_name(name) {
+    // Resolve type aliases before anything else.
+    let resolved_name = if let Some(target) = module.type_aliases.get(name) {
+        target.as_str()
+    } else {
+        name
+    };
+    if let Some(ty) = skotch_types::ty_from_name(resolved_name) {
         return ty;
     }
     // Enums are real classes now.
-    if module.enum_names.contains(name) {
-        return Ty::Class(name.to_string());
+    if module.enum_names.contains(resolved_name) {
+        return Ty::Class(resolved_name.to_string());
     }
     // User-defined class or interface.
-    if module.classes.iter().any(|c| c.name == name) {
-        return Ty::Class(name.to_string());
+    if module.classes.iter().any(|c| c.name == resolved_name) {
+        return Ty::Class(resolved_name.to_string());
     }
     Ty::Any
 }
@@ -65,15 +71,13 @@ pub fn lower_file(
     };
 
     // ─── Pass 0: collect type aliases ─────────────────────────────────
-    let mut type_aliases: FxHashMap<String, String> = FxHashMap::default();
     for decl in &file.decls {
         if let Decl::TypeAlias(ta) = decl {
             let alias_name = interner.resolve(ta.name).to_string();
             let target_name = interner.resolve(ta.target.name).to_string();
-            type_aliases.insert(alias_name, target_name);
+            module.type_aliases.insert(alias_name, target_name);
         }
     }
-    let _ = &type_aliases; // suppress unused warning if no aliases used yet
 
     // ─── Pass 1: register top-level functions ───────────────────────────
     //
@@ -433,6 +437,22 @@ fn collect_free_in_expr(
         Expr::ElvisOp { lhs, rhs, .. } => {
             collect_free_in_expr(lhs, param_names, outer_scope, fb, free, seen);
             collect_free_in_expr(rhs, param_names, outer_scope, fb, free, seen);
+        }
+        Expr::Lambda {
+            params: inner_params,
+            body: inner_body,
+            ..
+        } => {
+            // A nested lambda may reference variables from the enclosing
+            // scope.  We must recurse into its body so that those
+            // references are surfaced as free variables of the *outer*
+            // lambda.  The nested lambda's own parameters shadow outer
+            // names, so extend `param_names` with them before recursing.
+            let mut extended_params: Vec<Symbol> = param_names.to_vec();
+            for p in inner_params {
+                extended_params.push(p.name);
+            }
+            collect_free_in_block(inner_body, &extended_params, outer_scope, fb, free, seen);
         }
         _ => {}
     }
@@ -2121,6 +2141,37 @@ fn lower_expr(
                             },
                             return_ty,
                         )
+                    }
+                } else if matches!(&recv_ty, Ty::Any | Ty::Nullable(_)) {
+                    // Methods defined on java/lang/Object are available on
+                    // every JVM type, including erased generics (Ty::Any).
+                    let object_method: Option<(&str, Ty)> =
+                        match (method_name_str.as_str(), args.len()) {
+                            ("toString", 0) => Some(("()Ljava/lang/String;", Ty::String)),
+                            ("hashCode", 0) => Some(("()I", Ty::Int)),
+                            ("equals", 1) => Some(("(Ljava/lang/Object;)Z", Ty::Bool)),
+                            _ => None,
+                        };
+                    if let Some((descriptor, ret_ty)) = object_method {
+                        (
+                            CallKind::VirtualJava {
+                                class_name: "java/lang/Object".to_string(),
+                                method_name: method_name_str,
+                                descriptor: descriptor.to_string(),
+                            },
+                            ret_ty,
+                        )
+                    } else if let Some(fid) = name_to_func.get(&method_name) {
+                        (
+                            CallKind::Static(*fid),
+                            module.functions[fid.0 as usize].return_ty.clone(),
+                        )
+                    } else {
+                        diags.push(Diagnostic::error(
+                            *span,
+                            format!("unknown method `{}`", interner.resolve(method_name)),
+                        ));
+                        return None;
                     }
                 } else if let Some(fid) = name_to_func.get(&method_name) {
                     (

@@ -2265,6 +2265,20 @@ impl<'a> Parser<'a> {
                 stmts: vec![stmt],
                 span,
             }
+        } else if self.peek_kind() == TokenKind::KwBreak {
+            let span = self.peek_span();
+            self.bump();
+            Block {
+                stmts: vec![Stmt::Break(span)],
+                span,
+            }
+        } else if self.peek_kind() == TokenKind::KwContinue {
+            let span = self.peek_span();
+            self.bump();
+            Block {
+                stmts: vec![Stmt::Continue(span)],
+                span,
+            }
         } else {
             let expr = self.parse_expr();
             let span = expr.span();
