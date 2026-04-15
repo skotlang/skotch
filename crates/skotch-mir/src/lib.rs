@@ -201,6 +201,12 @@ pub enum CallKind {
     },
     /// Constructor call: `new ClassName(args)`.
     Constructor(std::string::String),
+    /// Constructor call on an external Java/Kotlin class with explicit
+    /// descriptor (the class is not in the current MIR module).
+    ConstructorJava {
+        class_name: std::string::String,
+        descriptor: std::string::String,
+    },
     /// Virtual method call on an instance: `receiver.method(args)`.
     Virtual {
         class_name: std::string::String,

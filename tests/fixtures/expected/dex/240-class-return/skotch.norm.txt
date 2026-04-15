@@ -1,5 +1,5 @@
 dex_version   035
-strings       15
+strings       14
 types         7
 methods       4
 classes       1
@@ -12,7 +12,6 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "V"
-  "VI"
   "VL"
   "[Ljava/lang/String;"
   "input.kt"
@@ -34,7 +33,7 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.makePair(II)Ljava/lang/Object;
-  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
 
 --- class[0] ---
   descriptor   LInputKt;

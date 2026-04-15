@@ -295,12 +295,15 @@ pub enum Stmt {
     /// `do { body } while (cond)`.
     DoWhile { body: Block, cond: Expr, span: Span },
     /// `for (name in start..end) { body }` or `for (name in start until end) { body }`.
+    /// Optional `step` for `for (i in 0..10 step 2)`.
     For {
         var_name: Symbol,
         start: Expr,
         end: Expr,
         exclusive: bool,
         descending: bool,
+        /// Optional step expression: `for (i in 1..10 step 2)`.
+        step: Option<Expr>,
         body: Block,
         span: Span,
     },

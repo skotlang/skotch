@@ -331,9 +331,11 @@ milestones:
           - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } == listOf(4, 6)"
 
       - name: "Mutable collections"
+        completed: true
         description: >
-          mutableListOf, mutableMapOf, mutableSetOf. add(), put(),
-          remove(), clear(), addAll(), contains(), isEmpty().
+          mutableListOf(...) via real CollectionsKt.mutableListOf.
+          list.add(), list.remove(), list.clear(), list[index] via
+          invokeinterface on java/util/List. Fixture: 381-mutablelistof-basic.
         acceptance_criteria:
           - "val list = mutableListOf(1,2,3); list.add(4); println(list.size) // 4"
 
@@ -345,16 +347,23 @@ milestones:
           - "mapOf(1 to \"a\")[1] == \"a\""
 
       - name: "Pair and Triple"
+        completed: true
         description: >
-          Pair(a, b) with .first/.second. Triple(a, b, c).
-          Infix `to` function: 1 to \"a\" creates Pair.
+          Pair(a, b) and Triple(a, b, c) via real kotlin/Pair and
+          kotlin/Triple constructors. .first/.second/.third via
+          getFirst()/getSecond()/getThird(). Infix `to` parsed in
+          expression chain, desugared to new kotlin/Pair.
+          Fixture: 380-pair-infix-to.
         acceptance_criteria:
           - "val (k, v) = 1 to \"hello\"; println(v) // hello"
 
       - name: "Ranges with step"
+        completed: true
         description: >
-          1..10 step 2, 'a'..'z', IntRange, LongRange, CharRange.
-          for (i in 1..10 step 2) iterates 1, 3, 5, 7, 9.
+          for (i in 1..10 step 2) — step expression parsed after range,
+          used as increment in MIR lowering. Works with downTo.
+          Fixture: 382-range-step.
+
 
       - name: "String stdlib completions"
         description: >

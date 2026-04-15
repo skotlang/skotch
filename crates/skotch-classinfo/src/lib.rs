@@ -245,7 +245,8 @@ pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
 
     // Also check CLASSPATH for directories and JARs.
     if let Ok(cp) = std::env::var("CLASSPATH") {
-        for entry in cp.split(':') {
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        for entry in cp.split(sep) {
             let p = Path::new(entry);
             if p.is_dir() {
                 let class_file = p.join(format!("{class_path}.class"));

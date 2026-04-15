@@ -684,11 +684,15 @@ impl<'a> TypeChecker<'a> {
                     var_name,
                     start: range_start,
                     end: range_end,
+                    step,
                     body,
                     ..
                 } => {
                     self.synth_expr(range_start, scope);
                     self.synth_expr(range_end, scope);
+                    if let Some(step_e) = step {
+                        self.synth_expr(step_e, scope);
+                    }
                     local_tys.push(Ty::Int);
                     scope.push((*var_name, Ty::Int));
                     self.check_block(body, scope, local_tys);

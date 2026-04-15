@@ -92,7 +92,16 @@ pub fn resolve_file(
     let print_sym = r.interner.intern("print");
     r.out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
     // Register stdlib top-level functions.
-    for name in &["maxOf", "minOf", "with", "repeat", "listOf"] {
+    for name in &[
+        "maxOf",
+        "minOf",
+        "with",
+        "repeat",
+        "listOf",
+        "mutableListOf",
+        "Pair",
+        "Triple",
+    ] {
         let sym = r.interner.intern(name);
         r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId
     }
@@ -234,11 +243,15 @@ impl<'a> Resolver<'a> {
                 var_name,
                 start: range_start,
                 end: range_end,
+                step,
                 body,
                 ..
             } => {
                 self.resolve_expr(fn_idx, range_start, scope, rf);
                 self.resolve_expr(fn_idx, range_end, scope, rf);
+                if let Some(step_e) = step {
+                    self.resolve_expr(fn_idx, step_e, scope, rf);
+                }
                 // The loop variable is a new local.
                 let local_idx = rf.locals.len() as u32;
                 rf.locals.push(*var_name);

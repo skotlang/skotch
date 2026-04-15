@@ -1,0 +1,34 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 iconst_1
+    0001 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0004 ldc "one"
+    0006 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0009 op_0x4B
+    0010 op_0x2A
+    0011 invokevirtual Method(kotlin/Pair.getFirst:()Ljava/lang/Object;)
+    0014 op_0xC0
+    0015 nop
+    0016 op_0x1C
+    0017 invokevirtual Method(java/lang/Number.intValue:()I)
+    0020 op_0x3C
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 op_0x1B
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 op_0x2A
+    0029 invokevirtual Method(kotlin/Pair.getSecond:()Ljava/lang/Object;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 op_0x5F
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 op_0x2A
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

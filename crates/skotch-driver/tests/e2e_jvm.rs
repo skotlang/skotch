@@ -115,8 +115,9 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
         }
 
         // Build classpath: temp dir + kotlin-stdlib.jar if available.
+        let sep = if cfg!(windows) { ";" } else { ":" };
         let cp_str = if let Some(ref stdlib) = kotlin_stdlib {
-            format!("{}:{}", tmp.display(), stdlib.display())
+            format!("{}{sep}{}", tmp.display(), stdlib.display())
         } else {
             tmp.display().to_string()
         };

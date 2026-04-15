@@ -1895,6 +1895,24 @@ impl<'a> Parser<'a> {
             self.skip_trivia();
             let range_end = self.parse_expr();
             self.skip_trivia();
+            // Optional `step N` after the range end.
+            let step = if self.peek_kind() == TokenKind::Ident {
+                let idx = self.pos;
+                let text = match self.payload(idx) {
+                    Some(TokenPayload::Ident(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                if text == "step" {
+                    self.bump(); // consume `step`
+                    self.skip_trivia();
+                    Some(self.parse_expr())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            self.skip_trivia();
             self.expect(TokenKind::RParen, "')' after for range");
             self.skip_trivia();
             let body = self.parse_block_or_single_stmt();
@@ -1905,6 +1923,7 @@ impl<'a> Parser<'a> {
                 end: range_end,
                 exclusive,
                 descending,
+                step,
                 body,
                 span,
             }
@@ -1970,14 +1989,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_conjunction(&mut self) -> Expr {
-        let mut lhs = self.parse_equality();
+        let mut lhs = self.parse_infix_call();
         loop {
             self.skip_trivia();
             if self.peek_kind() != TokenKind::AmpAmp {
                 break;
             }
             self.bump();
-            let rhs = self.parse_equality();
+            let rhs = self.parse_infix_call();
             let span = lhs.span().merge(rhs.span());
             lhs = Expr::Binary {
                 op: BinOp::And,
@@ -1985,6 +2004,51 @@ impl<'a> Parser<'a> {
                 rhs: Box::new(rhs),
                 span,
             };
+        }
+        lhs
+    }
+
+    /// Infix function calls: `a to b`, `a shl b`, etc.
+    /// Precedence: between conjunction (&&) and equality (==).
+    /// Parses `expr IDENT expr` as `expr.IDENT(expr)` for known infix
+    /// keywords. Does NOT loop — infix calls are right-to-left single.
+    fn parse_infix_call(&mut self) -> Expr {
+        let lhs = self.parse_equality();
+        self.skip_trivia();
+        // Check if the next token is a known infix function name that is
+        // NOT followed by `(` (which would be a regular call, already
+        // handled by parse_postfix).
+        if self.peek_kind() == TokenKind::Ident {
+            let idx = self.pos;
+            let text = match self.payload(idx) {
+                Some(TokenPayload::Ident(s)) => s.clone(),
+                _ => String::new(),
+            };
+            let is_infix = matches!(
+                text.as_str(),
+                "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr"
+            );
+            if is_infix && self.peek_kind_at(1) != TokenKind::LParen {
+                let kw_span = self.peek_span();
+                self.bump(); // consume infix ident
+                let name = self.interner.intern(&text);
+                self.skip_trivia();
+                let rhs = self.parse_equality();
+                let span = lhs.span().merge(rhs.span());
+                return Expr::Call {
+                    callee: Box::new(Expr::Field {
+                        receiver: Box::new(lhs),
+                        name,
+                        span: kw_span,
+                    }),
+                    args: vec![CallArg {
+                        name: None,
+                        expr: rhs,
+                    }],
+                    type_args: Vec::new(),
+                    span,
+                };
+            }
         }
         lhs
     }

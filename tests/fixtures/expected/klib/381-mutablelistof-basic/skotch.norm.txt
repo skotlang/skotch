@@ -1,0 +1,383 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.7.0
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Any",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        {
+          "Class": "java/util/List"
+        },
+        {
+          "Class": "java/util/List"
+        },
+        {
+          "Class": "java/util/List"
+        },
+        "Int",
+        "Any",
+        "Bool",
+        {
+          "Class": "java/util/List"
+        },
+        "Unit",
+        {
+          "Class": "java/util/List"
+        },
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "NewObjectArray": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 4,
+                    "index": 5,
+                    "value": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 4,
+                    "index": 8,
+                    "value": 9
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 4,
+                    "index": 11,
+                    "value": 12
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlin/collections/CollectionsKt",
+                        "method_name": "mutableListOf",
+                        "descriptor": "([Ljava/lang/Object;)Ljava/util/List;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Local": 14
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      17
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/List",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      16,
+                      18
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      20
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/List",
+                        "method_name": "size",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      22
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      23
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [],
+  "strings": []
+}
