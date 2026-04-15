@@ -1,0 +1,162 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.7.0
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "Unit",
+        "Int",
+        "Int"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 0
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpGe",
+                    "lhs": 2,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 3,
+              "then_block": 2,
+              "else_block": 4
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 2,
+                    "rhs": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 7
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    }
+  ],
+  "classes": [],
+  "strings": []
+}

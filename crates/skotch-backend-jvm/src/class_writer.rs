@@ -2272,6 +2272,22 @@ fn walk_block(
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }
                 }
+                CallKind::ConstructorJava {
+                    class_name,
+                    descriptor,
+                } => {
+                    // External constructor with explicit descriptor.
+                    // Stack already has [ref, ref] from NewInstance + dup.
+                    // Load the actual args (not including receiver).
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    let mref = cp.methodref(class_name, "<init>", descriptor);
+                    code.push(0xB7); // invokespecial
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    bump(stack, max_stack, -(args.len() as i32) - 1);
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                }
                 CallKind::Virtual {
                     class_name,
                     method_name,

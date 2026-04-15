@@ -1,4 +1,4 @@
 name   = "84-range-downto-step"
-status = "stub"
+status = "supported"
 features = ["range", "downTo", "step", "for-loop", "IntProgression"]
 reason = "Requires downTo and step infix functions + IntProgression iteration."

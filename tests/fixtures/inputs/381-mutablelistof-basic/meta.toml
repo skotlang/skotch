@@ -1,0 +1,4 @@
+name   = "381-mutablelistof-basic"
+status = "supported"
+features = ["mutableListOf", "List.add", "List.size", "stdlib"]
+reason = "Requires mutableListOf via kotlin/collections/CollectionsKt, List.add dispatch, and List.size property."

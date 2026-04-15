@@ -1,0 +1,4 @@
+name   = "382-range-step"
+status = "supported"
+features = ["range", "downTo", "step", "for-loop", "IntProgression"]
+reason = "Requires step modifier on downTo range in for-loop."

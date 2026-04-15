@@ -315,6 +315,7 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
                 CallKind::Static(_)
                 | CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
+                | CallKind::ConstructorJava { .. }
                 | CallKind::Virtual { .. }
                 | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. } => 0,
@@ -941,6 +942,7 @@ fn emit_call(
         }
         CallKind::StaticJava { .. }
         | CallKind::Constructor(_)
+        | CallKind::ConstructorJava { .. }
         | CallKind::Virtual { .. }
         | CallKind::Super { .. }
         | CallKind::VirtualJava { .. } => {

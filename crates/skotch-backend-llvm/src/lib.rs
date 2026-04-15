@@ -756,6 +756,7 @@ impl<'a> BlockWalker<'a> {
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
                 CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
+                | CallKind::ConstructorJava { .. }
                 | CallKind::Virtual { .. }
                 | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. } => {
@@ -819,6 +820,7 @@ impl<'a> BlockWalker<'a> {
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
             CallKind::StaticJava { .. }
             | CallKind::Constructor(_)
+            | CallKind::ConstructorJava { .. }
             | CallKind::Virtual { .. }
             | CallKind::Super { .. }
             | CallKind::VirtualJava { .. } => {

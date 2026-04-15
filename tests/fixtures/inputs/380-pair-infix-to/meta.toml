@@ -1,0 +1,4 @@
+name   = "380-pair-infix-to"
+status = "supported"
+features = ["Pair", "infix", "to", "stdlib"]
+reason = "Requires infix `to` parsing, Pair construction via kotlin/Pair, and .first/.second property access."

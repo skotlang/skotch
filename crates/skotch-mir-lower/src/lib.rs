@@ -1344,6 +1344,7 @@ fn lower_stmt(
             end: range_end,
             exclusive,
             descending,
+            step: step_expr,
             body,
             ..
         } => {
@@ -1442,24 +1443,50 @@ fn lower_stmt(
             // After body: goto increment block
             fb.terminate_and_switch(Terminator::Goto(incr_block), incr_block);
 
-            // Step block: i = i + 1 (ascending) or i = i - 1 (descending)
+            // Step block: i = i + step (ascending) or i = i - step (descending)
+            // When a `step` expression is provided, always ADD (the step
+            // value itself is always positive in Kotlin; for downTo the
+            // step is still added as subtraction).
             let step_op = if *descending {
                 MBinOp::SubI
             } else {
                 MBinOp::AddI
             };
-            let one = fb.new_local(Ty::Int);
-            fb.push_stmt(MStmt::Assign {
-                dest: one,
-                value: Rvalue::Const(MirConst::Int(1)),
-            });
+            let step_val = if let Some(step_e) = step_expr {
+                lower_expr(
+                    step_e,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                )
+                .unwrap_or_else(|| {
+                    let tmp = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: tmp,
+                        value: Rvalue::Const(MirConst::Int(1)),
+                    });
+                    tmp
+                })
+            } else {
+                let one = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: one,
+                    value: Rvalue::Const(MirConst::Int(1)),
+                });
+                one
+            };
             let incremented = fb.new_local(Ty::Int);
             fb.push_stmt(MStmt::Assign {
                 dest: incremented,
                 value: Rvalue::BinOp {
                     op: step_op,
                     lhs: loop_var,
-                    rhs: one,
+                    rhs: step_val,
                 },
             });
             fb.push_stmt(MStmt::Assign {
@@ -2886,6 +2913,32 @@ fn lower_expr(
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
 
+                // ── Infix `to`: `a to b` → `Pair(a, b)` ─────────
+                if method_name_str == "to" && args.len() == 1 {
+                    let a = recv_local;
+                    let b = all_args[1]; // all_args = [receiver, arg]
+                    let a_ty = fb.mf.locals[a.0 as usize].clone();
+                    let b_ty = fb.mf.locals[b.0 as usize].clone();
+                    let a_boxed = mir_autobox(fb, a, &a_ty);
+                    let b_boxed = mir_autobox(fb, b, &b_ty);
+                    let dest = fb.new_local(Ty::Class("kotlin/Pair".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::NewInstance("kotlin/Pair".to_string()),
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::ConstructorJava {
+                                class_name: "kotlin/Pair".to_string(),
+                                descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)V".to_string(),
+                            },
+                            args: vec![a_boxed, b_boxed],
+                        },
+                    });
+                    return Some(dest);
+                }
+
                 // ── Scope functions (let, also, run, apply) ─────────
                 // Lowered as inline intrinsics: the trailing lambda arg
                 // is invoked with the receiver, and the result depends
@@ -3144,6 +3197,88 @@ fn lower_expr(
                         let result = fb.new_local(Ty::Unit);
                         return Some(result);
                     }
+                }
+
+                // ── MutableList .add() / .remove() / .removeAt() / .clear() ───
+                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("ArrayList") || cn.contains("List"))
+                {
+                    let list_method: Option<(&str, &str, &str, Ty)> =
+                        match (method_name_str.as_str(), args.len()) {
+                            ("add", 1) => {
+                                // Autobox the argument before passing to add(Object).
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some(("java/util/List", "add", "(Ljava/lang/Object;)Z", Ty::Bool))
+                            }
+                            ("remove", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/List",
+                                    "remove",
+                                    "(Ljava/lang/Object;)Z",
+                                    Ty::Bool,
+                                ))
+                            }
+                            ("removeAt", 1) => {
+                                Some(("java/util/List", "remove", "(I)Ljava/lang/Object;", Ty::Any))
+                            }
+                            ("clear", 0) => Some(("java/util/List", "clear", "()V", Ty::Unit)),
+                            ("get", 1) => {
+                                Some(("java/util/List", "get", "(I)Ljava/lang/Object;", Ty::Any))
+                            }
+                            ("contains", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/List",
+                                    "contains",
+                                    "(Ljava/lang/Object;)Z",
+                                    Ty::Bool,
+                                ))
+                            }
+                            _ => None,
+                        };
+                    if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = list_method {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                },
+                                args: all_args,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
+
+                // ── Pair .toString() — on kotlin/Pair instances ─────
+                if matches!(&recv_ty, Ty::Class(cn) if cn == "kotlin/Pair")
+                    && method_name_str == "toString"
+                {
+                    let dest = fb.new_local(Ty::String);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlin/Pair".to_string(),
+                                method_name: "toString".to_string(),
+                                descriptor: "()Ljava/lang/String;".to_string(),
+                            },
+                            args: all_args,
+                        },
+                    });
+                    return Some(dest);
                 }
 
                 // ── Kotlin stdlib extension functions ─────────────────
@@ -3985,6 +4120,116 @@ fn lower_expr(
                     },
                 });
                 return Some(result);
+            }
+
+            // `mutableListOf(...)` — same pattern as listOf, but returns
+            // `java/util/ArrayList` via
+            // `kotlin/collections/CollectionsKt.mutableListOf([Object;)ArrayList`.
+            if callee_str == "mutableListOf" {
+                let arg_count = arg_locals.len();
+
+                let count_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
+                });
+                let array_local = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: array_local,
+                    value: Rvalue::NewObjectArray(count_local),
+                });
+
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+
+                // Return type is java/util/List at JVM level. The .add()/.remove()
+                // dispatch already matches on class names containing "List".
+                let result = fb.new_local(Ty::Class("java/util/List".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/CollectionsKt".to_string(),
+                            method_name: "mutableListOf".to_string(),
+                            descriptor: "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // `Pair(a, b)` — new kotlin/Pair(boxed_a, boxed_b).
+            if callee_str == "Pair"
+                && arg_locals.len() == 2
+                && !module.classes.iter().any(|c| c.name == "Pair")
+            {
+                let a_ty = fb.mf.locals[arg_locals[0].0 as usize].clone();
+                let b_ty = fb.mf.locals[arg_locals[1].0 as usize].clone();
+                let a_boxed = mir_autobox(fb, arg_locals[0], &a_ty);
+                let b_boxed = mir_autobox(fb, arg_locals[1], &b_ty);
+                let dest = fb.new_local(Ty::Class("kotlin/Pair".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance("kotlin/Pair".to_string()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::ConstructorJava {
+                            class_name: "kotlin/Pair".to_string(),
+                            descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)V".to_string(),
+                        },
+                        args: vec![a_boxed, b_boxed],
+                    },
+                });
+                return Some(dest);
+            }
+
+            // `Triple(a, b, c)` — new kotlin/Triple(boxed_a, boxed_b, boxed_c).
+            if callee_str == "Triple"
+                && arg_locals.len() == 3
+                && !module.classes.iter().any(|c| c.name == "Triple")
+            {
+                let a_ty = fb.mf.locals[arg_locals[0].0 as usize].clone();
+                let b_ty = fb.mf.locals[arg_locals[1].0 as usize].clone();
+                let c_ty = fb.mf.locals[arg_locals[2].0 as usize].clone();
+                let a_boxed = mir_autobox(fb, arg_locals[0], &a_ty);
+                let b_boxed = mir_autobox(fb, arg_locals[1], &b_ty);
+                let c_boxed = mir_autobox(fb, arg_locals[2], &c_ty);
+                let dest = fb.new_local(Ty::Class("kotlin/Triple".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance("kotlin/Triple".to_string()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::ConstructorJava {
+                            class_name: "kotlin/Triple".to_string(),
+                            descriptor: "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V"
+                                .to_string(),
+                        },
+                        args: vec![a_boxed, b_boxed, c_boxed],
+                    },
+                });
+                return Some(dest);
             }
 
             // `IntArray(size)` intrinsic — create a primitive int[].
@@ -5055,7 +5300,7 @@ fn lower_expr(
                 loop_ctx,
             )?;
             let arr_ty = fb.mf.locals[arr.0 as usize].clone();
-            match arr_ty {
+            match &arr_ty {
                 Ty::IntArray => {
                     let dest = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
@@ -5067,10 +5312,26 @@ fn lower_expr(
                     });
                     Some(dest)
                 }
+                Ty::Class(cn) if cn.contains("ArrayList") || cn.contains("List") => {
+                    // List[index] → invokeinterface java/util/List.get(I)Object
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/List".to_string(),
+                                method_name: "get".to_string(),
+                                descriptor: "(I)Ljava/lang/Object;".to_string(),
+                            },
+                            args: vec![arr, idx],
+                        },
+                    });
+                    Some(dest)
+                }
                 _ => {
                     diags.push(Diagnostic::error(
                         receiver.span(),
-                        "index operator is only supported on IntArray",
+                        "index operator is only supported on IntArray and List",
                     ));
                     None
                 }
@@ -5175,6 +5436,53 @@ fn lower_expr(
                             },
                         });
                         return Some(dest);
+                    }
+                    // Pair .first / .second → invoke getFirst() / getSecond()
+                    if declaring_class.contains("Pair") || declaring_class == "kotlin/Pair" {
+                        let (getter, desc) = match field_name.as_str() {
+                            "first" => ("getFirst", "()Ljava/lang/Object;"),
+                            "second" => ("getSecond", "()Ljava/lang/Object;"),
+                            _ => ("", ""),
+                        };
+                        if !getter.is_empty() {
+                            let dest = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "kotlin/Pair".to_string(),
+                                        method_name: getter.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                    // Triple .first / .second / .third → getFirst/getSecond/getThird
+                    if declaring_class.contains("Triple") || declaring_class == "kotlin/Triple" {
+                        let (getter, desc) = match field_name.as_str() {
+                            "first" => ("getFirst", "()Ljava/lang/Object;"),
+                            "second" => ("getSecond", "()Ljava/lang/Object;"),
+                            "third" => ("getThird", "()Ljava/lang/Object;"),
+                            _ => ("", ""),
+                        };
+                        if !getter.is_empty() {
+                            let dest = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "kotlin/Triple".to_string(),
+                                        method_name: getter.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                     let dest = fb.new_local(field_ty);
                     fb.push_stmt(MStmt::Assign {
