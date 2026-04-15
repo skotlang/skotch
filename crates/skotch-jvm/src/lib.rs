@@ -481,31 +481,36 @@ impl EmbeddedJvm {
             .map_err(|e| anyhow!("getSystemClassLoader result: {e}"))?;
 
         // Use reflection to call addURL on the URLClassLoader.
-        // This works on Java 8-16. On Java 17+ with modules, we need
-        // to open the module first.
+        // Only safe when the system class loader is actually a
+        // URLClassLoader — on Java 9+ it is an `AppClassLoader` that
+        // does NOT extend URLClassLoader, and invoking the method via
+        // a URLClassLoader method id is JNI undefined behavior that
+        // crashes the JVM on modern JDKs.
         let ucl_class = env
             .find_class("java/net/URLClassLoader")
             .map_err(|e| anyhow!("FindClass URLClassLoader: {e}"))?;
+        let is_url_cl = env
+            .is_instance_of(&sys_cl, &ucl_class)
+            .map_err(|e| anyhow!("IsInstanceOf URLClassLoader: {e}"))?;
+        if !is_url_cl {
+            return Err(anyhow!(
+                "cannot add jar to system classpath at runtime: system class loader \
+                 is not a URLClassLoader (Java 9+). Set the classpath before JVM \
+                 startup instead. JAR: {url_str}"
+            ));
+        }
         let add_url_method = env
             .get_method_id(&ucl_class, "addURL", "(Ljava/net/URL;)V")
-            .map_err(|_| {
-                // Fallback: just log and continue. The JVM may not use URLClassLoader.
-                anyhow!("addURL method not found (Java 17+ sealed class loader). JAR: {url_str}")
-            });
-
-        if let Ok(method_id) = add_url_method {
-            // Make accessible via setAccessible(true).
-            // On Java 17+ this may fail, but we try anyway.
-            unsafe {
-                let _ = env.call_method_unchecked(
-                    &sys_cl,
-                    method_id,
-                    jni::signature::ReturnType::Primitive(jni::signature::Primitive::Void),
-                    &[jni::objects::JValue::Object(&url_obj).as_jni()],
-                );
-            }
-            env.exception_clear().ok();
+            .map_err(|e| anyhow!("GetMethodID URLClassLoader.addURL: {e}"))?;
+        unsafe {
+            let _ = env.call_method_unchecked(
+                &sys_cl,
+                add_url_method,
+                jni::signature::ReturnType::Primitive(jni::signature::Primitive::Void),
+                &[jni::objects::JValue::Object(&url_obj).as_jni()],
+            );
         }
+        env.exception_clear().ok();
 
         Ok(())
     }

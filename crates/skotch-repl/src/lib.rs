@@ -82,14 +82,13 @@ fn load_kotlin_stdlib(jvm: &EmbeddedJvm) {
         Ok(lib_dir) => {
             let stdlib = lib_dir.join("kotlin-stdlib.jar");
             if stdlib.exists() {
-                if let Err(e) = jvm.add_jar_to_classpath(&stdlib) {
-                    eprintln!(
-                        "  warning: failed to add kotlin-stdlib.jar to classpath: {e}\n  \
-                         path: {}\n  \
-                         hint: try setting KOTLIN_HOME or adding kotlin-stdlib.jar to CLASSPATH",
-                        stdlib.display()
-                    );
-                }
+                // Best effort: on Java 9+ the system class loader is
+                // not a URLClassLoader, so `add_jar_to_classpath`
+                // will fail. That's fine — `skotch-jvm::create_jvm`
+                // already puts kotlin-stdlib.jar on the JVM's
+                // startup classpath via `-Djava.class.path=`, so no
+                // runtime injection is required.
+                let _ = jvm.add_jar_to_classpath(&stdlib);
             } else {
                 eprintln!(
                     "  warning: kotlin-stdlib.jar not found at {}",
