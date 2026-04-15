@@ -2082,7 +2082,7 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "skotch-apk"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "byteorder",
  "skotch-axml",
@@ -2091,14 +2091,14 @@ dependencies = [
 
 [[package]]
 name = "skotch-axml"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
 name = "skotch-backend-dex"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "adler",
  "byteorder",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-backend-jvm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "byteorder",
  "rustc-hash",
@@ -2139,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-backend-klib"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -2160,7 +2160,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-backend-llvm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "skotch-backend-klib",
@@ -2179,7 +2179,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-backend-wasm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-mir",
  "skotch-types",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-build"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2210,7 +2210,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-buildscript"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-diagnostics",
  "skotch-intern",
@@ -2221,14 +2221,14 @@ dependencies = [
 
 [[package]]
 name = "skotch-classfile-norm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
 name = "skotch-classinfo"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "which",
  "zip",
@@ -2236,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-cli"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2249,11 +2249,11 @@ dependencies = [
 
 [[package]]
 name = "skotch-config"
-version = "0.5.0"
+version = "0.6.1"
 
 [[package]]
 name = "skotch-db"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "blake3",
  "rayon",
@@ -2269,14 +2269,14 @@ dependencies = [
 
 [[package]]
 name = "skotch-dex-norm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
 name = "skotch-diagnostics"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "ariadne",
  "skotch-span",
@@ -2285,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-driver"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -2312,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-hir"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-intern",
  "skotch-types",
@@ -2320,21 +2320,21 @@ dependencies = [
 
 [[package]]
 name = "skotch-intern"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "lasso",
 ]
 
 [[package]]
 name = "skotch-jar"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "zip",
 ]
 
 [[package]]
 name = "skotch-jvm"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "jni",
@@ -2343,7 +2343,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-lexer"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-diagnostics",
  "skotch-intern",
@@ -2353,11 +2353,11 @@ dependencies = [
 
 [[package]]
 name = "skotch-llvm-norm"
-version = "0.5.0"
+version = "0.6.1"
 
 [[package]]
 name = "skotch-lsp"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "dashmap 6.1.0",
  "skotch-diagnostics",
@@ -2375,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-mir"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -2385,7 +2385,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-mir-lower"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rustc-hash",
  "skotch-classinfo",
@@ -2403,7 +2403,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-parser"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-diagnostics",
  "skotch-intern",
@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-repl"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "directories",
@@ -2434,7 +2434,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-resolve"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rustc-hash",
  "skotch-diagnostics",
@@ -2447,7 +2447,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-sign"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -2459,14 +2459,14 @@ dependencies = [
 
 [[package]]
 name = "skotch-span"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rustc-hash",
 ]
 
 [[package]]
 name = "skotch-syntax"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "skotch-intern",
  "skotch-span",
@@ -2474,7 +2474,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-tape"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "directories",
@@ -2485,7 +2485,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-typeck"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "rustc-hash",
  "skotch-diagnostics",
@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "skotch-types"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "skotch-intern",
@@ -3335,7 +3335,7 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "clap",

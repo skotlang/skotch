@@ -27,6 +27,10 @@ pub enum Ty {
     String,
     /// `Any` — top type.
     Any,
+    /// `Nothing` — bottom type. No value has this type.
+    /// `throw` expressions synthesize Nothing, and functions that always
+    /// throw (like `error()`, `TODO()`) return Nothing.
+    Nothing,
     /// `IntArray` — primitive int array (`int[]` on JVM).
     IntArray,
     /// Nullable wrapper. `String?` ≡ `Nullable(String)`.
@@ -45,6 +49,10 @@ impl Ty {
     /// reflexive case plus `Int → Any` and `String → Any`.
     pub fn assignable_to(&self, other: &Ty) -> bool {
         if self == other {
+            return true;
+        }
+        // Nothing is the bottom type — assignable to everything.
+        if matches!(self, Ty::Nothing) {
             return true;
         }
         if matches!(other, Ty::Any) {
@@ -87,6 +95,7 @@ impl Ty {
             Ty::Double => "Double",
             Ty::String => "String",
             Ty::Any => "Any",
+            Ty::Nothing => "Nothing",
             Ty::IntArray => "IntArray",
             Ty::Class(_) => "<class>",
             Ty::Function { .. } => "<function>",
@@ -107,6 +116,7 @@ pub fn ty_from_name(name: &str) -> Option<Ty> {
         "Double" => Ty::Double,
         "String" => Ty::String,
         "Any" => Ty::Any,
+        "Nothing" => Ty::Nothing,
         "IntArray" => Ty::IntArray,
         _ => return None,
     })
@@ -131,5 +141,21 @@ mod tests {
     #[test]
     fn nullable_wrapping() {
         assert!(Ty::String.assignable_to(&Ty::Nullable(Box::new(Ty::String))));
+    }
+
+    #[test]
+    fn nothing_is_bottom_type() {
+        // Nothing is assignable to everything.
+        assert!(Ty::Nothing.assignable_to(&Ty::Int));
+        assert!(Ty::Nothing.assignable_to(&Ty::String));
+        assert!(Ty::Nothing.assignable_to(&Ty::Any));
+        assert!(Ty::Nothing.assignable_to(&Ty::Unit));
+        assert!(Ty::Nothing.assignable_to(&Ty::Nothing));
+        assert!(Ty::Nothing.assignable_to(&Ty::Nullable(Box::new(Ty::String))));
+    }
+
+    #[test]
+    fn nothing_from_name() {
+        assert_eq!(ty_from_name("Nothing"), Some(Ty::Nothing));
     }
 }

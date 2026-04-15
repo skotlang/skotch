@@ -366,6 +366,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Safe call (?.)](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `x?.length` — null-check + short-circuit to null; handles properties and methods |
 | [Non-null assertion (!!)](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `x!!` — unwraps Nullable(T) to T for downstream dispatch |
 | [Smart casts in when](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `when (x) { is String -> x.uppercase() }` — checkcast + scope narrowing in when branches |
+| [Nullable enforcement](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `val x: String = null` → compile error; non-nullable types reject null |
+| [Nothing type](https://kotlinlang.org/spec/type-system.html#nothing) | §3.8 | Bottom type; `throw` has type Nothing; assignable to all types |
 
 ### Not yet implemented
 

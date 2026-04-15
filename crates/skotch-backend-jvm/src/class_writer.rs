@@ -1465,6 +1465,7 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::IntArray => "[I",
         Ty::Class(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
+        Ty::Nothing => "V",                          // Nothing → void (unreachable on JVM)
         Ty::Nullable(inner) => jvm_type(inner),
         Ty::Error => "V",
     }

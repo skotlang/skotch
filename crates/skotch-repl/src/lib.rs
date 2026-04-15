@@ -21,11 +21,9 @@
 //! - Ctrl-R reverse-search through history
 //! - Ctrl-C to abort the current line
 //! - Ctrl-D on an empty line to exit
-//!
-//! Stubs for tab-completion, syntax highlighting, input validation
-//! (multi-line entry), and hints are wired into reedline's extension
-//! points but currently return passthrough defaults. They're called
-//! out with `// TODO:` comments so a future PR can flesh them out.
+//! - **Tab completion** for REPL commands, Kotlin keywords, locally
+//!   defined variables/classes/functions, and member access on typed
+//!   variables via live JVM reflection
 //!
 //! ## Stateful REPL
 //!
@@ -54,16 +52,22 @@
 //! 2. `which java` on `PATH`
 //! 3. `None` — caller falls back to a clear error
 
+mod completion;
+
 use anyhow::{anyhow, Context, Result};
 use skotch_jvm::EmbeddedJvm;
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use skotch_diagnostics::Diagnostics;
 use skotch_driver::{emit, EmitOptions, Target};
 use skotch_intern::Interner;
 use skotch_span::FileId;
 use skotch_syntax::Decl;
+
+use completion::{expand_tilde, scan_dir_classes, CompletionCtx, SkotchCompleter};
 
 // ─── public entry points ─────────────────────────────────────────────────
 
@@ -80,11 +84,15 @@ use skotch_syntax::Decl;
 /// streams.
 pub fn run_repl_interactive() -> Result<()> {
     use reedline::{
-        default_emacs_keybindings, DefaultHinter, DefaultPrompt, DefaultPromptSegment, EditCommand,
-        Emacs, FileBackedHistory, KeyCode, KeyModifiers, Reedline, ReedlineEvent, Signal,
+        default_emacs_keybindings, ColumnarMenu, DefaultHinter, DefaultPrompt,
+        DefaultPromptSegment, EditCommand, Emacs, FileBackedHistory, KeyCode, KeyModifiers,
+        MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal,
     };
 
     let jvm = EmbeddedJvm::new()?;
+
+    // ── shared completion state ─────────────────────────────────────
+    let completion_ctx = Arc::new(Mutex::new(CompletionCtx::new()));
 
     // ── reedline setup ──────────────────────────────────────────────
     let mut keybindings = default_emacs_keybindings();
@@ -93,7 +101,35 @@ pub fn run_repl_interactive() -> Result<()> {
         KeyCode::Char('l'),
         ReedlineEvent::Edit(vec![EditCommand::Clear]),
     );
+    // Tab opens the completion menu (or cycles to the next item).
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Tab,
+        ReedlineEvent::UntilFound(vec![
+            ReedlineEvent::Menu("completion_menu".to_string()),
+            ReedlineEvent::MenuNext,
+        ]),
+    );
+    // Shift-Tab cycles backwards.
+    keybindings.add_binding(
+        KeyModifiers::SHIFT,
+        KeyCode::BackTab,
+        ReedlineEvent::MenuPrevious,
+    );
     let edit_mode = Box::new(Emacs::new(keybindings));
+
+    // Tab completer backed by REPL state + JVM reflection.
+    let completer = Box::new(SkotchCompleter {
+        ctx: Arc::clone(&completion_ctx),
+    });
+
+    // Columnar completion menu (idiomatic 4-column layout).
+    let completion_menu = Box::new(
+        ColumnarMenu::default()
+            .with_name("completion_menu")
+            .with_columns(4)
+            .with_column_padding(2),
+    );
 
     // Persistent history across REPL sessions (~/.skotch/repl_history).
     let history_path = history_path();
@@ -108,6 +144,8 @@ pub fn run_repl_interactive() -> Result<()> {
 
     let mut editor = Reedline::create()
         .with_edit_mode(edit_mode)
+        .with_completer(completer)
+        .with_menu(ReedlineMenu::EngineCompleter(completion_menu))
         .with_history(history)
         .with_hinter(hinter);
 
@@ -142,7 +180,12 @@ pub fn run_repl_interactive() -> Result<()> {
 
                 // ── REPL commands (colon-prefixed) ──────────────
                 if let Some(cmd) = trimmed.strip_prefix(':') {
-                    match cmd {
+                    let (cmd_name, cmd_arg) = cmd
+                        .split_once(' ')
+                        .map(|(n, a)| (n, a.trim()))
+                        .unwrap_or((cmd, ""));
+
+                    match cmd_name {
                         "quit" | "exit" | "q" => {
                             println!("bye");
                             return Ok(());
@@ -152,9 +195,13 @@ pub fn run_repl_interactive() -> Result<()> {
                             println!("  :help / :?     — show this help");
                             println!("  :history       — show accumulated declarations");
                             println!("  :reset         — clear all declarations");
+                            println!("  :cpadd <path>  — add JAR or directory to classpath");
+                            println!("  :cplist        — list classpath entries");
                             println!("  :type <expr>   — show the inferred type of an expression");
                             println!("  <kotlin>       — compile and run");
                             println!();
+                            println!("  Tab            — complete identifier or member");
+                            println!("  Shift-Tab      — previous completion");
                             println!("  Up/Down        — navigate history");
                             println!("  Ctrl-R         — reverse history search");
                             println!("  Ctrl-L         — clear screen");
@@ -177,11 +224,22 @@ pub fn run_repl_interactive() -> Result<()> {
                         }
                         "reset" | "clear" => {
                             state.reset();
+                            state.sync_completions(&completion_ctx);
                             println!("(state cleared)");
+                        }
+                        "cpadd" => {
+                            if cmd_arg.is_empty() {
+                                eprintln!("usage: :cpadd <jar-or-directory>");
+                            } else {
+                                handle_cpadd(cmd_arg, &jvm, &mut state, Some(&completion_ctx));
+                            }
+                        }
+                        "cplist" => {
+                            handle_cplist(&state);
                         }
                         other => {
                             eprintln!("unknown command :{other} — type :help for options");
-                        } // :type deferred — needs typechecker integration
+                        }
                     }
                     continue;
                 }
@@ -189,6 +247,7 @@ pub fn run_repl_interactive() -> Result<()> {
                 // ── Kotlin code ─────────────────────────────────
                 match state.process(&line, &jvm) {
                     Ok(stdout) => {
+                        state.sync_completions(&completion_ctx);
                         if !stdout.is_empty() {
                             print!("{stdout}");
                             if !stdout.ends_with('\n') {
@@ -210,6 +269,52 @@ pub fn run_repl_interactive() -> Result<()> {
                 eprintln!("reedline error: {e}");
                 return Err(e.into());
             }
+        }
+    }
+}
+
+/// Handle `:cpadd <path>` — add a JAR or directory to the classpath.
+fn handle_cpadd(
+    path_str: &str,
+    jvm: &EmbeddedJvm,
+    state: &mut ReplState,
+    ctx: Option<&Arc<Mutex<CompletionCtx>>>,
+) {
+    let path = expand_tilde(path_str);
+    if !path.exists() {
+        eprintln!("error: path not found: {}", path.display());
+        return;
+    }
+
+    if let Err(e) = jvm.add_jar_to_classpath(&path) {
+        eprintln!("warning: {e}");
+    }
+    state.classpath.push(path.clone());
+
+    let classes = if path.is_file() {
+        jvm.scan_jar_classes(&path).unwrap_or_default()
+    } else {
+        scan_dir_classes(&path)
+    };
+
+    let kind = if path.is_dir() { "directory" } else { "JAR" };
+    let count = classes.len();
+
+    if let Some(ctx) = ctx {
+        let mut ctx = ctx.lock().unwrap();
+        ctx.add_extra_classes(classes);
+    }
+
+    println!("added {kind}: {} ({count} classes)", path.display());
+}
+
+/// Handle `:cplist` — print classpath entries.
+fn handle_cplist(state: &ReplState) {
+    if state.classpath.is_empty() {
+        println!("(no extra classpath entries — JDK runtime is always available)");
+    } else {
+        for (i, p) in state.classpath.iter().enumerate() {
+            println!("  {}: {}", i + 1, p.display());
         }
     }
 }
@@ -285,7 +390,11 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
         // ── REPL commands (colon-prefixed) ──────────────────────────
         if let Some(cmd) = trimmed.strip_prefix(':') {
             writeln!(output, "{trimmed}")?;
-            match cmd {
+            let (cmd_name, cmd_arg) = cmd
+                .split_once(' ')
+                .map(|(n, a)| (n, a.trim()))
+                .unwrap_or((cmd, ""));
+            match cmd_name {
                 "quit" | "exit" | "q" => {
                     writeln!(output, "bye")?;
                     return Ok(());
@@ -294,6 +403,8 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
                     writeln!(output, "  :quit / :exit  — leave the REPL")?;
                     writeln!(output, "  :help          — show this help")?;
                     writeln!(output, "  :reset         — clear all declarations")?;
+                    writeln!(output, "  :cpadd <path>  — add JAR/dir to classpath")?;
+                    writeln!(output, "  :cplist        — list classpath entries")?;
                     writeln!(
                         output,
                         "  <kotlin>       — compile and run one expression or declaration"
@@ -317,6 +428,16 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
                             writeln!(output, "  {}: {d}", i + 1)?;
                         }
                     }
+                }
+                "cpadd" => {
+                    if cmd_arg.is_empty() {
+                        writeln!(output, "usage: :cpadd <jar-or-directory>")?;
+                    } else {
+                        handle_cpadd(cmd_arg, &jvm, &mut state, None);
+                    }
+                }
+                "cplist" => {
+                    handle_cplist(&state);
                 }
                 other => {
                     writeln!(output, "unknown command :{other}")?;
@@ -409,6 +530,10 @@ struct ReplState {
     turn: usize,
     /// Counter for auto-assigned result variables (res0, res1, ...).
     res_counter: usize,
+    /// Known variable types from expression evaluation or annotation.
+    var_types: HashMap<String, String>,
+    /// Extra classpath entries added via `:cpadd`.
+    classpath: Vec<PathBuf>,
 }
 
 impl ReplState {
@@ -418,6 +543,8 @@ impl ReplState {
             local_decls: Vec::new(),
             turn: 0,
             res_counter: 0,
+            var_types: HashMap::new(),
+            classpath: Vec::new(),
         }
     }
 
@@ -426,6 +553,19 @@ impl ReplState {
     fn reset(&mut self) {
         self.top_decls.clear();
         self.local_decls.clear();
+        self.var_types.clear();
+        // Classpath entries are NOT cleared on reset.
+    }
+
+    /// Push current REPL state into the shared completion context.
+    fn sync_completions(&self, ctx: &Arc<Mutex<CompletionCtx>>) {
+        let mut ctx = ctx.lock().unwrap();
+        ctx.sync_from_repl(
+            &self.top_decls,
+            &self.local_decls,
+            self.res_counter,
+            &self.var_types,
+        );
     }
 
     /// Process one REPL turn. Returns the captured stdout (empty for
@@ -512,6 +652,8 @@ impl ReplState {
                         // Determine the display type from the value.
                         let value_str = stdout.trim_end();
                         let type_name = infer_display_type(value_str, body);
+                        self.var_types
+                            .insert(res_name.clone(), type_name.to_string());
                         self.local_decls.push(format!("val {res_name} = {body}"));
                         self.res_counter += 1;
                         Ok(format!("{res_name}: {type_name} = {value_str}\n"))

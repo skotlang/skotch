@@ -573,6 +573,21 @@ impl<'a> TypeChecker<'a> {
                             ),
                         ));
                     }
+                    // Nullable enforcement: `val x: String = null` is an error.
+                    // Only fires when there is an explicit non-nullable annotation
+                    // and the init expression is a null literal.
+                    if v.ty.is_some()
+                        && !matches!(declared, Ty::Nullable(_) | Ty::Error)
+                        && matches!(v.init, Expr::NullLit(_))
+                    {
+                        self.diags.push(Diagnostic::error(
+                            v.span,
+                            format!(
+                                "Null can not be a value of a non-null type {}",
+                                declared.display_name()
+                            ),
+                        ));
+                    }
                     local_tys.push(declared.clone());
                     scope.push((v.name, declared));
                 }
@@ -953,7 +968,7 @@ impl<'a> TypeChecker<'a> {
 
             Expr::Throw { expr, .. } => {
                 self.synth_expr(expr, scope);
-                Ty::Unit
+                Ty::Nothing
             }
 
             Expr::Try {

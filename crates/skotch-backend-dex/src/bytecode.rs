@@ -959,6 +959,7 @@ fn type_descriptor(ty: &Ty) -> &'static str {
         Ty::IntArray => "[I",
         Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;",
+        Ty::Nothing => "V", // Nothing → void (unreachable on DEX)
         Ty::Error => "V",
     }
 }

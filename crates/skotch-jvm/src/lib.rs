@@ -457,6 +457,171 @@ impl EmbeddedJvm {
         Ok(())
     }
 
+    /// List public method and field names for a class via JVM reflection.
+    ///
+    /// Uses `Class.forName(name)` to load the class, then `getMethods()`
+    /// and `getFields()` to enumerate members. Method overloads are
+    /// deduplicated (only the name is returned). Returns `(name, kind)`
+    /// pairs where kind is `"method"` or `"field"`.
+    pub fn list_members(&self, java_class_name: &str) -> Result<Vec<(String, &'static str)>> {
+        let mut env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("attach: {e}"))?;
+
+        let name_j = env
+            .new_string(java_class_name)
+            .map_err(|e| anyhow!("NewString: {e}"))?;
+        let cls = match env.call_static_method(
+            "java/lang/Class",
+            "forName",
+            "(Ljava/lang/String;)Ljava/lang/Class;",
+            &[JValue::Object(&name_j.into())],
+        ) {
+            Ok(v) => v.l().map_err(|e| anyhow!("forName result: {e}"))?,
+            Err(_) => {
+                env.exception_clear().ok();
+                return Err(anyhow!("Class.forName({java_class_name}) not found"));
+            }
+        };
+
+        let mut members: Vec<(String, &'static str)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        // Public methods.
+        if let Ok(arr_val) =
+            env.call_method(&cls, "getMethods", "()[Ljava/lang/reflect/Method;", &[])
+        {
+            if let Ok(arr_obj) = arr_val.l() {
+                let arr: jni::objects::JObjectArray = arr_obj.into();
+                let len = env.get_array_length(&arr).unwrap_or(0);
+                for i in 0..len {
+                    if let Ok(elem) = env.get_object_array_element(&arr, i) {
+                        if let Ok(nv) =
+                            env.call_method(&elem, "getName", "()Ljava/lang/String;", &[])
+                        {
+                            if let Ok(no) = nv.l() {
+                                if let Ok(js) = env.get_string((&no).into()) {
+                                    let n = js.to_string_lossy().into_owned();
+                                    if seen.insert(n.clone()) {
+                                        members.push((n, "method"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        env.exception_clear().ok();
+
+        // Public fields.
+        if let Ok(arr_val) = env.call_method(&cls, "getFields", "()[Ljava/lang/reflect/Field;", &[])
+        {
+            if let Ok(arr_obj) = arr_val.l() {
+                let arr: jni::objects::JObjectArray = arr_obj.into();
+                let len = env.get_array_length(&arr).unwrap_or(0);
+                for i in 0..len {
+                    if let Ok(elem) = env.get_object_array_element(&arr, i) {
+                        if let Ok(nv) =
+                            env.call_method(&elem, "getName", "()Ljava/lang/String;", &[])
+                        {
+                            if let Ok(no) = nv.l() {
+                                if let Ok(js) = env.get_string((&no).into()) {
+                                    let n = js.to_string_lossy().into_owned();
+                                    if seen.insert(n.clone()) {
+                                        members.push((n, "field"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        env.exception_clear().ok();
+
+        members.sort();
+        Ok(members)
+    }
+
+    /// Scan a JAR file for class names using `java.util.jar.JarFile`.
+    ///
+    /// Returns fully-qualified class names (e.g. `com.example.Foo`).
+    /// Inner classes (containing `$`) and metadata entries are excluded.
+    pub fn scan_jar_classes(&self, jar_path: &std::path::Path) -> Result<Vec<String>> {
+        let mut env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("attach: {e}"))?;
+
+        let path_str = jar_path.to_string_lossy();
+        let path_j = env
+            .new_string(&*path_str)
+            .map_err(|e| anyhow!("NewString: {e}"))?;
+
+        let jar_class = env
+            .find_class("java/util/jar/JarFile")
+            .map_err(|e| anyhow!("FindClass JarFile: {e}"))?;
+        let jar_obj = match env.new_object(
+            jar_class,
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(&path_j.into())],
+        ) {
+            Ok(j) => j,
+            Err(_) => {
+                env.exception_clear().ok();
+                return Err(anyhow!("cannot open JAR: {path_str}"));
+            }
+        };
+
+        let entries = env
+            .call_method(&jar_obj, "entries", "()Ljava/util/Enumeration;", &[])
+            .map_err(|e| anyhow!("entries(): {e}"))?
+            .l()
+            .map_err(|e| anyhow!("entries result: {e}"))?;
+
+        let mut classes = Vec::new();
+
+        loop {
+            let has = env
+                .call_method(&entries, "hasMoreElements", "()Z", &[])
+                .and_then(|v| v.z())
+                .unwrap_or(false);
+            if !has {
+                break;
+            }
+            let entry = match env.call_method(&entries, "nextElement", "()Ljava/lang/Object;", &[])
+            {
+                Ok(v) => match v.l() {
+                    Ok(o) => o,
+                    _ => continue,
+                },
+                _ => break,
+            };
+            let name = match env.call_method(&entry, "getName", "()Ljava/lang/String;", &[]) {
+                Ok(nv) => match nv.l() {
+                    Ok(no) => match env.get_string((&no).into()) {
+                        Ok(js) => js.to_string_lossy().into_owned(),
+                        _ => continue,
+                    },
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            if name.ends_with(".class") && !name.contains('$') {
+                if let Some(cn) = name.strip_suffix(".class") {
+                    let dotted = cn.replace('/', ".");
+                    if !dotted.ends_with(".module-info") && !dotted.ends_with(".package-info") {
+                        classes.push(dotted);
+                    }
+                }
+            }
+        }
+
+        let _ = env.call_method(&jar_obj, "close", "()V", &[]);
+        env.exception_clear().ok();
+        Ok(classes)
+    }
+
     /// Verify the JVM is alive.
     pub fn check_alive(&self) -> Result<()> {
         let env = Self::jvm()

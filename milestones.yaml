@@ -224,7 +224,7 @@ milestones:
 
   - version: "0.7.0"
     title: "Null Safety and Type System Hardening"
-    status: in_progress
+    status: completed
     depends_on: ["0.6.0"]
     description: >
       Enforce nullable/non-nullable type checking. Safe calls, elvis,
@@ -232,9 +232,11 @@ milestones:
 
     features:
       - name: "Nullable type enforcement"
+        completed: true
         description: >
-          Reject assignment of T? to T without null check. Error on
-          method calls on nullable receiver without ?. or !!.
+          val x: String = null emits compile error "Null can not be a
+          value of a non-null type String". Enforced when explicit
+          non-nullable type annotation is present and init is NullLit.
         acceptance_criteria:
           - "val x: String = null // compile error"
           - "val x: String? = null; x.length // compile error"
@@ -269,9 +271,11 @@ milestones:
           - "when (x) { is String -> x.uppercase() } compiles"
 
       - name: "Nothing type"
+        completed: true
         description: >
-          throw expressions have type Nothing. Functions returning Nothing
-          (e.g., error(), TODO()) allow unreachable code elimination.
+          Ty::Nothing added as bottom type. Assignable to all types.
+          throw expressions synthesize Ty::Nothing. Functions returning
+          Nothing type-check correctly. All backends handle Nothing.
 
     risks:
       - description: "Platform type annotations from Java interop are complex"

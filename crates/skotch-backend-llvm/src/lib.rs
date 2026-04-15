@@ -996,6 +996,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::String => "ptr",
         Ty::IntArray => "ptr", // int[] → pointer in LLVM
         Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
+        Ty::Nothing => "void", // Nothing → void (unreachable)
         Ty::Error => "void",
     }
 }
