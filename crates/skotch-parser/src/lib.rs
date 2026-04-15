@@ -2233,9 +2233,21 @@ impl<'a> Parser<'a> {
     fn parse_postfix(&mut self) -> Expr {
         let mut expr = self.parse_primary();
         loop {
-            // Postfix `.field` and `(args)` cannot have a newline before
-            // them — that would be a new statement. We don't skip
-            // newlines here.
+            // Kotlin allows expression continuation across newlines when
+            // the next non-trivia token is `.` or `?.`. This lets users
+            // write multi-line dot-chains like:
+            //   listOf(1,2,3)
+            //       .map { it * 2 }
+            //       .filter { it > 2 }
+            // Other operators (e.g. `-`) after a newline start a new
+            // statement, so we only skip trivia when the continuation
+            // token is a dot.
+            if matches!(self.peek_kind(), TokenKind::Newline | TokenKind::Semi) {
+                let next = self.peek_kind_skip_trivia_at(self.pos);
+                if matches!(next, TokenKind::Dot | TokenKind::QuestionDot) {
+                    self.skip_trivia();
+                }
+            }
             match self.peek_kind() {
                 TokenKind::Dot => {
                     self.bump();

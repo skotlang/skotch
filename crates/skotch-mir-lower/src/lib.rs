@@ -45,6 +45,9 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     if let Some(ty) = skotch_types::ty_from_name(resolved_name) {
         return ty;
     }
+    // User-defined types take priority over well-known mappings so
+    // that e.g. a user-defined `Pair` class isn't silently mapped
+    // to `kotlin/Pair`.
     // Enums are real classes now.
     if module.enum_names.contains(resolved_name) {
         return Ty::Class(resolved_name.to_string());
@@ -53,7 +56,28 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     if module.classes.iter().any(|c| c.name == resolved_name) {
         return Ty::Class(resolved_name.to_string());
     }
+    // Map well-known Kotlin collection/stdlib type names to their
+    // fully-qualified JVM internal names.
+    if let Some(jvm_name) = well_known_class_name(resolved_name) {
+        return Ty::Class(jvm_name.to_string());
+    }
     Ty::Any
+}
+
+/// Map well-known Kotlin source-level class names to their JVM internal names
+/// so that type descriptors use `Ljava/util/List;` rather than `LList;`.
+fn well_known_class_name(name: &str) -> Option<&'static str> {
+    match name {
+        "List" | "MutableList" => Some("java/util/List"),
+        "Map" | "MutableMap" => Some("java/util/Map"),
+        "Set" | "MutableSet" => Some("java/util/Set"),
+        "Collection" => Some("java/util/Collection"),
+        "Iterable" => Some("java/lang/Iterable"),
+        "Iterator" => Some("java/util/Iterator"),
+        "Pair" => Some("kotlin/Pair"),
+        "Triple" => Some("kotlin/Triple"),
+        _ => None,
+    }
 }
 
 /// Return the Kotlin stdlib `Function{N}` interface name for the given
@@ -3462,6 +3486,14 @@ fn lower_expr(
                     if let Some((facade_class, facade_method, descriptor, ret_ty)) =
                         stdlib_extension(recv_ty_str, &method_name_str)
                     {
+                        // For `fold`, the second arg (initial accumulator,
+                        // index 1 in all_args) is `Object` on the JVM so
+                        // any primitive must be boxed.
+                        if facade_method == "fold" && all_args.len() > 1 {
+                            let init = all_args[1];
+                            let init_ty = fb.mf.locals[init.0 as usize].clone();
+                            all_args[1] = mir_autobox(fb, init, &init_ty);
+                        }
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -6215,6 +6247,38 @@ fn lower_expr(
                         receiver: recv_unwrapped,
                         class_name: declaring_class,
                         field_name,
+                    },
+                });
+                d
+            } else if field_name == "length" {
+                // When the inner type is erased to Any (e.g. from a
+                // preceding safe-call chain), `.length` most likely
+                // targets String.length(). Dispatch as a virtual call
+                // instead of emitting a broken empty-class GetField.
+                let d = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::Call {
+                        kind: CallKind::Virtual {
+                            class_name: "java/lang/String".to_string(),
+                            method_name: "length".to_string(),
+                        },
+                        args: vec![recv_unwrapped],
+                    },
+                });
+                d
+            } else if field_name == "size" {
+                // Similarly, `.size` on Any likely targets a collection.
+                let d = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/util/Collection".to_string(),
+                            method_name: "size".to_string(),
+                            descriptor: "()I".to_string(),
+                        },
+                        args: vec![recv_unwrapped],
                     },
                 });
                 d
