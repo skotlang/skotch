@@ -30,6 +30,22 @@ use skotch_syntax::{
 };
 use skotch_types::{ty_from_name, Ty};
 
+/// Map well-known Kotlin source-level class names to their JVM internal names
+/// so that type descriptors use `Ljava/util/List;` rather than `LList;`.
+fn well_known_class_name(name: &str) -> Option<&'static str> {
+    match name {
+        "List" | "MutableList" => Some("java/util/List"),
+        "Map" | "MutableMap" => Some("java/util/Map"),
+        "Set" | "MutableSet" => Some("java/util/Set"),
+        "Collection" => Some("java/util/Collection"),
+        "Iterable" => Some("java/lang/Iterable"),
+        "Iterator" => Some("java/util/Iterator"),
+        "Pair" => Some("kotlin/Pair"),
+        "Triple" => Some("kotlin/Triple"),
+        _ => None,
+    }
+}
+
 // ─── Public output types ────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
@@ -433,14 +449,22 @@ impl<'a> TypeChecker<'a> {
         } else {
             raw_name
         };
+        // Map well-known Kotlin collection/stdlib type names to their
+        // fully-qualified JVM internal names so descriptors use the
+        // correct class path (e.g. `Ljava/util/List;` not `LList;`).
+        // User-defined types take priority over well-known mappings so
+        // that e.g. a user-defined `Pair` class isn't silently mapped
+        // to `kotlin/Pair`.
         let base = if let Some(t) = ty_from_name(&name) {
             t
         } else if self.type_params.contains(&name) {
             // Type parameter: erase to Any (Object on JVM).
             Ty::Any
-        } else if self.env.types.contains_key(&name)
-            || name.chars().next().is_some_and(|c| c.is_uppercase())
-        {
+        } else if self.env.types.contains_key(&name) {
+            Ty::Class(name)
+        } else if let Some(jvm_name) = well_known_class_name(&name) {
+            Ty::Class(jvm_name.to_string())
+        } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
             Ty::Class(name)
         } else {
             self.diags
