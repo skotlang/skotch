@@ -99,6 +99,10 @@ pub fn resolve_file(
         "repeat",
         "listOf",
         "mutableListOf",
+        "mapOf",
+        "mutableMapOf",
+        "setOf",
+        "mutableSetOf",
         "Pair",
         "Triple",
     ] {

@@ -1,0 +1,4 @@
+name   = "384-setof-basic"
+status = "supported"
+features = ["setOf", "Set.size", "stdlib"]
+reason = "Requires setOf via kotlin/collections/SetsKt and Set.size property."

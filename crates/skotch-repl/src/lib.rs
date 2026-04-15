@@ -119,10 +119,10 @@ fn load_kotlin_stdlib(jvm: &EmbeddedJvm) {
 /// [`run_repl`] instead, which takes generic `BufRead`/`Write`
 /// streams.
 pub fn run_repl_interactive_default() -> Result<()> {
-    run_repl_interactive(ScanMode::Background)
+    run_repl_interactive(ScanMode::Background, false)
 }
 
-pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
+pub fn run_repl_interactive(scan_mode: ScanMode, verbose: bool) -> Result<()> {
     use reedline::{
         default_emacs_keybindings, ColumnarMenu, DefaultPrompt, DefaultPromptSegment, EditCommand,
         Emacs, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Reedline, ReedlineEvent,
@@ -146,9 +146,15 @@ pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
                     let mut ctx = completion_ctx.lock().unwrap();
                     ctx.add_extra_classes(classes);
                     drop(ctx);
-                    eprintln!("  classpath: {count} system classes indexed ({secs:.1}s)");
+                    if verbose {
+                        eprintln!("  classpath: {count} system classes indexed ({secs:.1}s)");
+                    }
                 }
-                Err(e) => eprintln!("  classpath scan failed: {e}"),
+                Err(e) => {
+                    if verbose {
+                        eprintln!("  classpath scan failed: {e}");
+                    }
+                }
             }
         }
         ScanMode::Background => {
@@ -156,10 +162,19 @@ pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
             std::thread::Builder::new()
                 .name("scanlib".into())
                 .spawn(move || {
+                    let t0 = std::time::Instant::now();
                     if let Ok(bg_jvm) = EmbeddedJvm::new() {
                         if let Ok(classes) = bg_jvm.scan_system_classes() {
+                            let count = classes.len();
+                            let secs = t0.elapsed().as_secs_f64();
                             let mut ctx = ctx_bg.lock().unwrap();
                             ctx.add_extra_classes(classes);
+                            drop(ctx);
+                            if verbose {
+                                eprintln!(
+                                    "  classpath: {count} system classes indexed ({secs:.1}s)"
+                                );
+                            }
                         }
                     }
                 })
@@ -198,6 +213,7 @@ pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
     // Tab completer backed by REPL state + JVM reflection.
     let completer = Box::new(SkotchCompleter {
         ctx: Arc::clone(&completion_ctx),
+        verbose,
     });
 
     // Columnar completion menu (idiomatic 4-column layout).
@@ -237,7 +253,7 @@ pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
         "skotch repl {} (jvm {jvm_ver}){debug_star} — type :help for commands, :quit to exit",
         env!("CARGO_PKG_VERSION")
     );
-    if history_path.exists() {
+    if verbose && history_path.exists() {
         eprintln!("  history: {}", history_path.display());
     }
 
@@ -766,31 +782,57 @@ impl ReplState {
                 }
 
                 // Capture the expression result in a resN variable and print it.
+                // We also print the runtime class via getClass().toString()
+                // so the REPL can display the real type (not a heuristic guess).
                 let res_name = format!("res{}", self.res_counter);
+                let type_var = format!("__type{}", self.res_counter);
                 let source = format!(
                     "{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
-                 println({res_name})\n}}\n"
+                     val {type_var} = {res_name}.getClass()\n    \
+                     println({type_var}.toString())\n    \
+                     println({res_name})\n}}\n"
                 );
                 let class_name = format!("ReplTurn{}Kt", self.turn);
 
                 match compile_and_run_jni(&source, jvm, &class_name) {
                     Ok(stdout) => {
-                        // Determine the display type from the value.
-                        let value_str = stdout.trim_end();
-                        let type_name = infer_display_type(value_str, body);
-                        self.var_types
-                            .insert(res_name.clone(), type_name.to_string());
+                        // First line: "class java.net.URI" (from getClass().toString())
+                        // Remaining lines: the value's toString() output.
+                        let (type_name, value_str) = parse_type_and_value(&stdout, body);
+                        self.var_types.insert(res_name.clone(), type_name.clone());
                         self.local_decls.push(format!("val {res_name} = {body}"));
                         self.res_counter += 1;
                         Ok(format!("{res_name}: {type_name} = {value_str}\n"))
                     }
                     Err(_) => {
-                        // Fallback: execute as a plain statement (no result capture).
+                        // getClass() may fail on primitives or if the expr
+                        // isn't assignable. Try without the type query.
                         self.turn += 1;
-                        let source =
-                            format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
-                        let class_name = format!("ReplTurn{}Kt", self.turn);
-                        compile_and_run_jni(&source, jvm, &class_name)
+                        let source_simple = format!(
+                            "{top}\nfun main() {{\n    {locals}\n    \
+                             val {res_name} = {body}\n    \
+                             println({res_name})\n}}\n"
+                        );
+                        let cn2 = format!("ReplTurn{}Kt", self.turn);
+                        match compile_and_run_jni(&source_simple, jvm, &cn2) {
+                            Ok(stdout) => {
+                                let value_str = stdout.trim_end();
+                                let type_name = infer_display_type(value_str, body);
+                                self.var_types
+                                    .insert(res_name.clone(), type_name.to_string());
+                                self.local_decls.push(format!("val {res_name} = {body}"));
+                                self.res_counter += 1;
+                                Ok(format!("{res_name}: {type_name} = {value_str}\n"))
+                            }
+                            Err(_) => {
+                                // Last resort: plain statement, no capture.
+                                self.turn += 1;
+                                let source =
+                                    format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                                let cn3 = format!("ReplTurn{}Kt", self.turn);
+                                compile_and_run_jni(&source, jvm, &cn3)
+                            }
+                        }
                     }
                 }
             }
@@ -853,7 +895,50 @@ fn classify_input(line: &str) -> DeclKind {
     DeclKind::Expr
 }
 
+/// Parse the two-line output from expression evaluation.
+///
+/// The generated code prints `getClass().toString()` on the first line
+/// (e.g. `"class java.net.URI"`) and the value's `toString()` on the
+/// remaining lines. This function splits them and maps the JVM class
+/// name to a Kotlin-idiomatic display name.
+fn parse_type_and_value(stdout: &str, expr: &str) -> (String, String) {
+    let stdout = stdout.trim_end_matches('\n');
+    if let Some((first_line, rest)) = stdout.split_once('\n') {
+        let jvm_class = first_line
+            .strip_prefix("class ")
+            .unwrap_or(first_line)
+            .trim();
+        let display_type = jvm_class_to_kotlin_name(jvm_class);
+        (display_type, rest.to_string())
+    } else {
+        // Single line — the getClass line and value are the same line,
+        // meaning the value is empty or compilation didn't emit the type
+        // line. Fall back to the old heuristic.
+        let type_name = infer_display_type(stdout, expr);
+        (type_name.to_string(), stdout.to_string())
+    }
+}
+
+/// Map a JVM class name to a Kotlin-idiomatic display name.
+fn jvm_class_to_kotlin_name(jvm_class: &str) -> String {
+    match jvm_class {
+        "java.lang.Integer" | "int" => "kotlin.Int".to_string(),
+        "java.lang.Long" | "long" => "kotlin.Long".to_string(),
+        "java.lang.Double" | "double" => "kotlin.Double".to_string(),
+        "java.lang.Float" | "float" => "kotlin.Float".to_string(),
+        "java.lang.Boolean" | "boolean" => "kotlin.Boolean".to_string(),
+        "java.lang.Byte" | "byte" => "kotlin.Byte".to_string(),
+        "java.lang.Short" | "short" => "kotlin.Short".to_string(),
+        "java.lang.Character" | "char" => "kotlin.Char".to_string(),
+        "java.lang.String" => "kotlin.String".to_string(),
+        "java.lang.Object" => "kotlin.Any".to_string(),
+        "kotlin.Unit" => "kotlin.Unit".to_string(),
+        _ => jvm_class.to_string(),
+    }
+}
+
 /// Infer a display type name from the printed value and expression text.
+/// Used as a fallback when the getClass() approach doesn't produce output.
 fn infer_display_type(value: &str, expr: &str) -> &'static str {
     // Try to parse as Int.
     if value.parse::<i64>().is_ok() && !value.contains('.') {

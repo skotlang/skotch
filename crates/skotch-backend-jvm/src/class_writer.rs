@@ -2425,6 +2425,18 @@ fn walk_block(
                 // anewarray pops int (size), pushes arrayref: net 0
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
+            Rvalue::NewTypedObjectArray {
+                size,
+                element_class,
+            } => {
+                // Push size, then emit anewarray <element_class>.
+                load_local(code, stack, max_stack, slots, *size, &func.locals);
+                let cls = cp.class(element_class);
+                code.push(0xBD); // anewarray
+                code.write_u16::<BigEndian>(cls).unwrap();
+                // anewarray pops int (size), pushes arrayref: net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
             Rvalue::ObjectArrayStore {
                 array,
                 index,

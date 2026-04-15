@@ -1,0 +1,4 @@
+name   = "383-mapof-basic"
+status = "supported"
+features = ["mapOf", "Map.get", "Map.size", "infix-to", "stdlib"]
+reason = "Requires mapOf via kotlin/collections/MapsKt, Map indexing via Map.get, and Map.size property."

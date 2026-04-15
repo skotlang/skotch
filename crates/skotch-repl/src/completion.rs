@@ -627,6 +627,7 @@ impl CompletionCtx {
 
 pub(crate) struct SkotchCompleter {
     pub ctx: Arc<Mutex<CompletionCtx>>,
+    pub verbose: bool,
 }
 
 impl SkotchCompleter {
@@ -637,14 +638,18 @@ impl SkotchCompleter {
             ctx.lazy_scan_pending
         };
         if needs_scan {
+            let t0 = std::time::Instant::now();
             if let Ok(jvm) = EmbeddedJvm::new() {
                 if let Ok(classes) = jvm.scan_system_classes() {
                     let count = classes.len();
+                    let secs = t0.elapsed().as_secs_f64();
                     let mut ctx = self.ctx.lock().unwrap();
                     ctx.add_extra_classes(classes);
                     ctx.lazy_scan_pending = false;
                     drop(ctx);
-                    eprintln!("  classpath: {count} system classes indexed (lazy)");
+                    if self.verbose {
+                        eprintln!("  classpath: {count} system classes indexed ({secs:.1}s, lazy)");
+                    }
                 }
             }
         }
@@ -1405,6 +1410,7 @@ mod tests {
         ]);
         SkotchCompleter {
             ctx: Arc::new(Mutex::new(ctx)),
+            verbose: false,
         }
     }
 

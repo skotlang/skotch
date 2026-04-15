@@ -747,6 +747,7 @@ impl<'a> BlockWalker<'a> {
             | Rvalue::ArrayStore { .. }
             | Rvalue::ArrayLength(_)
             | Rvalue::NewObjectArray(_)
+            | Rvalue::NewTypedObjectArray { .. }
             | Rvalue::ObjectArrayStore { .. } => {
                 // TODO: IntArray/ObjectArray support in LLVM backend
             }

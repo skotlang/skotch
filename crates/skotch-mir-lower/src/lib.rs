@@ -243,6 +243,33 @@ fn stdlib_extension(
                 Ty::Class("java/util/List".into()),
             ))
         }
+        // ── Map extension functions via CollectionsKt / MapsKt ──
+        // ── Map extension functions via MapsKt ──
+        (_, "forEach") if receiver_ty.contains("Map") => Some((
+            "kotlin/collections/MapsKt",
+            "forEach",
+            "(Ljava/util/Map;Lkotlin/jvm/functions/Function2;)V",
+            Ty::Unit,
+        )),
+        (_, "toList") if receiver_ty.contains("Map") => Some((
+            "kotlin/collections/MapsKt",
+            "toList",
+            "(Ljava/util/Map;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        // ── String stdlib extension functions (kotlin.text) ──
+        ("java/lang/String", "lines") => Some((
+            "kotlin/text/StringsKt",
+            "lines",
+            "(Ljava/lang/CharSequence;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        ("java/lang/String", "reversed") => Some((
+            "kotlin/text/StringsKt",
+            "reversed",
+            "(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
+            Ty::Any, // CharSequence, not String — use Any so println uses Object overload
+        )),
         _ => None,
     }
 }
@@ -3262,6 +3289,144 @@ fn lower_expr(
                     }
                 }
 
+                // ── Map .containsKey() / .get() / .put() / .remove() ───
+                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("Map")) {
+                    let map_method: Option<(&str, &str, &str, Ty)> =
+                        match (method_name_str.as_str(), args.len()) {
+                            ("containsKey", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/Map",
+                                    "containsKey",
+                                    "(Ljava/lang/Object;)Z",
+                                    Ty::Bool,
+                                ))
+                            }
+                            ("containsValue", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/Map",
+                                    "containsValue",
+                                    "(Ljava/lang/Object;)Z",
+                                    Ty::Bool,
+                                ))
+                            }
+                            ("get", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/Map",
+                                    "get",
+                                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+                                    Ty::Any,
+                                ))
+                            }
+                            ("put", 2) => {
+                                let k = all_args[1];
+                                let k_ty = fb.mf.locals[k.0 as usize].clone();
+                                all_args[1] = mir_autobox(fb, k, &k_ty);
+                                let v = all_args[2];
+                                let v_ty = fb.mf.locals[v.0 as usize].clone();
+                                all_args[2] = mir_autobox(fb, v, &v_ty);
+                                Some((
+                                    "java/util/Map",
+                                    "put",
+                                    "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+                                    Ty::Any,
+                                ))
+                            }
+                            ("remove", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/Map",
+                                    "remove",
+                                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+                                    Ty::Any,
+                                ))
+                            }
+                            ("isEmpty", 0) => Some(("java/util/Map", "isEmpty", "()Z", Ty::Bool)),
+                            ("clear", 0) => Some(("java/util/Map", "clear", "()V", Ty::Unit)),
+                            _ => None,
+                        };
+                    if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = map_method {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                },
+                                args: all_args,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
+
+                // ── Set .contains() / .add() / .remove() / .isEmpty() ───
+                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("Set")) {
+                    let set_method: Option<(&str, &str, &str, Ty)> =
+                        match (method_name_str.as_str(), args.len()) {
+                            ("contains", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some((
+                                    "java/util/Set",
+                                    "contains",
+                                    "(Ljava/lang/Object;)Z",
+                                    Ty::Bool,
+                                ))
+                            }
+                            ("add", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some(("java/util/Set", "add", "(Ljava/lang/Object;)Z", Ty::Bool))
+                            }
+                            ("remove", 1) => {
+                                let arg = all_args[1];
+                                let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                                let boxed = mir_autobox(fb, arg, &arg_ty);
+                                all_args[1] = boxed;
+                                Some(("java/util/Set", "remove", "(Ljava/lang/Object;)Z", Ty::Bool))
+                            }
+                            ("isEmpty", 0) => Some(("java/util/Set", "isEmpty", "()Z", Ty::Bool)),
+                            ("clear", 0) => Some(("java/util/Set", "clear", "()V", Ty::Unit)),
+                            _ => None,
+                        };
+                    if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = set_method {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: jvm_class.to_string(),
+                                    method_name: jvm_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                },
+                                args: all_args,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
+
                 // ── Pair .toString() — on kotlin/Pair instances ─────
                 if matches!(&recv_ty, Ty::Class(cn) if cn == "kotlin/Pair")
                     && method_name_str == "toString"
@@ -3557,6 +3722,7 @@ fn lower_expr(
                             ("toString", 0) => Some(("()Ljava/lang/String;", Ty::String)),
                             ("hashCode", 0) => Some(("()I", Ty::Int)),
                             ("equals", 1) => Some(("(Ljava/lang/Object;)Z", Ty::Bool)),
+                            ("getClass", 0) => Some(("()Ljava/lang/Class;", Ty::Any)),
                             _ => None,
                         };
                     if let Some((descriptor, ret_ty)) = object_method {
@@ -4168,6 +4334,215 @@ fn lower_expr(
                             class_name: "kotlin/collections/CollectionsKt".to_string(),
                             method_name: "mutableListOf".to_string(),
                             descriptor: "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // `mapOf(pair1, pair2, ...)` — create Pair[] array, call
+            // `kotlin/collections/MapsKt.mapOf([Lkotlin/Pair;)Ljava/util/Map;`.
+            if callee_str == "mapOf" {
+                let arg_count = arg_locals.len();
+
+                // Create kotlin/Pair[] of the right size (must be Pair[], not Object[]).
+                let count_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
+                });
+                let array_local = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: array_local,
+                    value: Rvalue::NewTypedObjectArray {
+                        size: count_local,
+                        element_class: "kotlin/Pair".to_string(),
+                    },
+                });
+
+                // Store each Pair arg into the array.
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+
+                // Call kotlin/collections/MapsKt.mapOf([Lkotlin/Pair;)Ljava/util/Map;
+                let result = fb.new_local(Ty::Class("java/util/Map".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/MapsKt".to_string(),
+                            method_name: "mapOf".to_string(),
+                            descriptor: "([Lkotlin/Pair;)Ljava/util/Map;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // `mutableMapOf(pair1, pair2, ...)` — same pattern as mapOf but
+            // calls `MapsKt.mutableMapOf`.
+            if callee_str == "mutableMapOf" {
+                let arg_count = arg_locals.len();
+
+                let count_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
+                });
+                let array_local = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: array_local,
+                    value: Rvalue::NewTypedObjectArray {
+                        size: count_local,
+                        element_class: "kotlin/Pair".to_string(),
+                    },
+                });
+
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+
+                let result = fb.new_local(Ty::Class("java/util/Map".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/MapsKt".to_string(),
+                            method_name: "mutableMapOf".to_string(),
+                            descriptor: "([Lkotlin/Pair;)Ljava/util/Map;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // `setOf(elements...)` — create Object[] array, call
+            // `kotlin/collections/SetsKt.setOf([Ljava/lang/Object;)Ljava/util/Set;`.
+            if callee_str == "setOf" {
+                let arg_count = arg_locals.len();
+
+                let count_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
+                });
+                let array_local = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: array_local,
+                    value: Rvalue::NewObjectArray(count_local),
+                });
+
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+
+                let result = fb.new_local(Ty::Class("java/util/Set".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/SetsKt".to_string(),
+                            method_name: "setOf".to_string(),
+                            descriptor: "([Ljava/lang/Object;)Ljava/util/Set;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // `mutableSetOf(elements...)` — same pattern as setOf but calls
+            // `SetsKt.mutableSetOf`.
+            if callee_str == "mutableSetOf" {
+                let arg_count = arg_locals.len();
+
+                let count_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
+                });
+                let array_local = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: array_local,
+                    value: Rvalue::NewObjectArray(count_local),
+                });
+
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+
+                let result = fb.new_local(Ty::Class("java/util/Set".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/SetsKt".to_string(),
+                            method_name: "mutableSetOf".to_string(),
+                            descriptor: "([Ljava/lang/Object;)Ljava/util/Set;".to_string(),
                         },
                         args: vec![array_local],
                     },
@@ -5328,10 +5703,28 @@ fn lower_expr(
                     });
                     Some(dest)
                 }
+                Ty::Class(cn) if cn.contains("Map") => {
+                    // Map[key] → invokeinterface java/util/Map.get(Object)Object
+                    let idx_ty = fb.mf.locals[idx.0 as usize].clone();
+                    let boxed_key = mir_autobox(fb, idx, &idx_ty);
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/Map".to_string(),
+                                method_name: "get".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Ljava/lang/Object;".to_string(),
+                            },
+                            args: vec![arr, boxed_key],
+                        },
+                    });
+                    Some(dest)
+                }
                 _ => {
                     diags.push(Diagnostic::error(
                         receiver.span(),
-                        "index operator is only supported on IntArray and List",
+                        "index operator is only supported on IntArray, List, and Map",
                     ));
                     None
                 }
@@ -5429,6 +5822,59 @@ fn lower_expr(
                             value: Rvalue::Call {
                                 kind: CallKind::VirtualJava {
                                     class_name: "java/util/List".to_string(),
+                                    method_name: "size".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![recv_local],
+                            },
+                        });
+                        return Some(dest);
+                    }
+                    // Map .size / .keys / .values / .entries
+                    if declaring_class.contains("Map") {
+                        let map_prop: Option<(&str, &str, Ty)> = match field_name.as_str() {
+                            "size" => Some(("size", "()I", Ty::Int)),
+                            "keys" => Some((
+                                "keySet",
+                                "()Ljava/util/Set;",
+                                Ty::Class("java/util/Set".into()),
+                            )),
+                            "values" => Some((
+                                "values",
+                                "()Ljava/util/Collection;",
+                                Ty::Class("java/util/Collection".into()),
+                            )),
+                            "entries" => Some((
+                                "entrySet",
+                                "()Ljava/util/Set;",
+                                Ty::Class("java/util/Set".into()),
+                            )),
+                            _ => None,
+                        };
+                        if let Some((jvm_method, descriptor, ret_ty)) = map_prop {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "java/util/Map".to_string(),
+                                        method_name: jvm_method.to_string(),
+                                        descriptor: descriptor.to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                    // Set .size
+                    if declaring_class.contains("Set") && field_name == "size" {
+                        let dest = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/Set".to_string(),
                                     method_name: "size".to_string(),
                                     descriptor: "()I".to_string(),
                                 },

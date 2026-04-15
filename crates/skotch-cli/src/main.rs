@@ -79,6 +79,11 @@ enum Command {
         /// - `none`: disable classpath indexing entirely.
         #[arg(long = "scanlib", value_name = "MODE", default_value = "background")]
         scanlib: String,
+
+        /// Show extra diagnostic output (history path, classpath
+        /// scan timing, etc.).
+        #[arg(short = 'v', long = "verbose")]
+        verbose: bool,
     },
     /// Execute a Kotlin script (`.kts`) file.
     ///
@@ -156,6 +161,7 @@ fn main() -> Result<()> {
             file,
             exit_after,
             scanlib,
+            verbose,
         } => {
             let scan_mode: skotch_repl::ScanMode = scanlib
                 .parse()
@@ -210,13 +216,13 @@ fn main() -> Result<()> {
                 skotch_repl::run_repl(input, io::stdout().lock())?;
                 let stdin = io::stdin();
                 if stdin.is_terminal() {
-                    skotch_repl::run_repl_interactive(scan_mode)?;
+                    skotch_repl::run_repl_interactive(scan_mode, verbose)?;
                 }
             } else {
                 // No prelude — pure interactive REPL.
                 let stdin = io::stdin();
                 if stdin.is_terminal() {
-                    skotch_repl::run_repl_interactive(scan_mode)?;
+                    skotch_repl::run_repl_interactive(scan_mode, verbose)?;
                 } else {
                     skotch_repl::run_repl(BufReader::new(stdin.lock()), io::stdout().lock())?;
                 }

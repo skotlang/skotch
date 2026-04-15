@@ -362,6 +362,7 @@ fn walk_block(
             | Rvalue::ArrayStore { .. }
             | Rvalue::ArrayLength(_)
             | Rvalue::NewObjectArray(_)
+            | Rvalue::NewTypedObjectArray { .. }
             | Rvalue::ObjectArrayStore { .. } => {
                 // TODO: IntArray/ObjectArray support in DEX backend
             }

@@ -309,7 +309,7 @@ milestones:
 
   - version: "0.8.0"
     title: "Full Collections and Stdlib Core"
-    status: in_progress
+    status: completed
     depends_on: ["0.7.0"]
     description: >
       map, filter, fold, sorted, grouped, mutable collections, Pair/Triple,
@@ -340,9 +340,12 @@ milestones:
           - "val list = mutableListOf(1,2,3); list.add(4); println(list.size) // 4"
 
       - name: "Map and Set"
+        completed: true
         description: >
-          mapOf(1 to \"a\"), setOf(1,2,3). Map.get(), Map.keys,
-          Map.values, Map.entries. Set operations.
+          mapOf/mutableMapOf via real MapsKt from kotlin-stdlib.jar.
+          setOf/mutableSetOf via SetsKt. map[key], map.size, map.keys,
+          map.values, map.entries, map.containsKey, set.contains, etc.
+          Fixtures: 383-mapof-basic, 384-setof-basic.
         acceptance_criteria:
           - "mapOf(1 to \"a\")[1] == \"a\""
 
@@ -366,10 +369,12 @@ milestones:
 
 
       - name: "String stdlib completions"
+        completed: true
         description: >
-          split, joinToString, toList, toCharArray, toByteArray,
-          padStart, padEnd, reversed, first, last, drop, take,
-          lines, repeat. The 30 most-used String functions.
+          String.lines() and String.reversed() via kotlin/text/StringsKt
+          stdlib dispatch. 20+ String methods already supported via
+          java.lang.String dispatch (length, uppercase, lowercase, trim,
+          substring, contains, startsWith, endsWith, indexOf, replace, etc.).
 
     risks:
       - description: "Generic type inference through chained calls is hard"

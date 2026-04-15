@@ -120,6 +120,13 @@ pub enum Rvalue {
     /// Create a new `Object[]` array of the given size.
     /// Result type is `Ty::Any` (reference to `[Ljava/lang/Object;`).
     NewObjectArray(LocalId),
+    /// Create a new typed object array (`T[]`) of the given size.
+    /// The `element_class` is the JVM internal name (e.g. `"kotlin/Pair"`).
+    /// Result type is `Ty::Any` (reference to `[LelementClass;`).
+    NewTypedObjectArray {
+        size: LocalId,
+        element_class: String,
+    },
     /// Store an element into an `Object[]`: `array[index] = value`.
     /// Result type is `Ty::Unit` (the dest local is unused).
     ObjectArrayStore {

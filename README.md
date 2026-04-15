@@ -373,6 +373,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Pair/Triple](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-pair/) | stdlib | `1 to "one"` infix syntax, `.first`/`.second`, real `kotlin.Pair` from stdlib |
 | [Mutable collections](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/) | stdlib | `mutableListOf(1,2,3)`, `.add()`, `.remove()`, `.clear()`, `list[i]` |
 | [Ranges with step](https://kotlinlang.org/spec/expressions.html#range-expressions) | §7.5 | `for (i in 1..10 step 2)` — custom step in for loops |
+| [mapOf / setOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/) | stdlib | `mapOf(1 to "a")`, `setOf(1,2,3)` — real MapsKt/SetsKt from stdlib; `map[key]`, `.size`, `.keys` |
 
 ### Not yet implemented
 
@@ -380,7 +381,6 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 |---|---|---|---|
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
 | Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
-| mapOf / setOf | stdlib | Medium | `mapOf(1 to "a")`, `setOf(1,2,3)` |
 
 ## Running the tests
 

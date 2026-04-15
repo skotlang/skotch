@@ -1108,8 +1108,10 @@ impl<'a> TypeChecker<'a> {
             }
             (
                 Ty::String,
-                "uppercase" | "lowercase" | "trim" | "substring" | "replace" | "repeat",
+                "uppercase" | "lowercase" | "trim" | "substring" | "replace" | "repeat"
+                | "reversed",
             ) => Some(Ty::String),
+            (Ty::String, "lines") => Some(Ty::Class("java/util/List".into())),
             (Ty::String, "toInt") => Some(Ty::Int),
             (Ty::String, "toLong") => Some(Ty::Long),
             (Ty::String, "toDouble") => Some(Ty::Double),
@@ -1117,6 +1119,23 @@ impl<'a> TypeChecker<'a> {
             (_, "hashCode") => Some(Ty::Int),
             (_, "equals") => Some(Ty::Bool),
             (_, "coerceAtLeast" | "coerceAtMost") => Some(recv_ty.clone()),
+            // Map methods
+            (Ty::Class(cn), "containsKey" | "containsValue" | "isEmpty") if cn.contains("Map") => {
+                Some(Ty::Bool)
+            }
+            (Ty::Class(cn), "get" | "put" | "remove") if cn.contains("Map") => Some(Ty::Any),
+            (Ty::Class(cn), "size") if cn.contains("Map") => Some(Ty::Int),
+            (Ty::Class(cn), "keys" | "entries") if cn.contains("Map") => {
+                Some(Ty::Class("java/util/Set".into()))
+            }
+            (Ty::Class(cn), "values") if cn.contains("Map") => {
+                Some(Ty::Class("java/util/Collection".into()))
+            }
+            // Set methods
+            (Ty::Class(cn), "contains" | "add" | "remove" | "isEmpty") if cn.contains("Set") => {
+                Some(Ty::Bool)
+            }
+            (Ty::Class(cn), "size") if cn.contains("Set") => Some(Ty::Int),
             _ => None,
         }
     }
