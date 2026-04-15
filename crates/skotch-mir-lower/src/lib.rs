@@ -312,6 +312,114 @@ pub fn lower_file(
     }
     let _ = resolved;
 
+    // ─── Apply package prefix ──────────────────────────────────────────
+    //
+    // If the source file has a `package` declaration, prepend the
+    // package path (with `/` separators) to the wrapper class and all
+    // user-defined class names so that the JVM sees the correct
+    // fully-qualified internal names (e.g. `com/example/InputKt`).
+    if let Some(pkg) = &file.package {
+        let segments: Vec<&str> = pkg.path.iter().map(|s| interner.resolve(*s)).collect();
+        if !segments.is_empty() {
+            let prefix = segments.join("/");
+
+            // Collect the set of simple (un-prefixed) user class names
+            // so we can rewrite internal references.
+            let user_classes: rustc_hash::FxHashSet<String> =
+                module.classes.iter().map(|c| c.name.clone()).collect();
+
+            // 1. Prefix the wrapper class.
+            module.wrapper_class = format!("{prefix}/{}", module.wrapper_class);
+
+            // 2. Prefix every user-defined class name.
+            for class in &mut module.classes {
+                if user_classes.contains(&class.name) {
+                    class.name = format!("{prefix}/{}", class.name);
+                }
+            }
+
+            // 3. Prefix enum names.
+            let old_enum_names: Vec<String> = module.enum_names.iter().cloned().collect();
+            module.enum_names.clear();
+            for name in old_enum_names {
+                module.enum_names.insert(format!("{prefix}/{name}"));
+            }
+
+            // 4. Rewrite class-name references inside all MIR functions.
+            let rewrite = |name: &mut String| {
+                if user_classes.contains(name.as_str()) {
+                    *name = format!("{prefix}/{name}");
+                }
+            };
+            let rewrite_fn = |f: &mut MirFunction| {
+                // Rewrite Ty::Class in locals.
+                for ty in &mut f.locals {
+                    if let Ty::Class(ref mut n) = ty {
+                        if user_classes.contains(n.as_str()) {
+                            *n = format!("{prefix}/{n}");
+                        }
+                    }
+                }
+                // Rewrite Rvalue references.
+                for block in &mut f.blocks {
+                    for stmt in &mut block.stmts {
+                        let MStmt::Assign { value, .. } = stmt;
+                        match value {
+                            Rvalue::NewInstance(ref mut n) => {
+                                if user_classes.contains(n.as_str()) {
+                                    *n = format!("{prefix}/{n}");
+                                }
+                            }
+                            Rvalue::GetField {
+                                ref mut class_name, ..
+                            } => rewrite(class_name),
+                            Rvalue::PutField {
+                                ref mut class_name, ..
+                            } => rewrite(class_name),
+                            Rvalue::InstanceOf {
+                                ref mut type_descriptor,
+                                ..
+                            } => {
+                                if user_classes.contains(type_descriptor.as_str()) {
+                                    *type_descriptor = format!("{prefix}/{type_descriptor}");
+                                }
+                            }
+                            Rvalue::Call { ref mut kind, .. } => match kind {
+                                CallKind::Constructor(ref mut n) => {
+                                    if user_classes.contains(n.as_str()) {
+                                        *n = format!("{prefix}/{n}");
+                                    }
+                                }
+                                CallKind::Virtual {
+                                    ref mut class_name, ..
+                                } => rewrite(class_name),
+                                CallKind::Super {
+                                    ref mut class_name, ..
+                                } => rewrite(class_name),
+                                _ => {}
+                            },
+                            _ => {}
+                        }
+                    }
+                }
+            };
+            // Top-level functions.
+            for f in &mut module.functions {
+                rewrite_fn(f);
+            }
+            // Class methods and constructors.
+            for class in &mut module.classes {
+                rewrite_fn(&mut class.constructor);
+                for ctor in &mut class.secondary_constructors {
+                    rewrite_fn(ctor);
+                }
+                for method in &mut class.methods {
+                    rewrite_fn(method);
+                }
+            }
+        }
+    }
+
     module
 }
 

@@ -139,6 +139,11 @@ fn build_jvm(
         .with_context(|| format!("creating {}", classes_dir.display()))?;
     classes.par_iter().for_each(|(name, bytes)| {
         let path = classes_dir.join(format!("{name}.class"));
+        // When a package prefix is present, `name` contains `/` separators
+        // (e.g. `com/example/Greeter`), so create intermediate directories.
+        if let Some(p) = path.parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
         let _ = std::fs::write(&path, bytes);
     });
 

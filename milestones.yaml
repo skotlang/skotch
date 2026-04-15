@@ -575,16 +575,19 @@ milestones:
 
   - version: "0.7.0"
     title: "Dependency Resolution and Build System"
-    status: planned
+    status: in_progress
     depends_on: []  # parallel with language milestones
     description: >
       Maven resolution, version catalogs, AAR handling, Kotlin metadata.
 
     features:
       - name: "Maven dependency resolution"
+        completed: true
         description: >
-          Parse implementation(\"group:artifact:version\"). Resolve from
-          Maven Central + Google Maven. Transitive deps. Cache in ~/.skotch/cache/.
+          @file:DependsOn and @file:Repository annotations in .kts scripts.
+          Transitive resolution via POM parsing with skotch-tape crate.
+          HTTP download with reqwest+rustls, cached in XDG data dir.
+          Used by REPL and script runner.
         acceptance_criteria:
           - "kotlinx-coroutines-core resolved and downloaded"
 
@@ -616,10 +619,13 @@ milestones:
           - "Two-module project where module B imports from module A compiles"
 
       - name: "Package-aware class naming"
+        completed: true
         description: >
-          com.example.MyClass → com/example/MyClass.class. Currently all
-          classes go in the default package. Real apps need package support
-          for classpath resolution and AndroidManifest activity references.
+          package com.example → com/example/InputKt.class. Package declaration
+          prefixes wrapper class and all user classes with the package path.
+          All MIR references (Ty::Class, NewInstance, GetField, PutField,
+          Constructor, Virtual, Super, InstanceOf) rewritten with prefix.
+          Directories created for nested packages.
         acceptance_criteria:
           - "Package declaration affects .class file location in JAR/APK"
 
