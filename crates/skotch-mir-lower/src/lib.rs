@@ -496,6 +496,75 @@ pub fn lower_file(
 /// uses of the same text — backends dedupe constant-pool entries
 /// across the whole module, and inlining the global through the same
 /// string pool keeps that dedup correct.
+/// Emit MIR-level autoboxing for a primitive value.  Returns a new
+/// local holding the boxed reference (e.g. `Integer.valueOf(int)`) or
+/// the original local unchanged if it is already a reference type.
+fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
+    match ty {
+        Ty::Int => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Integer".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Long => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Long".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(J)Ljava/lang/Long;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Double => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Double".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(D)Ljava/lang/Double;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Bool => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Boolean".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        _ => val,
+    }
+}
+
 /// Collect free variables in a lambda body: names that are referenced
 /// but not defined as lambda parameters or known top-level functions.
 fn collect_free_vars(
@@ -1770,7 +1839,29 @@ fn lower_val_stmt(
     ) else {
         return false;
     };
-    let ty = fb.mf.locals[rhs.0 as usize].clone();
+    let rhs_ty = fb.mf.locals[rhs.0 as usize].clone();
+    // Respect the nullable annotation when present.  In particular,
+    // `val x: String? = "hello"` should give x type Nullable(String),
+    // not plain String (the RHS type).  We only use the annotation to
+    // add the Nullable wrapper; for everything else (including function
+    // types like `(Int) -> Int`) we keep the RHS-inferred type.
+    let ty = if let Some(tr) = &v.ty {
+        if tr.nullable && tr.func_params.is_none() {
+            let base = resolve_type(interner.resolve(tr.name), module);
+            Ty::Nullable(Box::new(base))
+        } else if tr.nullable {
+            // Function-type annotation: wrap the RHS type.
+            if matches!(rhs_ty, Ty::Nullable(_)) {
+                rhs_ty
+            } else {
+                Ty::Nullable(Box::new(rhs_ty))
+            }
+        } else {
+            rhs_ty
+        }
+    } else {
+        rhs_ty
+    };
     let dest = fb.new_local(ty);
     fb.push_stmt(MStmt::Assign {
         dest,
@@ -3178,6 +3269,117 @@ fn lower_expr(
                     },
                 });
                 return Some(dest);
+            }
+
+            // Handle safe method calls: `receiver?.method(args)`
+            // Wrap the call in a null-check: if (recv != null) recv.method(args) else null
+            if let Expr::SafeCall {
+                receiver: sc_receiver,
+                name: sc_name,
+                span: sc_span,
+            } = callee.as_ref()
+            {
+                let recv = lower_expr(
+                    sc_receiver,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                )?;
+                let then_block = fb.new_block();
+                let else_block = fb.new_block();
+                let merge_block = fb.new_block();
+
+                let null_local = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_local,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                let cmp = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: cmp,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpNe,
+                        lhs: recv,
+                        rhs: null_local,
+                    },
+                });
+                let result = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: cmp,
+                        then_block,
+                        else_block,
+                    },
+                    then_block,
+                );
+
+                // then-block: unwrap and dispatch the method call via a
+                // synthetic Call { callee: Field { .. } } expression.
+                let recv_ty = fb.mf.locals[recv.0 as usize].clone();
+                let inner_ty = match &recv_ty {
+                    Ty::Nullable(inner) => (**inner).clone(),
+                    other => other.clone(),
+                };
+                let recv_unwrapped = if matches!(recv_ty, Ty::Nullable(_)) {
+                    let uw = fb.new_local(inner_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: uw,
+                        value: Rvalue::Local(recv),
+                    });
+                    uw
+                } else {
+                    recv
+                };
+
+                // Build a synthetic Field-based call expression and lower it.
+                // We use a temporary ident node whose symbol is bound to the
+                // unwrapped receiver local in the scope.
+                let tmp_sym = interner.intern("$safe_recv$");
+                scope.push((tmp_sym, recv_unwrapped));
+                let synthetic_call = Expr::Call {
+                    callee: Box::new(Expr::Field {
+                        receiver: Box::new(Expr::Ident(tmp_sym, *sc_span)),
+                        name: *sc_name,
+                        span: *sc_span,
+                    }),
+                    args: args.clone(),
+                    type_args: type_args.clone(),
+                    span: *span,
+                };
+                let call_result = lower_expr(
+                    &synthetic_call,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                );
+                scope.pop(); // remove $safe_recv$
+
+                if let Some(cr) = call_result {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(cr),
+                    });
+                }
+                fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
+
+                // else-block: result = null
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
+
+                return Some(result);
             }
 
             let callee_name = match callee.as_ref() {
@@ -4625,6 +4827,7 @@ fn lower_expr(
                         value: Rvalue::Local(val),
                     });
                 }
+
                 // Goto merge, switch to next comparison block
                 let next = if i + 1 < branches.len() {
                     cmp_blks[i + 1]
@@ -5042,20 +5245,95 @@ fn lower_expr(
                 then_block,
             );
 
-            // then: result = receiver.name (field access)
+            // then: dispatch the property access on the non-null receiver.
+            // Unwrap the nullable type to get the inner type for dispatch.
+            let recv_ty = fb.mf.locals[recv.0 as usize].clone();
+            let inner_ty = match &recv_ty {
+                Ty::Nullable(inner) => (**inner).clone(),
+                other => other.clone(),
+            };
             let field_name = interner.resolve(*name).to_string();
-            let field_val = fb.new_local(Ty::Any);
-            fb.push_stmt(MStmt::Assign {
-                dest: field_val,
-                value: Rvalue::GetField {
-                    receiver: recv,
-                    class_name: String::new(), // resolved at codegen
-                    field_name,
-                },
-            });
+
+            // Create a non-nullable alias so JVM dispatch sees the right type.
+            let recv_unwrapped = if matches!(recv_ty, Ty::Nullable(_)) {
+                let uw = fb.new_local(inner_ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: uw,
+                    value: Rvalue::Local(recv),
+                });
+                uw
+            } else {
+                recv
+            };
+
+            // Dispatch built-in properties (String.length, IntArray.size, etc.)
+            let field_val = if matches!(inner_ty, Ty::String) && field_name == "length" {
+                let d = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::Call {
+                        kind: CallKind::Virtual {
+                            class_name: "java/lang/String".to_string(),
+                            method_name: "length".to_string(),
+                        },
+                        args: vec![recv_unwrapped],
+                    },
+                });
+                d
+            } else if matches!(inner_ty, Ty::IntArray) && field_name == "size" {
+                let d = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::ArrayLength(recv_unwrapped),
+                });
+                d
+            } else if let Ty::Class(ref class_name) = inner_ty {
+                // Look up field in user-defined class.
+                let mut declaring_class = class_name.clone();
+                let mut field_ty = Ty::Any;
+                let mut search = Some(class_name.clone());
+                while let Some(ref cname) = search {
+                    if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                        if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
+                            declaring_class = cname.clone();
+                            field_ty = f.ty.clone();
+                            break;
+                        }
+                        search = cls.super_class.clone();
+                    } else {
+                        break;
+                    }
+                }
+                let d = fb.new_local(field_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::GetField {
+                        receiver: recv_unwrapped,
+                        class_name: declaring_class,
+                        field_name,
+                    },
+                });
+                d
+            } else {
+                // Fallback: generic field access.
+                let d = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: d,
+                    value: Rvalue::GetField {
+                        receiver: recv_unwrapped,
+                        class_name: String::new(),
+                        field_name,
+                    },
+                });
+                d
+            };
+            // Box primitive results so they fit in the Nullable(Any) result
+            // local (which is a JVM reference slot).
+            let field_val_ty = fb.mf.locals[field_val.0 as usize].clone();
+            let boxed_val = mir_autobox(fb, field_val, &field_val_ty);
             fb.push_stmt(MStmt::Assign {
                 dest: result,
-                value: Rvalue::Local(field_val),
+                value: Rvalue::Local(boxed_val),
             });
             fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
 
@@ -5145,17 +5423,35 @@ fn lower_expr(
                 loop_ctx,
             )
         }
-        Expr::NotNullAssert { expr: asserted, .. } => lower_expr(
-            asserted,
-            fb,
-            scope,
-            module,
-            name_to_func,
-            name_to_global,
-            interner,
-            diags,
-            loop_ctx,
-        ),
+        Expr::NotNullAssert { expr: asserted, .. } => {
+            // x!! → unwrap the Nullable wrapper so downstream dispatch
+            // sees the concrete inner type (e.g. String instead of
+            // Nullable(String)).  The JVM will throw NPE naturally if
+            // the value is null and a method is called on it.
+            let inner = lower_expr(
+                asserted,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            )?;
+            let inner_ty = fb.mf.locals[inner.0 as usize].clone();
+            if let Ty::Nullable(unwrapped) = inner_ty {
+                let dest = fb.new_local(*unwrapped);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Local(inner),
+                });
+                Some(dest)
+            } else {
+                // Already non-nullable — pass through.
+                Some(inner)
+            }
+        }
 
         Expr::Lambda { params, body, .. } => {
             // ── Capture analysis ────────────────────────────────────

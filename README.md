@@ -363,6 +363,9 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Interface delegation](https://kotlinlang.org/spec/declarations.html#delegated-classifier-declaration) | §4.5 | `class X : Base by b` — auto-generated forwarding methods |
 | [Package declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.1 | `package com.example` → `com/example/InputKt.class`; all class refs prefixed |
 | [Higher-order functions](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | `fun apply(f: (Int)->Int, x: Int) = f(x)` — synthetic `$FunctionN` interfaces, `invokeinterface` dispatch, autoboxing |
+| [Safe call (?.)](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `x?.length` — null-check + short-circuit to null; handles properties and methods |
+| [Non-null assertion (!!)](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `x!!` — unwraps Nullable(T) to T for downstream dispatch |
+| [Smart casts in when](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `when (x) { is String -> x.uppercase() }` — checkcast + scope narrowing in when branches |
 
 ### Not yet implemented
 
