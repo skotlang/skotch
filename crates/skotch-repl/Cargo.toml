@@ -10,6 +10,11 @@ description = "Interactive REPL and `.kts` script runner backed by skotch's JVM 
 skotch-driver      = { workspace = true }
 skotch-jvm         = { workspace = true }
 skotch-diagnostics = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-span        = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-parser      = { workspace = true }
 anyhow             = { workspace = true }
 which              = { workspace = true }
 reedline           = { workspace = true }

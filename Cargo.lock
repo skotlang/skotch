@@ -2422,7 +2422,12 @@ dependencies = [
  "similar",
  "skotch-diagnostics",
  "skotch-driver",
+ "skotch-intern",
  "skotch-jvm",
+ "skotch-lexer",
+ "skotch-parser",
+ "skotch-span",
+ "skotch-syntax",
  "skotch-tape",
  "which",
 ]

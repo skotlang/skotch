@@ -59,7 +59,11 @@ use skotch_jvm::EmbeddedJvm;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
+use skotch_diagnostics::Diagnostics;
 use skotch_driver::{emit, EmitOptions, Target};
+use skotch_intern::Interner;
+use skotch_span::FileId;
+use skotch_syntax::Decl;
 
 // ─── public entry points ─────────────────────────────────────────────────
 
@@ -447,79 +451,107 @@ impl ReplState {
 
     fn process_single(&mut self, line: &str, jvm: &EmbeddedJvm) -> Result<String> {
         self.turn += 1;
-        let trimmed = line.trim_start();
 
-        if is_top_level_only_decl(trimmed) {
-            // Class/fun declarations go at top level.
-            let top = self.top_decls.join("\n");
-            let locals = self.local_decls.join("\n    ");
-            let candidate = format!("{top}\n{line}\nfun main() {{\n    {locals}\n}}\n");
-            let class_name = format!("ReplTurn{}Kt", self.turn);
-            compile_only(&candidate, &class_name)?;
-            self.top_decls.push(line.to_string());
-            Ok(String::new())
-        } else if is_local_decl(trimmed) {
-            // val/var declarations go inside fun main() as locals.
-            let top = self.top_decls.join("\n");
-            let mut locals: Vec<String> = self.local_decls.clone();
-            locals.push(line.to_string());
-            let locals_str = locals.join("\n    ");
-            let candidate = format!("{top}\nfun main() {{\n    {locals_str}\n}}\n");
-            let class_name = format!("ReplTurn{}Kt", self.turn);
-            compile_only(&candidate, &class_name)?;
-            self.local_decls.push(line.to_string());
-            Ok(String::new())
-        } else {
-            // Expression: assign to resN, print type + value, store for future use.
-            let top = self.top_decls.join("\n");
-            let locals = self.local_decls.join("\n    ");
-            let body = line.trim_end();
-
-            // Check if the expression is a bare `println`/`print` call — if so,
-            // just execute it without capturing (it returns Unit).
-            let is_print = body.starts_with("println(") || body.starts_with("print(");
-            if is_print {
-                let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+        match classify_input(line) {
+            DeclKind::TopLevel => {
+                // Class/fun declarations go at top level.
+                let top = self.top_decls.join("\n");
+                let locals = self.local_decls.join("\n    ");
+                let candidate = format!("{top}\n{line}\nfun main() {{\n    {locals}\n}}\n");
                 let class_name = format!("ReplTurn{}Kt", self.turn);
-                return compile_and_run_jni(&source, jvm, &class_name);
+                compile_only(&candidate, &class_name)?;
+                self.top_decls.push(line.to_string());
+                Ok(String::new())
             }
+            DeclKind::LocalDecl => {
+                // val/var declarations go inside fun main() as locals.
+                let top = self.top_decls.join("\n");
+                let mut locals: Vec<String> = self.local_decls.clone();
+                locals.push(line.to_string());
+                let locals_str = locals.join("\n    ");
+                let candidate = format!("{top}\nfun main() {{\n    {locals_str}\n}}\n");
+                let class_name = format!("ReplTurn{}Kt", self.turn);
+                compile_only(&candidate, &class_name)?;
+                self.local_decls.push(line.to_string());
+                Ok(String::new())
+            }
+            DeclKind::Expr => {
+                // Expression: assign to resN, print type + value, store for future use.
+                let top = self.top_decls.join("\n");
+                let locals = self.local_decls.join("\n    ");
+                let body = line.trim_end();
 
-            // Capture the expression result in a resN variable and print it.
-            let res_name = format!("res{}", self.res_counter);
-            let source = format!(
-                "{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
-                 println({res_name})\n}}\n"
-            );
-            let class_name = format!("ReplTurn{}Kt", self.turn);
-
-            match compile_and_run_jni(&source, jvm, &class_name) {
-                Ok(stdout) => {
-                    // Determine the display type from the value.
-                    let value_str = stdout.trim_end();
-                    let type_name = infer_display_type(value_str, body);
-                    self.local_decls.push(format!("val {res_name} = {body}"));
-                    self.res_counter += 1;
-                    Ok(format!("{res_name}: {type_name} = {value_str}\n"))
-                }
-                Err(_) => {
-                    // Fallback: execute as a plain statement (no result capture).
-                    self.turn += 1;
+                // Check if the expression is a bare `println`/`print` call — if so,
+                // just execute it without capturing (it returns Unit).
+                let is_print = body.starts_with("println(") || body.starts_with("print(");
+                if is_print {
                     let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
                     let class_name = format!("ReplTurn{}Kt", self.turn);
-                    compile_and_run_jni(&source, jvm, &class_name)
+                    return compile_and_run_jni(&source, jvm, &class_name);
+                }
+
+                // Capture the expression result in a resN variable and print it.
+                let res_name = format!("res{}", self.res_counter);
+                let source = format!(
+                    "{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
+                 println({res_name})\n}}\n"
+                );
+                let class_name = format!("ReplTurn{}Kt", self.turn);
+
+                match compile_and_run_jni(&source, jvm, &class_name) {
+                    Ok(stdout) => {
+                        // Determine the display type from the value.
+                        let value_str = stdout.trim_end();
+                        let type_name = infer_display_type(value_str, body);
+                        self.local_decls.push(format!("val {res_name} = {body}"));
+                        self.res_counter += 1;
+                        Ok(format!("{res_name}: {type_name} = {value_str}\n"))
+                    }
+                    Err(_) => {
+                        // Fallback: execute as a plain statement (no result capture).
+                        self.turn += 1;
+                        let source =
+                            format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                        let class_name = format!("ReplTurn{}Kt", self.turn);
+                        compile_and_run_jni(&source, jvm, &class_name)
+                    }
                 }
             }
         }
     }
 }
 
-/// Heuristic check for "is this line a top-level declaration?"
-///
-/// Looks at the leading keyword. Anything that starts with `val `,
-/// `var `, or `fun ` (or has a visibility modifier in front of
-/// those) is treated as a declaration. Everything else is treated
-/// as an expression statement.
-/// Strip leading modifier keywords from a declaration line.
+/// Classify a REPL line by actually parsing it and inspecting the AST.
+/// Returns `Some(Decl variant)` for declarations, `None` for expressions.
+enum DeclKind {
+    TopLevel,  // class, fun, interface, object, enum, typealias
+    LocalDecl, // val, var
+    Expr,      // everything else
+}
+
+fn classify_input(line: &str) -> DeclKind {
+    let mut interner = Interner::new();
+    let mut diags = Diagnostics::new();
+    let file_id = FileId(0);
+    let lexed = skotch_lexer::lex(file_id, line, &mut diags);
+    let ast = skotch_parser::parse_file(&lexed, &mut interner, &mut diags);
+
+    // If parsing produced a single top-level declaration, classify it.
+    if let Some(decl) = ast.decls.first() {
+        return match decl {
+            Decl::Fun(_)
+            | Decl::Class(_)
+            | Decl::Interface(_)
+            | Decl::Object(_)
+            | Decl::Enum(_)
+            | Decl::TypeAlias(_) => DeclKind::TopLevel,
+            Decl::Val(_) => DeclKind::LocalDecl,
+            Decl::Unsupported { .. } => DeclKind::Expr,
+        };
+    }
+    DeclKind::Expr
+}
+
 /// Infer a display type name from the printed value and expression text.
 fn infer_display_type(value: &str, expr: &str) -> &'static str {
     // Try to parse as Int.
@@ -549,38 +581,6 @@ fn infer_display_type(value: &str, expr: &str) -> &'static str {
     }
     // Default to String (println always produces string output).
     "kotlin.String"
-}
-
-fn strip_modifiers(trimmed: &str) -> &str {
-    let mut s = trimmed;
-    loop {
-        let next = s
-            .strip_prefix("public ")
-            .or_else(|| s.strip_prefix("private "))
-            .or_else(|| s.strip_prefix("internal "))
-            .or_else(|| s.strip_prefix("data "))
-            .or_else(|| s.strip_prefix("enum "))
-            .or_else(|| s.strip_prefix("open "))
-            .or_else(|| s.strip_prefix("abstract "))
-            .or_else(|| s.strip_prefix("const "));
-        match next {
-            Some(rest) => s = rest.trim_start(),
-            None => break,
-        }
-    }
-    s
-}
-
-/// Is this a declaration that must be at the top level (class, fun)?
-fn is_top_level_only_decl(trimmed: &str) -> bool {
-    let s = strip_modifiers(trimmed);
-    s.starts_with("class ") || s.starts_with("fun ")
-}
-
-/// Is this a local declaration (val, var)?
-fn is_local_decl(trimmed: &str) -> bool {
-    let s = strip_modifiers(trimmed);
-    s.starts_with("val ") || s.starts_with("var ")
 }
 
 // ─── compilation + execution helpers ─────────────────────────────────────
@@ -675,21 +675,29 @@ mod tests {
 
     #[test]
     fn decl_classification() {
-        // Top-level declarations (class, fun)
-        assert!(is_top_level_only_decl("fun foo() {}"));
-        assert!(is_top_level_only_decl("class Foo {}"));
-        assert!(is_top_level_only_decl("data class Point(val x: Int)"));
-        assert!(is_top_level_only_decl("private fun foo() {}"));
-        assert!(!is_top_level_only_decl("val x = 1"));
-        assert!(!is_top_level_only_decl("println(1)"));
+        // Top-level declarations
+        assert!(matches!(classify_input("fun foo() {}"), DeclKind::TopLevel));
+        assert!(matches!(classify_input("class Foo {}"), DeclKind::TopLevel));
+        assert!(matches!(
+            classify_input("data class Point(val x: Int)"),
+            DeclKind::TopLevel
+        ));
+        assert!(matches!(
+            classify_input("interface Greeter { fun greet(): String }"),
+            DeclKind::TopLevel
+        ));
+        assert!(matches!(
+            classify_input("object Singleton { fun greet(): String = \"hi\" }"),
+            DeclKind::TopLevel
+        ));
 
         // Local declarations (val, var)
-        assert!(is_local_decl("val x = 1"));
-        assert!(is_local_decl("var y = 2"));
-        assert!(is_local_decl("const val PI = 3.14"));
-        assert!(!is_local_decl("fun foo() {}"));
-        assert!(!is_local_decl("println(1)"));
-        assert!(!is_local_decl(""));
+        assert!(matches!(classify_input("val x = 1"), DeclKind::LocalDecl));
+        assert!(matches!(classify_input("var y = 2"), DeclKind::LocalDecl));
+
+        // Expressions
+        assert!(matches!(classify_input("println(1)"), DeclKind::Expr));
+        assert!(matches!(classify_input("1 + 2"), DeclKind::Expr));
     }
 
     #[test]

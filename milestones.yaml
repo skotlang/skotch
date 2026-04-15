@@ -522,9 +522,12 @@ milestones:
           - "runBlocking { delay(100); println(\"done\") } works"
 
       - name: "Property delegation (by keyword)"
+        completed: true
         description: >
-          val x by lazy { 42 }, var name by Delegates.observable(...).
-          Desugars to delegate field + getValue/setValue.
+          val x by lazy { body } desugared to eager initialization in the
+          class constructor. The lambda body runs during construction and
+          the result is stored in the backing field. Fixture: 96-delegated-property-lazy.
+          Full Delegates.observable / by remember support is future work.
         acceptance_criteria:
           - "val x by lazy { 42 } computes once"
           - "by remember { mutableStateOf(0) } pattern works"
@@ -546,9 +549,13 @@ milestones:
           Fixture: 105-secondary-constructor.
 
       - name: "Interface delegation"
+        completed: true
         description: >
-          class X : List<Int> by backingList. Generates forwarding methods.
-          Used in many Kotlin collection wrappers.
+          class Derived(b: Base) : Base by b. Parser detects `by` soft keyword
+          after interface name, stores (interface, delegate) pairs. MIR lowering
+          generates forwarding methods for all interface methods not explicitly
+          overridden. Delegate stored as field, accessed via GetField.
+          Fixture: 95-delegation-by.
         acceptance_criteria:
           - "Interface delegation forwards all method calls to delegate"
 

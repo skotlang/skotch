@@ -359,6 +359,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg numbers: Int)` — args packed into IntArray at call site; for-in over IntArray |
 | [Lateinit var](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `lateinit var name: String` — declared without init, field defaults to null |
 | [Secondary constructors](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5.2 | `constructor(x: Int) : this(x, 0)` — multiple `<init>` methods, delegation chain |
+| [Property delegation](https://kotlinlang.org/spec/declarations.html#delegated-property-declaration) | §4.2 | `val x by lazy { expr }` — desugared to eager init in constructor |
+| [Interface delegation](https://kotlinlang.org/spec/declarations.html#delegated-classifier-declaration) | §4.5 | `class X : Base by b` — auto-generated forwarding methods |
 
 ### Not yet implemented
 
