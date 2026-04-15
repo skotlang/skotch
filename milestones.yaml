@@ -1,58 +1,61 @@
 # ============================================================================
-# skotch — Milestone Roadmap: v0.2.0 through v1.0.0
+# skotch — Milestone Roadmap
 # ============================================================================
 #
-# This file defines the roadmap for the skotch Kotlin toolchain from its
-# current state to v1.0.0, where the goal is building every Official Jetpack
-# Compose Sample (https://github.com/android/compose-samples) using only
-# skotch — no kotlinc, aapt2, d8, AGP, or Gradle.
+# PHILOSOPHY: 100% Kotlin language support first, then tooling.
 #
-# R8/ProGuard tree-shaking and minification are deferred to v2.0.
-# The v1.0.0 target is debug APK builds only.
+# Every feature must:
+#   1. Compile to JVM bytecode (.class) and run correctly
+#   2. Compile to DEX and validate with dexdump
+#   3. Compile to LLVM IR
+#   4. Work in the REPL (skotch repl)
+#   5. Work in .kts scripts (skotch run)
+#   6. Be exercised by the LSP server (diagnostics, hover)
+#   7. Have e2e test fixtures with golden outputs
+#   8. Pass cargo clippy + cargo fmt + cargo test
 #
-# This file is consumed by an Astro pre-build script for the visual roadmap
-# on skotch.dev/ and by contributors (human and AI) to guide implementation.
+# No feature may be marked "completed" if it only works on a happy path.
+# Every claimed feature must survive adversarial edge-case testing.
 #
 # ── Dependency graph ─────────────────────────────────────────────────────
 #
-#   v0.2.0 (Objects) ─→ v0.3.0 (Lambdas) ─→ v0.4.0 (Generics)
-#                                                 ↓
-#                                            v0.5.0 (Collections+Stdlib)
-#                                                 ↓
-#   v0.7.0 (Dependencies) ──────────────→ v0.6.0 (Coroutines)
-#                 ↓                             ↓
-#            v0.8.0 (Resources+DEX) ──→ v0.9.0 (Compose)
-#                                            ↓
-#                                       v1.0.0 (Integration)
+#   v0.1–v0.5 (Foundation through Collections) — COMPLETED
+#       ↓
+#   v0.6  (Higher-order functions)     ← THE critical unlock
+#       ↓
+#   v0.7  (Null safety + type system)
+#       ↓
+#   v0.8  (Full collections + stdlib)
+#       ↓
+#   v0.9  (Coroutines)                 ← hardest milestone
+#       ↓
+#   v0.10 (Nested/inner classes, enums, sealed)
+#       ↓
+#   v0.11 (Advanced functions + expressions)
+#       ↓
+#   v0.12 (Full type system)
+#       ↓
+#   v0.13 (Kotlin stdlib completeness)
+#       ↓
+#   v0.14 (DEX backend parity)
+#       ↓
+#   v0.15 (Multi-file + packages + modules)
+#       ↓
+#   v0.20 (Build system + dependencies)
+#       ↓
+#   v0.30 (Android resources + APK)
+#       ↓
+#   v0.40 (Compose compiler plugin)
+#       ↓
+#   v1.0  (Compose Samples integration)
 #
-# v0.7.0 (build tooling) can start in parallel with v0.3.0–v0.5.0 since
-# dependency resolution is independent of language features.
-#
-# ── Post-v0.2.0 honest assessment ────────────────────────────────────────
-#
-# As of v0.2.0 completion (148 fixtures, real enum classes, proper type
-# environment, smart casts, inheritance+interfaces+abstract+sealed):
-#
-# SOLID:
-#   - Compilation pipeline (lex→parse→resolve→typeck→MIR→5 backends)
-#   - Class system (inheritance, interfaces, abstract, sealed, enums)
-#   - Type checker with type environment (fields, methods, class hierarchy)
-#   - 148 e2e fixtures verified on JVM and DEX
-#
-# KEY RISKS FOR v1.0.0:
-#   - Lambdas (v0.3.0) are the single biggest unlock — zero Compose code
-#     compiles without them, and they touch every compiler layer
-#   - CPS coroutine transform (v0.6.0) is ~2,000 lines of the most complex
-#     compiler code, with subtle edge cases around cancellation
-#   - resources.arsc format (v0.8.0) is poorly documented outside AOSP
-#   - Compose compiler plugin transform (v0.9.0) changes across versions
 # ============================================================================
 
 project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.2.0"
+  current_version: "0.5.0"
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
@@ -60,7 +63,7 @@ project:
     No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
 
 # ============================================================================
-# v0.1.0 — Foundation (COMPLETED)
+# COMPLETED MILESTONES (v0.1.0 – v0.5.0)
 # ============================================================================
 
 milestones:
@@ -70,627 +73,746 @@ milestones:
     status: completed
     depends_on: []
     description: >
-      Full compilation pipeline across five targets, ~55% Kotlin language
-      coverage, build system with JAR/APK packaging, REPL with JNI, LSP
-      server, and 295+ validated test fixtures.
-    features:
-      - name: "Five-target compilation pipeline"
-        completed: true
-        description: "lex → parse → resolve → typecheck → MIR → JVM/DEX/LLVM/klib/native."
-      - name: "Fixture-driven validation system"
-        completed: true
-        description: "295+ fixtures with golden outputs for all targets."
-      - name: "Build pipeline (JAR and APK)"
-        completed: true
-        description: "skotch build with Gradle DSL parsing, JAR/APK packaging."
-      - name: "REPL with JNI"
-        completed: true
-        description: "Interactive REPL backed by embedded JVM."
-      - name: "Language Server Protocol"
-        completed: true
-        description: "Diagnostics, semantic tokens, hover, go-to-def, completions."
-      - name: "Functions (declarations, default params, named args, extension, local)"
-        completed: true
-      - name: "Classes (constructors, data classes, init blocks, mutable fields)"
-        completed: true
-      - name: "Types (Int, Long, Double, String with 20+ methods, nullable, conversions)"
-        completed: true
-      - name: "Operators (arithmetic, comparison, logical, compound assignment, ++/--)"
-        completed: true
-      - name: "Control flow (if/else, when, for, while, do-while, break, continue, try-finally)"
-        completed: true
-      - name: "Java interop (JDK class parsing, imports, kotlin-stdlib resolution)"
-        completed: true
-
-# ============================================================================
-# v0.2.0 — Object Model Foundation (COMPLETED)
-# ============================================================================
+      Five-target pipeline (JVM/DEX/LLVM/klib/native), REPL, LSP,
+      basic types, functions, classes, control flow. 295+ fixtures.
 
   - version: "0.2.0"
-    title: "Object Model Foundation"
+    title: "Object Model"
     status: completed
     depends_on: []
     description: >
-      Kotlin object model: inheritance (3+ levels, constructor forwarding,
-      super calls, inherited field access), interfaces (abstract + default
-      methods, invokeinterface), abstract classes (template method pattern),
-      sealed classes (when+is, exhaustiveness checking), real enum classes
-      (as MirClass with fields, runtime member access), smart casts
-      (instanceof + checkcast + flow-sensitive narrowing for built-in and
-      user types), object/companion singletons. Proper type environment
-      with class/interface/enum metadata for method and field resolution.
-      148 e2e fixtures.
-    features:
-      - name: "Inheritance with open/override"
-        completed: true
-        description: "3-level inheritance, ctor arg forwarding, super.method(), inherited fields in methods."
-      - name: "Interface declaration and implementation"
-        completed: true
-        description: "Abstract + default methods, invokeinterface, multiple interface impl."
-      - name: "Abstract classes"
-        completed: true
-        description: "ACC_ABSTRACT, abstract fun with no body, template method pattern."
-      - name: "Sealed classes"
-        completed: true
-        description: "when+is patterns, exhaustiveness checking, smart cast to access fields."
-      - name: "Enum classes (real)"
-        completed: true
-        description: "MirClass with name+constructor param fields, toString, runtime member access."
-      - name: "Object declarations and companion objects"
-        completed: true
-      - name: "Smart casts with is/!is checks"
-        completed: true
-        description: "instanceof + autobox + checkcast + flow narrowing (if branch, user types)."
-      - name: "Typechecker with type environment"
-        completed: true
-        description: "TypeEnv with class/interface/enum declarations, method/field resolution with superclass walking."
-      - name: "Incremental compilation with content-hash caching"
-        completed: true
-        description: >
-          Per-file SHA-256 content hashing. Unchanged files skip the entire
-          front-end pipeline (lex/parse/resolve/typeck/MIR) and load cached
-          MIR from build/cache/. Rayon added for parallel class file writing.
-          5 tests verify: cache population, cache reuse, invalidation on change.
-      - name: "Parallel class file output"
-        completed: true
-        description: >
-          JVM backend writes .class files in parallel via rayon::par_iter().
-
-# ============================================================================
-# v0.3.0 — Lambdas and Higher-Order Functions
-# ============================================================================
-# THE SINGLE MOST CRITICAL MILESTONE. Every @Composable function receives
-# lambdas. Button { Text("Click") }, remember {}, LaunchedEffect {} all
-# take lambdas. Zero Compose code compiles without this.
-# ============================================================================
+      Inheritance (3-level), interfaces (abstract+default), abstract classes,
+      sealed classes, real enum classes, smart casts, object/companion,
+      type environment, incremental compilation.
 
   - version: "0.3.0"
-    title: "Lambdas, Closures, and Higher-Order Functions"
+    title: "Lambdas and Closures"
     status: completed
     depends_on: ["0.2.0"]
     description: >
-      Function types, lambda expressions, closures, trailing lambda syntax,
-      lambda with receiver, scope functions, SAM conversions, inline functions.
-
-    features:
-      - name: "Lambda expressions"
-        completed: true
-        description: >
-          { x: Int -> x * 2 } with typed params. Compiled as synthetic
-          $Lambda$N classes with invoke() method. Lambda calls lowered to
-          receiver.invoke(args) via invokevirtual. Multi-param supported.
-          Implicit `it` param deferred to follow-up.
-        acceptance_criteria:
-          - "val double = { x: Int -> x * 2 }; println(double(5)) prints 10"
-          - "val add = { a: Int, b: Int -> a + b }; println(add(3, 4)) prints 7"
-
-      - name: "Function types"
-        completed: true
-        description: >
-          (Int) -> String syntax parsed in TypeRef. Ty::Function { params, ret }
-          added to type system. Erased to Object on JVM/DEX. Function types
-          assignable to/from Any for lambda compatibility. Local function-typed
-          variables work; higher-order parameter dispatch via $Callable deferred.
-        acceptance_criteria:
-          - "val f: (Int) -> Int = { x: Int -> x * 3 }; f(7) → 21"
-
-      - name: "Closure capture"
-        completed: true
-        description: >
-          Immutable val capture: free variables in lambda body detected by
-          analysis pass, added as fields on the synthetic class, passed as
-          constructor args at instantiation, loaded from this.field in invoke.
-          Mutable var capture (Ref boxing) deferred.
-        acceptance_criteria:
-          - "val x = 10; val addX = { n: Int -> n + x }; addX(5) → 15"
-          - "String capture works: { prefix -> prefix + name }"
-
-      - name: "Trailing lambda syntax"
-        completed: true
-        description: >
-          f(args) { body } and f { body } syntax. Parser detects { after )
-          or after identifier and appends the lambda as the last call argument.
-          Unit-returning lambdas correctly use Terminator::Return.
-        acceptance_criteria:
-          - "action { s: String -> println(s) } parses as trailing lambda"
-
-      - name: "Lambda with receiver"
-        completed: true
-        description: >
-          Type.() -> ReturnType syntax parsed. Receiver function types store
-          the receiver as the first func_param. Scope functions (run, apply)
-          pass receiver to lambda. Full this-binding in lambda body deferred
-          to v0.4.0 (needs generic type resolution).
-        acceptance_criteria:
-          - "String.() -> String type syntax parses correctly"
-
-      - name: "Scope functions (let, apply, also, run, with)"
-        completed: true
-        description: >
-          All five scope functions + repeat() lowered as MIR intrinsics.
-          let/run: invoke lambda with receiver, return result.
-          also/apply: invoke lambda, return receiver.
-          with(receiver) { lambda }: top-level function, invokes lambda.
-          repeat(n) { lambda }: loop intrinsic with counter.
-        acceptance_criteria:
-          - "\"hello\".let { s: String -> s.uppercase() } returns \"HELLO\""
-          - "42.also { n: Int -> println(n) } prints 42 and returns 42"
-          - "repeat(3) { i: Int -> println(i) } prints 0, 1, 2"
-
-      - name: "SAM conversions"
-        completed: true
-        description: >
-          Interface { lambda } desugars to object : Interface { override fun method() { body } }.
-          Detected when callee names an interface with exactly one abstract method
-          and the argument is a single lambda. Also fixed: interface abstract methods
-          now include proper parameter types in the JVM class file.
-        acceptance_criteria:
-          - "Runnable { println(\"hi\") } creates anonymous interface impl"
-
-      - name: "Inline functions (basic)"
-        completed: true
-        description: >
-          `inline` keyword parsed and accepted as a function modifier.
-          Functions marked inline compile normally (actual body inlining at
-          call sites deferred to v0.5.0). The keyword doesn't block compilation.
-        acceptance_criteria:
-          - "inline fun double(x: Int): Int = x * 2 compiles and runs"
-
-      - name: "Object expressions (anonymous implementations)"
-        completed: true
-        description: >
-          object : Interface { override fun method() {} } and
-          object : AbstractClass() { override fun method() {} }.
-          Generates synthetic $Object$N class implementing/extending
-          the specified type. Works for interfaces and abstract classes.
-        acceptance_criteria:
-          - "val r: Runnable = object : Runnable { override fun run() { } }"
-
-      # NOTE: Null-check smart cast (if x != null → narrow to non-null) should
-      # also be completed here since it's simple and many lambda patterns need it.
-      - name: "Null-check smart cast"
-        completed: true
-        description: >
-          if (x != null) { x.length } — narrows Nullable(T) to T in then-branch.
-          Detects x != null and null != x patterns. JVM checkcast emitted for
-          Nullable → concrete type transitions.
-        acceptance_criteria:
-          - "if (s != null) { println(s.uppercase()) } compiles without ?."
-
-    risks:
-      - description: "Lambda synthesis touches every compiler layer"
-        mitigation: "Start with non-capturing, then val capture, then var capture"
-      - description: "FunctionN inner class generation is verbose"
-        mitigation: "Use a template; generate invoke() from MIR"
-
-# ============================================================================
-# v0.4.0 — Generics and Type Erasure
-# ============================================================================
-# Generics unlock List<T>, Map<K,V>, MutableState<T>, remember<T>.
-# ============================================================================
+      Lambda expressions, function types, closure capture (val + var with
+      Ref boxing), 3-level nested lambdas, trailing lambda, scope functions
+      (let/also/run/apply/with/repeat), SAM conversions, object expressions.
 
   - version: "0.4.0"
     title: "Generics and Type Erasure"
     status: completed
     depends_on: ["0.3.0"]
     description: >
-      Type parameters, variance, generic classes/functions, reified types.
-      JVM/DEX use type erasure; compiler inserts casts at erasure boundaries.
-
-    features:
-      - name: "Generic functions"
-        completed: true
-        description: >
-          fun <T> identity(x: T): T = x. Type parameters parsed in <...> after
-          fun keyword. Erased to Any (Object on JVM). Autoboxing at call sites
-          for primitive args. Fixture: 24-generic-function.
-        acceptance_criteria:
-          - "identity(42) and identity(\"hi\") both work"
-
-      - name: "Generic classes"
-        completed: true
-        description: >
-          class Box<T>(val value: T). Type parameters parsed after class name.
-          Fields and constructor params erased to Object. Autoboxing at
-          constructor call sites. Fixture: 93-generic-class.
-        acceptance_criteria:
-          - "Box(42).value returns 42 with correct cast"
-
-      - name: "Upper bounds"
-        completed: true
-        description: >
-          fun <T : Comparable<T>> max(a: T, b: T): T. Bound parsed and stored
-          in TypeParam AST. Erased to Any on JVM (bound not enforced at
-          compile time). Fixture: 365-upper-bound-generic.
-        acceptance_criteria:
-          - "Bound-constrained generic compiles; wrong type rejected"
-
-      - name: "Variance (in/out)"
-        completed: true
-        description: >
-          class Producer<out T>, class Consumer<in T>. Variance annotations
-          parsed (including KwIn hard keyword in type param context). Erased
-          on JVM — no runtime effect. Fixture: 366-generic-variance.
-        acceptance_criteria:
-          - "Producer<String> assignable to Producer<Any>"
-
-      - name: "Star projection"
-        completed: true
-        description: >
-          Holder<*> parsed as type argument. Erased to Object on JVM.
-          Fixture: 367-star-projection.
-
-      - name: "Reified type parameters"
-        completed: true
-        description: >
-          inline fun <reified T> isInstance(value: Any): Boolean = value is T.
-          Reified modifier parsed on type params. Explicit type arguments at
-          call sites parsed via tentative <Type>( lookahead. Single-param
-          reified `is T` calls inlined as instanceof at the call site with the
-          concrete type. Primitive args autoboxed via valueOf.
-          Limitation: multi-reified-param functions (e.g. <reified A, reified B>)
-          are not yet inlined — requires full function body inlining.
-          Fixture: 94-reified-type-param.
-        acceptance_criteria:
-          - "Reified is-check works at runtime"
-
-      - name: "Type aliases"
-        completed: true
-        description: >
-          typealias Name = TargetType. Parsed as soft keyword, stored in AST,
-          resolved to target type name during MIR lowering. Type parameters
-          on aliases parsed but not substituted (erased).
-
-      - name: "Property getters and setters"
-        completed: true
-        description: >
-          val x: Int get() = compute(). Custom getter parsed as expression
-          body or block body, lowered to synthetic getPropertyName() method.
-          Property access dispatches to getter method when no backing field
-          exists. Setter parsing implemented but codegen deferred.
-          Fixture: 104-property-getter-setter.
-        acceptance_criteria:
-          - "Custom getter works; custom setter persists value"
-
-    risks:
-      - description: "Kotlin type inference is sophisticated"
-        mitigation: "Implement common patterns; require explicit annotations for edge cases"
-
-# ============================================================================
-# v0.5.0 — Collections, Arrays, Stdlib, and Annotations
-# ============================================================================
-# With generics and lambdas, this builds the collection APIs every Compose
-# sample uses. Also adds arrays (needed for varargs and resources) and
-# basic annotation support.
-# ============================================================================
+      Generic functions/classes, upper bounds, variance (in/out), star
+      projection, reified type parameters (single-param), type aliases,
+      property getters, autoboxing at erasure boundaries.
 
   - version: "0.5.0"
-    title: "Collections, Arrays, Stdlib, and Annotations"
+    title: "Collections, Arrays, and Annotations"
     status: completed
     depends_on: ["0.4.0"]
     description: >
-      Collection types, arrays, iteration, varargs, destructuring, operator
-      overloading, basic annotations, and try-catch with type matching.
-
-    features:
-      - name: "Array types"
-        completed: true
-        description: >
-          IntArray(size) construction via JVM newarray. array[i] read via
-          iaload, array[i] = v write via iastore, array.size via
-          arraylength. Ty::IntArray added to type lattice. Parser handles
-          Expr::Index and Stmt::IndexAssign. All backends updated with
-          stub support. Fixture: 372-intarray-basic.
-        acceptance_criteria:
-          - "IntArray(5) { it * 2 } creates [0, 2, 4, 6, 8]"
-          - "array[i] and array[i] = v work"
-
-      - name: "Varargs and spread operator"
-        completed: true
-        description: >
-          fun sum(vararg numbers: Int). vararg keyword parsed, param typed
-          as IntArray. Call-site args packed into NewIntArray + ArrayStore.
-          for-in over IntArray desugars to index-based loop. Spread operator
-          (*) not yet implemented. Fixture: 81-vararg-basic.
-        acceptance_criteria:
-          - "printAll(\"a\", \"b\", \"c\") and printAll(*array) work"
-
-      - name: "Collection factories (listOf, mapOf, setOf, mutableListOf)"
-        completed: true
-        description: >
-          listOf(...) intrinsic lowered to ArrayList construction + .add()
-          for each argument. Primitives autoboxed via valueOf. Returns
-          Ty::Class("java/util/ArrayList"). Fixture: 370-listof-foreach.
-        acceptance_criteria:
-          - "listOf(1, 2, 3).forEach { println(it) }"
-
-      - name: "Collection extensions (map, filter, forEach, fold, etc.)"
-        completed: true
-        description: >
-          .forEach { } intrinsic on ArrayList/List receivers desugared to
-          iterator pattern: .iterator() → while hasNext() → next() → unbox
-          → lambda.invoke(element). Handles Int/Long/Double unboxing.
-          Fixture: 370-listof-foreach.
-        acceptance_criteria:
-          - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } returns [4, 6]"
-
-      - name: "For-in over iterables"
-        completed: true
-        description: >
-          for (x in collection) parsed as Stmt::ForIn, desugared to
-          iterator()/hasNext()/next() pattern. Works with any Iterable
-          including ArrayList from listOf(). JVM backend emits invokeinterface
-          for Iterator methods. Fixture: 371-for-in-collection.
-        acceptance_criteria:
-          - "for (item in listOf(1, 2, 3)) works"
-
-      - name: "Destructuring declarations"
-        completed: true
-        description: >
-          val (a, b) = expr desugars to component1()/component2() calls.
-          Parser detects val ( as destructuring. Data classes auto-generate
-          componentN() methods. Works with 2+ fields.
-          Fixtures: 373-destructuring-basic, 64-data-class-destructuring.
-        acceptance_criteria:
-          - "val (a, b) = Pair(1, \"hello\") works"
-
-      - name: "Operator overloading"
-        completed: true
-        description: >
-          operator fun plus and invoke. `operator` keyword parsed and accepted.
-          Binary `+` on class types desugars to `receiver.plus(other)` via
-          virtual dispatch. `obj(args)` on class instances desugars to
-          `obj.invoke(args)`. Fixtures: 97-operator-plus, 99-operator-invoke.
-        acceptance_criteria:
-          - "Custom class with operator plus: a + b dispatches to plus()"
-
-      - name: "Infix functions and Pair/Triple"
-        completed: true
-        description: >
-          `infix` keyword parsed and accepted on function declarations.
-          Infix call syntax (`a op b`) not yet desugared — must use
-          `a.op(b)` form. Fixture: 369-infix-fun.
-        acceptance_criteria:
-          - "mapOf(1 to \"a\", 2 to \"b\") works"
-
-      - name: "Basic annotation support"
-        completed: true
-        description: >
-          @Suppress, @Deprecated, @JvmStatic, @JvmInline, @field:JvmField.
-          Annotations parsed and skipped (accepted without errors). Handles
-          bare annotations, annotations with arguments, and use-site targets.
-          No runtime retention or codegen effect yet. Fixture: 119-annotation-basic.
-        acceptance_criteria:
-          - "Annotations parsed without errors; @JvmStatic affects codegen"
-
-      - name: "Try-catch with type matching"
-        completed: true
-        description: >
-          try { } catch (e: ArithmeticException) { }. Full JVM exception
-          tables emitted in Code attribute. MIR lowering creates try/catch/after
-          blocks with ExceptionHandler records. JVM backend emits start_pc,
-          end_pc, handler_pc, catch_type. StackMapTable includes handler
-          frames. Fixture: 56-try-catch.
-        acceptance_criteria:
-          - "Catch specific exception type; handler executes correctly"
-
-    risks:
-      - description: "Collection intrinsic lowering is extensive (~20 functions)"
-        mitigation: "Prioritize: map, filter, forEach, fold, any, first, size, isEmpty, contains"
+      IntArray, varargs, listOf+forEach+for-in, destructuring with
+      componentN, operator overloading (plus/invoke), try-catch with
+      exception tables, annotation parsing, infix keyword, secondary
+      constructors, lateinit, property/interface delegation.
 
 # ============================================================================
-# v0.6.0 — Coroutines, Suspend, Property Delegation
+# v0.6.0 — Higher-Order Function Dispatch
 # ============================================================================
-# Coroutines drive all async Compose: LaunchedEffect, data loading.
-# Property delegation (by remember, by viewModels) is the state mechanism.
+# THIS IS THE SINGLE MOST IMPORTANT REMAINING LANGUAGE FEATURE.
+#
+# Currently, lambdas work when stored in local variables and invoked
+# directly (val f = { x: Int -> x * 2 }; f(5)). But passing a lambda
+# as a function-typed parameter DOES NOT WORK:
+#
+#   fun apply(f: (Int) -> Int, x: Int): Int = f(x)  // BROKEN
+#   apply({ it * 2 }, 5)                             // BROKEN
+#
+# This blocks: .map, .filter, .fold, .sortBy, .groupBy, and every
+# higher-order stdlib function. It also blocks custom HOFs that are
+# pervasive in Kotlin code.
+#
+# IMPLEMENTATION STRATEGY:
+# The fix requires a $Callable interface (or FunctionN hierarchy).
+# When a function takes a parameter of type (A) -> B, the MIR must:
+#   1. Type the parameter as $Callable (or Function1<A,B>)
+#   2. At the call site, the lambda class already has invoke() —
+#      it just needs to implement the $Callable interface
+#   3. Inside the function body, f(x) desugars to f.invoke(x)
+#      dispatched via invokeinterface on $Callable
+#
+# ALTERNATIVE: Use invokedynamic + LambdaMetafactory (JDK 8+).
+# This is how real kotlinc works. Avoids generating $Lambda classes
+# entirely. But it's more complex to implement in the backend.
+#
+# RECOMMENDED APPROACH: Start with $Callable interface (simpler),
+# upgrade to invokedynamic later for performance.
+#
+# PITFALLS:
+#   - Function arity: (Int)->Int vs (Int,Int)->Int need different
+#     interfaces or a single invoke(vararg Any) with boxing
+#   - Return type erasure: invoke() returns Object, callers must cast
+#   - Primitive boxing overhead at every call boundary
+#   - Interaction with generics: fun <T> map(f: (T)->T) needs erasure
 # ============================================================================
 
   - version: "0.6.0"
-    title: "Coroutines, Suspend Functions, and Property Delegation"
-    status: in_progress
+    title: "Higher-Order Function Dispatch"
+    status: planned
     depends_on: ["0.5.0"]
     description: >
-      The hardest language features: coroutine CPS transform, property
-      delegation, lateinit, secondary constructors, interface delegation.
+      The critical unlock: passing lambdas through function-typed parameters.
+      Without this, .map/.filter/.fold and all custom HOFs are impossible.
 
     features:
-      - name: "Suspend functions and CPS transform"
+      - name: "FunctionN interface hierarchy"
         description: >
-          suspend fun fetchData(): String. Transforms to state machine with
-          Continuation<T> parameter. ~2,000 lines of MIR lowering.
+          Generate synthetic Function0, Function1, Function2, ... interfaces
+          with invoke() methods. Lambda $Lambda$N classes implement the
+          appropriate FunctionN. Function-typed parameters typed as FunctionN.
         acceptance_criteria:
-          - "runBlocking { delay(100); println(\"done\") } works"
+          - "fun apply(f: (Int) -> Int, x: Int) = f(x); apply({ it * 2 }, 5) → 10"
 
-      - name: "Property delegation (by keyword)"
-        completed: true
+      - name: "Lambda-to-FunctionN bridge"
         description: >
-          val x by lazy { body } desugared to eager initialization in the
-          class constructor. The lambda body runs during construction and
-          the result is stored in the backing field. Fixture: 96-delegated-property-lazy.
-          Full Delegates.observable / by remember support is future work.
+          When passing a lambda literal to a function-typed parameter,
+          the $Lambda$N class implements FunctionN<A,R>. The invoke()
+          method signature matches. JVM uses invokeinterface for dispatch.
+
+      - name: "Function reference syntax"
+        description: >
+          ::functionName creates a FunctionN reference to a named function.
+          val f: (Int) -> Int = ::double. Lowered as a synthetic lambda
+          class wrapping a static call to the target function.
         acceptance_criteria:
-          - "val x by lazy { 42 } computes once"
-          - "by remember { mutableStateOf(0) } pattern works"
+          - "val f = ::println; f(42) prints 42"
 
-      - name: "Lateinit var"
-        completed: true
+      - name: "Multi-arity dispatch"
         description: >
-          lateinit var name: String. Keyword parsed and accepted. Property
-          declared with no initializer, field defaults to null on JVM.
-          Assigned later via method. Fixture: 101-lateinit-var.
-
-      - name: "Secondary constructors"
-        completed: true
-        description: >
-          constructor(params) : this(args) { body }. Parsed in class body.
-          MIR lowers to additional <init> methods that delegate to primary.
-          JVM backend emits multiple <init> with different descriptors.
-          Call site selects constructor by argument count.
-          Fixture: 105-secondary-constructor.
-
-      - name: "Interface delegation"
-        completed: true
-        description: >
-          class Derived(b: Base) : Base by b. Parser detects `by` soft keyword
-          after interface name, stores (interface, delegate) pairs. MIR lowering
-          generates forwarding methods for all interface methods not explicitly
-          overridden. Delegate stored as field, accessed via GetField.
-          Fixture: 95-delegation-by.
-        acceptance_criteria:
-          - "Interface delegation forwards all method calls to delegate"
-
-      - name: "DEX exception tables"
-        description: "try-catch in DEX. Needed for coroutine state machines."
+          Function0 through Function5 (or FunctionN with vararg for N>5).
+          Each arity gets its own interface with the correct invoke() sig.
 
     risks:
-      - description: "CPS transform is the most complex single transform (~2K lines)"
-        mitigation: "Study kotlinc's CoroutineTransformerMethodVisitor; start with sequential suspends"
+      - description: "Primitive boxing at every HOF boundary kills performance"
+        mitigation: "Accept boxing for now; invokedynamic optimization in v0.15+"
 
 # ============================================================================
-# v0.7.0 — Dependency Resolution and Build System
+# v0.7.0 — Null Safety and Type System Hardening
 # ============================================================================
-# CAN START IN PARALLEL with v0.3.0–v0.5.0.
-# Real Compose apps depend on dozens of Maven artifacts.
+# Kotlin's null safety is THE defining type system feature. Currently we
+# parse nullable types but don't enforce them. This milestone makes the
+# type checker actually reject null-unsafe code.
+#
+# IMPLEMENTATION STRATEGY:
+# The type checker already has Ty::Nullable(Box<Ty>). What's missing:
+#   1. Method calls on nullable receivers must require ?. or !!
+#   2. Assignments from nullable to non-nullable must error
+#   3. Smart cast narrowing from T? to T after null checks
+#   4. Safe call (?.) must short-circuit to null
+#   5. Elvis (?:) must work correctly with nullable operands
+#   6. !! must emit a null check + throw
+#
+# PITFALLS:
+#   - Platform types from Java: everything from Java is T! (nullable/unknown)
+#   - Smart cast invalidation: var reassignment invalidates narrowing
+#   - Intersection types from multiple is-checks
+#   - Nothing type for functions that never return (throw, TODO())
 # ============================================================================
 
   - version: "0.7.0"
-    title: "Dependency Resolution and Build System"
-    status: in_progress
-    depends_on: []  # parallel with language milestones
+    title: "Null Safety and Type System Hardening"
+    status: planned
+    depends_on: ["0.6.0"]
     description: >
-      Maven resolution, version catalogs, AAR handling, Kotlin metadata.
+      Enforce nullable/non-nullable type checking. Safe calls, elvis,
+      non-null assertion, smart cast narrowing in all contexts.
+
+    features:
+      - name: "Nullable type enforcement"
+        description: >
+          Reject assignment of T? to T without null check. Error on
+          method calls on nullable receiver without ?. or !!.
+        acceptance_criteria:
+          - "val x: String = null // compile error"
+          - "val x: String? = null; x.length // compile error"
+
+      - name: "Safe call operator (?.)"
+        description: >
+          expr?.method() short-circuits to null if receiver is null.
+          Lowers to: if (recv != null) recv.method() else null.
+        acceptance_criteria:
+          - "val x: String? = null; println(x?.length) // prints null"
+
+      - name: "Non-null assertion (!!)"
+        description: >
+          expr!! throws KotlinNullPointerException if null.
+          Lowers to: if (recv == null) throw NPE else recv.
+        acceptance_criteria:
+          - "val x: String? = \"hi\"; println(x!!.length) // prints 2"
+
+      - name: "Smart casts in when branches"
+        description: >
+          when { x is String -> x.length } narrows x to String.
+          Currently only works in if-branches.
+        acceptance_criteria:
+          - "when (x) { is String -> x.uppercase() } compiles"
+
+      - name: "Nothing type"
+        description: >
+          throw expressions have type Nothing. Functions returning Nothing
+          (e.g., error(), TODO()) allow unreachable code elimination.
+
+    risks:
+      - description: "Platform type annotations from Java interop are complex"
+        mitigation: "Treat all Java types as T! (nullable-agnostic) initially"
+
+# ============================================================================
+# v0.8.0 — Full Collections and Stdlib Core
+# ============================================================================
+# With HOFs working (v0.6.0), we can implement the full collection API.
+# This is the most-used part of Kotlin's stdlib.
+#
+# IMPLEMENTATION STRATEGY:
+# Two approaches:
+#   A. Intrinsic lowering: hardcode map/filter/fold as MIR patterns
+#   B. Load kotlin-stdlib.jar and call real implementations
+#
+# Approach A is what we've done for forEach. It works but doesn't scale
+# to 200+ collection functions. Approach B requires classfile parsing
+# of the stdlib JAR and routing calls to it.
+#
+# RECOMMENDED: Hybrid. Intrinsic for the top ~20 functions (map, filter,
+# fold, any, first, last, sortedBy, groupBy, associate, flatten,
+# zip, take, drop, count, sum, max, min, toList, toSet, toMap).
+# Load stdlib JAR for the rest.
+#
+# PITFALLS:
+#   - Generic type inference: listOf(1,2,3).map { it * 2 } needs
+#     the compiler to infer that `it` is Int from the List<Int> context
+#   - Chained operations: list.filter { }.map { }.first() must propagate
+#     types through the chain
+#   - MutableList/MutableMap/MutableSet: need add/put/remove/clear
+#   - Pair and Triple: need Pair<A,B> class with first/second fields
+#   - Ranges: IntRange, LongRange, CharRange with step
+# ============================================================================
+
+  - version: "0.8.0"
+    title: "Full Collections and Stdlib Core"
+    status: planned
+    depends_on: ["0.7.0"]
+    description: >
+      map, filter, fold, sorted, grouped, mutable collections, Pair/Triple,
+      ranges with step, and the top ~50 most-used stdlib functions.
+
+    features:
+      - name: "Collection HOFs (map, filter, fold, etc.)"
+        description: >
+          listOf(1,2,3).map { it * 2 }.filter { it > 3 } → [4, 6].
+          Top 20 collection extensions as intrinsics.
+        acceptance_criteria:
+          - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } == listOf(4, 6)"
+
+      - name: "Mutable collections"
+        description: >
+          mutableListOf, mutableMapOf, mutableSetOf. add(), put(),
+          remove(), clear(), addAll(), contains(), isEmpty().
+        acceptance_criteria:
+          - "val list = mutableListOf(1,2,3); list.add(4); println(list.size) // 4"
+
+      - name: "Map and Set"
+        description: >
+          mapOf(1 to \"a\"), setOf(1,2,3). Map.get(), Map.keys,
+          Map.values, Map.entries. Set operations.
+        acceptance_criteria:
+          - "mapOf(1 to \"a\")[1] == \"a\""
+
+      - name: "Pair and Triple"
+        description: >
+          Pair(a, b) with .first/.second. Triple(a, b, c).
+          Infix `to` function: 1 to \"a\" creates Pair.
+        acceptance_criteria:
+          - "val (k, v) = 1 to \"hello\"; println(v) // hello"
+
+      - name: "Ranges with step"
+        description: >
+          1..10 step 2, 'a'..'z', IntRange, LongRange, CharRange.
+          for (i in 1..10 step 2) iterates 1, 3, 5, 7, 9.
+
+      - name: "String stdlib completions"
+        description: >
+          split, joinToString, toList, toCharArray, toByteArray,
+          padStart, padEnd, reversed, first, last, drop, take,
+          lines, repeat. The 30 most-used String functions.
+
+    risks:
+      - description: "Generic type inference through chained calls is hard"
+        mitigation: "Require explicit lambda param types initially; infer `it` type later"
+
+# ============================================================================
+# v0.9.0 — Coroutines and Suspend Functions
+# ============================================================================
+# THE HARDEST MILESTONE. Coroutines require a CPS (continuation-passing
+# style) transform that converts sequential suspend code into a state
+# machine. This is ~2000 lines of the most complex compiler code in
+# any Kotlin implementation.
+#
+# IMPLEMENTATION STRATEGY:
+# Study kotlinc's CoroutineTransformerMethodVisitor in detail.
+# The transform works as follows:
+#
+#   suspend fun fetchData(): String {
+#       val a = suspendCall1()    // suspend point 0
+#       val b = suspendCall2(a)   // suspend point 1
+#       return a + b
+#   }
+#
+#   ↓ transforms to ↓
+#
+#   fun fetchData(continuation: Continuation<String>): Any? {
+#       val sm = continuation as? FetchDataContinuation
+#           ?: FetchDataContinuation(continuation)
+#       when (sm.label) {
+#           0 -> { sm.label = 1; val result = suspendCall1(sm); if (result == COROUTINE_SUSPENDED) return result; }
+#           1 -> { val a = sm.result; sm.label = 2; val result = suspendCall2(a, sm); if (result == COROUTINE_SUSPENDED) return result; }
+#           2 -> { val a = sm.a; val b = sm.result; sm.continuation.resume(a + b); return; }
+#       }
+#   }
+#
+# Each suspend point becomes a state in the state machine. Local
+# variables that cross suspend boundaries are saved to the
+# continuation object's fields.
+#
+# PITFALLS:
+#   - Variable liveness: must determine which locals are live across
+#     each suspend point and save/restore them
+#   - Exception handling: try-catch around suspend calls needs careful
+#     state machine integration
+#   - Tail call optimization: tailrec suspend functions
+#   - Cancellation: CancellationException must propagate correctly
+#   - CoroutineContext: must thread through the dispatcher
+#   - Structured concurrency: coroutineScope, supervisorScope
+#   - Flow: cold streams built on suspend + channels
+#
+# RECOMMENDED APPROACH:
+#   Phase 1: Sequential suspends only (no branching across suspend points)
+#   Phase 2: Branching (if/when with suspend calls in branches)
+#   Phase 3: Loops with suspend calls
+#   Phase 4: Try-catch with suspend calls
+#   Phase 5: Flow and channels
+# ============================================================================
+
+  - version: "0.9.0"
+    title: "Coroutines and Suspend Functions"
+    status: planned
+    depends_on: ["0.8.0"]
+    description: >
+      CPS state machine transform for suspend functions. runBlocking,
+      launch, async/await, delay. The hardest single milestone.
+
+    features:
+      - name: "Suspend function CPS transform"
+        description: >
+          suspend fun becomes a state machine with Continuation<T> param.
+          Local variables saved/restored across suspend points. Each
+          suspend call becomes a state transition.
+        acceptance_criteria:
+          - "suspend fun fetch(): String with two sequential suspend calls works"
+
+      - name: "runBlocking builder"
+        description: >
+          runBlocking { } creates a coroutine scope and blocks the current
+          thread until all child coroutines complete. Minimum viable
+          coroutine runtime.
+        acceptance_criteria:
+          - "runBlocking { delay(10); println(\"done\") } prints \"done\""
+
+      - name: "launch and async/await"
+        description: >
+          launch { } starts a fire-and-forget coroutine.
+          async { } starts a coroutine that returns Deferred<T>.
+          deferred.await() suspends until the result is ready.
+
+      - name: "delay function"
+        description: >
+          delay(millis) suspends the coroutine for the given duration
+          without blocking the thread. Implemented via a scheduled
+          continuation resume.
+
+      - name: "CoroutineScope and structured concurrency"
+        description: >
+          coroutineScope { } creates a child scope. Parent waits for
+          all children. Cancellation propagates to children.
+
+    risks:
+      - description: "CPS transform is ~2000 lines of the most complex compiler code"
+        mitigation: "Start with sequential suspends; add branching later"
+      - description: "CoroutineContext threading is subtle"
+        mitigation: "Implement single-threaded dispatcher first; multi-thread later"
+
+# ============================================================================
+# v0.10.0 — Nested Classes, Full Enums, Sealed Hierarchies
+# ============================================================================
+# These features are partially implemented but have gaps that need
+# closing for real-world Kotlin code.
+#
+# PITFALLS:
+#   - Inner classes hold a reference to the outer class instance
+#   - Nested classes are static on JVM (no outer reference)
+#   - Enum.values(), Enum.valueOf(), Enum.entries need array allocation
+#   - Sealed class subclasses must all be in the same file
+#   - Sealed interface (Kotlin 1.5+) — subclasses in same module
+# ============================================================================
+
+  - version: "0.10.0"
+    title: "Nested Classes, Full Enums, Sealed Completeness"
+    status: planned
+    depends_on: ["0.9.0"]
+    description: >
+      Inner/nested classes, enum values()/valueOf()/entries, sealed
+      interface, sealed with object subclasses.
+
+    features:
+      - name: "Nested classes"
+        description: >
+          class Outer { class Nested { } } — Nested is a static inner
+          class on JVM. No reference to Outer instance.
+
+      - name: "Inner classes"
+        description: >
+          class Outer { inner class Inner { } } — Inner holds implicit
+          reference to Outer. Access outer members via this@Outer.
+
+      - name: "Enum values() and valueOf()"
+        description: >
+          Color.values() returns Array<Color>. Color.valueOf("RED")
+          returns the matching entry. Color.entries returns List<Color>.
+
+      - name: "Enum with methods and properties"
+        description: >
+          enum class Planet(val mass: Double) { EARTH(5.97) { override fun display() = "Earth" } }.
+          Enum entries can override methods.
+
+      - name: "Sealed interfaces"
+        description: >
+          sealed interface Result. Subclasses must be in same module.
+          Exhaustive when checking for sealed interfaces.
+
+    risks:
+      - description: "Inner class outer reference adds complexity to closures"
+        mitigation: "Implement nested (static) first; inner after"
+
+# ============================================================================
+# v0.11.0 — Advanced Functions and Expressions
+# ============================================================================
+# These are the remaining function/expression features that real
+# Kotlin code uses frequently.
+#
+# PITFALLS:
+#   - try-as-expression: `val x = try { f() } catch { default }` needs
+#     the parser to handle `try` in expression position
+#   - when-as-expression with smart casts in each branch
+#   - Labeled returns: return@forEach, return@launch
+#   - Tailrec: must detect tail position and emit goto instead of call
+#   - Property setter codegen: need field write-back pattern
+# ============================================================================
+
+  - version: "0.11.0"
+    title: "Advanced Functions and Expressions"
+    status: planned
+    depends_on: ["0.10.0"]
+    description: >
+      try-as-expression, multi-statement try bodies, labeled returns,
+      tailrec, property setters, extension properties, when-as-expression
+      with smart casts, infix call syntax (a op b).
+
+    features:
+      - name: "Try as expression"
+        description: "val x = try { f() } catch (e: Exception) { default }"
+
+      - name: "Multi-statement try-catch bodies"
+        description: >
+          Currently only the first statement in a try block executes.
+          Fix the MIR lowering to iterate all statements.
+
+      - name: "Labeled returns"
+        description: >
+          return@forEach — return from the lambda, not the enclosing
+          function. Needs label tracking in the MIR lowering.
+        acceptance_criteria:
+          - "listOf(1,2,3).forEach { if (it == 2) return@forEach; println(it) } prints 1, 3"
+
+      - name: "Tailrec optimization"
+        description: >
+          tailrec fun gcd(a: Int, b: Int): Int — tail calls become gotos.
+        acceptance_criteria:
+          - "tailrec factorial with large input doesn't stack overflow"
+
+      - name: "Property setters (codegen)"
+        description: >
+          var x: Int set(value) { field = value * 2 }. Parser already
+          handles syntax; need codegen for setter dispatch.
+
+      - name: "Extension properties"
+        description: >
+          val String.lastChar: Char get() = this[length - 1].
+          Parser and MIR lowering for extension property access.
+
+      - name: "Infix call syntax"
+        description: >
+          a to b, a shl b. Parser recognizes identifier-as-infix after
+          an expression. Desugars to a.to(b).
+        acceptance_criteria:
+          - "1 to \"one\" creates a Pair"
+
+      - name: "When with smart casts in all branches"
+        description: >
+          when (x) { is String -> x.length } narrows x to String.
+          when { x is String -> x.length } also narrows.
+
+    risks:
+      - description: "Labeled returns interact with closures and inline functions"
+        mitigation: "Implement non-local returns for inline lambdas only"
+
+# ============================================================================
+# v0.12.0 — Full Type System
+# ============================================================================
+# These are the remaining type system features needed for real Kotlin code.
+#
+# PITFALLS:
+#   - Type inference: Kotlin has bidirectional type inference that is
+#     MUCH more sophisticated than what we have. Full Hindley-Milner
+#     style inference with constraints is needed for complex code.
+#   - Bound checking: T : Comparable<T> should reject non-Comparable types
+#   - Declaration-site variance interacts with type projection
+#   - Intersection types from smart casts
+#   - SAM type inference: when multiple overloads exist
+# ============================================================================
+
+  - version: "0.12.0"
+    title: "Full Type System"
+    status: planned
+    depends_on: ["0.11.0"]
+    description: >
+      Type inference engine, bound enforcement, multi-reified, full
+      smart casts, data class equals/hashCode/copy, value classes.
+
+    features:
+      - name: "Type inference for lambda parameters"
+        description: >
+          listOf(1,2,3).map { it * 2 } — infer `it` type as Int from
+          context (List<Int>.map expects (Int)->R).
+
+      - name: "Upper bound enforcement"
+        description: >
+          fun <T : Comparable<T>> max(a: T, b: T) rejects non-Comparable
+          types at compile time.
+
+      - name: "Multi-reified type parameters"
+        description: >
+          inline fun <reified A, reified B> check(x: Any) — full function
+          body inlining with multiple type substitutions.
+
+      - name: "Data class equals/hashCode/copy"
+        description: >
+          Auto-synthesize equals(), hashCode(), copy() with default params.
+          componentN() already implemented.
+        acceptance_criteria:
+          - "Point(1,2) == Point(1,2) is true"
+          - "Point(1,2).copy(y=3) == Point(1,3)"
+
+      - name: "Value classes (@JvmInline)"
+        description: >
+          @JvmInline value class Password(val s: String). Erased to
+          underlying type at call sites. Mangled method names on JVM.
+
+      - name: "Intersection types"
+        description: >
+          After multiple is-checks, the narrowed type is the intersection
+          of all checked types.
+
+    risks:
+      - description: "Full type inference is the second-hardest feature after coroutines"
+        mitigation: "Require explicit types where inference fails; add inference iteratively"
+
+# ============================================================================
+# v0.13.0 — Kotlin Stdlib Completeness
+# ============================================================================
+# Real Kotlin code uses hundreds of stdlib functions. We need either
+# intrinsic implementations or the ability to load kotlin-stdlib.jar.
+#
+# IMPLEMENTATION STRATEGY:
+# Loading kotlin-stdlib.jar and calling real implementations is the
+# only scalable approach. This requires:
+#   1. Classfile parsing of stdlib classes
+#   2. Resolving method descriptors from parsed classfiles
+#   3. Emitting invokestatic/invokevirtual to stdlib methods
+#   4. Including kotlin-stdlib.jar in the runtime classpath
+#
+# PITFALLS:
+#   - Kotlin stdlib uses inline functions heavily — these won't work
+#     unless we support inline function body inlining
+#   - Many stdlib functions use reified type parameters
+#   - Kotlin stdlib depends on kotlin-stdlib-common (multiplatform)
+#   - Version compatibility: stdlib version must match language version
+# ============================================================================
+
+  - version: "0.13.0"
+    title: "Kotlin Stdlib Completeness"
+    status: planned
+    depends_on: ["0.12.0"]
+    description: >
+      Load kotlin-stdlib.jar for full stdlib access. Intrinsic fallback
+      for inline/reified functions. 95% stdlib coverage.
+
+    features:
+      - name: "kotlin-stdlib.jar loading"
+        description: >
+          Parse kotlin-stdlib.jar classfiles. Resolve method signatures.
+          Emit calls to real stdlib implementations.
+
+      - name: "Inline function body inlining"
+        description: >
+          For stdlib inline functions (require, check, buildList, etc.),
+          inline the function body at the call site.
+
+      - name: "Standard IO (readLine, readln)"
+        description: "readLine(), readln(), println with format strings."
+
+      - name: "Math functions"
+        description: "abs, max, min, sqrt, pow, roundToInt, etc."
+
+      - name: "Regex support"
+        description: "Regex class, matchResult, find, replace, split."
+
+# ============================================================================
+# v0.14.0 — DEX Backend Parity
+# ============================================================================
+# The DEX backend currently handles basic functions but lags behind
+# JVM for classes, inheritance, lambdas, etc. This milestone brings
+# DEX to full parity with JVM.
+#
+# PITFALLS:
+#   - DEX register model vs JVM stack model — completely different codegen
+#   - DEX has 64K method reference limit per dex file
+#   - DEX encoded_catch_handler format differs from JVM exception tables
+#   - DEX needs multi-dex splitting for large apps
+# ============================================================================
+
+  - version: "0.14.0"
+    title: "DEX Backend Parity"
+    status: planned
+    depends_on: ["0.13.0"]
+    description: >
+      Full DEX backend: classes, inheritance, lambdas, generics,
+      exception tables, multi-dex. Every JVM fixture must also pass DEX.
+
+    features:
+      - name: "DEX class emission"
+        description: "User classes, interfaces, inheritance, virtual dispatch."
+
+      - name: "DEX exception tables"
+        description: "try-catch in DEX using encoded_catch_handler."
+
+      - name: "DEX lambda support"
+        description: "$Lambda$N classes, closure capture, invoke dispatch."
+
+      - name: "Multi-DEX splitting"
+        description: ">64K methods → classes.dex + classes2.dex."
+
+# ============================================================================
+# v0.15.0 — Multi-File, Packages, and Modules
+# ============================================================================
+# Real projects have multiple files, packages, and modules.
+#
+# PITFALLS:
+#   - Cross-file name resolution: class in file A used in file B
+#   - Package-private visibility
+#   - Module boundaries and internal visibility
+#   - Classpath ordering affects resolution
+# ============================================================================
+
+  - version: "0.15.0"
+    title: "Multi-File, Packages, and Modules"
+    status: planned
+    depends_on: ["0.14.0"]
+    description: >
+      Multi-file compilation, package-aware resolution, multi-module
+      builds, Kotlin metadata emission for cross-module interop.
+
+    features:
+      - name: "Multi-file compilation"
+        description: >
+          Compile multiple .kt files in the same package. Cross-file
+          references resolved via two-pass compilation.
+
+      - name: "Multi-module compilation"
+        description: >
+          Compile module A, then module B that depends on A. Module A's
+          classes available when compiling B.
+
+      - name: "Kotlin metadata emission"
+        description: >
+          @Metadata annotation on generated classes with protobuf payload.
+          Required for kotlinc-compiled code to interop with skotch output.
+
+      - name: "Internal visibility enforcement"
+        description: "internal members visible within module, hidden outside."
+
+# ============================================================================
+# BUILD SYSTEM AND ANDROID TOOLING (v0.20–v0.40)
+# ============================================================================
+# These milestones are ONLY attempted after the language is 100%.
+# They are build system / packaging concerns, not language features.
+# ============================================================================
+
+  - version: "0.20.0"
+    title: "Build System and Dependency Resolution"
+    status: planned
+    depends_on: ["0.15.0"]
+    description: >
+      Full Gradle DSL parsing, Maven/Google dependency resolution,
+      version catalogs, AAR handling, BOM support.
 
     features:
       - name: "Maven dependency resolution"
         completed: true
-        description: >
-          @file:DependsOn and @file:Repository annotations in .kts scripts.
-          Transitive resolution via POM parsing with skotch-tape crate.
-          HTTP download with reqwest+rustls, cached in XDG data dir.
-          Used by REPL and script runner.
-        acceptance_criteria:
-          - "kotlinx-coroutines-core resolved and downloaded"
-
+        description: "Already implemented in skotch-tape crate."
       - name: "Version catalog (libs.versions.toml)"
         completed: true
-        description: >
-          Hand-rolled TOML parser for gradle/libs.versions.toml. Parses
-          [versions], [libraries], [plugins] sections. Resolves version.ref
-          lookups, module notation (group:name:version), literal versions.
-          Strips comments, skips unknown sections. 6 unit tests.
-
+        description: "Already implemented."
+      - name: "Gradle plugin stubs"
+        completed: true
+        description: "Already implemented."
+      - name: "Package-aware class naming"
+        completed: true
+        description: "Already implemented."
       - name: "AAR handling"
         description: "Extract classes.jar + res/ from .aar. Scan for type resolution."
-
       - name: "BOM support"
         description: "platform(\"compose-bom:2026.03.00\") constrains versions."
 
-      - name: "Gradle plugin stubs"
-        completed: true
-        description: >
-          Plugin declarations in build.gradle.kts mapped to internal config.
-          Recognizes: com.android.application/library, kotlin.android/jvm/multiplatform,
-          compose. Sets is_android, is_kotlin, is_compose flags on ProjectModel.
-          Handles both id("...") and kotlin("...") shorthand. 7 unit tests.
-
-      - name: "Kotlin metadata emission"
-        description: >
-          Emit @Metadata annotations on generated classes so Kotlin-aware
-          libraries (kotlinx-serialization, Compose) can inspect types.
-          Without this, cross-module Kotlin interop breaks.
-        acceptance_criteria:
-          - "Generated class files contain @Metadata with correct protobuf payload"
-
-      - name: "Multi-module compilation"
-        description: >
-          Compile modules in dependency order. Module A's classes available
-          when compiling module B. Needed for real project structures.
-        acceptance_criteria:
-          - "Two-module project where module B imports from module A compiles"
-
-      - name: "Package-aware class naming"
-        completed: true
-        description: >
-          package com.example → com/example/InputKt.class. Package declaration
-          prefixes wrapper class and all user classes with the package path.
-          All MIR references (Ty::Class, NewInstance, GetField, PutField,
-          Constructor, Virtual, Super, InstanceOf) rewritten with prefix.
-          Directories created for nested packages.
-        acceptance_criteria:
-          - "Package declaration affects .class file location in JAR/APK"
-
-    risks:
-      - description: "Maven POM transitivity can pull hundreds of artifacts"
-        mitigation: "Depth-limited resolution; aggressive caching"
-
-# ============================================================================
-# v0.8.0 — Android Resource Pipeline and Full DEX Backend
-# ============================================================================
-
-  - version: "0.8.0"
-    title: "Android Resource Pipeline and Full DEX Backend"
+  - version: "0.30.0"
+    title: "Android Resource Pipeline and APK Assembly"
     status: planned
-    depends_on: ["0.6.0", "0.7.0"]
+    depends_on: ["0.20.0"]
     description: >
-      Resource compilation (aapt2 replacement), R class, full DEX backend
-      with class hierarchy support, multi-DEX, debug APK assembly.
+      aapt2 replacement, R class, resources.arsc, debug APK assembly.
 
     features:
       - name: "Resource compilation (aapt2 equivalent)"
         description: "XML → binary, resources.arsc generation."
       - name: "R class generation"
         description: "R.string.app_name, R.drawable.ic_launcher → integer constants."
-      - name: "Full DEX backend (class parity with JVM)"
-        description: >
-          Classes, interfaces, inheritance, virtual dispatch, exception tables,
-          arrays, instance creation, casts. Currently DEX handles only static
-          functions and basic class structures.
-      - name: "Multi-DEX support"
-        description: ">65K methods → classes.dex + classes2.dex splitting."
-      - name: "Debug APK assembly (end-to-end)"
-        description: "AndroidManifest + classes.dex + resources.arsc + res/ + lib/. Debug signing."
+      - name: "Debug APK assembly"
+        description: "AndroidManifest + classes.dex + resources.arsc + res/ + lib/."
       - name: "APK alignment and v2 signing"
         description: "zipalign + v2/v3 signing scheme for Android 7+."
 
-    risks:
-      - description: "resources.arsc format is poorly documented outside AOSP"
-        mitigation: "Use aapt2 output as test oracle"
-
-# ============================================================================
-# v0.9.0 — Compose Compiler Plugin
-# ============================================================================
-
-  - version: "0.9.0"
+  - version: "0.40.0"
     title: "Compose Compiler Plugin"
     status: planned
-    depends_on: ["0.8.0"]
+    depends_on: ["0.30.0"]
     description: >
       @Composable transform, state tracking, remember, recomposition.
-      Implemented as a MIR-to-MIR pass.
 
     features:
-      - name: "Runtime-visible annotations"
-        description: "@Composable, @Preview, @OptIn → class file RuntimeVisibleAnnotations."
       - name: "@Composable function transform"
         description: "Composer + $changed parameters, startRestartGroup/endRestartGroup."
       - name: "remember intrinsic"
@@ -699,12 +821,6 @@ milestones:
         description: "State reads recorded by Composer; changes trigger recomposition."
       - name: "Stability inference"
         description: "$stable flags for skipping unchanged composables."
-      - name: "CompositionLocal support"
-        description: "CompositionLocalProvider { } for theme/context propagation."
-
-    risks:
-      - description: "Transform semantics change across Compose compiler versions"
-        mitigation: "Pin to specific Compose BOM version; validate against its runtime"
 
 # ============================================================================
 # v1.0.0 — Compose Samples Integration
@@ -713,17 +829,9 @@ milestones:
   - version: "1.0.0"
     title: "Compose Samples Integration"
     status: planned
-    depends_on: ["0.9.0"]
+    depends_on: ["0.40.0"]
     description: >
       End-to-end validation: build every Compose Sample with skotch alone.
-
-    features:
-      - name: "Build each compose-sample"
-        description: "Clone android/compose-samples. Run skotch build. Fix gaps."
-      - name: "Parser/typeck/codegen gap fixes"
-        description: "Real code exposes syntax/type combinations not covered by fixtures."
-      - name: "Missing stdlib functions (added on demand)"
-      - name: "Material3 + Navigation compatibility"
 
     release_criteria:
       - "skotch build succeeds for: Jetchat, JetNews, Jetsnack, Jetcaster, Reply, JetLagged"
@@ -731,15 +839,5 @@ milestones:
       - "Each app launches to main screen"
       - "No external tools invoked"
       - "Build < 60s per sample (clean)"
-
-# ============================================================================
-# FUTURE: v2.0.0
-# ============================================================================
-# - R8/ProGuard tree-shaking and minification
-# - Release build optimization
-# - Advanced incremental compilation (cross-file dependency tracking)
-# - Full parallel compilation (with cross-file name pre-registration)
-# - IDE integration beyond LSP (IntelliJ plugin)
-# - Kotlin Multiplatform (KMP) support
-# - Compose for Desktop/Web targets
-# ============================================================================
+      - "100% of Kotlin language spec is supported"
+      - "All features work on JVM, DEX, LLVM, REPL, .kts, and LSP"
