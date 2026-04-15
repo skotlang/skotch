@@ -224,7 +224,7 @@ milestones:
 
   - version: "0.7.0"
     title: "Null Safety and Type System Hardening"
-    status: planned
+    status: in_progress
     depends_on: ["0.6.0"]
     description: >
       Enforce nullable/non-nullable type checking. Safe calls, elvis,
@@ -240,23 +240,31 @@ milestones:
           - "val x: String? = null; x.length // compile error"
 
       - name: "Safe call operator (?.)"
+        completed: true
         description: >
-          expr?.method() short-circuits to null if receiver is null.
-          Lowers to: if (recv != null) recv.method() else null.
+          x?.length short-circuits to null if receiver is null.
+          Multi-block lowering: null-check → then-block (dispatch on
+          unwrapped type) / else-block (store null). Handles property
+          access and method calls. Primitives autoboxed for nullable
+          result. Fixture: 376-safe-call-nonnull.
         acceptance_criteria:
           - "val x: String? = null; println(x?.length) // prints null"
 
       - name: "Non-null assertion (!!)"
+        completed: true
         description: >
-          expr!! throws KotlinNullPointerException if null.
-          Lowers to: if (recv == null) throw NPE else recv.
+          x!! unwraps Nullable(T) to T. Creates new local with
+          non-nullable type for correct downstream dispatch.
+          Fixture: 376-safe-call-nonnull.
         acceptance_criteria:
           - "val x: String? = \"hi\"; println(x!!.length) // prints 2"
 
       - name: "Smart casts in when branches"
+        completed: true
         description: >
-          when { x is String -> x.length } narrows x to String.
-          Currently only works in if-branches.
+          when (x) { is String -> x.uppercase() } narrows x to String
+          in the branch body. Emits checkcast + scope narrowing for
+          reference types. Fixture: 377-when-smart-cast.
         acceptance_criteria:
           - "when (x) { is String -> x.uppercase() } compiles"
 
