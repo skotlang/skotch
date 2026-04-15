@@ -106,29 +106,20 @@ method        digitSum (I)I 0x0009
     0156 op_0xAC
     sub_attr  StackMapTable (133 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=7
-    0000 bipush 123
-    0002 istore 1
-    0004 iload 1
-    0006 invokestatic Method(InputKt.digitSum:(I)I)
-    0009 istore 2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 iload 2
-    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0019 sipush 9999
-    0022 istore 3
-    0024 iload 3
+  code        max_stack=2 max_locals=4
+    0000 invokestatic Method(InputKt.digitSum:(I)I)
+    0003 istore 1
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 iload 1
+    0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0013 invokestatic Method(InputKt.digitSum:(I)I)
+    0016 istore 2
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 iload 2
+    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 invokestatic Method(InputKt.digitSum:(I)I)
-    0029 istore 4
+    0029 istore 3
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 iload 4
+    0034 iload 3
     0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0039 iconst_0
-    0040 istore 5
-    0042 iload 5
-    0044 invokestatic Method(InputKt.digitSum:(I)I)
-    0047 istore 6
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 iload 6
-    0054 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0057 return
+    0039 return

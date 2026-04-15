@@ -10,13 +10,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0005 nop
     0006 op_0x0D
     0007 op_0x59
-    0008 invokespecial Method($Lambda$0.<init>:()V)
+    0008 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0011 astore 2
     0013 aload 1
     0015 astore 3
     0017 aload 2
     0019 aload 3
-    0021 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0021 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0024 astore 4
     0026 aload 4
     0028 astore 5
@@ -31,14 +31,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0047 nop
     0048 op_0x23
     0049 op_0x59
-    0050 invokespecial Method($Lambda$2.<init>:()V)
+    0050 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0053 astore 8
     0055 iload 7
     0057 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0060 astore 9
     0062 aload 8
     0064 aload 9
-    0066 invokevirtual Method($Lambda$2.invoke:(Ljava/lang/Object;)V)
+    0066 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)V)
     0069 iload 7
     0071 istore 10
     0073 iload 10
@@ -52,13 +52,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0090 nop
     0091 op_0x33
     0092 op_0x59
-    0093 invokespecial Method($Lambda$3.<init>:()V)
+    0093 invokespecial Method(InputKt$Lambda$2.<init>:()V)
     0096 astore 13
     0098 aload 12
     0100 astore 14
     0102 aload 13
     0104 aload 14
-    0106 invokevirtual Method($Lambda$3.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0106 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0109 astore 15
     0111 aload 15
     0113 astore 16
@@ -73,14 +73,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0132 nop
     0133 op_0x37
     0134 op_0x59
-    0135 invokespecial Method($Lambda$4.<init>:()V)
+    0135 invokespecial Method(InputKt$Lambda$3.<init>:()V)
     0138 astore 19
     0140 iload 18
     0142 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0145 astore 20
     0147 aload 19
     0149 aload 20
-    0151 invokevirtual Method($Lambda$4.invoke:(Ljava/lang/Object;)V)
+    0151 invokevirtual Method(InputKt$Lambda$3.invoke:(Ljava/lang/Object;)V)
     0154 iload 18
     0156 istore 21
     0158 iload 21
@@ -94,13 +94,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0175 nop
     0176 op_0x3D
     0177 op_0x59
-    0178 invokespecial Method($Lambda$5.<init>:()V)
+    0178 invokespecial Method(InputKt$Lambda$4.<init>:()V)
     0181 astore 24
     0183 aload 23
     0185 astore 25
     0187 aload 24
     0189 aload 25
-    0191 invokevirtual Method($Lambda$5.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0191 invokevirtual Method(InputKt$Lambda$4.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0194 astore 26
     0196 aload 26
     0198 astore 27

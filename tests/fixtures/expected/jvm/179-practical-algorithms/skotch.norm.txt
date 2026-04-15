@@ -174,7 +174,7 @@ method        isPrime (I)Z 0x0009
     0158 op_0x91
     sub_attr  StackMapTable (234 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=18
+  code        max_stack=2 max_locals=16
     0000 iconst_2
     0001 istore 1
     0003 bipush 20
@@ -198,90 +198,84 @@ method        main ([Ljava/lang/String;)V 0x0009
     0028 iload 4
     0030 op_0x99
     0031 nop
-    0032 op_0x27
-    0033 iload 3
-    0035 istore 5
-    0037 iload 5
-    0039 invokestatic Method(InputKt.isPrime:(I)Z)
-    0042 istore 6
-    0044 iload 6
-    0046 op_0x99
-    0047 nop
-    0048 astore 167
-    0050 nop
-    0051 op_0x28
-    0052 iconst_1
-    0053 istore 7
-    0055 iload 3
-    0057 iload 7
-    0059 iadd
-    0060 istore 8
-    0062 iload 8
-    0064 istore 3
-    0066 op_0xA7
-    0067 op_0xFF
-    0068 op_0xCC
-    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0072 invokevirtual Method(java/io/PrintStream.println:()V)
-    0075 iconst_1
-    0076 istore 9
-    0078 bipush 7
-    0080 istore 10
-    0082 iload 9
-    0084 istore 11
-    0086 op_0xA7
-    0087 nop
-    0088 op_0x18
-    0089 iload 3
-    0091 istore 12
-    0093 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0096 iload 12
-    0098 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 op_0x21
+    0033 invokestatic Method(InputKt.isPrime:(I)Z)
+    0036 istore 5
+    0038 iload 5
+    0040 op_0x99
+    0041 nop
+    0042 astore 167
+    0044 nop
+    0045 op_0x28
+    0046 iconst_1
+    0047 istore 6
+    0049 iload 3
+    0051 iload 6
+    0053 iadd
+    0054 istore 7
+    0056 iload 7
+    0058 istore 3
+    0060 op_0xA7
+    0061 op_0xFF
+    0062 op_0xD2
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 invokevirtual Method(java/io/PrintStream.println:()V)
+    0069 iconst_1
+    0070 istore 8
+    0072 bipush 7
+    0074 istore 9
+    0076 iload 8
+    0078 istore 10
+    0080 op_0xA7
+    0081 nop
+    0082 op_0x18
+    0083 iload 3
+    0085 istore 11
+    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0090 iload 11
+    0092 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0095 op_0xA7
+    0096 nop
+    0097 iconst_3
+    0098 op_0xA7
+    0099 nop
+    0100 iconst_0
     0101 op_0xA7
-    0102 nop
-    0103 iconst_3
-    0104 op_0xA7
-    0105 nop
-    0106 iconst_0
-    0107 op_0xA7
-    0108 op_0xFF
-    0109 op_0xC9
-    0110 iload 11
-    0112 iload 10
-    0114 op_0xA4
-    0115 nop
-    0116 iconst_4
-    0117 iconst_0
-    0118 op_0xA7
-    0119 nop
-    0120 iconst_1
-    0121 iconst_1
-    0122 istore 13
-    0124 iload 13
-    0126 op_0x99
-    0127 nop
-    0128 op_0x2A
-    0129 iload 11
-    0131 istore 14
-    0133 iload 14
-    0135 invokestatic Method(InputKt.factorial:(I)I)
-    0138 istore 15
-    0140 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0143 iload 15
-    0145 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0148 op_0xA7
-    0149 nop
-    0150 iconst_0
-    0151 iconst_1
-    0152 istore 16
-    0154 iload 11
-    0156 iload 16
-    0158 iadd
-    0159 istore 17
-    0161 iload 17
-    0163 istore 11
-    0165 op_0xA7
-    0166 op_0xFF
-    0167 op_0xC9
-    0168 return
-    sub_attr  StackMapTable (232 bytes)
+    0102 op_0xFF
+    0103 op_0xC9
+    0104 iload 10
+    0106 iload 9
+    0108 op_0xA4
+    0109 nop
+    0110 iconst_4
+    0111 iconst_0
+    0112 op_0xA7
+    0113 nop
+    0114 iconst_1
+    0115 iconst_1
+    0116 istore 12
+    0118 iload 12
+    0120 op_0x99
+    0121 nop
+    0122 op_0x24
+    0123 invokestatic Method(InputKt.factorial:(I)I)
+    0126 istore 13
+    0128 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0131 iload 13
+    0133 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0136 op_0xA7
+    0137 nop
+    0138 iconst_0
+    0139 iconst_1
+    0140 istore 14
+    0142 iload 10
+    0144 iload 14
+    0146 iadd
+    0147 istore 15
+    0149 iload 15
+    0151 istore 10
+    0153 op_0xA7
+    0154 op_0xFF
+    0155 op_0xCF
+    0156 return
+    sub_attr  StackMapTable (222 bytes)

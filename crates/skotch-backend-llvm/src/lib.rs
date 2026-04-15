@@ -745,8 +745,10 @@ impl<'a> BlockWalker<'a> {
             Rvalue::NewIntArray(_)
             | Rvalue::ArrayLoad { .. }
             | Rvalue::ArrayStore { .. }
-            | Rvalue::ArrayLength(_) => {
-                // TODO: IntArray support in LLVM backend
+            | Rvalue::ArrayLength(_)
+            | Rvalue::NewObjectArray(_)
+            | Rvalue::ObjectArrayStore { .. } => {
+                // TODO: IntArray/ObjectArray support in LLVM backend
             }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println | CallKind::Print => self.lower_println(args),

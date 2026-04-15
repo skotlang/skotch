@@ -69,6 +69,16 @@ enum Command {
         /// Example: `skotch repl --exec 'println("hi")' --exit-after`
         #[arg(long = "exit-after")]
         exit_after: bool,
+
+        /// When to index classes on the classpath for tab completion.
+        ///
+        /// - `background` (default): scan in a background thread;
+        ///   the prompt appears immediately.
+        /// - `eager`: scan before the first prompt and report timing.
+        /// - `lazy`: defer until the first Tab keypress.
+        /// - `none`: disable classpath indexing entirely.
+        #[arg(long = "scanlib", value_name = "MODE", default_value = "background")]
+        scanlib: String,
     },
     /// Execute a Kotlin script (`.kts`) file.
     ///
@@ -145,7 +155,11 @@ fn main() -> Result<()> {
             exec,
             file,
             exit_after,
+            scanlib,
         } => {
+            let scan_mode: skotch_repl::ScanMode = scanlib
+                .parse()
+                .map_err(|e: String| anyhow::anyhow!("{e}"))?;
             let has_prelude = exec.is_some() || file.is_some();
 
             // Build the prelude source from --exec and/or --file.
@@ -196,13 +210,13 @@ fn main() -> Result<()> {
                 skotch_repl::run_repl(input, io::stdout().lock())?;
                 let stdin = io::stdin();
                 if stdin.is_terminal() {
-                    skotch_repl::run_repl_interactive()?;
+                    skotch_repl::run_repl_interactive(scan_mode)?;
                 }
             } else {
                 // No prelude — pure interactive REPL.
                 let stdin = io::stdin();
                 if stdin.is_terminal() {
-                    skotch_repl::run_repl_interactive()?;
+                    skotch_repl::run_repl_interactive(scan_mode)?;
                 } else {
                     skotch_repl::run_repl(BufReader::new(stdin.lock()), io::stdout().lock())?;
                 }

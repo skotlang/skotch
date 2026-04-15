@@ -53,6 +53,7 @@
 //! 3. `None` — caller falls back to a clear error
 
 mod completion;
+pub mod highlight;
 
 use anyhow::{anyhow, Context, Result};
 use skotch_jvm::EmbeddedJvm;
@@ -67,7 +68,43 @@ use skotch_intern::Interner;
 use skotch_span::FileId;
 use skotch_syntax::Decl;
 
+pub use completion::ScanMode;
 use completion::{expand_tilde, scan_dir_classes, CompletionCtx, SkotchCompleter};
+
+/// Load `kotlin-stdlib.jar` onto the embedded JVM's classpath.
+///
+/// Uses `skotch_classinfo::find_kotlin_lib_dir()` to locate the Kotlin
+/// stdlib, then adds it via `add_jar_to_classpath`. This is called once
+/// per JVM initialization so that `kotlin.collections.CollectionsKt.listOf`
+/// and other real stdlib functions are available at runtime.
+fn load_kotlin_stdlib(jvm: &EmbeddedJvm) {
+    match skotch_classinfo::find_kotlin_lib_dir() {
+        Ok(lib_dir) => {
+            let stdlib = lib_dir.join("kotlin-stdlib.jar");
+            if stdlib.exists() {
+                if let Err(e) = jvm.add_jar_to_classpath(&stdlib) {
+                    eprintln!(
+                        "  warning: failed to add kotlin-stdlib.jar to classpath: {e}\n  \
+                         path: {}\n  \
+                         hint: try setting KOTLIN_HOME or adding kotlin-stdlib.jar to CLASSPATH",
+                        stdlib.display()
+                    );
+                }
+            } else {
+                eprintln!(
+                    "  warning: kotlin-stdlib.jar not found at {}",
+                    stdlib.display()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "  warning: could not locate kotlin-stdlib.jar: {e}\n  \
+                 hint: install Kotlin (brew install kotlin) or set KOTLIN_HOME"
+            );
+        }
+    }
+}
 
 // ─── public entry points ─────────────────────────────────────────────────
 
@@ -82,17 +119,58 @@ use completion::{expand_tilde, scan_dir_classes, CompletionCtx, SkotchCompleter}
 /// function does not take I/O parameters. For piped/test input use
 /// [`run_repl`] instead, which takes generic `BufRead`/`Write`
 /// streams.
-pub fn run_repl_interactive() -> Result<()> {
+pub fn run_repl_interactive_default() -> Result<()> {
+    run_repl_interactive(ScanMode::Background)
+}
+
+pub fn run_repl_interactive(scan_mode: ScanMode) -> Result<()> {
     use reedline::{
-        default_emacs_keybindings, ColumnarMenu, DefaultHinter, DefaultPrompt,
-        DefaultPromptSegment, EditCommand, Emacs, FileBackedHistory, KeyCode, KeyModifiers,
-        MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal,
+        default_emacs_keybindings, ColumnarMenu, DefaultPrompt, DefaultPromptSegment, EditCommand,
+        Emacs, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Reedline, ReedlineEvent,
+        ReedlineMenu, Signal,
     };
 
     let jvm = EmbeddedJvm::new()?;
+    load_kotlin_stdlib(&jvm);
 
     // ── shared completion state ─────────────────────────────────────
     let completion_ctx = Arc::new(Mutex::new(CompletionCtx::new()));
+
+    // ── classpath scan (mode-dependent) ─────────────────────────────
+    match scan_mode {
+        ScanMode::Eager => {
+            let t0 = std::time::Instant::now();
+            match jvm.scan_system_classes() {
+                Ok(classes) => {
+                    let count = classes.len();
+                    let secs = t0.elapsed().as_secs_f64();
+                    let mut ctx = completion_ctx.lock().unwrap();
+                    ctx.add_extra_classes(classes);
+                    drop(ctx);
+                    eprintln!("  classpath: {count} system classes indexed ({secs:.1}s)");
+                }
+                Err(e) => eprintln!("  classpath scan failed: {e}"),
+            }
+        }
+        ScanMode::Background => {
+            let ctx_bg = Arc::clone(&completion_ctx);
+            std::thread::Builder::new()
+                .name("scanlib".into())
+                .spawn(move || {
+                    if let Ok(bg_jvm) = EmbeddedJvm::new() {
+                        if let Ok(classes) = bg_jvm.scan_system_classes() {
+                            let mut ctx = ctx_bg.lock().unwrap();
+                            ctx.add_extra_classes(classes);
+                        }
+                    }
+                })
+                .ok();
+        }
+        ScanMode::Lazy => {
+            completion_ctx.lock().unwrap().lazy_scan_pending = true;
+        }
+        ScanMode::None => {}
+    }
 
     // ── reedline setup ──────────────────────────────────────────────
     let mut keybindings = default_emacs_keybindings();
@@ -139,28 +217,25 @@ pub fn run_repl_interactive() -> Result<()> {
             .expect("failed to create history"),
     );
 
-    // Fish-shell style history hints.
-    let hinter = Box::new(DefaultHinter::default());
+    // Syntax highlighter backed by the real skotch lexer.
+    let highlighter = Box::new(highlight::SkotchHighlighter);
 
     let mut editor = Reedline::create()
         .with_edit_mode(edit_mode)
         .with_completer(completer)
         .with_menu(ReedlineMenu::EngineCompleter(completion_menu))
         .with_history(history)
-        .with_hinter(hinter);
+        .with_highlighter(highlighter);
 
     let prompt = DefaultPrompt::new(
-        DefaultPromptSegment::Basic(if cfg!(debug_assertions) {
-            "\x1b[33mskotch\x1b[0m".to_string()
-        } else {
-            "skotch".to_string()
-        }),
+        DefaultPromptSegment::Basic("\x1b[35mskotch\x1b[0m".to_string()),
         DefaultPromptSegment::Empty,
     );
 
     let debug_star = if cfg!(debug_assertions) { "*" } else { "" };
+    let jvm_ver = jvm.java_version().unwrap_or_else(|_| "?".into());
     println!(
-        "skotch repl {}{debug_star} — type :help for commands, :quit to exit",
+        "skotch repl {} (jvm {jvm_ver}){debug_star} — type :help for commands, :quit to exit",
         env!("CARGO_PKG_VERSION")
     );
     if history_path.exists() {
@@ -231,7 +306,13 @@ pub fn run_repl_interactive() -> Result<()> {
                             if cmd_arg.is_empty() {
                                 eprintln!("usage: :cpadd <jar-or-directory>");
                             } else {
-                                handle_cpadd(cmd_arg, &jvm, &mut state, Some(&completion_ctx));
+                                handle_cpadd(
+                                    cmd_arg,
+                                    &jvm,
+                                    &mut state,
+                                    Some(&completion_ctx),
+                                    scan_mode,
+                                );
                             }
                         }
                         "cplist" => {
@@ -274,11 +355,16 @@ pub fn run_repl_interactive() -> Result<()> {
 }
 
 /// Handle `:cpadd <path>` — add a JAR or directory to the classpath.
+///
+/// The class-name scan of the new entry follows the active `ScanMode`:
+/// eager/lazy/background behave the same way as at startup; `None`
+/// skips scanning entirely.
 fn handle_cpadd(
     path_str: &str,
     jvm: &EmbeddedJvm,
     state: &mut ReplState,
     ctx: Option<&Arc<Mutex<CompletionCtx>>>,
+    scan_mode: ScanMode,
 ) {
     let path = expand_tilde(path_str);
     if !path.exists() {
@@ -291,21 +377,59 @@ fn handle_cpadd(
     }
     state.classpath.push(path.clone());
 
-    let classes = if path.is_file() {
-        jvm.scan_jar_classes(&path).unwrap_or_default()
-    } else {
-        scan_dir_classes(&path)
-    };
-
     let kind = if path.is_dir() { "directory" } else { "JAR" };
-    let count = classes.len();
 
-    if let Some(ctx) = ctx {
-        let mut ctx = ctx.lock().unwrap();
-        ctx.add_extra_classes(classes);
+    if scan_mode == ScanMode::None {
+        println!("added {kind}: {}", path.display());
+        return;
     }
 
-    println!("added {kind}: {} ({count} classes)", path.display());
+    let scan_entry = |p: &std::path::Path| -> Vec<String> {
+        if p.is_file() {
+            jvm.scan_jar_classes(p).unwrap_or_default()
+        } else {
+            scan_dir_classes(p)
+        }
+    };
+
+    match scan_mode {
+        ScanMode::Eager | ScanMode::Lazy => {
+            let t0 = std::time::Instant::now();
+            let classes = scan_entry(&path);
+            let count = classes.len();
+            let secs = t0.elapsed().as_secs_f64();
+            if let Some(ctx) = ctx {
+                let mut ctx = ctx.lock().unwrap();
+                ctx.add_extra_classes(classes);
+            }
+            println!(
+                "added {kind}: {} ({count} classes, {secs:.1}s)",
+                path.display()
+            );
+        }
+        ScanMode::Background => {
+            println!("added {kind}: {} (indexing…)", path.display());
+            if let Some(ctx) = ctx {
+                let ctx_bg = Arc::clone(ctx);
+                let path_bg = path.clone();
+                std::thread::Builder::new()
+                    .name("cpadd-scan".into())
+                    .spawn(move || {
+                        if let Ok(bg_jvm) = EmbeddedJvm::new() {
+                            let classes = if path_bg.is_file() {
+                                bg_jvm.scan_jar_classes(&path_bg).unwrap_or_default()
+                            } else {
+                                scan_dir_classes(&path_bg)
+                            };
+                            let mut ctx = ctx_bg.lock().unwrap();
+                            ctx.add_extra_classes(classes);
+                        }
+                    })
+                    .ok();
+            }
+        }
+        ScanMode::None => unreachable!(),
+    }
 }
 
 /// Handle `:cplist` — print classpath entries.
@@ -369,6 +493,7 @@ fn history_path() -> std::path::PathBuf {
 /// against canned output.
 pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
     let jvm = EmbeddedJvm::new()?;
+    load_kotlin_stdlib(&jvm);
 
     let debug_star = if cfg!(debug_assertions) { "*" } else { "" };
     writeln!(
@@ -433,7 +558,7 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
                     if cmd_arg.is_empty() {
                         writeln!(output, "usage: :cpadd <jar-or-directory>")?;
                     } else {
-                        handle_cpadd(cmd_arg, &jvm, &mut state, None);
+                        handle_cpadd(cmd_arg, &jvm, &mut state, None, ScanMode::Eager);
                     }
                 }
                 "cplist" => {
@@ -476,6 +601,7 @@ pub fn run_repl<R: BufRead, W: Write>(input: R, mut output: W) -> Result<()> {
 /// containing the compiler diagnostic / JVM stderr on failure.
 pub fn run_script(path: &Path) -> Result<String> {
     let jvm = EmbeddedJvm::new()?;
+    load_kotlin_stdlib(&jvm);
     let source =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
@@ -498,6 +624,7 @@ pub fn run_script(path: &Path) -> Result<String> {
 /// the filesystem.
 pub fn run_script_str(source: &str) -> Result<String> {
     let jvm = EmbeddedJvm::new()?;
+    load_kotlin_stdlib(&jvm);
     let wrapped = wrap_script(source);
     let class_name = unique_class_name("Script");
     compile_and_run_jni(&wrapped, &jvm, &class_name)

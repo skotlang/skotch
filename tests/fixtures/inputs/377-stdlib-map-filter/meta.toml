@@ -1,0 +1,3 @@
+name   = "377-stdlib-map-filter"
+status = "supported"
+features = ["stdlib-extension", "map", "filter", "listOf", "lambda"]

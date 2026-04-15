@@ -8,7 +8,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 nop
     0002 op_0x0B
     0003 op_0x59
-    0004 invokespecial Method($Lambda$0.<init>:()V)
+    0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0007 astore 1
     0009 aload 1
     0011 op_0xC0
@@ -22,7 +22,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0024 astore 4
     0026 aload 2
     0028 aload 4
-    0030 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0030 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0033 astore 5
     0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0038 aload 5
@@ -34,7 +34,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0052 astore 7
     0054 aload 2
     0056 aload 7
-    0058 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0058 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0061 astore 8
     0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0066 aload 8
@@ -43,7 +43,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0072 nop
     0073 op_0x27
     0074 op_0x59
-    0075 invokespecial Method($Lambda$2.<init>:()V)
+    0075 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0078 astore 9
     0080 aload 9
     0082 op_0xC0
@@ -56,7 +56,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0093 astore 12
     0095 aload 10
     0097 aload 12
-    0099 invokevirtual Method($Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0099 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0102 astore 13
     0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0107 aload 13
@@ -65,7 +65,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0113 nop
     0114 op_0x2D
     0115 op_0x59
-    0116 invokespecial Method($Lambda$3.<init>:()V)
+    0116 invokespecial Method(InputKt$Lambda$2.<init>:()V)
     0119 astore 14
     0121 aload 14
     0123 op_0xC0
@@ -85,7 +85,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0148 aload 15
     0150 aload 18
     0152 aload 19
-    0154 invokevirtual Method($Lambda$3.invoke:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0154 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
     0157 astore 20
     0159 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0162 aload 20

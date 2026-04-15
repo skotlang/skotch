@@ -368,14 +368,16 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Smart casts in when](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `when (x) { is String -> x.uppercase() }` — checkcast + scope narrowing in when branches |
 | [Nullable enforcement](https://kotlinlang.org/spec/type-system.html#nullable-types) | §3.3 | `val x: String = null` → compile error; non-nullable types reject null |
 | [Nothing type](https://kotlinlang.org/spec/type-system.html#nothing) | §3.8 | Bottom type; `throw` has type Nothing; assignable to all types |
+| [Real kotlin-stdlib](https://kotlinlang.org/api/core/kotlin-stdlib/) | stdlib | `listOf()` calls real `CollectionsKt.listOf`; kotlin-stdlib.jar on JVM classpath at init |
+| [Collection HOFs](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/) | stdlib | `.map { }`, `.filter { }`, `.associateWith { }`, `.fold`, `.any`, `.first`, `.count`, 25+ extensions via real stdlib |
 
 ### Not yet implemented
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Collection extensions (map, filter) | stdlib | Medium | `.forEach` works; `.map`, `.filter`, `.fold` not yet implemented |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
 | Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
+| Mutable collections | stdlib | Medium | `mutableListOf`, `mutableMapOf` — need add/put/remove |
 
 ## Running the tests
 

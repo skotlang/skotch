@@ -117,6 +117,16 @@ pub enum Rvalue {
     /// Get the length of an array: `array.size`.
     /// Result type is `Ty::Int`.
     ArrayLength(LocalId),
+    /// Create a new `Object[]` array of the given size.
+    /// Result type is `Ty::Any` (reference to `[Ljava/lang/Object;`).
+    NewObjectArray(LocalId),
+    /// Store an element into an `Object[]`: `array[index] = value`.
+    /// Result type is `Ty::Unit` (the dest local is unused).
+    ObjectArrayStore {
+        array: LocalId,
+        index: LocalId,
+        value: LocalId,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

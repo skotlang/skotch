@@ -69,6 +69,13 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
         }
     };
 
+    // Locate kotlin-stdlib.jar so classes that reference
+    // kotlin.collections.CollectionsKt (e.g. listOf) can resolve at runtime.
+    let kotlin_stdlib: Option<std::path::PathBuf> = skotch_classinfo::find_kotlin_lib_dir()
+        .ok()
+        .map(|d| d.join("kotlin-stdlib.jar"))
+        .filter(|p| p.exists());
+
     let fixtures = discover_e2e_fixtures();
     if fixtures.is_empty() {
         eprintln!("[skip] no eligible fixtures found");
@@ -107,10 +114,17 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
             continue;
         }
 
+        // Build classpath: temp dir + kotlin-stdlib.jar if available.
+        let cp_str = if let Some(ref stdlib) = kotlin_stdlib {
+            format!("{}:{}", tmp.display(), stdlib.display())
+        } else {
+            tmp.display().to_string()
+        };
+
         // Run under java.
         let out = Command::new(&java)
             .arg("-cp")
-            .arg(&tmp)
+            .arg(&cp_str)
             .arg("InputKt")
             .output()
             .expect("running java");
