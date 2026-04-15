@@ -1526,7 +1526,20 @@ fn walk_block(
                 if *op == MBinOp::ConcatStr {
                     // String concatenation: lhs.concat(rhs)
                     // If rhs is Int/Bool, convert via String.valueOf first.
-                    load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                    let lhs_ty = &func.locals[lhs.0 as usize];
+                    // If lhs is Ty::Any (erased lambda param), cast to String first.
+                    if matches!(lhs_ty, Ty::Any) {
+                        load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                        let valueof = cp.methodref(
+                            "java/lang/String",
+                            "valueOf",
+                            "(Ljava/lang/Object;)Ljava/lang/String;",
+                        );
+                        code.push(0xB8); // invokestatic
+                        code.write_u16::<BigEndian>(valueof).unwrap();
+                    } else {
+                        load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                    }
                     let rhs_ty = &func.locals[rhs.0 as usize];
                     match rhs_ty {
                         Ty::String => {
@@ -1573,6 +1586,17 @@ fn walk_block(
                             code.push(0xB8); // invokestatic
                             code.write_u16::<BigEndian>(valueof).unwrap();
                             bump(stack, max_stack, -1); // double→String: -2 for double, +1 for string
+                        }
+                        Ty::Any => {
+                            // Erased type — use String.valueOf(Object) to convert.
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let valueof = cp.methodref(
+                                "java/lang/String",
+                                "valueOf",
+                                "(Ljava/lang/Object;)Ljava/lang/String;",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(valueof).unwrap();
                         }
                         _ => {
                             load_local(code, stack, max_stack, slots, *rhs, &func.locals);

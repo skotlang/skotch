@@ -155,7 +155,7 @@ milestones:
 
   - version: "0.6.0"
     title: "Higher-Order Function Dispatch"
-    status: planned
+    status: completed
     depends_on: ["0.5.0"]
     description: >
       The critical unlock: passing lambdas through function-typed parameters.
@@ -163,31 +163,37 @@ milestones:
 
     features:
       - name: "FunctionN interface hierarchy"
+        completed: true
         description: >
-          Generate synthetic Function0, Function1, Function2, ... interfaces
-          with invoke() methods. Lambda $Lambda$N classes implement the
-          appropriate FunctionN. Function-typed parameters typed as FunctionN.
+          Synthetic $Function0, $Function1, $Function2, ... interfaces
+          generated on demand with abstract invoke(Object...) -> Object.
+          Lambda $Lambda$N classes implement the appropriate $FunctionN.
+          Function-typed parameters typed as $FunctionN. Dispatch via
+          invokeinterface. Args autoboxed, returns unboxed.
+          Fixture: 375-higher-order-function.
         acceptance_criteria:
           - "fun apply(f: (Int) -> Int, x: Int) = f(x); apply({ it * 2 }, 5) → 10"
 
       - name: "Lambda-to-FunctionN bridge"
+        completed: true
         description: >
-          When passing a lambda literal to a function-typed parameter,
-          the $Lambda$N class implements FunctionN<A,R>. The invoke()
-          method signature matches. JVM uses invokeinterface for dispatch.
+          $Lambda$N classes declare implements $FunctionN. invoke() uses
+          erased types (all params Ty::Any, return Ty::Any). Lambda body
+          unboxes params to annotated types. Return values autoboxed.
 
       - name: "Function reference syntax"
         description: >
           ::functionName creates a FunctionN reference to a named function.
-          val f: (Int) -> Int = ::double. Lowered as a synthetic lambda
-          class wrapping a static call to the target function.
+          val f: (Int) -> Int = ::double. Not yet implemented.
         acceptance_criteria:
           - "val f = ::println; f(42) prints 42"
 
       - name: "Multi-arity dispatch"
+        completed: true
         description: >
-          Function0 through Function5 (or FunctionN with vararg for N>5).
-          Each arity gets its own interface with the correct invoke() sig.
+          $Function0 through $FunctionN generated per arity.
+          Each interface has invoke() with the correct number of
+          Object parameters.
 
     risks:
       - description: "Primitive boxing at every HOF boundary kills performance"

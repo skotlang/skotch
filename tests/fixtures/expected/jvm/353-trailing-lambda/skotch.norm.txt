@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=7
     0000 op_0xBB
     0001 nop
     0002 op_0x0B
@@ -17,12 +17,16 @@ method        main ([Ljava/lang/String;)V 0x0009
     0014 astore 2
     0016 ldc "hello"
     0018 astore 3
-    0020 aload 2
-    0022 aload 3
-    0024 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/String;)V)
-    0027 ldc "world"
-    0029 astore 4
-    0031 aload 2
-    0033 aload 4
-    0035 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/String;)V)
-    0038 return
+    0020 aload 3
+    0022 astore 4
+    0024 aload 2
+    0026 aload 4
+    0028 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0031 ldc "world"
+    0033 astore 5
+    0035 aload 5
+    0037 astore 6
+    0039 aload 2
+    0041 aload 6
+    0043 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0046 return

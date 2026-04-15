@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=15
+  code        max_stack=2 max_locals=20
     0000 op_0xBB
     0001 nop
     0002 op_0x0B
@@ -27,44 +27,61 @@ method        main ([Ljava/lang/String;)V 0x0009
     0029 sipush 14852
     0032 iconst_5
     0033 istore 5
-    0035 aload 2
-    0037 iload 5
-    0039 invokevirtual Method($Lambda$0.invoke:(I)I)
-    0042 istore 6
-    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0047 iload 6
-    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0052 bipush 21
-    0054 istore 7
-    0056 aload 2
-    0058 iload 7
-    0060 invokevirtual Method($Lambda$0.invoke:(I)I)
-    0063 istore 8
-    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0068 iload 8
-    0070 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0073 ldc "World"
-    0075 astore 9
-    0077 aload 4
-    0079 aload 9
-    0081 invokevirtual Method($Lambda$1.invoke:(Ljava/lang/String;)Ljava/lang/String;)
-    0084 astore 10
-    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0089 aload 10
-    0091 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0094 iconst_3
-    0095 istore 11
-    0097 aload 2
-    0099 iload 11
-    0101 invokevirtual Method($Lambda$0.invoke:(I)I)
-    0104 istore 12
-    0106 bipush 10
-    0108 istore 13
-    0110 iload 12
-    0112 iload 13
-    0114 iadd
-    0115 istore 14
-    0117 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0120 iload 14
-    0122 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0125 return
+    0035 iload 5
+    0037 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0040 astore 6
+    0042 aload 2
+    0044 aload 6
+    0046 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0049 astore 7
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 aload 7
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 bipush 21
+    0061 istore 8
+    0063 iload 8
+    0065 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0068 astore 9
+    0070 aload 2
+    0072 aload 9
+    0074 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0077 astore 10
+    0079 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0082 aload 10
+    0084 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0087 ldc "World"
+    0089 astore 11
+    0091 aload 11
+    0093 astore 12
+    0095 aload 4
+    0097 aload 12
+    0099 invokevirtual Method($Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0102 astore 13
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 aload 13
+    0109 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0112 iconst_3
+    0113 istore 14
+    0115 iload 14
+    0117 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0120 astore 15
+    0122 aload 2
+    0124 aload 15
+    0126 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0129 astore 16
+    0131 bipush 10
+    0133 istore 17
+    0135 aload 16
+    0137 op_0xC0
+    0138 nop
+    0139 op_0x14
+    0140 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0143 istore 18
+    0145 iload 18
+    0147 iload 17
+    0149 iadd
+    0150 istore 19
+    0152 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0155 iload 19
+    0157 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0160 return

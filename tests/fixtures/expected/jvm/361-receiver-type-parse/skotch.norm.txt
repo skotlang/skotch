@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=6
     0000 op_0xBB
     0001 nop
     0002 op_0x0B
@@ -17,11 +17,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0014 astore 2
     0016 bipush 8
     0018 istore 3
-    0020 aload 2
-    0022 iload 3
-    0024 invokevirtual Method($Lambda$0.invoke:(I)I)
-    0027 istore 4
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload 4
-    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0037 return
+    0020 iload 3
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 astore 4
+    0027 aload 2
+    0029 aload 4
+    0031 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0044 return

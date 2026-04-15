@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=7
     0000 iconst_3
     0001 istore 1
     0003 op_0xBB
@@ -31,18 +31,21 @@ method        main ([Ljava/lang/String;)V 0x0009
     0032 iload 4
     0034 op_0x99
     0035 nop
-    0036 op_0x17
-    0037 aload 2
-    0039 iload 3
-    0041 invokevirtual Method($Lambda$0.invoke:(I)V)
-    0044 iconst_1
-    0045 istore 5
-    0047 iload 3
-    0049 iload 5
-    0051 iadd
-    0052 istore 3
-    0054 op_0xA7
-    0055 op_0xFF
-    0056 op_0xDC
-    0057 return
+    0036 op_0x1E
+    0037 iload 3
+    0039 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0042 astore 5
+    0044 aload 2
+    0046 aload 5
+    0048 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0051 iconst_1
+    0052 istore 6
+    0054 iload 3
+    0056 iload 6
+    0058 iadd
+    0059 istore 3
+    0061 op_0xA7
+    0062 op_0xFF
+    0063 op_0xD5
+    0064 return
     sub_attr  StackMapTable (64 bytes)

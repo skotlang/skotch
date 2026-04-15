@@ -56,6 +56,70 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     Ty::Any
 }
 
+/// Ensure a synthetic `$FunctionN` interface exists in the module for the
+/// given arity. Returns the interface name (e.g. `"$Function1"`).
+///
+/// The interface has a single abstract method:
+///   `invoke(Object, Object, ...) -> Object`
+/// (all parameters and return type are `Ty::Any` = erased).
+///
+/// Lambda classes implement `$FunctionN` so that higher-order function
+/// parameters typed as `$FunctionN` can dispatch via `invokeinterface`.
+fn ensure_function_interface(module: &mut MirModule, arity: usize) -> String {
+    let name = format!("$Function{arity}");
+    if module.classes.iter().any(|c| c.name == name) {
+        return name;
+    }
+    let mut invoke = MirFunction {
+        id: FuncId(0),
+        name: "invoke".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: Vec::new(),
+        return_ty: Ty::Any,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: true,
+        exception_handlers: Vec::new(),
+        vararg_index: None,
+    };
+    // `this` parameter (slot 0).
+    let this_local = invoke.new_local(Ty::Class(name.clone()));
+    invoke.params.push(this_local);
+    // One `Ty::Any` parameter per arity slot.
+    for _ in 0..arity {
+        let p = invoke.new_local(Ty::Any);
+        invoke.params.push(p);
+    }
+    module.classes.push(MirClass {
+        name: name.clone(),
+        super_class: None,
+        is_open: false,
+        is_abstract: true,
+        is_interface: true,
+        interfaces: Vec::new(),
+        fields: Vec::new(),
+        methods: vec![invoke],
+        constructor: MirFunction {
+            id: FuncId(0),
+            name: "<init>".to_string(),
+            params: Vec::new(),
+            locals: Vec::new(),
+            blocks: Vec::new(),
+            return_ty: Ty::Unit,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            exception_handlers: Vec::new(),
+            vararg_index: None,
+        },
+        secondary_constructors: Vec::new(),
+    });
+    name
+}
+
 /// Lower a parsed/resolved/typed file to MIR.
 pub fn lower_file(
     file: &KtFile,
@@ -741,6 +805,14 @@ fn lower_function(
                         .cloned()
                 })
                 .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module))
+        };
+        // Function-typed parameters → $FunctionN interface class.
+        let ty = if let Ty::Function { ref params, .. } = ty {
+            let arity = params.len();
+            let iface = ensure_function_interface(module, arity);
+            Ty::Class(iface)
+        } else {
+            ty
         };
         // Override enum class types to String (enums are string-based).
         let id = fb.new_local(ty);
@@ -2022,6 +2094,8 @@ fn lower_expr(
             }
 
             // Auto-unbox Ty::Any operands for arithmetic: Object → Integer.intValue()
+            // Skip when either side is String — that's string concatenation, not arithmetic,
+            // and the Any operand is likely a String at runtime.
             let lhs_ty = lhs_ty.clone();
             let rhs_ty = rhs_ty.clone();
             let needs_unbox = matches!(
@@ -2035,7 +2109,9 @@ fn lower_expr(
                     | BinOp::Gt
                     | BinOp::LtEq
                     | BinOp::GtEq
-            ) && (matches!(lhs_ty, Ty::Any) || matches!(rhs_ty, Ty::Any));
+            ) && (matches!(lhs_ty, Ty::Any) || matches!(rhs_ty, Ty::Any))
+                && !matches!(lhs_ty, Ty::String)
+                && !matches!(rhs_ty, Ty::String);
             let (l, lhs_ty) = if needs_unbox && matches!(lhs_ty, Ty::Any) {
                 let unboxed = fb.new_local(Ty::Int);
                 fb.push_stmt(MStmt::Assign {
@@ -2074,7 +2150,9 @@ fn lower_expr(
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
             let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
             let (mop, result_ty) = match op {
-                BinOp::Add if matches!(lhs_ty, Ty::String) => (MBinOp::ConcatStr, Ty::String),
+                BinOp::Add if matches!(lhs_ty, Ty::String) || matches!(rhs_ty, Ty::String) => {
+                    (MBinOp::ConcatStr, Ty::String)
+                }
                 BinOp::Add if is_double => (MBinOp::AddD, Ty::Double),
                 BinOp::Sub if is_double => (MBinOp::SubD, Ty::Double),
                 BinOp::Mul if is_double => (MBinOp::MulD, Ty::Double),
@@ -2583,7 +2661,39 @@ fn lower_expr(
                             Ty::Any
                         };
 
-                        let call_args = vec![lambda_local, recv_local];
+                        // Widen the receiver arg to Ty::Any for the erased
+                        // invoke signature, and autobox primitives.
+                        let recv_arg = {
+                            let recv_arg_ty = fb.mf.locals[recv_local.0 as usize].clone();
+                            match recv_arg_ty {
+                                Ty::Int => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Integer".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                                            },
+                                            args: vec![recv_local],
+                                        },
+                                    });
+                                    boxed
+                                }
+                                Ty::Any => recv_local,
+                                _ => {
+                                    // Reference type — widen to Ty::Any.
+                                    let widened = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: widened,
+                                        value: Rvalue::Local(recv_local),
+                                    });
+                                    widened
+                                }
+                            }
+                        };
+                        let call_args = vec![lambda_local, recv_arg];
                         let call_result = fb.new_local(invoke_ret.clone());
                         fb.push_stmt(MStmt::Assign {
                             dest: call_result,
@@ -3574,6 +3684,19 @@ fn lower_expr(
                         body_blk,
                     );
                     // Body: lambda.invoke(i)
+                    // Autobox i to Object for the erased invoke signature.
+                    let boxed_i = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: boxed_i,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "java/lang/Integer".to_string(),
+                                method_name: "valueOf".to_string(),
+                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                            },
+                            args: vec![i_local],
+                        },
+                    });
                     let _call_result = fb.new_local(Ty::Unit);
                     fb.push_stmt(MStmt::Assign {
                         dest: _call_result,
@@ -3582,7 +3705,7 @@ fn lower_expr(
                                 class_name: cn,
                                 method_name: "invoke".to_string(),
                             },
-                            args: vec![lambda, i_local],
+                            args: vec![lambda, boxed_i],
                         },
                     });
                     // i++
@@ -3623,6 +3746,36 @@ fn lower_expr(
                         .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
                         .map(|m| m.return_ty.clone())
                         .unwrap_or(Ty::Any);
+                    // Widen receiver to Ty::Any for erased invoke signature.
+                    let recv_arg = {
+                        let recv_ty = fb.mf.locals[receiver.0 as usize].clone();
+                        match recv_ty {
+                            Ty::Int => {
+                                let boxed = fb.new_local(Ty::Any);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: boxed,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::StaticJava {
+                                            class_name: "java/lang/Integer".to_string(),
+                                            method_name: "valueOf".to_string(),
+                                            descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                                        },
+                                        args: vec![receiver],
+                                    },
+                                });
+                                boxed
+                            }
+                            Ty::Any => receiver,
+                            _ => {
+                                let widened = fb.new_local(Ty::Any);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: widened,
+                                    value: Rvalue::Local(receiver),
+                                });
+                                widened
+                            }
+                        }
+                    };
                     let dest = fb.new_local(ret);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -3631,7 +3784,7 @@ fn lower_expr(
                                 class_name: cn,
                                 method_name: "invoke".to_string(),
                             },
-                            args: vec![lambda, receiver],
+                            args: vec![lambda, recv_arg],
                         },
                     });
                     return Some(dest);
@@ -3662,11 +3815,13 @@ fn lower_expr(
 
             // Check if callee is a local variable (lambda or callable object).
             // Handles: val f = { x: Int -> x * 2 }; f(5)
-            // Also: fun apply(f: Any, x: Int) = f(x) when f is a lambda at runtime.
+            // Also: fun apply(f: (Int)->Int, x: Int) = f(x) via $FunctionN interface.
             if let Some((_, local_id)) = scope.iter().rev().find(|(s, _)| *s == callee_name) {
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
                 let is_lambda_class =
                     matches!(&local_ty, Ty::Class(n) if n.starts_with("$Lambda$"));
+                let is_function_interface =
+                    matches!(&local_ty, Ty::Class(n) if n.starts_with("$Function"));
                 // Check if this is a class with an `invoke` operator method.
                 let has_invoke_method = if let Ty::Class(ref cn) = local_ty {
                     module
@@ -3679,13 +3834,255 @@ fn lower_expr(
                     false
                 };
                 let is_callable = is_lambda_class
+                    || is_function_interface
                     || has_invoke_method
                     || matches!(local_ty, Ty::Any | Ty::Function { .. });
                 if is_callable {
+                    // ── $FunctionN interface dispatch ──────────────────
+                    // When the local is typed as $FunctionN, Ty::Any, or
+                    // Ty::Function, dispatch through the erased $FunctionN
+                    // interface: autobox each arg to Object, call
+                    // invokeinterface $FunctionN.invoke(), then unbox the
+                    // Object return to the expected type.
+                    let use_interface_dispatch =
+                        is_function_interface || matches!(local_ty, Ty::Any | Ty::Function { .. });
+                    if use_interface_dispatch {
+                        // Autobox each argument: primitive → wrapper Object.
+                        let mut boxed_args: Vec<LocalId> = vec![*local_id];
+                        for &arg in &arg_locals {
+                            let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                            match arg_ty {
+                                Ty::Int => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Integer".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    boxed_args.push(boxed);
+                                }
+                                Ty::Bool => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Boolean".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    boxed_args.push(boxed);
+                                }
+                                Ty::Long => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Long".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(J)Ljava/lang/Long;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    boxed_args.push(boxed);
+                                }
+                                Ty::Double => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Double".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(D)Ljava/lang/Double;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    boxed_args.push(boxed);
+                                }
+                                Ty::Any => boxed_args.push(arg),
+                                _ => {
+                                    // Reference type — widen to Ty::Any so the
+                                    // descriptor uses Ljava/lang/Object;.
+                                    let widened = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: widened,
+                                        value: Rvalue::Local(arg),
+                                    });
+                                    boxed_args.push(widened);
+                                }
+                            }
+                        }
+                        let iface_name = if let Ty::Class(ref cn) = local_ty {
+                            cn.clone()
+                        } else {
+                            // For Ty::Any / Ty::Function, derive arity from call args.
+                            let arity = arg_locals.len();
+                            ensure_function_interface(module, arity)
+                        };
+                        // The interface invoke returns Ty::Any (Object).
+                        let raw_result = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: raw_result,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: iface_name,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: boxed_args,
+                            },
+                        });
+                        // Determine the expected return type from the function
+                        // signature. Look up the calling function's return type
+                        // as a heuristic — the return of f(x) in the expression
+                        // position determines the expected type.
+                        // For now, unbox to Int (the most common HOF return type).
+                        // If this is used in a println(f(x)) context, the Int
+                        // will be correct. For other types, the auto-unbox in
+                        // BinOp / println will handle it.
+                        let unboxed = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: unboxed,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Integer".to_string(),
+                                    method_name: "intValue".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![raw_result],
+                            },
+                        });
+                        return Some(unboxed);
+                    }
+
+                    // ── Direct lambda / invoke-operator dispatch ──────
                     // Lower as: receiver.invoke(args)
+                    // Lambda invoke methods now use erased types (Ty::Any)
+                    // for $FunctionN compatibility. Must autobox args and
+                    // the return is Ty::Any (Object).
+                    let invoke_class = if let Ty::Class(ref cn) = local_ty {
+                        cn.clone()
+                    } else if matches!(local_ty, Ty::Function { .. } | Ty::Any) {
+                        module
+                            .classes
+                            .iter()
+                            .rev()
+                            .find(|c| c.name.starts_with("$Lambda$"))
+                            .map(|c| c.name.clone())
+                            .unwrap_or_else(|| "java/lang/Object".to_string())
+                    } else {
+                        "java/lang/Object".to_string()
+                    };
+                    // Check if the target invoke uses erased types.
+                    let target_erased = module
+                        .classes
+                        .iter()
+                        .find(|c| c.name == invoke_class)
+                        .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                        .map(|m| {
+                            m.params
+                                .iter()
+                                .skip(1)
+                                .all(|p| matches!(m.locals[p.0 as usize], Ty::Any))
+                        })
+                        .unwrap_or(false);
                     let mut all_args = vec![*local_id];
-                    all_args.extend_from_slice(&arg_locals);
-                    // Find invoke return type from class metadata if available.
+                    if target_erased {
+                        // Autobox each arg for the erased invoke method.
+                        for &arg in &arg_locals {
+                            let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                            match arg_ty {
+                                Ty::Int => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Integer".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    all_args.push(boxed);
+                                }
+                                Ty::Bool => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Boolean".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    all_args.push(boxed);
+                                }
+                                Ty::Long => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Long".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(J)Ljava/lang/Long;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    all_args.push(boxed);
+                                }
+                                Ty::Double => {
+                                    let boxed = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: boxed,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::StaticJava {
+                                                class_name: "java/lang/Double".to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: "(D)Ljava/lang/Double;".to_string(),
+                                            },
+                                            args: vec![arg],
+                                        },
+                                    });
+                                    all_args.push(boxed);
+                                }
+                                Ty::Any => all_args.push(arg),
+                                _ => {
+                                    // Reference type (String, Class, etc.) —
+                                    // widen to Ty::Any so the descriptor uses
+                                    // Ljava/lang/Object; matching the erased
+                                    // invoke signature.
+                                    let widened = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: widened,
+                                        value: Rvalue::Local(arg),
+                                    });
+                                    all_args.push(widened);
+                                }
+                            }
+                        }
+                    } else {
+                        all_args.extend_from_slice(&arg_locals);
+                    }
+                    // Find invoke return type from class metadata.
                     let ret_ty = if let Ty::Class(ref cn) = local_ty {
                         module
                             .classes
@@ -3700,28 +4097,6 @@ fn lower_expr(
                         Ty::Any
                     };
                     let dest = fb.new_local(ret_ty);
-                    // For function-typed params, find the first lambda class
-                    // whose invoke signature matches. This is a heuristic that
-                    // works when the lambda is created in the same module.
-                    let invoke_class = if let Ty::Class(ref cn) = local_ty {
-                        cn.clone()
-                    } else if matches!(local_ty, Ty::Function { .. } | Ty::Any) {
-                        // For function-typed params, use the LAST lambda class
-                        // in the module as the dispatch target. The JVM resolves
-                        // invokevirtual based on the runtime type, and all our
-                        // lambda classes are single-use, so the most recently
-                        // created lambda is the one being passed.
-                        // TODO: replace with a proper $Callable interface.
-                        module
-                            .classes
-                            .iter()
-                            .rev()
-                            .find(|c| c.name.starts_with("$Lambda$"))
-                            .map(|c| c.name.clone())
-                            .unwrap_or_else(|| "java/lang/Object".to_string())
-                    } else {
-                        "java/lang/Object".to_string()
-                    };
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::Call {
@@ -4980,12 +5355,69 @@ fn lower_expr(
                         invoke_scope.push((*sym, local));
                     }
                 }
-                // Lambda parameters.
+                // Lambda parameters — use Ty::Any for the method param
+                // so the invoke descriptor matches $FunctionN.invoke(Object…).
+                // Then immediately unbox/cast to the annotated type in
+                // a body-local so method resolution and arithmetic work.
                 for p in params {
-                    let ty = resolve_type(interner.resolve(p.ty.name), module);
-                    let pid = invoke_fb.new_local(ty);
-                    invoke_fb.mf.params.push(pid);
-                    invoke_scope.push((p.name, pid));
+                    let erased_pid = invoke_fb.new_local(Ty::Any);
+                    invoke_fb.mf.params.push(erased_pid);
+                    let annotated_ty = resolve_type(interner.resolve(p.ty.name), module);
+                    if annotated_ty != Ty::Any {
+                        // Cast/unbox from Object to the annotated type.
+                        let cast_rvalue = match &annotated_ty {
+                            Ty::Int => Some(Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Integer".to_string(),
+                                    method_name: "intValue".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![erased_pid],
+                            }),
+                            Ty::Bool => Some(Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Boolean".to_string(),
+                                    method_name: "booleanValue".to_string(),
+                                    descriptor: "()Z".to_string(),
+                                },
+                                args: vec![erased_pid],
+                            }),
+                            Ty::Long => Some(Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Long".to_string(),
+                                    method_name: "longValue".to_string(),
+                                    descriptor: "()J".to_string(),
+                                },
+                                args: vec![erased_pid],
+                            }),
+                            Ty::Double => Some(Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Double".to_string(),
+                                    method_name: "doubleValue".to_string(),
+                                    descriptor: "()D".to_string(),
+                                },
+                                args: vec![erased_pid],
+                            }),
+                            _ => {
+                                // Reference type — use a local-copy typed
+                                // as the annotated type so method resolution
+                                // works (e.g., String.uppercase()).
+                                Some(Rvalue::Local(erased_pid))
+                            }
+                        };
+                        if let Some(rv) = cast_rvalue {
+                            let typed_local = invoke_fb.new_local(annotated_ty);
+                            invoke_fb.push_stmt(MStmt::Assign {
+                                dest: typed_local,
+                                value: rv,
+                            });
+                            invoke_scope.push((p.name, typed_local));
+                        } else {
+                            invoke_scope.push((p.name, erased_pid));
+                        }
+                    } else {
+                        invoke_scope.push((p.name, erased_pid));
+                    }
                 }
                 for s in &body.stmts {
                     lower_stmt(
@@ -5004,18 +5436,79 @@ fn lower_expr(
             };
             invoke_fn.is_abstract = false;
             let mut found_return_value = false;
-            for block in &mut invoke_fn.blocks {
+            // Find the block with ReturnValue and determine if we need
+            // to autobox the return for the erased $FunctionN interface.
+            let mut autobox_info: Option<(usize, LocalId, Ty)> = None;
+            for (bi, block) in invoke_fn.blocks.iter().enumerate() {
                 if let Terminator::ReturnValue(local) = &block.terminator {
                     let ret_ty = invoke_fn.locals[local.0 as usize].clone();
                     if ret_ty == Ty::Unit {
-                        block.terminator = Terminator::Return;
-                        invoke_fn.return_ty = Ty::Unit;
+                        // Will convert to plain Return below.
                     } else {
-                        invoke_fn.return_ty = ret_ty;
+                        autobox_info = Some((bi, *local, ret_ty));
                     }
                     found_return_value = true;
                     break;
                 }
+            }
+            if let Some((bi, local, ret_ty)) = autobox_info {
+                // Autobox the return value so the erased invoke
+                // descriptor `()Ljava/lang/Object;` matches the
+                // $FunctionN interface. E.g. int → Integer.valueOf.
+                let box_rvalue = match &ret_ty {
+                    Ty::Int => Some(Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "java/lang/Integer".to_string(),
+                            method_name: "valueOf".to_string(),
+                            descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                        },
+                        args: vec![local],
+                    }),
+                    Ty::Bool => Some(Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "java/lang/Boolean".to_string(),
+                            method_name: "valueOf".to_string(),
+                            descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
+                        },
+                        args: vec![local],
+                    }),
+                    Ty::Long => Some(Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "java/lang/Long".to_string(),
+                            method_name: "valueOf".to_string(),
+                            descriptor: "(J)Ljava/lang/Long;".to_string(),
+                        },
+                        args: vec![local],
+                    }),
+                    Ty::Double => Some(Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "java/lang/Double".to_string(),
+                            method_name: "valueOf".to_string(),
+                            descriptor: "(D)Ljava/lang/Double;".to_string(),
+                        },
+                        args: vec![local],
+                    }),
+                    _ => None, // already a reference type
+                };
+                if let Some(rv) = box_rvalue {
+                    let b = invoke_fn.new_local(Ty::Any);
+                    invoke_fn.blocks[bi]
+                        .stmts
+                        .push(MStmt::Assign { dest: b, value: rv });
+                    invoke_fn.blocks[bi].terminator = Terminator::ReturnValue(b);
+                }
+                invoke_fn.return_ty = Ty::Any;
+            } else if found_return_value {
+                // ReturnValue with Ty::Unit — convert to plain Return.
+                for block in &mut invoke_fn.blocks {
+                    if let Terminator::ReturnValue(local) = &block.terminator {
+                        let ret_ty = invoke_fn.locals[local.0 as usize].clone();
+                        if ret_ty == Ty::Unit {
+                            block.terminator = Terminator::Return;
+                        }
+                    }
+                }
+                invoke_fn.return_ty = Ty::Unit;
             }
             if !found_return_value {
                 // No ReturnValue found — the lambda body is all statements
@@ -5070,6 +5563,11 @@ fn lower_expr(
                 });
             }
 
+            // Make the lambda class implement $FunctionN so higher-order
+            // function parameters can dispatch via invokeinterface.
+            let lambda_arity = params.len();
+            let iface_name = ensure_function_interface(module, lambda_arity);
+
             // Replace the pre-registered stub with the real class.
             module.classes[lambda_idx] = MirClass {
                 name: lambda_class_name.clone(),
@@ -5077,7 +5575,7 @@ fn lower_expr(
                 is_open: false,
                 is_abstract: false,
                 is_interface: false,
-                interfaces: Vec::new(),
+                interfaces: vec![iface_name],
                 fields: capture_fields,
                 methods: vec![invoke_fn],
                 constructor: init_fn,

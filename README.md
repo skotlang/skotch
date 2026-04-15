@@ -362,14 +362,15 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Property delegation](https://kotlinlang.org/spec/declarations.html#delegated-property-declaration) | §4.2 | `val x by lazy { expr }` — desugared to eager init in constructor |
 | [Interface delegation](https://kotlinlang.org/spec/declarations.html#delegated-classifier-declaration) | §4.5 | `class X : Base by b` — auto-generated forwarding methods |
 | [Package declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.1 | `package com.example` → `com/example/InputKt.class`; all class refs prefixed |
+| [Higher-order functions](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | §7.2 | `fun apply(f: (Int)->Int, x: Int) = f(x)` — synthetic `$FunctionN` interfaces, `invokeinterface` dispatch, autoboxing |
 
 ### Not yet implemented
 
 | Feature | Spec reference | Difficulty | Notes |
 |---|---|---|---|
-| Higher-order function dispatch | [§7.2](https://kotlinlang.org/spec/expressions.html#function-calls-and-property-access) | Hard | Passing lambdas as function-typed parameters (needs `$Callable` or invokedynamic) |
 | Collection extensions (map, filter) | stdlib | Medium | `.forEach` works; `.map`, `.filter`, `.fold` not yet implemented |
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, state machine CPS transform |
+| Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
 
 ## Running the tests
 

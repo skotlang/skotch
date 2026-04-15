@@ -1,0 +1,52 @@
+dex_version   035
+strings       18
+types         7
+methods       6
+classes       1
+
+--- strings ---
+  "I"
+  "ILI"
+  "ILLI"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "apply"
+  "combine"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "transform"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.apply(Ljava/lang/Object;I)I
+  LInputKt;.combine(Ljava/lang/Object;Ljava/lang/Object;I)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.transform(Ljava/lang/Object;I)I
+  Ljava/io/PrintStream;.println(I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=0 insns=2
+  method       combine(Ljava/lang/Object;Ljava/lang/Object;I)I flags=0x0019 regs=10 ins=3 outs=0 insns=2
+  method       main()V flags=0x0019 regs=14 ins=0 outs=3 insns=43
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       transform(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=0 insns=2

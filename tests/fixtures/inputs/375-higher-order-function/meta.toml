@@ -1,0 +1,3 @@
+name   = "375-higher-order-function"
+status = "supported"
+features = ["higher-order", "lambda", "function-type", "invokeinterface"]

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=11
     0000 op_0xBB
     0001 nop
     0002 op_0x0B
@@ -17,31 +17,36 @@ method        main ([Ljava/lang/String;)V 0x0009
     0014 astore 2
     0016 bipush 7
     0018 istore 3
-    0020 aload 2
-    0022 iload 3
-    0024 invokevirtual Method($Lambda$0.invoke:(I)I)
-    0027 istore 4
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload 4
-    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0037 op_0xBB
-    0038 nop
-    0039 op_0x21
-    0040 op_0x59
-    0041 invokespecial Method($Lambda$1.<init>:()V)
-    0044 astore 5
-    0046 aload 5
-    0048 op_0xC0
-    0049 nop
-    0050 op_0x21
+    0020 iload 3
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 astore 4
+    0027 aload 2
+    0029 aload 4
+    0031 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0044 op_0xBB
+    0045 nop
+    0046 op_0x27
+    0047 op_0x59
+    0048 invokespecial Method($Lambda$2.<init>:()V)
     0051 astore 6
-    0053 ldc "World"
-    0055 astore 7
-    0057 aload 6
-    0059 aload 7
-    0061 invokevirtual Method($Lambda$1.invoke:(Ljava/lang/String;)Ljava/lang/String;)
-    0064 astore 8
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 aload 8
-    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0074 return
+    0053 aload 6
+    0055 op_0xC0
+    0056 nop
+    0057 op_0x27
+    0058 astore 7
+    0060 ldc "World"
+    0062 astore 8
+    0064 aload 8
+    0066 astore 9
+    0068 aload 7
+    0070 aload 9
+    0072 invokevirtual Method($Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0075 astore 10
+    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0080 aload 10
+    0082 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0085 return
