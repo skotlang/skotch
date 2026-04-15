@@ -1490,7 +1490,8 @@ mod tests {
     #[test]
     fn tilde_expansion() {
         let p = expand_tilde("~/foo/bar.jar");
-        assert!(p.to_string_lossy().ends_with("/foo/bar.jar"));
+        // On Windows join uses `\`, on Unix `/`.
+        assert!(p.ends_with("foo/bar.jar") || p.ends_with("foo\\bar.jar"));
         assert!(!p.to_string_lossy().starts_with("~/"));
 
         let p2 = expand_tilde("/absolute/path.jar");

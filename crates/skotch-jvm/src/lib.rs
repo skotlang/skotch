@@ -136,7 +136,11 @@ impl EmbeddedJvm {
         // Locate kotlinc on PATH. Try the original path first (Windows
         // canonicalize prepends \\?\ which can break things), then the
         // resolved symlink path.
-        let compiler_name = if cfg!(windows) { "kotlinc.bat" } else { "kotlinc" };
+        let compiler_name = if cfg!(windows) {
+            "kotlinc.bat"
+        } else {
+            "kotlinc"
+        };
         if let Ok(kotlinc) = which::which(compiler_name) {
             let mut candidates = vec![kotlinc.clone()];
             if let Ok(resolved) = std::fs::canonicalize(&kotlinc) {
