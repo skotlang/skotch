@@ -31,6 +31,7 @@ serde_json          = { workspace = true }
 similar           = { workspace = true }
 which             = { workspace = true }
 serde_json        = { workspace = true }
+skotch-classinfo    = { workspace = true }
 skotch-dex-norm     = { workspace = true }
 skotch-llvm-norm    = { workspace = true }
 skotch-backend-klib = { workspace = true }

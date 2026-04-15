@@ -1,0 +1,29 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=1
+    0000 op_0xBB
+    0001 nop
+    0002 iconst_5
+    0003 op_0x59
+    0004 bipush 10
+    0006 invokespecial Method(BaseImpl.<init>:(I)V)
+    0009 op_0x4B
+    0010 op_0xBB
+    0011 nop
+    0012 op_0x0E
+    0013 op_0x59
+    0014 op_0x2A
+    0015 op_0xC0
+    0016 nop
+    0017 bipush -73
+    0019 nop
+    0020 ldc_w #46592
+    0023 op_0x16
+    0024 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -19,18 +19,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0019 nop
     0020 sipush 22809
     0023 iconst_0
-    0024 invokespecial Method($Lambda$1.<init>:(L$Ref$0;)V)
+    0024 invokespecial Method(InputKt$Lambda$1.<init>:(L$Ref$0;)V)
     0027 astore 4
     0029 aload 4
     0031 op_0xC0
     0032 nop
     0033 sipush 14853
     0036 aload 5
-    0038 invokevirtual Method($Lambda$1.invoke:()V)
+    0038 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
     0041 aload 5
-    0043 invokevirtual Method($Lambda$1.invoke:()V)
+    0043 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
     0046 aload 5
-    0048 invokevirtual Method($Lambda$1.invoke:()V)
+    0048 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
     0051 aload 3
     0053 op_0xB4
     0054 nop

@@ -288,18 +288,14 @@ milestones:
 # This is the most-used part of Kotlin's stdlib.
 #
 # IMPLEMENTATION STRATEGY:
-# Two approaches:
-#   A. Intrinsic lowering: hardcode map/filter/fold as MIR patterns
-#   B. Load kotlin-stdlib.jar and call real implementations
+# Real kotlin-stdlib.jar loading — NOT intrinsics.
+# listOf() now calls kotlin/collections/CollectionsKt.listOf([Object;)List
+# via the real stdlib JAR. kotlin-stdlib.jar auto-located next to kotlinc
+# and added to JVM classpath at REPL/script startup.
 #
-# Approach A is what we've done for forEach. It works but doesn't scale
-# to 200+ collection functions. Approach B requires classfile parsing
-# of the stdlib JAR and routing calls to it.
-#
-# RECOMMENDED: Hybrid. Intrinsic for the top ~20 functions (map, filter,
-# fold, any, first, last, sortedBy, groupBy, associate, flatten,
-# zip, take, drop, count, sum, max, min, toList, toSet, toMap).
-# Load stdlib JAR for the rest.
+# For inline functions (forEach, map, filter, fold): these are desugared
+# to iterator patterns at the MIR level, which is exactly what kotlinc
+# does — it inlines the function body at the call site.
 #
 # PITFALLS:
 #   - Generic type inference: listOf(1,2,3).map { it * 2 } needs
@@ -313,7 +309,7 @@ milestones:
 
   - version: "0.8.0"
     title: "Full Collections and Stdlib Core"
-    status: planned
+    status: in_progress
     depends_on: ["0.7.0"]
     description: >
       map, filter, fold, sorted, grouped, mutable collections, Pair/Triple,
@@ -321,9 +317,16 @@ milestones:
 
     features:
       - name: "Collection HOFs (map, filter, fold, etc.)"
+        completed: true
         description: >
-          listOf(1,2,3).map { it * 2 }.filter { it > 3 } → [4, 6].
-          Top 20 collection extensions as intrinsics.
+          Stdlib extension function dispatch: receiver.method(lambda) →
+          StaticJava call to CollectionsKt/MapsKt facade class with receiver
+          as first arg. Lambda classes implement kotlin/jvm/functions/FunctionN
+          (real stdlib interface). 25+ stdlib extensions registered: map,
+          filter, flatMap, fold, any, all, none, first, last, count, take,
+          drop, distinct, sorted, sortedBy, reversed, groupBy, associateWith,
+          associateBy, toList, toSet, toMutableList, zip, flatten, contains.
+          Fixtures: 378-stdlib-map-filter, 379-stdlib-associateWith.
         acceptance_criteria:
           - "listOf(1,2,3).map { it * 2 }.filter { it > 3 } == listOf(4, 6)"
 

@@ -359,8 +359,10 @@ fn walk_block(
             Rvalue::NewIntArray(_)
             | Rvalue::ArrayLoad { .. }
             | Rvalue::ArrayStore { .. }
-            | Rvalue::ArrayLength(_) => {
-                // TODO: IntArray support in DEX backend
+            | Rvalue::ArrayLength(_)
+            | Rvalue::NewObjectArray(_)
+            | Rvalue::ObjectArrayStore { .. } => {
+                // TODO: IntArray/ObjectArray support in DEX backend
             }
             Rvalue::InstanceOf {
                 obj,

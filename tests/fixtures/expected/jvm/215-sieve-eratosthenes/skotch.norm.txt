@@ -115,7 +115,7 @@ method        isPrime (I)Z 0x0009
     0158 op_0x91
     sub_attr  StackMapTable (234 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=15
+  code        max_stack=2 max_locals=14
     0000 iconst_0
     0001 istore 1
     0003 iload 1
@@ -143,53 +143,50 @@ method        main ([Ljava/lang/String;)V 0x0009
     0035 iload 6
     0037 op_0x99
     0038 nop
-    0039 op_0x27
-    0040 iload 5
-    0042 istore 7
-    0044 iload 7
-    0046 invokestatic Method(InputKt.isPrime:(I)Z)
-    0049 istore 8
-    0051 iload 8
-    0053 op_0x99
-    0054 nop
-    0055 op_0x39
-    0056 op_0xA7
-    0057 nop
-    0058 op_0x21
-    0059 iconst_1
-    0060 istore 9
-    0062 iload 5
-    0064 iload 9
-    0066 iadd
-    0067 istore 10
-    0069 iload 10
-    0071 istore 5
-    0073 op_0xA7
-    0074 op_0xFF
-    0075 op_0xCC
-    0076 iload 2
-    0078 istore 11
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 iload 11
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 return
-    0089 iload 2
-    0091 istore 12
-    0093 iconst_1
-    0094 istore 13
-    0096 iload 12
-    0098 iload 13
-    0100 iadd
-    0101 istore 14
-    0103 iload 14
-    0105 istore 2
+    0039 op_0x21
+    0040 invokestatic Method(InputKt.isPrime:(I)Z)
+    0043 istore 7
+    0045 iload 7
+    0047 op_0x99
+    0048 nop
+    0049 op_0x39
+    0050 op_0xA7
+    0051 nop
+    0052 op_0x21
+    0053 iconst_1
+    0054 istore 8
+    0056 iload 5
+    0058 iload 8
+    0060 iadd
+    0061 istore 9
+    0063 iload 9
+    0065 istore 5
+    0067 op_0xA7
+    0068 op_0xFF
+    0069 op_0xD2
+    0070 iload 2
+    0072 istore 10
+    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0077 iload 10
+    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0082 return
+    0083 iload 2
+    0085 istore 11
+    0087 iconst_1
+    0088 istore 12
+    0090 iload 11
+    0092 iload 12
+    0094 iadd
+    0095 istore 13
+    0097 iload 13
+    0099 istore 2
+    0101 op_0xA7
+    0102 nop
+    0103 iconst_3
+    0104 op_0xA7
+    0105 nop
+    0106 iconst_0
     0107 op_0xA7
-    0108 nop
-    0109 iconst_3
-    0110 op_0xA7
-    0111 nop
-    0112 iconst_0
-    0113 op_0xA7
-    0114 op_0xFF
-    0115 op_0xCA
-    sub_attr  StackMapTable (136 bytes)
+    0108 op_0xFF
+    0109 op_0xCA
+    sub_attr  StackMapTable (132 bytes)

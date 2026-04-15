@@ -116,7 +116,7 @@ pub fn find_libjvm() -> Result<PathBuf> {
 
 /// Resolve `JAVA_HOME` from the environment or by following the
 /// `java` binary on PATH.
-fn resolve_java_home() -> Result<PathBuf> {
+pub fn resolve_java_home() -> Result<PathBuf> {
     // 1. Explicit JAVA_HOME env var.
     if let Some(home) = std::env::var_os("JAVA_HOME") {
         let home = PathBuf::from(home);

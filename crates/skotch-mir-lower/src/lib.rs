@@ -56,68 +56,195 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     Ty::Any
 }
 
-/// Ensure a synthetic `$FunctionN` interface exists in the module for the
-/// given arity. Returns the interface name (e.g. `"$Function1"`).
+/// Return the Kotlin stdlib `Function{N}` interface name for the given
+/// arity. Lambda classes implement this real stdlib interface so they can
+/// be passed to Kotlin stdlib HOFs (map, filter, etc.) which expect
+/// `kotlin/jvm/functions/Function1` and friends.
 ///
-/// The interface has a single abstract method:
-///   `invoke(Object, Object, ...) -> Object`
-/// (all parameters and return type are `Ty::Any` = erased).
-///
-/// Lambda classes implement `$FunctionN` so that higher-order function
-/// parameters typed as `$FunctionN` can dispatch via `invokeinterface`.
-fn ensure_function_interface(module: &mut MirModule, arity: usize) -> String {
-    let name = format!("$Function{arity}");
-    if module.classes.iter().any(|c| c.name == name) {
-        return name;
+/// Unlike the old `$FunctionN` approach, we do NOT create a synthetic
+/// interface class — the real interface lives in kotlin-stdlib.jar on
+/// the runtime classpath.
+fn stdlib_function_interface(arity: usize) -> String {
+    format!("kotlin/jvm/functions/Function{arity}")
+}
+
+/// Check if a method call on a receiver type is a Kotlin stdlib
+/// extension function compiled as a static method in a `*Kt` facade
+/// class. Returns `(facade_class, method_name, descriptor, return_ty)`.
+fn stdlib_extension(
+    receiver_ty: &str,
+    method: &str,
+) -> Option<(&'static str, &'static str, &'static str, Ty)> {
+    match (receiver_ty, method) {
+        // ── kotlin.collections — Iterable/Collection/List extensions ──
+        (_, "map") => Some((
+            "kotlin/collections/CollectionsKt",
+            "map",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "filter") => Some((
+            "kotlin/collections/CollectionsKt",
+            "filter",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "filterNot") => Some((
+            "kotlin/collections/CollectionsKt",
+            "filterNot",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "flatMap") => Some((
+            "kotlin/collections/CollectionsKt",
+            "flatMap",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "fold") => Some((
+            "kotlin/collections/CollectionsKt",
+            "fold",
+            "(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;",
+            Ty::Any,
+        )),
+        (_, "any") => Some((
+            "kotlin/collections/CollectionsKt",
+            "any",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+            Ty::Bool,
+        )),
+        (_, "all") => Some((
+            "kotlin/collections/CollectionsKt",
+            "all",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+            Ty::Bool,
+        )),
+        (_, "none") => Some((
+            "kotlin/collections/CollectionsKt",
+            "none",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+            Ty::Bool,
+        )),
+        (_, "first") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "first",
+                "(Ljava/util/List;)Ljava/lang/Object;",
+                Ty::Any,
+            ))
+        }
+        (_, "last") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
+            "kotlin/collections/CollectionsKt",
+            "last",
+            "(Ljava/util/List;)Ljava/lang/Object;",
+            Ty::Any,
+        )),
+        (_, "firstOrNull") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "firstOrNull",
+                "(Ljava/util/List;)Ljava/lang/Object;",
+                Ty::Any,
+            ))
+        }
+        (_, "count") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "count",
+                "(Ljava/lang/Iterable;)I",
+                Ty::Int,
+            ))
+        }
+        (_, "sortedBy") => Some((
+            "kotlin/collections/CollectionsKt",
+            "sortedBy",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "reversed") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "reversed",
+                "(Ljava/lang/Iterable;)Ljava/util/List;",
+                Ty::Class("java/util/List".into()),
+            ))
+        }
+        (_, "distinct") => Some((
+            "kotlin/collections/CollectionsKt",
+            "distinct",
+            "(Ljava/lang/Iterable;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "take") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
+            "kotlin/collections/CollectionsKt",
+            "take",
+            "(Ljava/lang/Iterable;I)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "drop") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
+            "kotlin/collections/CollectionsKt",
+            "drop",
+            "(Ljava/lang/Iterable;I)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "associateWith") => Some((
+            "kotlin/collections/CollectionsKt",
+            "associateWith",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
+            Ty::Class("java/util/Map".into()),
+        )),
+        (_, "associateBy") => Some((
+            "kotlin/collections/CollectionsKt",
+            "associateBy",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
+            Ty::Class("java/util/Map".into()),
+        )),
+        (_, "groupBy") => Some((
+            "kotlin/collections/CollectionsKt",
+            "groupBy",
+            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
+            Ty::Class("java/util/Map".into()),
+        )),
+        (_, "flatten") => Some((
+            "kotlin/collections/CollectionsKt",
+            "flatten",
+            "(Ljava/lang/Iterable;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "zip") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
+            "kotlin/collections/CollectionsKt",
+            "zip",
+            "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
+            Ty::Class("java/util/List".into()),
+        )),
+        (_, "toList") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "toList",
+                "(Ljava/lang/Iterable;)Ljava/util/List;",
+                Ty::Class("java/util/List".into()),
+            ))
+        }
+        (_, "toSet") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "toSet",
+                "(Ljava/lang/Iterable;)Ljava/util/Set;",
+                Ty::Class("java/util/Set".into()),
+            ))
+        }
+        (_, "toMutableList")
+            if receiver_ty.contains("List") || receiver_ty.contains("Iterable") =>
+        {
+            Some((
+                "kotlin/collections/CollectionsKt",
+                "toMutableList",
+                "(Ljava/lang/Iterable;)Ljava/util/List;",
+                Ty::Class("java/util/List".into()),
+            ))
+        }
+        _ => None,
     }
-    let mut invoke = MirFunction {
-        id: FuncId(0),
-        name: "invoke".to_string(),
-        params: Vec::new(),
-        locals: Vec::new(),
-        blocks: Vec::new(),
-        return_ty: Ty::Any,
-        required_params: 0,
-        param_names: Vec::new(),
-        param_defaults: Vec::new(),
-        is_abstract: true,
-        exception_handlers: Vec::new(),
-        vararg_index: None,
-    };
-    // `this` parameter (slot 0).
-    let this_local = invoke.new_local(Ty::Class(name.clone()));
-    invoke.params.push(this_local);
-    // One `Ty::Any` parameter per arity slot.
-    for _ in 0..arity {
-        let p = invoke.new_local(Ty::Any);
-        invoke.params.push(p);
-    }
-    module.classes.push(MirClass {
-        name: name.clone(),
-        super_class: None,
-        is_open: false,
-        is_abstract: true,
-        is_interface: true,
-        interfaces: Vec::new(),
-        fields: Vec::new(),
-        methods: vec![invoke],
-        constructor: MirFunction {
-            id: FuncId(0),
-            name: "<init>".to_string(),
-            params: Vec::new(),
-            locals: Vec::new(),
-            blocks: Vec::new(),
-            return_ty: Ty::Unit,
-            required_params: 0,
-            param_names: Vec::new(),
-            param_defaults: Vec::new(),
-            is_abstract: false,
-            exception_handlers: Vec::new(),
-            vararg_index: None,
-        },
-        secondary_constructors: Vec::new(),
-    });
-    name
 }
 
 /// Lower a parsed/resolved/typed file to MIR.
@@ -875,10 +1002,10 @@ fn lower_function(
                 })
                 .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module))
         };
-        // Function-typed parameters → $FunctionN interface class.
+        // Function-typed parameters → kotlin/jvm/functions/FunctionN interface.
         let ty = if let Ty::Function { ref params, .. } = ty {
             let arity = params.len();
-            let iface = ensure_function_interface(module, arity);
+            let iface = stdlib_function_interface(arity);
             Ty::Class(iface)
         } else {
             ty
@@ -1463,7 +1590,7 @@ fn lower_stmt(
                     dest: iter_local,
                     value: Rvalue::Call {
                         kind: CallKind::VirtualJava {
-                            class_name: "java/util/ArrayList".to_string(),
+                            class_name: "java/lang/Iterable".to_string(),
                             method_name: "iterator".to_string(),
                             descriptor: "()Ljava/util/Iterator;".to_string(),
                         },
@@ -2602,11 +2729,49 @@ fn lower_expr(
                     return Some(static_call);
                 }
 
-                // If try_java_static_call returned None, check if the receiver
-                // looks like an unresolvable external class and give a clear error.
+                // If try_java_static_call returned None, check if the
+                // "receiver.method" is actually a fully-qualified
+                // constructor: `java.net.URI()` → receiver="java.net",
+                // method="URI" → class="java/net/URI", call <init>.
                 if let Some(qname) = extract_qualified_name(receiver, interner) {
+                    let method_str = interner.resolve(method_name).to_string();
+
+                    if method_str.starts_with(|c: char| c.is_uppercase()) && qname.contains('.') {
+                        let full_class = format!("{qname}.{method_str}");
+                        let jvm_class = full_class.replace('.', "/");
+                        if let Ok(_info) = skotch_classinfo::load_jdk_class(&jvm_class) {
+                            let mut arg_locals = Vec::new();
+                            for a in args {
+                                let id = lower_expr(
+                                    &a.expr,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                )?;
+                                arg_locals.push(id);
+                            }
+                            let dest = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::NewInstance(jvm_class.clone()),
+                            });
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Constructor(jvm_class),
+                                    args: arg_locals,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+
                     if qname.starts_with(|c: char| c.is_uppercase()) || qname.contains('.') {
-                        let method_str = interner.resolve(method_name);
                         diags.push(Diagnostic::error(
                             *span,
                             format!(
@@ -2731,7 +2896,7 @@ fn lower_expr(
                     // The single argument should be a lambda.
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$"))
+                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$"))
                         || matches!(lambda_ty, Ty::Any);
                     if is_lambda {
                         // Invoke the lambda with the receiver as its argument.
@@ -2818,7 +2983,7 @@ fn lower_expr(
                 {
                     let lambda_local = all_args[1]; // all_args = [receiver, lambda]
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                    if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
                         let cn = if let Ty::Class(ref n) = lambda_ty {
                             n.clone()
                         } else {
@@ -2830,7 +2995,7 @@ fn lower_expr(
                             dest: iter_local,
                             value: Rvalue::Call {
                                 kind: CallKind::VirtualJava {
-                                    class_name: "java/util/ArrayList".to_string(),
+                                    class_name: "java/lang/Iterable".to_string(),
                                     method_name: "iterator".to_string(),
                                     descriptor: "()Ljava/util/Iterator;".to_string(),
                                 },
@@ -2978,6 +3143,38 @@ fn lower_expr(
                         fb.terminate_and_switch(Terminator::Goto(cond_blk), exit_blk);
                         let result = fb.new_local(Ty::Unit);
                         return Some(result);
+                    }
+                }
+
+                // ── Kotlin stdlib extension functions ─────────────────
+                // Extension functions like `List.map {}` are compiled as
+                // static methods in `*Kt` facade classes. The receiver
+                // becomes the first argument and lambdas must implement
+                // `kotlin/jvm/functions/FunctionN`.
+                {
+                    let recv_ty_str = match &recv_ty {
+                        Ty::Class(cn) => cn.as_str(),
+                        Ty::String => "java/lang/String",
+                        Ty::Int => "java/lang/Integer",
+                        Ty::Any => "java/lang/Object",
+                        _ => "",
+                    };
+                    if let Some((facade_class, facade_method, descriptor, ret_ty)) =
+                        stdlib_extension(recv_ty_str, &method_name_str)
+                    {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: facade_class.to_string(),
+                                    method_name: facade_method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                },
+                                args: all_args,
+                            },
+                        });
+                        return Some(dest);
                     }
                 }
 
@@ -3736,103 +3933,58 @@ fn lower_expr(
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
 
-            // `listOf(...)` intrinsic — create an ArrayList with elements.
+            // `listOf(...)` — call the real Kotlin stdlib
+            // `kotlin/collections/CollectionsKt.listOf([Ljava/lang/Object;)Ljava/util/List;`.
+            // We create an Object[] array, autobox + store each element, then invoke the stdlib.
             if callee_str == "listOf" {
-                // new ArrayList
-                let list_local = fb.new_local(Ty::Class("java/util/ArrayList".to_string()));
+                let arg_count = arg_locals.len();
+
+                // Create Object[] of the right size.
+                let count_local = fb.new_local(Ty::Int);
                 fb.push_stmt(MStmt::Assign {
-                    dest: list_local,
-                    value: Rvalue::NewInstance("java/util/ArrayList".to_string()),
+                    dest: count_local,
+                    value: Rvalue::Const(MirConst::Int(arg_count as i32)),
                 });
-                // <init>()V
+                let array_local = fb.new_local(Ty::Any);
                 fb.push_stmt(MStmt::Assign {
-                    dest: list_local,
-                    value: Rvalue::Call {
-                        kind: CallKind::Constructor("java/util/ArrayList".to_string()),
-                        args: vec![],
-                    },
+                    dest: array_local,
+                    value: Rvalue::NewObjectArray(count_local),
                 });
-                // .add(element) for each arg
-                for &arg in &arg_locals {
-                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
-                    // Autobox primitives for Object parameter.
-                    let boxed_arg = match arg_ty {
-                        Ty::Int => {
-                            let boxed = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest: boxed,
-                                value: Rvalue::Call {
-                                    kind: CallKind::StaticJava {
-                                        class_name: "java/lang/Integer".to_string(),
-                                        method_name: "valueOf".to_string(),
-                                        descriptor: "(I)Ljava/lang/Integer;".to_string(),
-                                    },
-                                    args: vec![arg],
-                                },
-                            });
-                            boxed
-                        }
-                        Ty::Long => {
-                            let boxed = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest: boxed,
-                                value: Rvalue::Call {
-                                    kind: CallKind::StaticJava {
-                                        class_name: "java/lang/Long".to_string(),
-                                        method_name: "valueOf".to_string(),
-                                        descriptor: "(J)Ljava/lang/Long;".to_string(),
-                                    },
-                                    args: vec![arg],
-                                },
-                            });
-                            boxed
-                        }
-                        Ty::Double => {
-                            let boxed = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest: boxed,
-                                value: Rvalue::Call {
-                                    kind: CallKind::StaticJava {
-                                        class_name: "java/lang/Double".to_string(),
-                                        method_name: "valueOf".to_string(),
-                                        descriptor: "(D)Ljava/lang/Double;".to_string(),
-                                    },
-                                    args: vec![arg],
-                                },
-                            });
-                            boxed
-                        }
-                        Ty::Bool => {
-                            let boxed = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest: boxed,
-                                value: Rvalue::Call {
-                                    kind: CallKind::StaticJava {
-                                        class_name: "java/lang/Boolean".to_string(),
-                                        method_name: "valueOf".to_string(),
-                                        descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
-                                    },
-                                    args: vec![arg],
-                                },
-                            });
-                            boxed
-                        }
-                        _ => arg,
-                    };
-                    let _add_result = fb.new_local(Ty::Bool);
+
+                // Store each arg into the Object[] (autoboxing primitives).
+                for (i, &arg) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
-                        dest: _add_result,
-                        value: Rvalue::Call {
-                            kind: CallKind::VirtualJava {
-                                class_name: "java/util/ArrayList".to_string(),
-                                method_name: "add".to_string(),
-                                descriptor: "(Ljava/lang/Object;)Z".to_string(),
-                            },
-                            args: vec![list_local, boxed_arg],
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let store_dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: store_dest,
+                        value: Rvalue::ObjectArrayStore {
+                            array: array_local,
+                            index: idx,
+                            value: boxed,
                         },
                     });
                 }
-                return Some(list_local);
+
+                // Call kotlin/collections/CollectionsKt.listOf(Object[])List
+                let result = fb.new_local(Ty::Class("java/util/List".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlin/collections/CollectionsKt".to_string(),
+                            method_name: "listOf".to_string(),
+                            descriptor: "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                        },
+                        args: vec![array_local],
+                    },
+                });
+                return Some(result);
             }
 
             // `IntArray(size)` intrinsic — create a primitive int[].
@@ -3851,7 +4003,7 @@ fn lower_expr(
                 let count = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
                     let cn = if let Ty::Class(ref n) = lambda_ty {
                         n.clone()
                     } else {
@@ -3935,7 +4087,7 @@ fn lower_expr(
                 let receiver = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if matches!(&lambda_ty, Ty::Class(n) if n.starts_with("$Lambda$")) {
+                if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
                     let cn = if let Ty::Class(ref n) = lambda_ty {
                         n.clone()
                     } else {
@@ -4017,13 +4169,11 @@ fn lower_expr(
 
             // Check if callee is a local variable (lambda or callable object).
             // Handles: val f = { x: Int -> x * 2 }; f(5)
-            // Also: fun apply(f: (Int)->Int, x: Int) = f(x) via $FunctionN interface.
+            // Also: fun apply(f: (Int)->Int, x: Int) = f(x) via FunctionN interface.
             if let Some((_, local_id)) = scope.iter().rev().find(|(s, _)| *s == callee_name) {
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
-                let is_lambda_class =
-                    matches!(&local_ty, Ty::Class(n) if n.starts_with("$Lambda$"));
-                let is_function_interface =
-                    matches!(&local_ty, Ty::Class(n) if n.starts_with("$Function"));
+                let is_lambda_class = matches!(&local_ty, Ty::Class(n) if n.contains("$Lambda$"));
+                let is_function_interface = matches!(&local_ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function"));
                 // Check if this is a class with an `invoke` operator method.
                 let has_invoke_method = if let Ty::Class(ref cn) = local_ty {
                     module
@@ -4040,11 +4190,11 @@ fn lower_expr(
                     || has_invoke_method
                     || matches!(local_ty, Ty::Any | Ty::Function { .. });
                 if is_callable {
-                    // ── $FunctionN interface dispatch ──────────────────
-                    // When the local is typed as $FunctionN, Ty::Any, or
-                    // Ty::Function, dispatch through the erased $FunctionN
+                    // ── FunctionN interface dispatch ──────────────────
+                    // When the local is typed as FunctionN, Ty::Any, or
+                    // Ty::Function, dispatch through the erased FunctionN
                     // interface: autobox each arg to Object, call
-                    // invokeinterface $FunctionN.invoke(), then unbox the
+                    // invokeinterface FunctionN.invoke(), then unbox the
                     // Object return to the expected type.
                     let use_interface_dispatch =
                         is_function_interface || matches!(local_ty, Ty::Any | Ty::Function { .. });
@@ -4132,7 +4282,7 @@ fn lower_expr(
                         } else {
                             // For Ty::Any / Ty::Function, derive arity from call args.
                             let arity = arg_locals.len();
-                            ensure_function_interface(module, arity)
+                            stdlib_function_interface(arity)
                         };
                         // The interface invoke returns Ty::Any (Object).
                         let raw_result = fb.new_local(Ty::Any);
@@ -4172,7 +4322,7 @@ fn lower_expr(
                     // ── Direct lambda / invoke-operator dispatch ──────
                     // Lower as: receiver.invoke(args)
                     // Lambda invoke methods now use erased types (Ty::Any)
-                    // for $FunctionN compatibility. Must autobox args and
+                    // for FunctionN compatibility. Must autobox args and
                     // the return is Ty::Any (Object).
                     let invoke_class = if let Ty::Class(ref cn) = local_ty {
                         cn.clone()
@@ -4181,7 +4331,7 @@ fn lower_expr(
                             .classes
                             .iter()
                             .rev()
-                            .find(|c| c.name.starts_with("$Lambda$"))
+                            .find(|c| c.name.contains("$Lambda$"))
                             .map(|c| c.name.clone())
                             .unwrap_or_else(|| "java/lang/Object".to_string())
                     } else {
@@ -5007,7 +5157,7 @@ fn lower_expr(
                             return Some(dest);
                         }
                     }
-                    // ArrayList/List .size → invokevirtual ArrayList.size()I
+                    // List .size → invokeinterface java/util/List.size()I
                     if field_name == "size"
                         && (declaring_class.contains("ArrayList")
                             || declaring_class.contains("List"))
@@ -5017,7 +5167,7 @@ fn lower_expr(
                             dest,
                             value: Rvalue::Call {
                                 kind: CallKind::VirtualJava {
-                                    class_name: "java/util/ArrayList".to_string(),
+                                    class_name: "java/util/List".to_string(),
                                     method_name: "size".to_string(),
                                     descriptor: "()I".to_string(),
                                 },
@@ -5575,7 +5725,10 @@ fn lower_expr(
             // Pre-register the lambda class so nested lambdas get unique indices.
             // (Recalculate lambda_idx since $Ref classes may have been added above.)
             let lambda_idx = module.classes.len();
-            let lambda_class_name = format!("$Lambda${lambda_idx}");
+            // Include the wrapper class name so lambda classes are
+            // globally unique (e.g. InputKt$Lambda$0). This prevents
+            // JNI DefineClass collisions across REPL turns.
+            let lambda_class_name = format!("{}$Lambda${lambda_idx}", module.wrapper_class);
             module.classes.push(MirClass {
                 name: lambda_class_name.clone(),
                 super_class: None,
@@ -5652,7 +5805,7 @@ fn lower_expr(
                     }
                 }
                 // Lambda parameters — use Ty::Any for the method param
-                // so the invoke descriptor matches $FunctionN.invoke(Object…).
+                // so the invoke descriptor matches FunctionN.invoke(Object...).
                 // Then immediately unbox/cast to the annotated type in
                 // a body-local so method resolution and arithmetic work.
                 for p in params {
@@ -5733,7 +5886,7 @@ fn lower_expr(
             invoke_fn.is_abstract = false;
             let mut found_return_value = false;
             // Find the block with ReturnValue and determine if we need
-            // to autobox the return for the erased $FunctionN interface.
+            // to autobox the return for the erased FunctionN interface.
             let mut autobox_info: Option<(usize, LocalId, Ty)> = None;
             for (bi, block) in invoke_fn.blocks.iter().enumerate() {
                 if let Terminator::ReturnValue(local) = &block.terminator {
@@ -5750,7 +5903,7 @@ fn lower_expr(
             if let Some((bi, local, ret_ty)) = autobox_info {
                 // Autobox the return value so the erased invoke
                 // descriptor `()Ljava/lang/Object;` matches the
-                // $FunctionN interface. E.g. int → Integer.valueOf.
+                // FunctionN interface. E.g. int -> Integer.valueOf.
                 let box_rvalue = match &ret_ty {
                     Ty::Int => Some(Rvalue::Call {
                         kind: CallKind::StaticJava {
@@ -5859,10 +6012,10 @@ fn lower_expr(
                 });
             }
 
-            // Make the lambda class implement $FunctionN so higher-order
-            // function parameters can dispatch via invokeinterface.
+            // Make the lambda class implement kotlin/jvm/functions/FunctionN
+            // so it can be passed to Kotlin stdlib HOFs and user-defined HOFs.
             let lambda_arity = params.len();
-            let iface_name = ensure_function_interface(module, lambda_arity);
+            let iface_name = stdlib_function_interface(lambda_arity);
 
             // Replace the pre-registered stub with the real class.
             module.classes[lambda_idx] = MirClass {

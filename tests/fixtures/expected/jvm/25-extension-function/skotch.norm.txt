@@ -3,16 +3,13 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=3
-    0000 ldc "hello"
-    0002 astore 1
-    0004 aload 1
-    0006 invokestatic Method(InputKt.shout:(Ljava/lang/String;)Ljava/lang/String;)
-    0009 astore 2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 aload 2
-    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0019 return
+  code        max_stack=2 max_locals=2
+    0000 invokestatic Method(InputKt.shout:(Ljava/lang/String;)Ljava/lang/String;)
+    0003 astore 1
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 aload 1
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0013 return
 method        shout (Ljava/lang/String;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=4
     0000 aload 0

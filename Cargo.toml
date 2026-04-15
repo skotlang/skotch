@@ -114,6 +114,7 @@ libloading   = "0.8"
 
 # REPL line editing
 reedline     = "0.46"
+nu-ansi-term = "0.50"
 
 # LSP
 tower-lsp    = "0.20"

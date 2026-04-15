@@ -93,8 +93,22 @@ impl EmbeddedJvm {
             }
         }
 
-        let jvm_args = InitArgsBuilder::new()
-            .version(JNIVersion::V8)
+        // Build classpath: include kotlin-stdlib.jar if found.
+        let mut cp_parts: Vec<String> = Vec::new();
+        if let Some(stdlib) = Self::find_kotlin_stdlib() {
+            cp_parts.push(stdlib);
+        }
+        let mut builder = InitArgsBuilder::new().version(JNIVersion::V8);
+        let cp_opt = if !cp_parts.is_empty() {
+            let cp = cp_parts.join(if cfg!(windows) { ";" } else { ":" });
+            Some(format!("-Djava.class.path={cp}"))
+        } else {
+            None
+        };
+        if let Some(ref opt) = cp_opt {
+            builder = builder.option(opt);
+        }
+        let jvm_args = builder
             .build()
             .map_err(|e| anyhow!("JVM InitArgs build failed: {e}"))?;
 
@@ -105,6 +119,45 @@ impl EmbeddedJvm {
             )
         })?;
         Ok(jvm)
+    }
+
+    /// Locate kotlin-stdlib.jar by checking KOTLIN_HOME and kotlinc on PATH.
+    fn find_kotlin_stdlib() -> Option<String> {
+        // Check KOTLIN_HOME
+        if let Ok(home) = std::env::var("KOTLIN_HOME") {
+            let base = std::path::PathBuf::from(&home);
+            for rel in ["lib/kotlin-stdlib.jar", "libexec/lib/kotlin-stdlib.jar"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p.to_string_lossy().into_owned());
+                }
+            }
+        }
+        // Locate kotlinc on PATH and resolve symlinks
+        if let Ok(kotlinc) = which::which("kotlinc") {
+            if let Ok(resolved) = std::fs::canonicalize(&kotlinc) {
+                if let Some(bin) = resolved.parent() {
+                    if let Some(home) = bin.parent() {
+                        for rel in ["lib/kotlin-stdlib.jar", "libexec/lib/kotlin-stdlib.jar"] {
+                            let p = home.join(rel);
+                            if p.exists() {
+                                return Some(p.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Check CLASSPATH
+        if let Ok(cp) = std::env::var("CLASSPATH") {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            for entry in cp.split(sep) {
+                if entry.ends_with("kotlin-stdlib.jar") && std::path::Path::new(entry).exists() {
+                    return Some(entry.to_string());
+                }
+            }
+        }
+        None
     }
 
     /// Get the global JVM reference.
@@ -622,6 +675,198 @@ impl EmbeddedJvm {
         Ok(classes)
     }
 
+    /// Discover all classes available to the JVM at startup.
+    ///
+    /// - **Java 9+**: scans every `.jmod` file under `$JAVA_HOME/jmods/`.
+    ///   `.jmod` files are ZIP archives with a 4-byte `JM` header; we
+    ///   skip that header and read entries via `ZipInputStream`.
+    /// - **Java 8**: scans `$JAVA_HOME/lib/rt.jar` with [`scan_jar_classes`].
+    ///
+    /// Returns fully-qualified class names (e.g. `java.lang.String`).
+    /// Inner classes (`$`) and metadata entries are excluded.
+    pub fn scan_system_classes(&self) -> Result<Vec<String>> {
+        let java_home = locate::resolve_java_home()?;
+        let real_home = std::fs::canonicalize(&java_home).unwrap_or(java_home.clone());
+
+        // Candidate roots — the same two that `find_libjvm` probes.
+        // Homebrew on macOS nests the real JDK under libexec/.
+        let roots = [
+            real_home.clone(),
+            real_home.join("libexec/openjdk.jdk/Contents/Home"),
+            java_home.clone(),
+            java_home.join("libexec/openjdk.jdk/Contents/Home"),
+        ];
+
+        // Java 9+: scan jmods/ directory.
+        for root in &roots {
+            let jmods = root.join("jmods");
+            if jmods.is_dir() {
+                let mut all = Vec::new();
+                if let Ok(entries) = std::fs::read_dir(&jmods) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.extension().and_then(|e| e.to_str()) == Some("jmod") {
+                            match self.scan_jmod_file(&p) {
+                                Ok(cs) => all.extend(cs),
+                                Err(_) => continue,
+                            }
+                        }
+                    }
+                }
+                if !all.is_empty() {
+                    return Ok(all);
+                }
+            }
+        }
+
+        // Java 8 fallback: rt.jar.
+        for root in &roots {
+            for rel in ["lib/rt.jar", "jre/lib/rt.jar"] {
+                let rt = root.join(rel);
+                if rt.exists() {
+                    return self.scan_jar_classes(&rt);
+                }
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    /// Scan a `.jmod` file for class names.
+    ///
+    /// `.jmod` files are ZIP archives preceded by a 4-byte magic
+    /// header (`JM\x01\x00`). We open a `FileInputStream`, skip the
+    /// header, and feed the remainder into a `ZipInputStream`.
+    /// Class entries live under the `classes/` prefix.
+    fn scan_jmod_file(&self, path: &std::path::Path) -> Result<Vec<String>> {
+        let mut env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("attach: {e}"))?;
+
+        let path_str = path.to_string_lossy();
+        let path_j = env
+            .new_string(&*path_str)
+            .map_err(|e| anyhow!("NewString: {e}"))?;
+
+        // new FileInputStream(path)
+        let fis_class = env
+            .find_class("java/io/FileInputStream")
+            .map_err(|e| anyhow!("FindClass FileInputStream: {e}"))?;
+        let fis = match env.new_object(
+            fis_class,
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(&path_j.into())],
+        ) {
+            Ok(f) => f,
+            Err(_) => {
+                env.exception_clear().ok();
+                return Err(anyhow!("cannot open: {path_str}"));
+            }
+        };
+
+        // fis.skip(4) — skip the JM\x01\x00 header
+        let _ = env.call_method(&fis, "skip", "(J)J", &[JValue::Long(4)]);
+        env.exception_clear().ok();
+
+        // new ZipInputStream(fis)
+        let zis_class = env
+            .find_class("java/util/zip/ZipInputStream")
+            .map_err(|e| anyhow!("FindClass ZipInputStream: {e}"))?;
+        let zis = match env.new_object(
+            zis_class,
+            "(Ljava/io/InputStream;)V",
+            &[JValue::Object(&fis)],
+        ) {
+            Ok(z) => z,
+            Err(_) => {
+                env.exception_clear().ok();
+                let _ = env.call_method(&fis, "close", "()V", &[]);
+                return Err(anyhow!("ZipInputStream failed: {path_str}"));
+            }
+        };
+
+        let mut classes = Vec::new();
+
+        loop {
+            let entry_val =
+                match env.call_method(&zis, "getNextEntry", "()Ljava/util/zip/ZipEntry;", &[]) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        env.exception_clear().ok();
+                        break;
+                    }
+                };
+            let entry = match entry_val.l() {
+                Ok(o) if !o.is_null() => o,
+                _ => break,
+            };
+
+            let name = (|| -> Option<String> {
+                let nv = env
+                    .call_method(&entry, "getName", "()Ljava/lang/String;", &[])
+                    .ok()?;
+                let no = nv.l().ok()?;
+                let s = env
+                    .get_string((&no).into())
+                    .ok()?
+                    .to_string_lossy()
+                    .into_owned();
+                let _ = no; // ensure no is not used after get_string
+                Some(s)
+            })();
+
+            env.delete_local_ref(entry).ok();
+
+            if let Some(name) = name {
+                if name.starts_with("classes/") && name.ends_with(".class") && !name.contains('$') {
+                    if let Some(cn) = name
+                        .strip_prefix("classes/")
+                        .and_then(|s| s.strip_suffix(".class"))
+                    {
+                        let dotted = cn.replace('/', ".");
+                        if !dotted.ends_with("module-info") && !dotted.ends_with("package-info") {
+                            classes.push(dotted);
+                        }
+                    }
+                }
+            }
+        }
+
+        let _ = env.call_method(&zis, "close", "()V", &[]);
+        env.exception_clear().ok();
+        Ok(classes)
+    }
+
+    /// Verify the JVM is alive.
+    /// Return the JVM version string (e.g. `"25.0.1"`).
+    pub fn java_version(&self) -> Result<String> {
+        let mut env = Self::jvm()
+            .attach_current_thread()
+            .map_err(|e| anyhow!("attach: {e}"))?;
+        let key = env
+            .new_string("java.version")
+            .map_err(|e| anyhow!("NewString: {e}"))?;
+        let val = env
+            .call_static_method(
+                "java/lang/System",
+                "getProperty",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&key.into())],
+            )
+            .map_err(|e| anyhow!("getProperty: {e}"))?
+            .l()
+            .map_err(|e| anyhow!("getProperty result: {e}"))?;
+        if val.is_null() {
+            return Ok("unknown".to_string());
+        }
+        let s = env
+            .get_string((&val).into())
+            .map_err(|e| anyhow!("getString: {e}"))?
+            .to_string_lossy()
+            .into_owned();
+        Ok(s)
+    }
+
     /// Verify the JVM is alive.
     pub fn check_alive(&self) -> Result<()> {
         let env = Self::jvm()
@@ -680,5 +925,21 @@ mod tests {
             .expect("should work");
         let millis = v.j().expect("should be long");
         assert!(millis > 0);
+    }
+
+    #[test]
+    fn scan_system_classes_finds_jdk() {
+        let jvm = get_jvm();
+        let classes = jvm.scan_system_classes().expect("should scan JDK");
+        // Any modern JDK should have thousands of classes.
+        assert!(
+            classes.len() > 1000,
+            "expected >1000 system classes, got {}",
+            classes.len()
+        );
+        // Smoke-check a few well-known ones.
+        assert!(classes.contains(&"java.lang.String".to_string()));
+        assert!(classes.contains(&"java.util.HashMap".to_string()));
+        assert!(classes.contains(&"java.io.File".to_string()));
     }
 }

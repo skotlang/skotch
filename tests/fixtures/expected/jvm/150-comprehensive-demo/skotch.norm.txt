@@ -126,22 +126,19 @@ method        isEven (I)Z 0x0009
     0033 op_0xAC
     sub_attr  StackMapTable (27 bytes)
 method        isOdd (I)Z 0x0009
-  code        max_stack=2 max_locals=5
-    0000 iload 0
-    0002 istore 1
-    0004 iload 1
-    0006 invokestatic Method(InputKt.isEven:(I)Z)
-    0009 istore 2
-    0011 iconst_1
-    0012 istore 3
-    0014 iload 3
-    0016 iload 2
-    0018 isub
-    0019 istore 4
-    0021 iload 4
-    0023 op_0xAC
+  code        max_stack=2 max_locals=4
+    0000 invokestatic Method(InputKt.isEven:(I)Z)
+    0003 istore 1
+    0005 iconst_1
+    0006 istore 2
+    0008 iload 2
+    0010 iload 1
+    0012 isub
+    0013 istore 3
+    0015 iload 3
+    0017 op_0xAC
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=31
+  code        max_stack=3 max_locals=30
     0000 ldc "Sum of odds 1..10: "
     0002 astore 1
     0004 bipush 10
@@ -262,68 +259,65 @@ method        main ([Ljava/lang/String;)V 0x0009
     0209 iload 21
     0211 op_0x99
     0212 nop
-    0213 op_0x2F
+    0213 op_0x29
     0214 iload 20
     0216 istore 22
     0218 ldc ": "
     0220 astore 23
-    0222 iload 20
-    0224 istore 24
-    0226 iload 24
-    0228 invokestatic Method(InputKt.isOdd:(I)Z)
-    0231 istore 25
-    0233 iload 25
-    0235 op_0x99
-    0236 nop
-    0237 op_0x23
-    0238 op_0xA7
-    0239 nop
-    0240 iload 4
-    0242 istore 26
-    0244 iload 20
-    0246 iload 26
-    0248 iadd
-    0249 istore 27
-    0251 iload 27
-    0253 istore 20
-    0255 op_0xA7
-    0256 op_0xFF
-    0257 op_0xC4
-    0258 return
-    0259 ldc "odd"
-    0261 astore 28
-    0263 aload 28
-    0265 astore 29
-    0267 op_0xA7
-    0268 nop
-    0269 op_0x0E
-    0270 ldc "even"
-    0272 astore 30
-    0274 aload 30
-    0276 astore 29
-    0278 op_0xA7
+    0222 invokestatic Method(InputKt.isOdd:(I)Z)
+    0225 istore 24
+    0227 iload 24
+    0229 op_0x99
+    0230 nop
+    0231 op_0x23
+    0232 op_0xA7
+    0233 nop
+    0234 iload 4
+    0236 istore 25
+    0238 iload 20
+    0240 iload 25
+    0242 iadd
+    0243 istore 26
+    0245 iload 26
+    0247 istore 20
+    0249 op_0xA7
+    0250 op_0xFF
+    0251 op_0xCA
+    0252 return
+    0253 ldc "odd"
+    0255 astore 27
+    0257 aload 27
+    0259 astore 28
+    0261 op_0xA7
+    0262 nop
+    0263 op_0x0E
+    0264 ldc "even"
+    0266 astore 29
+    0268 aload 29
+    0270 astore 28
+    0272 op_0xA7
+    0273 nop
+    0274 iconst_0
+    0275 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0278 op_0xBB
     0279 nop
-    0280 iconst_0
-    0281 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0284 op_0xBB
-    0285 nop
-    0286 op_0x1E
-    0287 op_0x59
-    0288 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0291 iload 22
-    0293 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0296 aload 23
-    0298 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0301 aload 29
-    0303 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0306 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0309 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0312 op_0xA7
-    0313 op_0xFF
-    0314 op_0xB9
-    sub_attr  StackMapTable (504 bytes)
+    0280 op_0x1E
+    0281 op_0x59
+    0282 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0285 iload 22
+    0287 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0290 aload 23
+    0292 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0295 aload 28
+    0297 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0300 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0303 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0306 op_0xA7
+    0307 op_0xFF
+    0308 op_0xB9
+    sub_attr  StackMapTable (500 bytes)
 method        sumOfOdds (I)I 0x0009
-  code        max_stack=3 max_locals=15
+  code        max_stack=3 max_locals=14
     0000 iconst_0
     0001 istore 1
     0003 iload 1
@@ -351,51 +345,48 @@ method        sumOfOdds (I)I 0x0009
     0035 iload 6
     0037 op_0x99
     0038 nop
-    0039 op_0x27
-    0040 iload 5
-    0042 istore 7
-    0044 iload 7
-    0046 invokestatic Method(InputKt.isEven:(I)Z)
-    0049 istore 8
-    0051 iload 8
-    0053 op_0x99
-    0054 nop
-    0055 op_0x21
-    0056 op_0xA7
-    0057 nop
-    0058 op_0x1B
-    0059 iconst_1
-    0060 istore 9
-    0062 iload 5
-    0064 iload 9
-    0066 iadd
-    0067 istore 10
-    0069 iload 10
-    0071 istore 5
-    0073 op_0xA7
-    0074 op_0xFF
-    0075 op_0xCC
-    0076 iload 2
-    0078 istore 11
-    0080 iload 11
-    0082 op_0xAC
-    0083 op_0xA7
-    0084 op_0xFF
-    0085 op_0xE8
-    0086 op_0xA7
-    0087 nop
-    0088 iconst_0
-    0089 iload 2
-    0091 istore 12
-    0093 iload 5
-    0095 istore 13
-    0097 iload 12
-    0099 iload 13
-    0101 iadd
-    0102 istore 14
-    0104 iload 14
-    0106 istore 2
-    0108 op_0xA7
-    0109 op_0xFF
-    0110 op_0xCF
-    sub_attr  StackMapTable (120 bytes)
+    0039 op_0x21
+    0040 invokestatic Method(InputKt.isEven:(I)Z)
+    0043 istore 7
+    0045 iload 7
+    0047 op_0x99
+    0048 nop
+    0049 op_0x21
+    0050 op_0xA7
+    0051 nop
+    0052 op_0x1B
+    0053 iconst_1
+    0054 istore 8
+    0056 iload 5
+    0058 iload 8
+    0060 iadd
+    0061 istore 9
+    0063 iload 9
+    0065 istore 5
+    0067 op_0xA7
+    0068 op_0xFF
+    0069 op_0xD2
+    0070 iload 2
+    0072 istore 10
+    0074 iload 10
+    0076 op_0xAC
+    0077 op_0xA7
+    0078 op_0xFF
+    0079 op_0xE8
+    0080 op_0xA7
+    0081 nop
+    0082 iconst_0
+    0083 iload 2
+    0085 istore 11
+    0087 iload 5
+    0089 istore 12
+    0091 iload 11
+    0093 iload 12
+    0095 iadd
+    0096 istore 13
+    0098 iload 13
+    0100 istore 2
+    0102 op_0xA7
+    0103 op_0xFF
+    0104 op_0xCF
+    sub_attr  StackMapTable (116 bytes)

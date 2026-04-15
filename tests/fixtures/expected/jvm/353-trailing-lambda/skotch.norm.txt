@@ -8,7 +8,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 nop
     0002 op_0x0B
     0003 op_0x59
-    0004 invokespecial Method($Lambda$0.<init>:()V)
+    0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0007 astore 1
     0009 aload 1
     0011 op_0xC0
@@ -21,12 +21,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0022 astore 4
     0024 aload 2
     0026 aload 4
-    0028 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0028 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
     0031 ldc "world"
     0033 astore 5
     0035 aload 5
     0037 astore 6
     0039 aload 2
     0041 aload 6
-    0043 invokevirtual Method($Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0043 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
     0046 return

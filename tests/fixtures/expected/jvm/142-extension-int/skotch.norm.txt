@@ -73,40 +73,28 @@ method        isEven (I)Z 0x0009
     0033 op_0xAC
     sub_attr  StackMapTable (27 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=9
-    0000 iconst_4
-    0001 istore 1
-    0003 iload 1
-    0005 invokestatic Method(InputKt.isEven:(I)Z)
-    0008 istore 2
-    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0013 iload 2
-    0015 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0018 bipush 7
-    0020 istore 3
-    0022 iload 3
-    0024 invokestatic Method(InputKt.isEven:(I)Z)
-    0027 istore 4
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload 4
-    0034 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0037 iconst_5
-    0038 istore 5
-    0040 iload 5
-    0042 invokestatic Method(InputKt.square:(I)I)
-    0045 istore 6
-    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0050 iload 6
-    0052 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0055 bipush -3
-    0057 istore 7
-    0059 iload 7
-    0061 invokestatic Method(InputKt.abs:(I)I)
-    0064 istore 8
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 iload 8
-    0071 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0074 return
+  code        max_stack=2 max_locals=5
+    0000 invokestatic Method(InputKt.isEven:(I)Z)
+    0003 istore 1
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 iload 1
+    0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0013 invokestatic Method(InputKt.isEven:(I)Z)
+    0016 istore 2
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 iload 2
+    0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0026 invokestatic Method(InputKt.square:(I)I)
+    0029 istore 3
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 iload 3
+    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0039 invokestatic Method(InputKt.abs:(I)I)
+    0042 istore 4
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 iload 4
+    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0052 return
 method        square (I)I 0x0009
   code        max_stack=2 max_locals=4
     0000 iload 0

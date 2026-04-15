@@ -6,5 +6,4 @@ fun main() {
     val d = Direction.NORTH
     println(d)
     println(d.name)
-    println(d.ordinal)
 }

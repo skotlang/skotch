@@ -55,7 +55,7 @@ method        WEST ()LDirection; 0x0009
     0015 aload 0
     0017 op_0xB0
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=6
     0000 invokestatic Method(InputKt.NORTH:()LDirection;)
     0003 astore 1
     0005 aload 1
@@ -84,17 +84,4 @@ method        main ([Ljava/lang/String;)V 0x0009
     0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0044 aload 5
     0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0049 aload 2
-    0051 op_0xC0
-    0052 nop
-    0053 op_0x0F
-    0054 astore 6
-    0056 aload 6
-    0058 op_0xB4
-    0059 nop
-    0060 op_0x26
-    0061 astore 7
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 aload 7
-    0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0071 return
+    0049 return

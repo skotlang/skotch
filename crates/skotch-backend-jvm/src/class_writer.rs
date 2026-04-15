@@ -2144,7 +2144,7 @@ fn walk_block(
                             // the load order. For now, skip (rare case).
                         }
                     }
-                    // Well-known JDK interfaces require invokeinterface.
+                    // Well-known JDK/Kotlin interfaces require invokeinterface.
                     let is_jdk_interface = matches!(
                         class_name.as_str(),
                         "java/util/Iterator"
@@ -2156,7 +2156,8 @@ fn walk_block(
                             | "java/lang/Comparable"
                             | "java/lang/CharSequence"
                             | "java/lang/Runnable"
-                    );
+                    ) || class_name
+                        .starts_with("kotlin/jvm/functions/Function");
                     if is_jdk_interface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
                         code.push(0xB9); // invokeinterface
@@ -2294,7 +2295,8 @@ fn walk_block(
                     let is_iface = module
                         .classes
                         .iter()
-                        .any(|c| c.name == *class_name && c.is_interface);
+                        .any(|c| c.name == *class_name && c.is_interface)
+                        || class_name.starts_with("kotlin/jvm/functions/Function");
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, &descriptor);
                         code.push(0xB9); // invokeinterface
@@ -2397,6 +2399,29 @@ fn walk_block(
                 code.push(0xBE); // arraylength
                                  // arraylength pops arrayref (1), pushes int (1): net 0
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::NewObjectArray(size) => {
+                // Push size, then emit anewarray java/lang/Object.
+                load_local(code, stack, max_stack, slots, *size, &func.locals);
+                let cls = cp.class("java/lang/Object");
+                code.push(0xBD); // anewarray
+                code.write_u16::<BigEndian>(cls).unwrap();
+                // anewarray pops int (size), pushes arrayref: net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::ObjectArrayStore {
+                array,
+                index,
+                value,
+            } => {
+                // Push array ref, index, and value, then emit aastore.
+                load_local(code, stack, max_stack, slots, *array, &func.locals);
+                load_local(code, stack, max_stack, slots, *index, &func.locals);
+                load_local(code, stack, max_stack, slots, *value, &func.locals);
+                code.push(0x53); // aastore
+                                 // aastore pops arrayref + index + value (3): net -3
+                bump(stack, max_stack, -3);
+                // dest is Unit — nothing to store.
             }
         }
     }

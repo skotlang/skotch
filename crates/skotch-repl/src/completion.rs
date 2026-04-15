@@ -486,6 +486,48 @@ fn kotlin_extensions_for(kt_type: &str) -> &'static [&'static str] {
     }
 }
 
+// ── Scan mode ────────────────────────────────────────────────────────
+
+/// Controls when the JDK / classpath class index is built.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScanMode {
+    /// Scan in a background thread immediately after JVM init.
+    /// The REPL prompt appears without waiting. (default)
+    Background,
+    /// Scan synchronously before the first prompt.
+    Eager,
+    /// Defer scanning until the first tab-completion request.
+    Lazy,
+    /// Never scan — only locally defined names are completed.
+    None,
+}
+
+impl std::fmt::Display for ScanMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScanMode::Background => write!(f, "background"),
+            ScanMode::Eager => write!(f, "eager"),
+            ScanMode::Lazy => write!(f, "lazy"),
+            ScanMode::None => write!(f, "none"),
+        }
+    }
+}
+
+impl std::str::FromStr for ScanMode {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "background" => Ok(ScanMode::Background),
+            "eager" => Ok(ScanMode::Eager),
+            "lazy" => Ok(ScanMode::Lazy),
+            "none" => Ok(ScanMode::None),
+            other => Err(format!(
+                "unknown scan mode `{other}` (expected: background, eager, lazy, none)"
+            )),
+        }
+    }
+}
+
 // ── Shared completion context ────────────────────────────────────────
 
 /// Mutable state shared between the REPL loop and the tab-completer
@@ -497,10 +539,15 @@ pub(crate) struct CompletionCtx {
     top_names: Vec<(String, String)>,
     /// How many `resN` result variables exist.
     res_count: usize,
-    /// Extra class names discovered from classpath scanning.
+    /// Simple (unqualified) class names from classpath scanning.
     extra_classes: Vec<String>,
+    /// Fully-qualified class names from classpath scanning, used for
+    /// dotted package/class completion (e.g. `com.example.Foo`).
+    extra_fqn_classes: Vec<String>,
     /// Cached member lists per Java class name.
     member_cache: HashMap<String, Vec<String>>,
+    /// Whether a lazy system-class scan is still pending.
+    pub lazy_scan_pending: bool,
 }
 
 impl CompletionCtx {
@@ -510,7 +557,9 @@ impl CompletionCtx {
             top_names: Vec::new(),
             res_count: 0,
             extra_classes: Vec::new(),
+            extra_fqn_classes: Vec::new(),
             member_cache: HashMap::new(),
+            lazy_scan_pending: false,
         }
     }
 
@@ -543,7 +592,11 @@ impl CompletionCtx {
     /// Register class names discovered from a newly added classpath entry.
     pub fn add_extra_classes(&mut self, classes: Vec<String>) {
         for fqn in classes {
-            // Store only the simple name for completion.
+            // Store the fully-qualified name for dotted completion.
+            if !self.extra_fqn_classes.contains(&fqn) {
+                self.extra_fqn_classes.push(fqn.clone());
+            }
+            // Store the simple name for unqualified completion.
             if let Some(simple) = fqn.rsplit('.').next() {
                 if !simple.is_empty() && simple.starts_with(|c: char| c.is_uppercase()) {
                     let s = simple.to_string();
@@ -555,6 +608,8 @@ impl CompletionCtx {
         }
         self.extra_classes.sort();
         self.extra_classes.dedup();
+        self.extra_fqn_classes.sort();
+        self.extra_fqn_classes.dedup();
     }
 
     /// Look up the Kotlin type of a named variable.
@@ -574,8 +629,31 @@ pub(crate) struct SkotchCompleter {
     pub ctx: Arc<Mutex<CompletionCtx>>,
 }
 
+impl SkotchCompleter {
+    /// If a lazy scan is pending, perform it now (blocking).
+    fn ensure_scanned(&self) {
+        let needs_scan = {
+            let ctx = self.ctx.lock().unwrap();
+            ctx.lazy_scan_pending
+        };
+        if needs_scan {
+            if let Ok(jvm) = EmbeddedJvm::new() {
+                if let Ok(classes) = jvm.scan_system_classes() {
+                    let count = classes.len();
+                    let mut ctx = self.ctx.lock().unwrap();
+                    ctx.add_extra_classes(classes);
+                    ctx.lazy_scan_pending = false;
+                    drop(ctx);
+                    eprintln!("  classpath: {count} system classes indexed (lazy)");
+                }
+            }
+        }
+    }
+}
+
 impl Completer for SkotchCompleter {
     fn complete(&mut self, line: &str, pos: usize) -> Vec<Suggestion> {
+        self.ensure_scanned();
         let line = &line[..pos.min(line.len())];
 
         // 1) REPL colon-commands.
@@ -588,27 +666,61 @@ impl Completer for SkotchCompleter {
             return self.complete_command(line, pos);
         }
 
-        // 2) Check for dot-completion (member access).
+        // 2) Extract the simple word at cursor (stops at dots).
         let (word, word_start) = extract_word_before(line, pos);
 
+        // 3) Check for dot context.
         if word_start > 0 && line.as_bytes()[word_start - 1] == b'.' {
             let dot_pos = word_start - 1;
-
-            // Named receiver: `myVar.prefix`
-            let (recv_name, _) = extract_word_before(line, dot_pos);
-            if !recv_name.is_empty() {
-                if let Some(rtype) = self.resolve_type(&recv_name) {
-                    return self.complete_members(&rtype, &word, pos, word_start);
-                }
-            }
 
             // String literal receiver: `"hello".prefix`
             if dot_pos > 0 && line.as_bytes()[dot_pos - 1] == b'"' {
                 return self.complete_members("kotlin.String", &word, pos, word_start);
             }
+
+            // Walk back through dots + identifiers to get the full
+            // receiver path (e.g. `java.util` from `java.util.Hash`).
+            let (recv, recv_start) = extract_dotted_word_before(line, dot_pos);
+
+            if !recv.is_empty() {
+                // a) Simple variable member access: `myVar.method`
+                if !recv.contains('.') {
+                    if let Some(rtype) = self.resolve_type(&recv) {
+                        return self.complete_members(&rtype, &word, pos, word_start);
+                    }
+                }
+
+                // b) Single uppercase name — try as class (static members):
+                //    `System.exit`, `Math.abs`
+                if !recv.contains('.') && recv.starts_with(|c: char| c.is_uppercase()) {
+                    let members = self.complete_members(&recv, &word, pos, word_start);
+                    if !members.is_empty() {
+                        return members;
+                    }
+                }
+
+                // c) Qualified package / class name: `java.util.Hash`
+                let full_prefix = if word.is_empty() {
+                    format!("{recv}.")
+                } else {
+                    format!("{recv}.{word}")
+                };
+                let qualified = self.complete_qualified(&full_prefix, pos, recv_start);
+                if !qualified.is_empty() {
+                    return qualified;
+                }
+
+                // d) FQN class member access: `java.lang.String.method`
+                if recv.contains('.') {
+                    let last_seg = recv.rsplit('.').next().unwrap_or("");
+                    if last_seg.starts_with(|c: char| c.is_uppercase()) {
+                        return self.complete_members(&recv, &word, pos, word_start);
+                    }
+                }
+            }
         }
 
-        // 3) Regular identifier completion.
+        // 4) Regular identifier completion.
         if word.is_empty() {
             return Vec::new();
         }
@@ -845,6 +957,52 @@ impl SkotchCompleter {
         members
     }
 
+    // ── Qualified name completion ────────────────────────────────────
+
+    /// Complete a dotted package / class prefix like `java.util.Hash`.
+    ///
+    /// Matches against the dynamically discovered FQN class list
+    /// (populated from JDK jmods/rt.jar at startup plus any user-added
+    /// classpath entries). For each match, extracts the next path
+    /// segment so that `java.` yields `java.lang`, `java.util`, …
+    /// and `java.util.` yields `java.util.List`, `java.util.HashMap`, …
+    fn complete_qualified(
+        &self,
+        dotted_prefix: &str,
+        pos: usize,
+        span_start: usize,
+    ) -> Vec<Suggestion> {
+        let lc = dotted_prefix.to_lowercase();
+        let mut seen = std::collections::HashSet::new();
+        let mut suggestions = Vec::new();
+
+        let ctx = self.ctx.lock().unwrap();
+
+        for fqn in ctx.extra_fqn_classes.iter().map(|s| s.as_str()) {
+            if !fqn.to_lowercase().starts_with(&lc) || fqn.len() <= dotted_prefix.len() {
+                continue;
+            }
+            // Extract the next segment after the prefix.
+            let rest = &fqn[dotted_prefix.len()..];
+            let value = match rest.find('.') {
+                Some(d) => &fqn[..dotted_prefix.len() + d], // package
+                None => fqn,                                // leaf class
+            };
+            if seen.insert(value.to_string()) {
+                let is_class = !rest.contains('.');
+                suggestions.push(Suggestion {
+                    value: value.to_string(),
+                    description: Some(if is_class { "class" } else { "package" }.into()),
+                    span: Span::new(span_start, pos),
+                    ..Default::default()
+                });
+            }
+        }
+
+        suggestions.sort_by(|a, b| a.value.cmp(&b.value));
+        suggestions
+    }
+
     // ── Type resolution ──────────────────────────────────────────────
 
     /// Resolve a receiver name to its Kotlin type.
@@ -1015,11 +1173,27 @@ fn infer_type_from_rhs(rhs: &str) -> Option<String> {
 // ── Misc helpers ─────────────────────────────────────────────────────
 
 /// Extract the identifier word ending at `pos` (walking backwards).
+/// Stops at dots, whitespace, and other non-identifier characters.
 fn extract_word_before(line: &str, pos: usize) -> (String, usize) {
     let bytes = line.as_bytes();
     let mut start = pos;
     while start > 0 && is_ident_char(bytes[start - 1]) {
         start -= 1;
+    }
+    (line[start..pos].to_string(), start)
+}
+
+/// Like [`extract_word_before`] but also walks through dots, so
+/// `java.util` is extracted as a single token from `val x = java.util`.
+fn extract_dotted_word_before(line: &str, pos: usize) -> (String, usize) {
+    let bytes = line.as_bytes();
+    let mut start = pos;
+    while start > 0 && (is_ident_char(bytes[start - 1]) || bytes[start - 1] == b'.') {
+        start -= 1;
+    }
+    // Trim a leading dot if present (e.g. from `.method` after a literal).
+    if start < pos && bytes[start] == b'.' {
+        start += 1;
     }
     (line[start..pos].to_string(), start)
 }
@@ -1183,6 +1357,118 @@ mod tests {
         let (w, s) = extract_word_before("println(myVar.toStr", 19);
         assert_eq!(w, "toStr");
         assert_eq!(s, 14);
+    }
+
+    #[test]
+    fn extract_dotted_basic() {
+        // `java.util` extracted as a single dotted token.
+        let (w, s) = extract_dotted_word_before("java.util", 9);
+        assert_eq!(w, "java.util");
+        assert_eq!(s, 0);
+    }
+
+    #[test]
+    fn extract_dotted_after_space() {
+        // Only the dotted part after the space.
+        let (w, s) = extract_dotted_word_before("val x = java.util", 17);
+        assert_eq!(w, "java.util");
+        assert_eq!(s, 8);
+    }
+
+    #[test]
+    fn extract_dotted_strips_leading_dot() {
+        // After a non-identifier like `"hello".`, the leading dot
+        // should be stripped so we don't return `.method`.
+        let (w, s) = extract_dotted_word_before("\"hello\".", 8);
+        assert_eq!(w, "");
+        assert_eq!(s, 8);
+    }
+
+    /// Build a completer pre-seeded with FQN class names so the
+    /// qualified-completion tests don't depend on a JVM.
+    fn seeded_completer() -> SkotchCompleter {
+        let mut ctx = CompletionCtx::new();
+        ctx.add_extra_classes(vec![
+            "java.lang.String".into(),
+            "java.lang.System".into(),
+            "java.lang.StringBuilder".into(),
+            "java.lang.Integer".into(),
+            "java.lang.Object".into(),
+            "java.util.List".into(),
+            "java.util.HashMap".into(),
+            "java.util.HashSet".into(),
+            "java.util.concurrent.Future".into(),
+            "java.util.stream.Stream".into(),
+            "java.io.File".into(),
+            "java.net.URL".into(),
+            "java.time.Instant".into(),
+        ]);
+        SkotchCompleter {
+            ctx: Arc::new(Mutex::new(ctx)),
+        }
+    }
+
+    #[test]
+    fn qualified_completion_java_dot() {
+        let mut c = seeded_completer();
+        let results = c.complete("java.", 5);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(
+            values.contains(&"java.lang"),
+            "expected java.lang in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.util"),
+            "expected java.util in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.io"),
+            "expected java.io in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.net"),
+            "expected java.net in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.time"),
+            "expected java.time in {values:?}"
+        );
+    }
+
+    #[test]
+    fn qualified_completion_java_util_dot() {
+        let mut c = seeded_completer();
+        let results = c.complete("java.util.", 10);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(
+            values.contains(&"java.util.HashMap"),
+            "expected HashMap in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.util.List"),
+            "expected List in {values:?}"
+        );
+        // Sub-packages should also appear.
+        assert!(
+            values.contains(&"java.util.concurrent"),
+            "expected concurrent in {values:?}"
+        );
+        assert!(
+            values.contains(&"java.util.stream"),
+            "expected stream in {values:?}"
+        );
+    }
+
+    #[test]
+    fn qualified_completion_prefix_filter() {
+        let mut c = seeded_completer();
+        let results = c.complete("java.lang.S", 11);
+        let values: Vec<&str> = results.iter().map(|s| s.value.as_str()).collect();
+        assert!(values.contains(&"java.lang.String"), "{values:?}");
+        assert!(values.contains(&"java.lang.System"), "{values:?}");
+        assert!(values.contains(&"java.lang.StringBuilder"), "{values:?}");
+        // Integer should NOT appear.
+        assert!(!values.contains(&"java.lang.Integer"), "{values:?}");
     }
 
     #[test]
