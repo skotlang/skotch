@@ -131,7 +131,7 @@ indicatif    = "0.17"
 
 # incremental computation + parallelism
 salsa        = "0.26"
-rayon        = "1.10"
+rayon        = "1.12"
 blake3       = "1"
 
 # xtask

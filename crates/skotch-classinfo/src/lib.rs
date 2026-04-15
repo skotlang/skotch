@@ -325,10 +325,21 @@ pub fn find_kotlin_lib_dir() -> io::Result<PathBuf> {
         "kotlinc"
     };
     if let Ok(kotlinc_path) = which::which(compiler_name) {
-        // Resolve the ultimate symlink destination.
-        if let Ok(resolved) = std::fs::canonicalize(&kotlinc_path) {
+        // Try both the original path and the canonicalized (symlink-resolved)
+        // path. On Windows, canonicalize prepends \\?\ which can break
+        // downstream path operations, so we try the original first.
+        let candidates: Vec<PathBuf> = {
+            let mut v = vec![kotlinc_path.clone()];
+            if let Ok(resolved) = std::fs::canonicalize(&kotlinc_path) {
+                if resolved != kotlinc_path {
+                    v.push(resolved);
+                }
+            }
+            v
+        };
+        for candidate in &candidates {
             // kotlinc is typically at $KOTLIN_HOME/bin/kotlinc
-            if let Some(bin) = resolved.parent() {
+            if let Some(bin) = candidate.parent() {
                 if let Some(home) = bin.parent() {
                     let lib = home.join("lib");
                     if lib.join("kotlin-stdlib.jar").exists() {

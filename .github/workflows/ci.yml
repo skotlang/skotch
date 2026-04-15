@@ -18,8 +18,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ─── Format check ────────────────────────────────────────────────────
-  # Cheap and fast — runs on Linux only.
   fmt:
     name: rustfmt
     runs-on: ubuntu-latest
@@ -30,9 +28,6 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
-  # ─── Clippy ──────────────────────────────────────────────────────────
-  # Lints with -D warnings (set via RUSTFLAGS above). Linux only —
-  # clippy results are platform-independent for our pure-Rust codebase.
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -44,11 +39,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets
 
-  # ─── Build + test matrix ─────────────────────────────────────────────
-  # The interesting one. Builds the full workspace and runs every test
-  # on Linux, macOS (arm64), and Windows. The skotch front-end and all
-  # backends are pure Rust with no host dependencies, so the matrix
-  # should be uniformly green.
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -93,12 +83,6 @@ jobs:
           test -s smoke/hello.klib
           test -s smoke/hello.ll
 
-  # ─── Release-mode test ───────────────────────────────────────────────
-  # The shipping `skotch` binary is built in release mode, and the
-  # `tests/no_external_compiler.rs` test only meaningfully greps a
-  # release binary (debug builds are full of panic strings that may
-  # contain forbidden substrings). Run that test specifically against
-  # the release binary on each platform.
   test-release:
     name: test --release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

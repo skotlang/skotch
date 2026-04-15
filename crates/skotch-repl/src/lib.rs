@@ -82,24 +82,29 @@ fn load_kotlin_stdlib(jvm: &EmbeddedJvm) {
         Ok(lib_dir) => {
             let stdlib = lib_dir.join("kotlin-stdlib.jar");
             if stdlib.exists() {
-                // Best effort: on Java 9+ the system class loader is
-                // not a URLClassLoader, so `add_jar_to_classpath`
-                // will fail. That's fine — `skotch-jvm::create_jvm`
-                // already puts kotlin-stdlib.jar on the JVM's
-                // startup classpath via `-Djava.class.path=`, so no
-                // runtime injection is required.
-                let _ = jvm.add_jar_to_classpath(&stdlib);
+                if let Err(e) = jvm.add_jar_to_classpath(&stdlib) {
+                    // On Java 9+ the system class loader is not a
+                    // URLClassLoader, so this fails. That's expected —
+                    // `skotch-jvm::create_jvm` already puts
+                    // kotlin-stdlib.jar on the startup classpath via
+                    // `-Djava.class.path=`.
+                    let _ = e;
+                }
             } else {
                 eprintln!(
-                    "  warning: kotlin-stdlib.jar not found at {}",
+                    "error: kotlin-stdlib.jar not found at {}\n  \
+                     Lambdas, collections, and other stdlib features will not work.\n  \
+                     hint: install Kotlin or set KOTLIN_HOME",
                     stdlib.display()
                 );
             }
         }
-        Err(e) => {
+        Err(_) => {
             eprintln!(
-                "  warning: could not locate kotlin-stdlib.jar: {e}\n  \
-                 hint: install Kotlin (brew install kotlin) or set KOTLIN_HOME"
+                "error: could not locate kotlin-stdlib.jar\n  \
+                 Lambdas, collections, and other stdlib features will not work.\n  \
+                 hint: install Kotlin (brew install kotlin / choco install kotlin),\n  \
+                 or set KOTLIN_HOME, or add kotlin-stdlib.jar to CLASSPATH"
             );
         }
     }

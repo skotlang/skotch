@@ -71,10 +71,30 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
 
     // Locate kotlin-stdlib.jar so classes that reference
     // kotlin.collections.CollectionsKt (e.g. listOf) can resolve at runtime.
-    let kotlin_stdlib: Option<std::path::PathBuf> = skotch_classinfo::find_kotlin_lib_dir()
-        .ok()
-        .map(|d| d.join("kotlin-stdlib.jar"))
-        .filter(|p| p.exists());
+    let kotlin_stdlib: Option<std::path::PathBuf> = match skotch_classinfo::find_kotlin_lib_dir() {
+        Ok(d) => {
+            let jar = d.join("kotlin-stdlib.jar");
+            if jar.exists() {
+                eprintln!("  kotlin-stdlib: {}", jar.display());
+                Some(jar)
+            } else {
+                eprintln!(
+                    "[warn] kotlin-stdlib.jar not found at {} — \
+                     lambda/collection fixtures will fail",
+                    jar.display()
+                );
+                None
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "[warn] could not locate Kotlin stdlib: {e} — \
+                 lambda/collection fixtures will fail.\n  \
+                 hint: set KOTLIN_HOME or add kotlin-stdlib.jar to CLASSPATH"
+            );
+            None
+        }
+    };
 
     let fixtures = discover_e2e_fixtures();
     if fixtures.is_empty() {
