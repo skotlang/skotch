@@ -9,6 +9,8 @@
 //! receiver-lambda blocks (`android { ... }`) that the skotch parser
 //! cannot handle yet. The walker only extracts configuration values.
 
+pub mod version_catalog;
+
 use skotch_diagnostics::Diagnostics;
 use skotch_intern::Interner;
 use skotch_lexer::LexedFile;
@@ -30,6 +32,10 @@ pub struct ProjectModel {
     pub version: Option<String>,
     pub target: Option<BuildTarget>,
     pub main_class: Option<String>,
+    // Plugin flags — set by `plugins { }` block recognition.
+    pub is_android: bool,
+    pub is_kotlin: bool,
+    pub is_compose: bool,
     // Android-specific
     pub application_id: Option<String>,
     pub namespace: Option<String>,
@@ -246,11 +252,13 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                         if self.peek() == TokenKind::LParen {
                             self.bump();
                             if let Some(val) = self.try_consume_string() {
+                                self.project.is_kotlin = true;
                                 match val.as_str() {
                                     "jvm" | "multiplatform" => {
                                         self.project.target.get_or_insert(BuildTarget::Jvm);
                                     }
                                     "android" => {
+                                        self.project.is_android = true;
                                         self.project.target = Some(BuildTarget::Android);
                                     }
                                     _ => {}
@@ -263,9 +271,7 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                         if self.peek() == TokenKind::LParen {
                             self.bump();
                             if let Some(val) = self.try_consume_string() {
-                                if val.contains("com.android.application") {
-                                    self.project.target = Some(BuildTarget::Android);
-                                }
+                                self.apply_plugin_id(&val);
                             }
                             self.skip_past(TokenKind::RParen);
                         }
@@ -569,6 +575,31 @@ impl<'src, 'lf> Walker<'src, 'lf> {
         }
     }
 
+    // ── Plugin recognition ──────────────────────────────────────────
+
+    /// Map a `plugins { id("...") }` string to project flags and target.
+    fn apply_plugin_id(&mut self, plugin_id: &str) {
+        match plugin_id {
+            "com.android.application" | "com.android.library" => {
+                self.project.is_android = true;
+                self.project.target = Some(BuildTarget::Android);
+            }
+            "org.jetbrains.kotlin.android" => {
+                self.project.is_kotlin = true;
+                self.project.is_android = true;
+                self.project.target = Some(BuildTarget::Android);
+            }
+            "org.jetbrains.kotlin.jvm" | "org.jetbrains.kotlin.multiplatform" => {
+                self.project.is_kotlin = true;
+                self.project.target.get_or_insert(BuildTarget::Jvm);
+            }
+            "org.jetbrains.compose" | "org.jetbrains.compose.desktop" => {
+                self.project.is_compose = true;
+            }
+            _ => {}
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────
 
     fn parse_string_assign(&mut self, key: &str) -> bool {
@@ -834,5 +865,92 @@ mod tests {
         let mut interner = Interner::new();
         let parsed = parse_buildfile(src, FileId(0), &mut interner);
         assert_eq!(parsed.project.target, Some(BuildTarget::Jvm));
+    }
+
+    #[test]
+    fn plugin_flags_android_app() {
+        let src = r#"
+            plugins {
+                id("com.android.application")
+                id("org.jetbrains.kotlin.android")
+                id("org.jetbrains.compose")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed.project.is_android);
+        assert!(parsed.project.is_kotlin);
+        assert!(parsed.project.is_compose);
+        assert_eq!(parsed.project.target, Some(BuildTarget::Android));
+    }
+
+    #[test]
+    fn plugin_flags_kotlin_shorthand() {
+        let src = r#"
+            plugins {
+                kotlin("android")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed.project.is_android);
+        assert!(parsed.project.is_kotlin);
+        assert_eq!(parsed.project.target, Some(BuildTarget::Android));
+    }
+
+    #[test]
+    fn plugin_flags_jvm_only() {
+        let src = r#"
+            plugins {
+                id("org.jetbrains.kotlin.jvm")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(!parsed.project.is_android);
+        assert!(parsed.project.is_kotlin);
+        assert!(!parsed.project.is_compose);
+        assert_eq!(parsed.project.target, Some(BuildTarget::Jvm));
+    }
+
+    #[test]
+    fn plugin_flags_kotlin_jvm_shorthand() {
+        let src = r#"
+            plugins {
+                kotlin("jvm")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(!parsed.project.is_android);
+        assert!(parsed.project.is_kotlin);
+        assert_eq!(parsed.project.target, Some(BuildTarget::Jvm));
+    }
+
+    #[test]
+    fn plugin_flags_compose_desktop() {
+        let src = r#"
+            plugins {
+                id("org.jetbrains.compose.desktop")
+                id("org.jetbrains.kotlin.jvm")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed.project.is_compose);
+        assert!(parsed.project.is_kotlin);
+        assert!(!parsed.project.is_android);
+    }
+
+    #[test]
+    fn plugin_flags_default_false() {
+        let src = r#"
+            group = "com.example"
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(!parsed.project.is_android);
+        assert!(!parsed.project.is_kotlin);
+        assert!(!parsed.project.is_compose);
     }
 }

@@ -2021,6 +2021,56 @@ fn lower_expr(
                 }
             }
 
+            // Auto-unbox Ty::Any operands for arithmetic: Object → Integer.intValue()
+            let lhs_ty = lhs_ty.clone();
+            let rhs_ty = rhs_ty.clone();
+            let needs_unbox = matches!(
+                op,
+                BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::Div
+                    | BinOp::Mod
+                    | BinOp::Lt
+                    | BinOp::Gt
+                    | BinOp::LtEq
+                    | BinOp::GtEq
+            ) && (matches!(lhs_ty, Ty::Any) || matches!(rhs_ty, Ty::Any));
+            let (l, lhs_ty) = if needs_unbox && matches!(lhs_ty, Ty::Any) {
+                let unboxed = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: unboxed,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/lang/Integer".to_string(),
+                            method_name: "intValue".to_string(),
+                            descriptor: "()I".to_string(),
+                        },
+                        args: vec![l],
+                    },
+                });
+                (unboxed, Ty::Int)
+            } else {
+                (l, lhs_ty)
+            };
+            let (r, rhs_ty) = if needs_unbox && matches!(rhs_ty, Ty::Any) {
+                let unboxed = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: unboxed,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "java/lang/Integer".to_string(),
+                            method_name: "intValue".to_string(),
+                            descriptor: "()I".to_string(),
+                        },
+                        args: vec![r],
+                    },
+                });
+                (unboxed, Ty::Int)
+            } else {
+                (r, rhs_ty)
+            };
+
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
             let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
             let (mop, result_ty) = match op {

@@ -475,6 +475,15 @@ impl ReplState {
                 self.local_decls.push(line.to_string());
                 Ok(String::new())
             }
+            DeclKind::Statement => {
+                // Statements (for, while, if, etc.) — execute inside fun main().
+                let top = self.top_decls.join("\n");
+                let locals = self.local_decls.join("\n    ");
+                let body = line.trim_end();
+                let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                let class_name = format!("ReplTurn{}Kt", self.turn);
+                compile_and_run_jni(&source, jvm, &class_name)
+            }
             DeclKind::Expr => {
                 // Expression: assign to resN, print type + value, store for future use.
                 let top = self.top_decls.join("\n");
@@ -526,7 +535,8 @@ impl ReplState {
 enum DeclKind {
     TopLevel,  // class, fun, interface, object, enum, typealias
     LocalDecl, // val, var
-    Expr,      // everything else
+    Statement, // for, while, if, try — statements that don't produce a value
+    Expr,      // everything else (expressions to be captured in resN)
 }
 
 fn classify_input(line: &str) -> DeclKind {
@@ -545,10 +555,33 @@ fn classify_input(line: &str) -> DeclKind {
             | Decl::Object(_)
             | Decl::Enum(_)
             | Decl::TypeAlias(_) => DeclKind::TopLevel,
+            Decl::Val(v) if v.is_var => DeclKind::LocalDecl,
             Decl::Val(_) => DeclKind::LocalDecl,
             Decl::Unsupported { .. } => DeclKind::Expr,
         };
     }
+
+    // Check if the line starts with a statement keyword that should
+    // execute inside fun main() without result capture.
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("for ")
+        || trimmed.starts_with("for(")
+        || trimmed.starts_with("while ")
+        || trimmed.starts_with("while(")
+        || trimmed.starts_with("do ")
+        || trimmed.starts_with("do{")
+        || trimmed.starts_with("if ")
+        || trimmed.starts_with("if(")
+        || trimmed.starts_with("when ")
+        || trimmed.starts_with("when(")
+        || trimmed.starts_with("when{")
+        || trimmed.starts_with("try ")
+        || trimmed.starts_with("try{")
+        || trimmed.starts_with("var ")
+    {
+        return DeclKind::Statement;
+    }
+
     DeclKind::Expr
 }
 

@@ -592,7 +592,12 @@ milestones:
           - "kotlinx-coroutines-core resolved and downloaded"
 
       - name: "Version catalog (libs.versions.toml)"
-        description: "Parse [versions], [libraries], [plugins]. Resolve catalog refs."
+        completed: true
+        description: >
+          Hand-rolled TOML parser for gradle/libs.versions.toml. Parses
+          [versions], [libraries], [plugins] sections. Resolves version.ref
+          lookups, module notation (group:name:version), literal versions.
+          Strips comments, skips unknown sections. 6 unit tests.
 
       - name: "AAR handling"
         description: "Extract classes.jar + res/ from .aar. Scan for type resolution."
@@ -601,7 +606,12 @@ milestones:
         description: "platform(\"compose-bom:2026.03.00\") constrains versions."
 
       - name: "Gradle plugin stubs"
-        description: "android application, kotlin android, compose plugins → internal config."
+        completed: true
+        description: >
+          Plugin declarations in build.gradle.kts mapped to internal config.
+          Recognizes: com.android.application/library, kotlin.android/jvm/multiplatform,
+          compose. Sets is_android, is_kotlin, is_compose flags on ProjectModel.
+          Handles both id("...") and kotlin("...") shorthand. 7 unit tests.
 
       - name: "Kotlin metadata emission"
         description: >
