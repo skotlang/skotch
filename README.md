@@ -361,6 +361,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Secondary constructors](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5.2 | `constructor(x: Int) : this(x, 0)` — multiple `<init>` methods, delegation chain |
 | [Property delegation](https://kotlinlang.org/spec/declarations.html#delegated-property-declaration) | §4.2 | `val x by lazy { expr }` — desugared to eager init in constructor |
 | [Interface delegation](https://kotlinlang.org/spec/declarations.html#delegated-classifier-declaration) | §4.5 | `class X : Base by b` — auto-generated forwarding methods |
+| [Package declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.1 | `package com.example` → `com/example/InputKt.class`; all class refs prefixed |
 
 ### Not yet implemented
 

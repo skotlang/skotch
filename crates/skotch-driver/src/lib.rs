@@ -240,9 +240,14 @@ fn emit_jvm(mir: &skotch_mir::MirModule, interner: &Interner, opts: &EmitOptions
         .with_context(|| format!("writing {}", opts.output.display()))?;
 
     // Write additional class files (user-defined classes) next to the main output.
+    // When a package prefix is present, `name` may contain `/` separators
+    // (e.g. `com/example/Greeter`), so we create intermediate directories.
     if let Some(parent) = opts.output.parent() {
         for (name, class_bytes) in bytes_list.iter().skip(1) {
             let path = parent.join(format!("{name}.class"));
+            if let Some(p) = path.parent() {
+                std::fs::create_dir_all(p).ok();
+            }
             std::fs::write(&path, class_bytes)
                 .with_context(|| format!("writing {}", path.display()))?;
         }
