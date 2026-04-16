@@ -1,0 +1,118 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=24
+    0000 iconst_1
+    0001 istore 1
+    0003 iconst_2
+    0004 istore 2
+    0006 iconst_3
+    0007 istore 3
+    0009 iconst_4
+    0010 istore 4
+    0012 iconst_5
+    0013 istore 5
+    0015 iconst_5
+    0016 istore 6
+    0018 iload 6
+    0020 op_0xBD
+    0021 nop
+    0022 iconst_1
+    0023 astore 7
+    0025 iconst_0
+    0026 istore 8
+    0028 iload 1
+    0030 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0033 astore 9
+    0035 aload 7
+    0037 iload 8
+    0039 aload 9
+    0041 op_0x53
+    0042 iconst_1
+    0043 istore 10
+    0045 iload 2
+    0047 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0050 astore 11
+    0052 aload 7
+    0054 iload 10
+    0056 aload 11
+    0058 op_0x53
+    0059 iconst_2
+    0060 istore 12
+    0062 iload 3
+    0064 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0067 astore 13
+    0069 aload 7
+    0071 iload 12
+    0073 aload 13
+    0075 op_0x53
+    0076 iconst_3
+    0077 istore 14
+    0079 iload 4
+    0081 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0084 astore 15
+    0086 aload 7
+    0088 iload 14
+    0090 aload 15
+    0092 op_0x53
+    0093 iconst_4
+    0094 istore 16
+    0096 iload 5
+    0098 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0101 astore 17
+    0103 aload 7
+    0105 iload 16
+    0107 aload 17
+    0109 op_0x53
+    0110 aload 7
+    0112 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0115 astore 18
+    0117 op_0xBB
+    0118 nop
+    0119 op_0x17
+    0120 op_0x59
+    0121 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0124 astore 19
+    0126 aload 18
+    0128 op_0xB9
+    0129 nop
+    0130 op_0x21
+    0131 aconst_null
+    0132 nop
+    0133 astore 20
+    0135 op_0xA7
+    0136 nop
+    0137 iconst_0
+    0138 aload 20
+    0140 op_0xB9
+    0141 nop
+    0142 op_0x27
+    0143 aconst_null
+    0144 nop
+    0145 istore 21
+    0147 iload 21
+    0149 op_0x99
+    0150 nop
+    0151 op_0x16
+    0152 aload 20
+    0154 op_0xB9
+    0155 nop
+    0156 op_0x2B
+    0157 aconst_null
+    0158 nop
+    0159 astore 22
+    0161 aload 19
+    0163 aload 22
+    0165 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
+    0168 op_0xA7
+    0169 op_0xFF
+    0170 op_0xE2
+    0171 ldc "done"
+    0173 astore 23
+    0175 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0178 aload 23
+    0180 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0183 return
+    sub_attr  StackMapTable (99 bytes)

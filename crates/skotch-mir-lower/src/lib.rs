@@ -1172,6 +1172,10 @@ fn lower_stmt(
                 ) {
                     fb.set_terminator(Terminator::ReturnValue(local));
                 }
+            } else {
+                // `return` (or `return@label`) with no value — exits the
+                // current function/lambda returning Unit/void.
+                fb.set_terminator(Terminator::Return);
             }
             true
         }
@@ -2844,6 +2848,45 @@ fn lower_expr(
                     loop_ctx,
                 ) {
                     return Some(static_call);
+                }
+
+                // Check for nested class constructor: `Outer.Nested(args)`.
+                // The parser sees this as receiver=Ident("Outer"),
+                // name="Nested". We look for a MirClass named "Outer$Nested".
+                if let Some(qname) = extract_qualified_name(receiver, interner) {
+                    let method_str = interner.resolve(method_name).to_string();
+                    let nested_class_name = format!("{}${}", qname, method_str);
+                    let is_nested = module.classes.iter().any(|c| c.name == nested_class_name);
+                    if is_nested {
+                        let mut arg_locals = Vec::new();
+                        for a in args {
+                            let id = lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            arg_locals.push(id);
+                        }
+                        let dest = fb.new_local(Ty::Class(nested_class_name.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::NewInstance(nested_class_name.clone()),
+                        });
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Constructor(nested_class_name),
+                                args: arg_locals,
+                            },
+                        });
+                        return Some(dest);
+                    }
                 }
 
                 // If try_java_static_call returned None, check if the
@@ -9008,6 +9051,7 @@ fn lower_class(
     }
 
     // Replace the stub class with the fully-lowered version.
+    let outer_name = class_name.clone();
     module.classes[class_idx] = MirClass {
         name: class_name,
         super_class,
@@ -9020,6 +9064,28 @@ fn lower_class(
         constructor: init_fn,
         secondary_constructors: mir_secondary_ctors,
     };
+
+    // Lower nested (static inner) classes. Each nested class becomes a
+    // separate top-level MirClass with a JVM-conventional mangled name:
+    // `Outer$Nested`. This is a static inner class — no reference to
+    // the outer instance.
+    for nested in &c.nested_classes {
+        let nested_name = interner.resolve(nested.name).to_string();
+        let mangled = format!("{}${}", outer_name, nested_name);
+        // Create a synthetic ClassDecl with the mangled name so
+        // lower_class produces a MirClass named "Outer$Nested".
+        let mangled_sym = interner.intern(&mangled);
+        let mut synthetic = nested.clone();
+        synthetic.name = mangled_sym;
+        lower_class(
+            &synthetic,
+            name_to_func,
+            name_to_global,
+            module,
+            interner,
+            diags,
+        );
+    }
 }
 
 fn lower_interface(

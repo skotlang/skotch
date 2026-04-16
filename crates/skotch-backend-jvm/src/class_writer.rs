@@ -2609,9 +2609,27 @@ fn load_local(
     if matches!(ty, Ty::Unit) {
         return;
     }
-    let &slot = slots
-        .get(&local.0)
-        .expect("local must be stored before being loaded");
+    // If the local was never stored (e.g. if-expression result in a
+    // branch where the then-block terminates via return/break and
+    // there is no else-block), auto-assign a slot via slot_for_ty.
+    // The JVM verifier won't reach this code path at runtime, but the
+    // bytecode must be structurally valid.
+    let slot = match slots.get(&local.0) {
+        Some(&s) => s,
+        None => {
+            // Allocate a fresh slot that doesn't collide with existing ones.
+            let s = slots.values().copied().max().map_or(0, |m| {
+                // Account for wide types: Long/Double occupy 2 slots.
+                m + if matches!(ty, Ty::Long | Ty::Double) {
+                    2
+                } else {
+                    1
+                }
+            });
+            slots.insert(local.0, s);
+            s
+        }
+    };
     let (opcode, width) = match ty {
         Ty::Int | Ty::Bool => (0x15u8, 1), // iload
         Ty::Long => (0x16, 2),             // lload (pushes 2 stack slots)

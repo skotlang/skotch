@@ -70,6 +70,9 @@ impl<'a> Parser<'a> {
     // ─── token plumbing ──────────────────────────────────────────────────
 
     fn peek_kind(&self) -> TokenKind {
+        if self.pos >= self.tokens.len() {
+            return TokenKind::Eof;
+        }
         self.tokens[self.pos].kind
     }
 
@@ -512,6 +515,7 @@ impl<'a> Parser<'a> {
         let mut companion_methods = Vec::new();
         let mut init_blocks = Vec::new();
         let mut secondary_constructors = Vec::new();
+        let mut nested_classes = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
             loop {
@@ -568,6 +572,10 @@ impl<'a> Parser<'a> {
                     }
                     TokenKind::KwConstructor => {
                         secondary_constructors.push(self.parse_secondary_constructor());
+                    }
+                    TokenKind::KwClass => {
+                        // Nested (static inner) class declaration.
+                        nested_classes.push(self.parse_class_decl());
                     }
                     TokenKind::Ident => {
                         // Check for `companion object { ... }`.
@@ -632,6 +640,7 @@ impl<'a> Parser<'a> {
             companion_methods,
             init_blocks,
             secondary_constructors,
+            nested_classes,
             span: kw.merge(name_span),
         }
     }
@@ -1026,6 +1035,7 @@ impl<'a> Parser<'a> {
                 Some(Block {
                     stmts: vec![Stmt::Return {
                         value: Some(expr),
+                        label: None,
                         span: sp,
                     }],
                     span: sp,
@@ -1269,6 +1279,7 @@ impl<'a> Parser<'a> {
             Block {
                 stmts: vec![Stmt::Return {
                     value: Some(expr),
+                    label: None,
                     span,
                 }],
                 span,
@@ -1638,9 +1649,32 @@ impl<'a> Parser<'a> {
             TokenKind::KwReturn => {
                 let kw = self.peek_span();
                 self.bump();
+                // Labeled return: `return@forEach` — exits the lambda, not
+                // the enclosing function.
+                let label = if self.peek_kind() == TokenKind::At {
+                    self.bump(); // consume `@`
+                    if self.peek_kind() == TokenKind::Ident {
+                        let idx = self.pos;
+                        self.bump();
+                        Some(self.intern_ident_at(idx))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                // A `return` (or `return@label`) with no value ends at a
+                // newline, semicolon, `}`, or EOF.  We must peek BEFORE
+                // skipping trivia, because `skip_trivia` eats the very
+                // newline we need to detect.
+                let at_line_end = matches!(
+                    self.peek_kind(),
+                    TokenKind::Newline | TokenKind::Semi | TokenKind::RBrace | TokenKind::Eof
+                );
                 self.skip_trivia();
-                // A naked `return` ends at a `}` or `Newline` (already skipped).
-                let value = if matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+                let value = if at_line_end
+                    || matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof)
+                {
                     None
                 } else {
                     Some(self.parse_expr())
@@ -1649,7 +1683,7 @@ impl<'a> Parser<'a> {
                     Some(v) => kw.merge(v.span()),
                     None => kw,
                 };
-                Stmt::Return { value, span }
+                Stmt::Return { value, label, span }
             }
             TokenKind::KwFun => {
                 // Local function declaration inside a block.
@@ -2915,6 +2949,7 @@ impl<'a> Parser<'a> {
                 let expr = std::mem::replace(e, Expr::IntLit(0, span));
                 *last = Stmt::Return {
                     value: Some(expr),
+                    label: None,
                     span,
                 };
             }

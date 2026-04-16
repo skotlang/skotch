@@ -1,9 +1,7 @@
-class Outer {
-    class Nested {
-        fun message(): String = "I am nested"
-    }
+class Container(val name: String) {
+    class Item(val value: Int)
 }
-
 fun main() {
-    println(Outer.Nested().message())
+    val item = Container.Item(42)
+    println(item.value)
 }

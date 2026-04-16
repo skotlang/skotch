@@ -195,6 +195,8 @@ pub struct ClassDecl {
     pub init_blocks: Vec<Block>,
     /// Secondary constructors: `constructor(params) : this(args) { body }`.
     pub secondary_constructors: Vec<SecondaryConstructor>,
+    /// Nested (static inner) classes: `class Outer { class Nested { } }`.
+    pub nested_classes: Vec<ClassDecl>,
     pub span: Span,
 }
 
@@ -282,8 +284,14 @@ pub enum Stmt {
     Expr(Expr),
     /// A local `val` or `var` declaration.
     Val(ValDecl),
-    /// `return [expr]`.
-    Return { value: Option<Expr>, span: Span },
+    /// `return [expr]` or `return@label [expr]`.
+    Return {
+        value: Option<Expr>,
+        /// Labeled return: `return@forEach` exits the lambda, not the
+        /// enclosing function.
+        label: Option<Symbol>,
+        span: Span,
+    },
     /// Local function declaration inside a block.
     LocalFun(FunDecl),
     /// `break` — exits the innermost loop.

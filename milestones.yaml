@@ -505,6 +505,7 @@ milestones:
 
     features:
       - name: "Nested classes"
+        completed: true
         description: >
           class Outer { class Nested { } } — Nested is a static inner
           class on JVM. No reference to Outer instance.
@@ -570,6 +571,7 @@ milestones:
           Fix the MIR lowering to iterate all statements.
 
       - name: "Labeled returns"
+        completed: true
         description: >
           return@forEach — return from the lambda, not the enclosing
           function. Needs label tracking in the MIR lowering.

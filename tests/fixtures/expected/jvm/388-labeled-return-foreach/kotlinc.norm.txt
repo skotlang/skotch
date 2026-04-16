@@ -1,0 +1,101 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=6
+    0000 iconst_5
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_5
+    0004 op_0x4B
+    0005 op_0x2A
+    0006 iconst_0
+    0007 iconst_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 op_0x53
+    0012 op_0x2A
+    0013 iconst_1
+    0014 iconst_2
+    0015 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0018 op_0x53
+    0019 op_0x2A
+    0020 iconst_2
+    0021 iconst_3
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 op_0x53
+    0026 op_0x2A
+    0027 iconst_3
+    0028 iconst_4
+    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0032 op_0x53
+    0033 op_0x2A
+    0034 iconst_4
+    0035 iconst_5
+    0036 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0039 op_0x53
+    0040 op_0x2A
+    0041 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0044 op_0xC0
+    0045 nop
+    0046 op_0x14
+    0047 op_0x4B
+    0048 iconst_0
+    0049 op_0x3C
+    0050 op_0x2A
+    0051 op_0xB9
+    0052 nop
+    0053 op_0x18
+    0054 aconst_null
+    0055 nop
+    0056 op_0x4D
+    0057 op_0x2C
+    0058 op_0xB9
+    0059 nop
+    0060 op_0x1E
+    0061 aconst_null
+    0062 nop
+    0063 op_0x99
+    0064 nop
+    0065 op_0x29
+    0066 op_0x2C
+    0067 op_0xB9
+    0068 nop
+    0069 op_0x22
+    0070 aconst_null
+    0071 nop
+    0072 op_0x4E
+    0073 op_0x2D
+    0074 op_0xC0
+    0075 nop
+    0076 op_0x24
+    0077 invokevirtual Method(java/lang/Number.intValue:()I)
+    0080 istore 4
+    0082 iconst_0
+    0083 istore 5
+    0085 iload 4
+    0087 iconst_3
+    0088 op_0x9F
+    0089 nop
+    0090 op_0x0C
+    0091 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0094 iload 4
+    0096 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0099 nop
+    0100 nop
+    0101 op_0xA7
+    0102 op_0xFF
+    0103 op_0xD4
+    0104 nop
+    0105 ldc "done"
+    0107 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0110 op_0x5F
+    0111 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0114 return
+    sub_attr  StackMapTable (23 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    SourceDebugExtension (199 bytes)
+class_attr    RuntimeInvisibleAnnotations (14 bytes)

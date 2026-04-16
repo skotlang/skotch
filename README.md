@@ -377,6 +377,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Try as expression](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `val x = try { f() } catch (e: Exception) { default }` |
 | [Enum values/valueOf](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | §4.5.7 | `Color.values()` returns list of entries; `Color.valueOf("RED")` |
 | [Multi-line dot chains](https://kotlinlang.org/spec/syntax-and-grammar.html) | §1 | `list\n    .map { }\n    .filter { }` — newline before `.` continues expression |
+| [Nested classes](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | `class Outer { class Nested { } }` — static inner class, `Outer$Nested` on JVM |
+| [Labeled returns](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | `return@forEach` — return from lambda, not enclosing function |
 
 ### Not yet implemented
 
