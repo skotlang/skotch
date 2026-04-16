@@ -90,6 +90,17 @@ pub struct EmitOptions {
 /// implementation handles the JVM target end-to-end and stubs the
 /// others (calls into the stub backend crates which `unimplemented!()`).
 pub fn emit(opts: &EmitOptions) -> Result<()> {
+    emit_inner(opts, true)
+}
+
+/// Like [`emit`] but suppresses diagnostic output to stderr.
+/// Used by the REPL for speculative compilation attempts that are
+/// expected to fail (e.g. trying `getClass()` on a primitive).
+pub fn emit_quiet(opts: &EmitOptions) -> Result<()> {
+    emit_inner(opts, false)
+}
+
+fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
     let source = std::fs::read_to_string(&opts.input)
         .with_context(|| format!("reading {}", opts.input.display()))?;
 
@@ -107,7 +118,9 @@ pub fn emit(opts: &EmitOptions) -> Result<()> {
     let mir = lower_file(&ast, &resolved, &typed, &mut interner, &mut diags, &wrapper);
 
     if diags.has_errors() {
-        eprint!("{}", render(&diags, &sm));
+        if print_diags {
+            eprint!("{}", render(&diags, &sm));
+        }
         return Err(anyhow!("compilation failed with {} error(s)", diags.len()));
     }
 
@@ -121,7 +134,7 @@ pub fn emit(opts: &EmitOptions) -> Result<()> {
     }
 
     // Drain any non-error diagnostics (warnings, notes).
-    if !diags.is_empty() {
+    if print_diags && !diags.is_empty() {
         eprint!("{}", render(&diags, &sm));
     }
     Ok(())

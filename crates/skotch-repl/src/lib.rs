@@ -799,7 +799,11 @@ impl ReplState {
                 );
                 let class_name = format!("ReplTurn{}Kt", self.turn);
 
-                match compile_and_run_jni(&source, jvm, &class_name) {
+                // The getClass() call may fail for primitive types
+                // (Int, Boolean, etc.) — that's expected. Suppress
+                // the compiler's diagnostic output for this speculative
+                // attempt so the user never sees the transient error.
+                match compile_and_run_jni_quiet(&source, jvm, &class_name) {
                     Ok(stdout) => {
                         // First line: "class java.net.URI" (from getClass().toString())
                         // Remaining lines: the value's toString() output.
@@ -990,6 +994,15 @@ fn wrap_script(source: &str) -> String {
 /// Compile a synthetic source through `skotch-driver`'s JVM target,
 /// returning the path to the produced `.class` file.
 fn compile_only(source: &str, class_name: &str) -> Result<PathBuf> {
+    compile_only_inner(source, class_name, false)
+}
+
+/// Like [`compile_only`] but suppresses compiler diagnostics on stderr.
+fn compile_only_quiet(source: &str, class_name: &str) -> Result<PathBuf> {
+    compile_only_inner(source, class_name, true)
+}
+
+fn compile_only_inner(source: &str, class_name: &str, quiet: bool) -> Result<PathBuf> {
     let stem = class_name.strip_suffix("Kt").unwrap_or(class_name);
     let tmp = unique_tempdir("skotch-repl");
     std::fs::create_dir_all(&tmp).context("creating REPL temp dir")?;
@@ -1000,19 +1013,42 @@ fn compile_only(source: &str, class_name: &str) -> Result<PathBuf> {
     let kt_path = tmp.join(format!("{lowered_stem}.kt"));
     std::fs::write(&kt_path, source).context("writing REPL temp source")?;
     let out_class = tmp.join(format!("{stem}Kt.class"));
-    emit(&EmitOptions {
+    let opts = EmitOptions {
         input: kt_path,
         output: out_class.clone(),
         target: Target::Jvm,
         norm_out: None,
-    })?;
+    };
+    if quiet {
+        skotch_driver::emit_quiet(&opts)?;
+    } else {
+        emit(&opts)?;
+    }
     Ok(out_class)
 }
 
 /// Compile a synthetic source, then run its `main` method inside
 /// the in-process JVM via JNI. Returns captured stdout.
 fn compile_and_run_jni(source: &str, jvm: &EmbeddedJvm, class_name: &str) -> Result<String> {
-    let class_path = compile_only(source, class_name)?;
+    compile_and_run_jni_inner(source, jvm, class_name, false)
+}
+
+/// Like [`compile_and_run_jni`] but suppresses compiler diagnostics.
+fn compile_and_run_jni_quiet(source: &str, jvm: &EmbeddedJvm, class_name: &str) -> Result<String> {
+    compile_and_run_jni_inner(source, jvm, class_name, true)
+}
+
+fn compile_and_run_jni_inner(
+    source: &str,
+    jvm: &EmbeddedJvm,
+    class_name: &str,
+    quiet: bool,
+) -> Result<String> {
+    let class_path = if quiet {
+        compile_only_quiet(source, class_name)?
+    } else {
+        compile_only(source, class_name)?
+    };
     let class_dir = class_path
         .parent()
         .ok_or_else(|| anyhow!("class file has no parent directory"))?;
