@@ -85,6 +85,9 @@ impl<'a> Parser<'a> {
     }
 
     fn peek_span(&self) -> Span {
+        if self.pos >= self.tokens.len() {
+            return Span::new(FileId(0), 0, 0);
+        }
         self.tokens[self.pos].span
     }
 
@@ -142,6 +145,9 @@ impl<'a> Parser<'a> {
 
     /// Consume one token regardless of kind.
     fn bump(&mut self) -> Token {
+        if self.pos >= self.tokens.len() {
+            return Token::new(TokenKind::Eof, Span::new(FileId(0), 0, 0));
+        }
         let t = self.tokens[self.pos];
         self.pos += 1;
         t

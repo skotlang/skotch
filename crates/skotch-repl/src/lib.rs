@@ -931,6 +931,7 @@ fn parse_type_and_value(stdout: &str, expr: &str) -> (String, String) {
 /// Map a JVM class name to a Kotlin-idiomatic display name.
 fn jvm_class_to_kotlin_name(jvm_class: &str) -> String {
     match jvm_class {
+        // Primitives / boxed primitives.
         "java.lang.Integer" | "int" => "kotlin.Int".to_string(),
         "java.lang.Long" | "long" => "kotlin.Long".to_string(),
         "java.lang.Double" | "double" => "kotlin.Double".to_string(),
@@ -942,7 +943,67 @@ fn jvm_class_to_kotlin_name(jvm_class: &str) -> String {
         "java.lang.String" => "kotlin.String".to_string(),
         "java.lang.Object" => "kotlin.Any".to_string(),
         "kotlin.Unit" => "kotlin.Unit".to_string(),
-        _ => jvm_class.to_string(),
+        "kotlin.Pair" => "kotlin.Pair".to_string(),
+        "kotlin.Triple" => "kotlin.Triple".to_string(),
+
+        // List implementations → kotlin.collections.List
+        "java.util.Arrays$ArrayList"      // listOf(...)
+        | "java.util.Collections$UnmodifiableList"
+        | "java.util.Collections$UnmodifiableRandomAccessList"
+        | "java.util.Collections$SingletonList"
+        | "java.util.Collections$EmptyList"
+        | "kotlin.collections.EmptyList" => "kotlin.collections.List".to_string(),
+
+        // Mutable list implementations → kotlin.collections.MutableList
+        "java.util.ArrayList"
+        | "java.util.LinkedList"
+        | "java.util.Vector"
+        | "java.util.concurrent.CopyOnWriteArrayList" => {
+            "kotlin.collections.MutableList".to_string()
+        }
+
+        // Set implementations → kotlin.collections.Set
+        "java.util.Collections$UnmodifiableSet"
+        | "java.util.Collections$SingletonSet"
+        | "java.util.Collections$EmptySet"
+        | "kotlin.collections.EmptySet" => "kotlin.collections.Set".to_string(),
+
+        // Mutable set implementations → kotlin.collections.MutableSet
+        "java.util.HashSet"
+        | "java.util.LinkedHashSet"
+        | "java.util.TreeSet" => "kotlin.collections.MutableSet".to_string(),
+
+        // Map implementations → kotlin.collections.Map
+        "java.util.Collections$UnmodifiableMap"
+        | "java.util.Collections$SingletonMap"
+        | "java.util.Collections$EmptyMap"
+        | "kotlin.collections.EmptyMap" => "kotlin.collections.Map".to_string(),
+
+        // Mutable map implementations → kotlin.collections.MutableMap
+        "java.util.HashMap"
+        | "java.util.LinkedHashMap"
+        | "java.util.TreeMap"
+        | "java.util.concurrent.ConcurrentHashMap" => {
+            "kotlin.collections.MutableMap".to_string()
+        }
+
+        // Arrays.
+        "[I" => "kotlin.IntArray".to_string(),
+        "[J" => "kotlin.LongArray".to_string(),
+        "[D" => "kotlin.DoubleArray".to_string(),
+        "[F" => "kotlin.FloatArray".to_string(),
+        "[Z" => "kotlin.BooleanArray".to_string(),
+        "[B" => "kotlin.ByteArray".to_string(),
+        "[S" => "kotlin.ShortArray".to_string(),
+        "[C" => "kotlin.CharArray".to_string(),
+
+        _ => {
+            // JVM array types: "[Ljava.lang.String;" → "kotlin.Array"
+            if jvm_class.starts_with("[L") {
+                return "kotlin.Array".to_string();
+            }
+            jvm_class.to_string()
+        }
     }
 }
 
