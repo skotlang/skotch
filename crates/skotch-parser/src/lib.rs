@@ -2507,6 +2507,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::KwIf => self.parse_if_expr(),
             TokenKind::KwWhen => self.parse_when_expr(),
+            TokenKind::KwTry => self.parse_try_expr(),
             TokenKind::KwThrow => self.parse_throw_expr(),
             TokenKind::StringStart => self.parse_string_literal(),
             TokenKind::LBrace => self.parse_lambda_expr(),

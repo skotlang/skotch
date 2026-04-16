@@ -2,6 +2,105 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
+method        Coin$valueOf (Ljava/lang/String;)LCoin; 0x0009
+  code        max_stack=5 max_locals=14
+    0000 ldc "PENNY"
+    0002 astore 1
+    0004 aload 0
+    0006 aload 1
+    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0011 istore 2
+    0013 iload 2
+    0015 op_0x99
+    0016 nop
+    0017 op_0x42
+    0018 op_0xA7
+    0019 nop
+    0020 op_0x59
+    0021 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0024 astore 3
+    0026 aload 3
+    0028 op_0xB0
+    0029 ldc "QUARTER"
+    0031 astore 4
+    0033 aload 0
+    0035 aload 4
+    0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0040 istore 5
+    0042 iload 5
+    0044 op_0x99
+    0045 op_0xFF
+    0046 op_0xE9
+    0047 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0050 astore 6
+    0052 aload 6
+    0054 op_0xB0
+    0055 ldc "DIME"
+    0057 astore 7
+    0059 aload 0
+    0061 aload 7
+    0063 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0066 istore 8
+    0068 iload 8
+    0070 op_0x99
+    0071 op_0xFF
+    0072 op_0xD7
+    0073 invokestatic Method(InputKt.DIME:()LCoin;)
+    0076 astore 9
+    0078 aload 9
+    0080 op_0xB0
+    0081 ldc "NICKEL"
+    0083 astore 10
+    0085 aload 0
+    0087 aload 10
+    0089 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0092 istore 11
+    0094 iload 11
+    0096 op_0x99
+    0097 op_0xFF
+    0098 op_0xD7
+    0099 invokestatic Method(InputKt.NICKEL:()LCoin;)
+    0102 astore 12
+    0104 aload 12
+    0106 op_0xB0
+    0107 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0110 astore 13
+    0112 aload 13
+    0114 op_0xB0
+    sub_attr  StackMapTable (111 bytes)
+method        Coin$values ()Ljava/util/ArrayList; 0x0009
+  code        max_stack=2 max_locals=9
+    0000 op_0xBB
+    0001 nop
+    0002 istore 89
+    0004 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0007 astore 0
+    0009 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0012 astore 1
+    0014 aload 0
+    0016 aload 1
+    0018 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0021 istore 2
+    0023 invokestatic Method(InputKt.NICKEL:()LCoin;)
+    0026 astore 3
+    0028 aload 0
+    0030 aload 3
+    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0035 istore 4
+    0037 invokestatic Method(InputKt.DIME:()LCoin;)
+    0040 astore 5
+    0042 aload 0
+    0044 aload 5
+    0046 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0049 istore 6
+    0051 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0054 astore 7
+    0056 aload 0
+    0058 aload 7
+    0060 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0063 istore 8
+    0065 aload 0
+    0067 op_0xB0
 method        DIME ()LCoin; 0x0009
   code        max_stack=4 max_locals=3
     0000 op_0xBB

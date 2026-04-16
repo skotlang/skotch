@@ -1,0 +1,4 @@
+name     = "386-try-catch-multi-stmt"
+status   = "supported"
+features = ["try-catch", "multi-statement", "println"]
+notes    = "Try block with multiple statements — all should execute, not just the first."

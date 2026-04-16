@@ -1,0 +1,4 @@
+name     = "385-try-as-expression"
+status   = "supported"
+features = ["try-catch", "expression", "val"]
+notes    = "Try-catch used as an expression — result is the last expression in the try or catch block."

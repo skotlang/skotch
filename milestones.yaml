@@ -515,6 +515,7 @@ milestones:
           reference to Outer. Access outer members via this@Outer.
 
       - name: "Enum values() and valueOf()"
+        completed: true
         description: >
           Color.values() returns Array<Color>. Color.valueOf("RED")
           returns the matching entry. Color.entries returns List<Color>.
@@ -559,9 +560,11 @@ milestones:
 
     features:
       - name: "Try as expression"
+        completed: true
         description: "val x = try { f() } catch (e: Exception) { default }"
 
       - name: "Multi-statement try-catch bodies"
+        completed: true
         description: >
           Currently only the first statement in a try block executes.
           Fix the MIR lowering to iterate all statements.
