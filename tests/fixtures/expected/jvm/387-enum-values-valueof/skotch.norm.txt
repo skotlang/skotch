@@ -3,21 +3,18 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        BLUE ()LColor; 0x0009
-  code        max_stack=4 max_locals=3
+  code        max_stack=3 max_locals=2
     0000 op_0xBB
     0001 nop
-    0002 op_0x21
+    0002 op_0x38
     0003 op_0x59
     0004 ldc "BLUE"
     0006 astore 1
-    0008 sipush 255
-    0011 istore 2
-    0013 aload 1
-    0015 iload 2
-    0017 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0020 astore 0
-    0022 aload 0
-    0024 op_0xB0
+    0008 aload 1
+    0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
+    0013 astore 0
+    0015 aload 0
+    0017 op_0xB0
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
   code        max_stack=4 max_locals=11
     0000 ldc "RED"
@@ -74,7 +71,7 @@ method        Color$values ()Ljava/util/ArrayList; 0x0009
   code        max_stack=2 max_locals=7
     0000 op_0xBB
     0001 nop
-    0002 op_0x2E
+    0002 op_0x0F
     0003 op_0x59
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore 0
@@ -99,52 +96,87 @@ method        Color$values ()Ljava/util/ArrayList; 0x0009
     0051 aload 0
     0053 op_0xB0
 method        GREEN ()LColor; 0x0009
-  code        max_stack=4 max_locals=3
+  code        max_stack=3 max_locals=2
     0000 op_0xBB
     0001 nop
-    0002 op_0x21
+    0002 op_0x38
     0003 op_0x59
     0004 ldc "GREEN"
     0006 astore 1
-    0008 ldc int(65280)
-    0010 istore 2
-    0012 aload 1
-    0014 iload 2
-    0016 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0019 astore 0
-    0021 aload 0
-    0023 op_0xB0
+    0008 aload 1
+    0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
+    0013 astore 0
+    0015 aload 0
+    0017 op_0xB0
 method        RED ()LColor; 0x0009
-  code        max_stack=4 max_locals=3
+  code        max_stack=3 max_locals=2
     0000 op_0xBB
     0001 nop
-    0002 op_0x21
+    0002 op_0x38
     0003 op_0x59
     0004 ldc "RED"
     0006 astore 1
-    0008 ldc int(16711680)
-    0010 istore 2
-    0012 aload 1
-    0014 iload 2
-    0016 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0019 astore 0
-    0021 aload 0
-    0023 op_0xB0
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=4
-    0000 invokestatic Method(InputKt.RED:()LColor;)
-    0003 astore 1
-    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0008 aload 1
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0013 invokestatic Method(InputKt.GREEN:()LColor;)
-    0016 astore 2
-    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 aload 2
-    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0026 invokestatic Method(InputKt.BLUE:()LColor;)
-    0029 astore 3
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 aload 3
-    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0039 return
+    0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
+    0013 astore 0
+    0015 aload 0
+    0017 op_0xB0
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=10
+    0000 invokestatic Method(InputKt.Color$values:()Ljava/util/ArrayList;)
+    0003 astore 1
+    0005 aload 1
+    0007 op_0xC0
+    0008 nop
+    0009 op_0x0F
+    0010 astore 2
+    0012 aload 2
+    0014 op_0xC0
+    0015 nop
+    0016 op_0x0F
+    0017 astore 3
+    0019 aload 3
+    0021 op_0xB9
+    0022 nop
+    0023 iload 1
+    0025 nop
+    0026 astore 4
+    0028 op_0xA7
+    0029 nop
+    0030 iconst_0
+    0031 aload 4
+    0033 op_0xB9
+    0034 nop
+    0035 op_0x1B
+    0036 aconst_null
+    0037 nop
+    0038 istore 5
+    0040 iload 5
+    0042 op_0x99
+    0043 nop
+    0044 op_0x1B
+    0045 aload 4
+    0047 op_0xB9
+    0048 nop
+    0049 op_0x1F
+    0050 aconst_null
+    0051 nop
+    0052 astore 6
+    0054 aload 6
+    0056 astore 7
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 aload 7
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0066 op_0xA7
+    0067 op_0xFF
+    0068 op_0xDD
+    0069 ldc "GREEN"
+    0071 astore 8
+    0073 aload 8
+    0075 invokestatic Method(InputKt.Color$valueOf:(Ljava/lang/String;)LColor;)
+    0078 astore 9
+    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0083 aload 9
+    0085 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0088 return
+    sub_attr  StackMapTable (47 bytes)

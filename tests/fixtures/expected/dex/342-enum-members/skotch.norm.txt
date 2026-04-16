@@ -1,16 +1,20 @@
 dex_version   035
-strings       15
-types         6
-methods       6
+strings       19
+types         7
+methods       8
 classes       1
 
 --- strings ---
   "BLUE"
+  "Color$valueOf"
+  "Color$values"
   "GREEN"
   "L"
   "LInputKt;"
+  "LL"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
+  "Ljava/lang/String;"
   "Ljava/lang/System;"
   "RED"
   "V"
@@ -25,12 +29,15 @@ classes       1
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
+  Ljava/lang/String;
   Ljava/lang/System;
   V
   [Ljava/lang/String;
 
 --- methods ---
   LInputKt;.BLUE()Ljava/lang/Object;
+  LInputKt;.Color$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Color$values()Ljava/lang/Object;
   LInputKt;.GREEN()Ljava/lang/Object;
   LInputKt;.RED()Ljava/lang/Object;
   LInputKt;.main()V
@@ -42,6 +49,8 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       BLUE()Ljava/lang/Object; flags=0x0019 regs=3 ins=0 outs=0 insns=5
+  method       Color$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=11 ins=1 outs=0 insns=45
+  method       Color$values()Ljava/lang/Object; flags=0x0019 regs=7 ins=0 outs=0 insns=13
   method       GREEN()Ljava/lang/Object; flags=0x0019 regs=3 ins=0 outs=0 insns=6
   method       RED()Ljava/lang/Object; flags=0x0019 regs=3 ins=0 outs=0 insns=6
   method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=28

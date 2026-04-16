@@ -1,0 +1,73 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=16
+    0000 ldc "apple"
+    0002 astore 1
+    0004 ldc "banana"
+    0006 astore 2
+    0008 ldc "cherry"
+    0010 astore 3
+    0012 iconst_3
+    0013 istore 4
+    0015 iload 4
+    0017 op_0xBD
+    0018 nop
+    0019 iconst_1
+    0020 astore 5
+    0022 iconst_0
+    0023 istore 6
+    0025 aload 5
+    0027 iload 6
+    0029 aload 1
+    0031 op_0x53
+    0032 iconst_1
+    0033 istore 7
+    0035 aload 5
+    0037 iload 7
+    0039 aload 2
+    0041 op_0x53
+    0042 iconst_2
+    0043 istore 8
+    0045 aload 5
+    0047 iload 8
+    0049 aload 3
+    0051 op_0x53
+    0052 aload 5
+    0054 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0057 astore 9
+    0059 aload 9
+    0061 op_0xC0
+    0062 nop
+    0063 op_0x17
+    0064 astore 10
+    0066 aload 10
+    0068 op_0xC0
+    0069 nop
+    0070 op_0x17
+    0071 astore 11
+    0073 op_0xBB
+    0074 nop
+    0075 aload 89
+    0077 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0080 astore 12
+    0082 aload 11
+    0084 aload 12
+    0086 invokestatic Method(kotlin/collections/CollectionsKt.associateWith:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;)
+    0089 astore 13
+    0091 aload 13
+    0093 op_0xC0
+    0094 nop
+    0095 op_0x23
+    0096 astore 14
+    0098 aload 14
+    0100 op_0xC0
+    0101 nop
+    0102 op_0x23
+    0103 astore 15
+    0105 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0108 aload 15
+    0110 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0113 return

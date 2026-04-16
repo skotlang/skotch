@@ -2760,6 +2760,45 @@ fn lower_expr(
             if let Expr::Field { receiver, name, .. } = callee.as_ref() {
                 let method_name = *name;
 
+                // Check for enum static methods: Color.values(), Color.valueOf("RED").
+                if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                    let recv_name = interner.resolve(*recv_sym).to_string();
+                    if module.enum_names.contains(&recv_name) {
+                        let method_str = interner.resolve(method_name).to_string();
+                        if method_str == "values" || method_str == "valueOf" {
+                            let compound = format!("{}${}", recv_name, method_str);
+                            let compound_sym = interner.intern(&compound);
+                            if let Some(&fid) = name_to_func.get(&compound_sym) {
+                                let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                                let mut arg_locals = Vec::new();
+                                for a in args {
+                                    let id = lower_expr(
+                                        &a.expr,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    )?;
+                                    arg_locals.push(id);
+                                }
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::Static(fid),
+                                        args: arg_locals,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
+                    }
+                }
+
                 // Check if this is an object method call (Singleton.method()).
                 // Object methods are registered as top-level functions.
                 if let Some(&fid) = name_to_func.get(&method_name) {
@@ -6096,49 +6135,272 @@ fn lower_expr(
         }
         Expr::Try {
             body,
+            catch_param,
+            catch_type,
             catch_body,
             finally_body,
             ..
         } => {
-            // Simplified try: just execute the body.
-            // Catch/finally are parsed but not compiled (need exception tables).
-            for stmt in &body.stmts {
-                let terminated = lower_stmt(
-                    stmt,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    loop_ctx,
-                );
-                if terminated {
-                    break;
-                }
-            }
-            // Execute finally body if present (unconditionally).
-            if let Some(fb_block) = finally_body {
-                for stmt in &fb_block.stmts {
-                    let terminated = lower_stmt(
-                        stmt,
-                        fb,
-                        scope,
-                        module,
-                        name_to_func,
-                        name_to_global,
-                        interner,
-                        diags,
-                        loop_ctx,
-                    );
-                    if terminated {
-                        break;
+            // ── try-as-expression lowering ──────────────────────────
+            //
+            // Layout (with catch):
+            //   current_block → goto try_block
+            //   try_block: <try body> last-expr → result; goto after_block
+            //   catch_block: astore param; <catch body> last-expr → result; goto after_block
+            //   after_block: result is available
+            //
+            // Without catch: just execute body and use last expression.
+            if catch_body.is_some() {
+                let try_block = fb.new_block();
+                let catch_block = fb.new_block();
+                let after_block = fb.new_block();
+
+                // Pre-allocate result local (type patched below).
+                let result = fb.new_local(Ty::Int);
+
+                fb.terminate_and_switch(Terminator::Goto(try_block), try_block);
+
+                // Lower try body: all statements, last one provides the value.
+                let mut try_val = None;
+                for (i, stmt) in body.stmts.iter().enumerate() {
+                    if i == body.stmts.len() - 1 {
+                        // Try to extract as expression for the result value.
+                        if let Stmt::Expr(expr) = stmt {
+                            try_val = lower_expr(
+                                expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        } else {
+                            lower_stmt(
+                                stmt,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        }
+                    } else {
+                        lower_stmt(
+                            stmt,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
                     }
                 }
+                if let Some(tv) = try_val {
+                    let ty = fb.mf.locals[tv.0 as usize].clone();
+                    fb.mf.locals[result.0 as usize] = ty;
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(tv),
+                    });
+                }
+                fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
+
+                // Catch handler: store exception param.
+                if let Some(param_sym) = catch_param {
+                    let exc_local = fb.new_local(Ty::Any);
+                    scope.push((*param_sym, exc_local));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: exc_local,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                }
+
+                // Lower catch body.
+                let mut catch_val = None;
+                if let Some(cb) = catch_body {
+                    for (i, stmt) in cb.stmts.iter().enumerate() {
+                        if i == cb.stmts.len() - 1 {
+                            if let Stmt::Expr(expr) = stmt {
+                                catch_val = lower_expr(
+                                    expr,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                );
+                            } else {
+                                lower_stmt(
+                                    stmt,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                );
+                            }
+                        } else {
+                            lower_stmt(
+                                stmt,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        }
+                    }
+                }
+                if let Some(cv) = catch_val {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(cv),
+                    });
+                }
+                fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
+
+                // Exception handler entry.
+                let jvm_catch_type = catch_type.map(|sym| {
+                    let name = interner.resolve(sym).to_string();
+                    match name.as_str() {
+                        "Exception" => "java/lang/Exception".to_string(),
+                        "RuntimeException" => "java/lang/RuntimeException".to_string(),
+                        "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
+                        "NullPointerException" => "java/lang/NullPointerException".to_string(),
+                        "IllegalArgumentException" => {
+                            "java/lang/IllegalArgumentException".to_string()
+                        }
+                        "IllegalStateException" => "java/lang/IllegalStateException".to_string(),
+                        "IndexOutOfBoundsException" => {
+                            "java/lang/IndexOutOfBoundsException".to_string()
+                        }
+                        "ClassCastException" => "java/lang/ClassCastException".to_string(),
+                        "NumberFormatException" => "java/lang/NumberFormatException".to_string(),
+                        "UnsupportedOperationException" => {
+                            "java/lang/UnsupportedOperationException".to_string()
+                        }
+                        "Throwable" => "java/lang/Throwable".to_string(),
+                        "Error" => "java/lang/Error".to_string(),
+                        other => {
+                            if other.contains('/') {
+                                other.to_string()
+                            } else {
+                                format!("java/lang/{other}")
+                            }
+                        }
+                    }
+                });
+
+                fb.mf.exception_handlers.push(ExceptionHandler {
+                    try_start_block: try_block,
+                    try_end_block: catch_block,
+                    handler_block: catch_block,
+                    catch_type: jvm_catch_type,
+                });
+
+                // Finally body (inlined unconditionally).
+                if let Some(fb_block) = finally_body {
+                    for stmt in &fb_block.stmts {
+                        let terminated = lower_stmt(
+                            stmt,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                        if terminated {
+                            break;
+                        }
+                    }
+                }
+
+                Some(result)
+            } else {
+                // No catch — just execute body, use last expression as result.
+                let mut last_val = None;
+                for (i, stmt) in body.stmts.iter().enumerate() {
+                    if i == body.stmts.len() - 1 {
+                        if let Stmt::Expr(expr) = stmt {
+                            last_val = lower_expr(
+                                expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        } else {
+                            lower_stmt(
+                                stmt,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        }
+                    } else {
+                        lower_stmt(
+                            stmt,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                    }
+                }
+                if let Some(fb_block) = finally_body {
+                    for stmt in &fb_block.stmts {
+                        let terminated = lower_stmt(
+                            stmt,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                        if terminated {
+                            break;
+                        }
+                    }
+                }
+                last_val
             }
-            let _ = catch_body; // catch needs exception tables
-            None
         }
         Expr::SafeCall { receiver, name, .. } => {
             // receiver?.name → if (receiver != null) receiver.name else null
@@ -7518,6 +7780,171 @@ fn lower_enum(
         });
 
         fb.set_terminator(Terminator::ReturnValue(inst));
+        module.add_function(fb.finish());
+    }
+
+    // ── values() function ──────────────────────────────────────────────
+    //
+    // Returns an ArrayList<EnumClass> containing all entries.
+    // Desugars to: ArrayList() + add(RED()) + add(GREEN()) + ... → return list
+    {
+        let values_fn_name = format!("{}$values", enum_name);
+        let fn_idx = module.functions.len();
+        let fn_id = FuncId(fn_idx as u32);
+        let values_sym = interner.intern(&values_fn_name);
+        name_to_func.insert(values_sym, fn_id);
+
+        let list_ty = Ty::Class("java/util/ArrayList".to_string());
+        let mut fb = FnBuilder::new(fn_idx, values_fn_name, list_ty.clone());
+
+        // Create ArrayList.
+        let list_local = fb.new_local(list_ty.clone());
+        fb.push_stmt(MStmt::Assign {
+            dest: list_local,
+            value: Rvalue::NewInstance("java/util/ArrayList".to_string()),
+        });
+        fb.push_stmt(MStmt::Assign {
+            dest: list_local,
+            value: Rvalue::Call {
+                kind: CallKind::Constructor("java/util/ArrayList".to_string()),
+                args: vec![],
+            },
+        });
+
+        // Add each entry.
+        for entry in &e.entries {
+            let entry_fid = *name_to_func.get(&entry.name).unwrap();
+            let entry_local = fb.new_local(Ty::Class(enum_name.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: entry_local,
+                value: Rvalue::Call {
+                    kind: CallKind::Static(entry_fid),
+                    args: vec![],
+                },
+            });
+            let _add_result = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: _add_result,
+                value: Rvalue::Call {
+                    kind: CallKind::VirtualJava {
+                        class_name: "java/util/ArrayList".to_string(),
+                        method_name: "add".to_string(),
+                        descriptor: "(Ljava/lang/Object;)Z".to_string(),
+                    },
+                    args: vec![list_local, entry_local],
+                },
+            });
+        }
+
+        fb.set_terminator(Terminator::ReturnValue(list_local));
+        module.add_function(fb.finish());
+    }
+
+    // ── valueOf(name: String) function ─────────────────────────────────
+    //
+    // Compares the string argument against each entry name. Returns the
+    // first match. If none match, returns the first entry (fallback).
+    // Layout:
+    //   block0: load arg → check entry0 name → branch
+    //   check_N: if (arg == "NAME") goto match_N else goto check_N+1
+    //   match_N: return EntryN()
+    //   fallback: return Entry0()   (Kotlin would throw, we simplify)
+    {
+        let valueof_fn_name = format!("{}$valueOf", enum_name);
+        let fn_idx = module.functions.len();
+        let fn_id = FuncId(fn_idx as u32);
+        let valueof_sym = interner.intern(&valueof_fn_name);
+        name_to_func.insert(valueof_sym, fn_id);
+
+        let entry_ty = Ty::Class(enum_name.clone());
+        let mut fb = FnBuilder::new(fn_idx, valueof_fn_name, entry_ty.clone());
+
+        // Parameter: name string.
+        let name_param = fb.new_local(Ty::String);
+        fb.mf.params.push(name_param);
+        fb.mf.required_params = 1;
+        fb.mf.param_names.push("name".to_string());
+
+        // For each entry, create check + match blocks.
+        let entry_count = e.entries.len();
+        if entry_count == 0 {
+            // No entries — just return null-ish (shouldn't happen in practice).
+            let null_local = fb.new_local(entry_ty);
+            fb.push_stmt(MStmt::Assign {
+                dest: null_local,
+                value: Rvalue::Const(MirConst::Null),
+            });
+            fb.set_terminator(Terminator::ReturnValue(null_local));
+        } else {
+            // Build chain: check0 → match0 | check1 → match1 | ... | fallback
+            let fallback_block = fb.new_block();
+            let mut next_check = fallback_block;
+
+            // Build in reverse so each check can branch to the next.
+            for i in (0..entry_count).rev() {
+                let entry = &e.entries[i];
+                let entry_name_str = interner.resolve(entry.name).to_string();
+                let entry_fid = *name_to_func.get(&entry.name).unwrap();
+
+                let check_block = if i == 0 { 0 } else { fb.new_block() };
+                let match_block = fb.new_block();
+
+                // In check_block: compare name_param with entry name string.
+                let saved = fb.cur_block;
+                fb.cur_block = check_block;
+
+                let name_sid = module.intern_string(&entry_name_str);
+                let name_const = fb.new_local(Ty::String);
+                fb.push_stmt(MStmt::Assign {
+                    dest: name_const,
+                    value: Rvalue::Const(MirConst::String(name_sid)),
+                });
+                let cmp = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: cmp,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpEq,
+                        lhs: name_param,
+                        rhs: name_const,
+                    },
+                });
+                fb.mf.blocks[check_block as usize].terminator = Terminator::Branch {
+                    cond: cmp,
+                    then_block: match_block,
+                    else_block: next_check,
+                };
+
+                // In match_block: call entry function, return result.
+                fb.cur_block = match_block;
+                let result = fb.new_local(Ty::Class(enum_name.clone()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(entry_fid),
+                        args: vec![],
+                    },
+                });
+                fb.mf.blocks[match_block as usize].terminator = Terminator::ReturnValue(result);
+
+                fb.cur_block = saved;
+                next_check = check_block;
+            }
+
+            // Fallback: return first entry.
+            fb.cur_block = fallback_block;
+            let first_entry_fid = *name_to_func.get(&e.entries[0].name).unwrap();
+            let fallback_result = fb.new_local(Ty::Class(enum_name.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: fallback_result,
+                value: Rvalue::Call {
+                    kind: CallKind::Static(first_entry_fid),
+                    args: vec![],
+                },
+            });
+            fb.mf.blocks[fallback_block as usize].terminator =
+                Terminator::ReturnValue(fallback_result);
+        }
+
         module.add_function(fb.finish());
     }
 }

@@ -374,6 +374,9 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Mutable collections](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/) | stdlib | `mutableListOf(1,2,3)`, `.add()`, `.remove()`, `.clear()`, `list[i]` |
 | [Ranges with step](https://kotlinlang.org/spec/expressions.html#range-expressions) | §7.5 | `for (i in 1..10 step 2)` — custom step in for loops |
 | [mapOf / setOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/) | stdlib | `mapOf(1 to "a")`, `setOf(1,2,3)` — real MapsKt/SetsKt from stdlib; `map[key]`, `.size`, `.keys` |
+| [Try as expression](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | `val x = try { f() } catch (e: Exception) { default }` |
+| [Enum values/valueOf](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | §4.5.7 | `Color.values()` returns list of entries; `Color.valueOf("RED")` |
+| [Multi-line dot chains](https://kotlinlang.org/spec/syntax-and-grammar.html) | §1 | `list\n    .map { }\n    .filter { }` — newline before `.` continues expression |
 
 ### Not yet implemented
 

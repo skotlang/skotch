@@ -1,0 +1,4 @@
+name     = "387-enum-values-valueof"
+status   = "supported"
+features = ["enum", "values", "valueOf", "for-in", "println"]
+notes    = "Enum values() returns all entries; valueOf() returns the entry matching a name string."
