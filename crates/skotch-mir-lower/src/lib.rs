@@ -8822,6 +8822,358 @@ fn lower_class(
         }
     }
 
+    // Synthesize equals(other: Any?): Boolean for data classes.
+    if c.is_data && !fields.is_empty() {
+        let eq_idx = module.functions.len() + mir_methods.len();
+        let mut eq_fb = FnBuilder::new(eq_idx, "equals".to_string(), Ty::Bool);
+        let eq_this = eq_fb.new_local(Ty::Class(class_name.clone()));
+        eq_fb.mf.params.push(eq_this);
+        let eq_other = eq_fb.new_local(Ty::Any);
+        eq_fb.mf.params.push(eq_other);
+
+        // Block 0: reference equality check  (this === other)
+        // Copy `this` into an Any-typed local so the JVM backend emits
+        // if_acmpeq (reference identity) instead of invokevirtual equals,
+        // which would cause infinite recursion.
+        let this_as_any = eq_fb.new_local(Ty::Any);
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: this_as_any,
+            value: Rvalue::Local(eq_this),
+        });
+        let ref_eq = eq_fb.new_local(Ty::Bool);
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: ref_eq,
+            value: Rvalue::BinOp {
+                op: MBinOp::CmpEq,
+                lhs: this_as_any,
+                rhs: eq_other,
+            },
+        });
+        let true_block = eq_fb.new_block(); // block 1: return true
+        let instanceof_block = eq_fb.new_block(); // block 2: instanceof check
+        eq_fb.set_terminator(Terminator::Branch {
+            cond: ref_eq,
+            then_block: true_block,
+            else_block: instanceof_block,
+        });
+
+        // Block 1 (true_block): return true
+        eq_fb.cur_block = true_block;
+        let const_true = eq_fb.new_local(Ty::Bool);
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: const_true,
+            value: Rvalue::Const(MirConst::Bool(true)),
+        });
+        eq_fb.set_terminator(Terminator::ReturnValue(const_true));
+
+        // Block 2 (instanceof_block): type check
+        eq_fb.cur_block = instanceof_block;
+        let is_same_type = eq_fb.new_local(Ty::Bool);
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: is_same_type,
+            value: Rvalue::InstanceOf {
+                obj: eq_other,
+                type_descriptor: class_name.clone(),
+            },
+        });
+        let false_block = eq_fb.new_block(); // block 3: return false
+        let compare_block = eq_fb.new_block(); // block 4: field comparison
+        eq_fb.set_terminator(Terminator::Branch {
+            cond: is_same_type,
+            then_block: compare_block,
+            else_block: false_block,
+        });
+
+        // Block 3 (false_block): return false
+        eq_fb.cur_block = false_block;
+        let const_false = eq_fb.new_local(Ty::Bool);
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: const_false,
+            value: Rvalue::Const(MirConst::Bool(false)),
+        });
+        eq_fb.set_terminator(Terminator::ReturnValue(const_false));
+
+        // Block 4 (compare_block): cast other and compare fields
+        eq_fb.cur_block = compare_block;
+        let casted_other = eq_fb.new_local(Ty::Class(class_name.clone()));
+        eq_fb.push_stmt(MStmt::Assign {
+            dest: casted_other,
+            value: Rvalue::CheckCast {
+                obj: eq_other,
+                target_class: class_name.clone(),
+            },
+        });
+
+        // Compare each field. For primitives (Int, Long, Double, Bool),
+        // use CmpEq directly. For reference types (String, Class), use
+        // VirtualJava Object.equals().
+        let mut result_local: Option<LocalId> = None;
+        for field in &fields {
+            let this_field = eq_fb.new_local(field.ty.clone());
+            eq_fb.push_stmt(MStmt::Assign {
+                dest: this_field,
+                value: Rvalue::GetField {
+                    receiver: eq_this,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            let other_field = eq_fb.new_local(field.ty.clone());
+            eq_fb.push_stmt(MStmt::Assign {
+                dest: other_field,
+                value: Rvalue::GetField {
+                    receiver: casted_other,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            let fields_eq = match &field.ty {
+                Ty::Int | Ty::Long | Ty::Double | Ty::Bool => {
+                    let cmp = eq_fb.new_local(Ty::Bool);
+                    eq_fb.push_stmt(MStmt::Assign {
+                        dest: cmp,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::CmpEq,
+                            lhs: this_field,
+                            rhs: other_field,
+                        },
+                    });
+                    cmp
+                }
+                Ty::String => {
+                    // Use String.equals(Object)
+                    let cmp = eq_fb.new_local(Ty::Bool);
+                    eq_fb.push_stmt(MStmt::Assign {
+                        dest: cmp,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/String".to_string(),
+                                method_name: "equals".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Z".to_string(),
+                            },
+                            args: vec![this_field, other_field],
+                        },
+                    });
+                    cmp
+                }
+                _ => {
+                    // For Class and other reference types, use Object.equals()
+                    let cmp = eq_fb.new_local(Ty::Bool);
+                    eq_fb.push_stmt(MStmt::Assign {
+                        dest: cmp,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/Object".to_string(),
+                                method_name: "equals".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Z".to_string(),
+                            },
+                            args: vec![this_field, other_field],
+                        },
+                    });
+                    cmp
+                }
+            };
+
+            result_local = Some(match result_local {
+                None => fields_eq,
+                Some(prev) => {
+                    // AND: both must be true. We use MulI since bool is int on JVM.
+                    // true(1) * true(1) = 1, true(1) * false(0) = 0
+                    let and_result = eq_fb.new_local(Ty::Bool);
+                    eq_fb.push_stmt(MStmt::Assign {
+                        dest: and_result,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::MulI,
+                            lhs: prev,
+                            rhs: fields_eq,
+                        },
+                    });
+                    and_result
+                }
+            });
+        }
+        eq_fb.set_terminator(Terminator::ReturnValue(result_local.unwrap()));
+        mir_methods.push(eq_fb.finish());
+    }
+
+    // Synthesize hashCode(): Int for data classes.
+    if c.is_data && !fields.is_empty() {
+        let hc_idx = module.functions.len() + mir_methods.len();
+        let mut hc_fb = FnBuilder::new(hc_idx, "hashCode".to_string(), Ty::Int);
+        let hc_this = hc_fb.new_local(Ty::Class(class_name.clone()));
+        hc_fb.mf.params.push(hc_this);
+
+        // result = field0.hashCode()
+        // result = 31 * result + field1.hashCode()
+        // ...
+        let mut result: Option<LocalId> = None;
+        for field in &fields {
+            let field_val = hc_fb.new_local(field.ty.clone());
+            hc_fb.push_stmt(MStmt::Assign {
+                dest: field_val,
+                value: Rvalue::GetField {
+                    receiver: hc_this,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+
+            // Compute hash for this field.
+            let field_hash = match &field.ty {
+                Ty::Int | Ty::Bool => {
+                    // For Int, hashCode is the value itself.
+                    // For Bool, true=1, false=0 — same representation.
+                    field_val
+                }
+                Ty::Long => {
+                    // Long.hashCode() in Kotlin = (value xor (value >>> 32)).toInt()
+                    // Use static call: java.lang.Long.hashCode(long)
+                    let h = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: h,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "java/lang/Long".to_string(),
+                                method_name: "hashCode".to_string(),
+                                descriptor: "(J)I".to_string(),
+                            },
+                            args: vec![field_val],
+                        },
+                    });
+                    h
+                }
+                Ty::Double => {
+                    // Double.hashCode() = java.lang.Double.hashCode(double)
+                    let h = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: h,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "java/lang/Double".to_string(),
+                                method_name: "hashCode".to_string(),
+                                descriptor: "(D)I".to_string(),
+                            },
+                            args: vec![field_val],
+                        },
+                    });
+                    h
+                }
+                Ty::String => {
+                    // String.hashCode()
+                    let h = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: h,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/String".to_string(),
+                                method_name: "hashCode".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![field_val],
+                        },
+                    });
+                    h
+                }
+                _ => {
+                    // For any reference type, call Object.hashCode()
+                    let h = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: h,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/Object".to_string(),
+                                method_name: "hashCode".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![field_val],
+                        },
+                    });
+                    h
+                }
+            };
+
+            result = Some(match result {
+                None => field_hash,
+                Some(prev) => {
+                    // result = 31 * prev + field_hash
+                    let thirty_one = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: thirty_one,
+                        value: Rvalue::Const(MirConst::Int(31)),
+                    });
+                    let mul = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: mul,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::MulI,
+                            lhs: thirty_one,
+                            rhs: prev,
+                        },
+                    });
+                    let sum = hc_fb.new_local(Ty::Int);
+                    hc_fb.push_stmt(MStmt::Assign {
+                        dest: sum,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::AddI,
+                            lhs: mul,
+                            rhs: field_hash,
+                        },
+                    });
+                    sum
+                }
+            });
+        }
+        hc_fb.set_terminator(Terminator::ReturnValue(result.unwrap()));
+        mir_methods.push(hc_fb.finish());
+    }
+
+    // Synthesize copy(): ClassName for data classes (no-argument version).
+    // Creates a new instance with all current field values.
+    if c.is_data && !fields.is_empty() {
+        let cp_idx = module.functions.len() + mir_methods.len();
+        let mut cp_fb = FnBuilder::new(cp_idx, "copy".to_string(), Ty::Class(class_name.clone()));
+        let cp_this = cp_fb.new_local(Ty::Class(class_name.clone()));
+        cp_fb.mf.params.push(cp_this);
+
+        // Load all field values from this BEFORE creating the new instance.
+        // On the JVM, NewInstance emits `new+dup` leaving uninitialized refs on
+        // the operand stack, so all GetField operations must come first.
+        let mut field_vals = Vec::new();
+        for field in &fields {
+            let fv = cp_fb.new_local(field.ty.clone());
+            cp_fb.push_stmt(MStmt::Assign {
+                dest: fv,
+                value: Rvalue::GetField {
+                    receiver: cp_this,
+                    class_name: class_name.clone(),
+                    field_name: field.name.clone(),
+                },
+            });
+            field_vals.push(fv);
+        }
+
+        // new ClassName
+        let new_inst = cp_fb.new_local(Ty::Class(class_name.clone()));
+        cp_fb.push_stmt(MStmt::Assign {
+            dest: new_inst,
+            value: Rvalue::NewInstance(class_name.clone()),
+        });
+
+        // Call constructor with pre-loaded field values.
+        // Do NOT include new_inst in args — the JVM backend's NewInstance
+        // handler already left [ref, ref] on the operand stack.
+        cp_fb.push_stmt(MStmt::Assign {
+            dest: new_inst,
+            value: Rvalue::Call {
+                kind: CallKind::Constructor(class_name.clone()),
+                args: field_vals,
+            },
+        });
+
+        cp_fb.set_terminator(Terminator::ReturnValue(new_inst));
+        mir_methods.push(cp_fb.finish());
+    }
+
     // Lower secondary constructors.
     let mut mir_secondary_ctors = Vec::new();
     for sec_ctor in &c.secondary_constructors {

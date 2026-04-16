@@ -739,8 +739,9 @@ impl<'a> BlockWalker<'a> {
             Rvalue::NewInstance(_)
             | Rvalue::GetField { .. }
             | Rvalue::PutField { .. }
-            | Rvalue::InstanceOf { .. } => {
-                // TODO: class/instanceof support in LLVM backend
+            | Rvalue::InstanceOf { .. }
+            | Rvalue::CheckCast { .. } => {
+                // TODO: class/instanceof/checkcast support in LLVM backend
             }
             Rvalue::NewIntArray(_)
             | Rvalue::ArrayLoad { .. }

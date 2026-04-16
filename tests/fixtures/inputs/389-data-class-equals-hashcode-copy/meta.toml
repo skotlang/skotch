@@ -1,0 +1,4 @@
+name     = "389-data-class-equals-hashcode-copy"
+status   = "supported"
+features = ["data-class", "equals", "hashCode", "copy"]
+notes    = "Data class with synthesized equals(), hashCode(), and copy()."

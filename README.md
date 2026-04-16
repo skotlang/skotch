@@ -379,6 +379,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Multi-line dot chains](https://kotlinlang.org/spec/syntax-and-grammar.html) | §1 | `list\n    .map { }\n    .filter { }` — newline before `.` continues expression |
 | [Nested classes](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | `class Outer { class Nested { } }` — static inner class, `Outer$Nested` on JVM |
 | [Labeled returns](https://kotlinlang.org/spec/expressions.html#return-expressions) | §7.10 | `return@forEach` — return from lambda, not enclosing function |
+| [Data class equals/hashCode/copy](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | §4.5.6 | Auto-synthesized; `==` uses structural equality; `.hashCode()` consistent; `.copy()` clones |
 
 ### Not yet implemented
 

@@ -384,6 +384,26 @@ fn walk_block(
                 });
                 code.push(0); // placeholder for type index
             }
+            Rvalue::CheckCast { obj, target_class } => {
+                // check-cast vAA, type@BBBB (format 21c, opcode 0x1F).
+                // check-cast is an in-place op, so we first move obj to dest
+                // if they differ, then check-cast on dest.
+                let obj_reg = slot[&obj.0];
+                let dest_reg = slot[&dest.0];
+                let type_idx = pools.intern_type(&format!("L{target_class};"));
+                if obj_reg != dest_reg {
+                    // move-object vA, vB (format 12x, opcode 0x07): B|A|op
+                    let high = ((obj_reg & 0x0F) << 4) | (dest_reg & 0x0F);
+                    code.push((high << 8) | 0x07);
+                }
+                code.push(opcode_aa(0x1F, dest_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Type,
+                    old_idx: type_idx,
+                });
+                code.push(0); // placeholder for type index
+            }
             Rvalue::Call { kind, args } => {
                 let used = emit_call(
                     kind,

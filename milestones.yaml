@@ -650,6 +650,7 @@ milestones:
           body inlining with multiple type substitutions.
 
       - name: "Data class equals/hashCode/copy"
+        completed: true
         description: >
           Auto-synthesize equals(), hashCode(), copy() with default params.
           componentN() already implemented.

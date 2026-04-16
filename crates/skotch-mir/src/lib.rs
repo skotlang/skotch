@@ -134,6 +134,13 @@ pub enum Rvalue {
         index: LocalId,
         value: LocalId,
     },
+    /// Downcast a reference: `(ClassName) obj`.
+    /// On JVM this emits a `checkcast` instruction. The result local
+    /// should be typed as `Class(target_class)`.
+    CheckCast {
+        obj: LocalId,
+        target_class: String,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

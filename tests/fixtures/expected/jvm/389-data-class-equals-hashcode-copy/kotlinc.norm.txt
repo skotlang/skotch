@@ -1,0 +1,83 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=5
+    0000 op_0xBB
+    0001 nop
+    0002 iconst_5
+    0003 op_0x59
+    0004 iconst_1
+    0005 iconst_2
+    0006 invokespecial Method(Point.<init>:(II)V)
+    0009 op_0x4B
+    0010 op_0xBB
+    0011 nop
+    0012 iconst_5
+    0013 op_0x59
+    0014 iconst_1
+    0015 iconst_2
+    0016 invokespecial Method(Point.<init>:(II)V)
+    0019 op_0x4C
+    0020 op_0xBB
+    0021 nop
+    0022 iconst_5
+    0023 op_0x59
+    0024 iconst_3
+    0025 iconst_4
+    0026 invokespecial Method(Point.<init>:(II)V)
+    0029 op_0x4D
+    0030 op_0x2A
+    0031 op_0x2B
+    0032 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0035 op_0x3E
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 op_0x1D
+    0040 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0043 op_0x2A
+    0044 op_0x2C
+    0045 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0048 op_0x3E
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 op_0x1D
+    0053 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0056 op_0x2A
+    0057 invokevirtual Method(Point.hashCode:()I)
+    0060 op_0x2B
+    0061 invokevirtual Method(Point.hashCode:()I)
+    0064 op_0xA0
+    0065 nop
+    0066 iconst_4
+    0067 iconst_1
+    0068 op_0xA7
+    0069 nop
+    0070 iconst_1
+    0071 iconst_0
+    0072 op_0x3E
+    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0076 op_0x1D
+    0077 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0080 op_0x2A
+    0081 iconst_0
+    0082 iconst_0
+    0083 iconst_3
+    0084 aconst_null
+    0085 invokestatic Method(Point.copy$default:(LPoint;IIILjava/lang/Object;)LPoint;)
+    0088 op_0x4E
+    0089 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0092 op_0x2D
+    0093 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0096 op_0x2D
+    0097 op_0x2A
+    0098 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0101 istore 4
+    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0106 iload 4
+    0108 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0111 return
+    sub_attr  StackMapTable (21 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

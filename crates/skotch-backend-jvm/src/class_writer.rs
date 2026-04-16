@@ -1686,31 +1686,52 @@ fn walk_block(
                             continue;
                         }
 
-                        // Class equality: use virtual toString().equals()
-                        // so enum instances and other user objects compare by value.
-                        // (Nullable/Any use reference identity to handle null safely.)
+                        // Class equality: dispatch via Object.equals() so data
+                        // classes with synthesized equals() compare by value.
+                        // Enum classes compare via toString().equals() because each
+                        // entry-access creates a fresh instance (no singletons yet).
                         if matches!(lhs_ty, Ty::Class(_))
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
-                            // call toString() on lhs
-                            let ts = cp.methodref(
-                                "java/lang/Object",
-                                "toString",
-                                "()Ljava/lang/String;",
-                            );
-                            code.push(0x5F); // swap: [lhs, rhs] → [rhs, lhs]
-                            code.push(0xB6); // invokevirtual toString
-                            code.write_u16::<BigEndian>(ts).unwrap();
-                            // stack: [rhs, lhs_str]
-                            code.push(0x5F); // swap: [lhs_str, rhs]
-                            code.push(0xB6); // invokevirtual toString
-                            code.write_u16::<BigEndian>(ts).unwrap();
-                            // stack: [lhs_str, rhs_str]
-                            let equals =
-                                cp.methodref("java/lang/String", "equals", "(Ljava/lang/Object;)Z");
-                            code.push(0xB6); // invokevirtual equals
-                            code.write_u16::<BigEndian>(equals).unwrap();
-                            bump(stack, max_stack, -1);
+                            let is_enum = if let Ty::Class(cn) = lhs_ty {
+                                module.enum_names.contains(cn.as_str())
+                            } else {
+                                false
+                            };
+
+                            if is_enum {
+                                // Enum: toString() both sides, compare strings.
+                                let ts = cp.methodref(
+                                    "java/lang/Object",
+                                    "toString",
+                                    "()Ljava/lang/String;",
+                                );
+                                code.push(0x5F); // swap
+                                code.push(0xB6); // invokevirtual toString
+                                code.write_u16::<BigEndian>(ts).unwrap();
+                                code.push(0x5F); // swap
+                                code.push(0xB6); // invokevirtual toString
+                                code.write_u16::<BigEndian>(ts).unwrap();
+                                let equals = cp.methodref(
+                                    "java/lang/String",
+                                    "equals",
+                                    "(Ljava/lang/Object;)Z",
+                                );
+                                code.push(0xB6); // invokevirtual equals
+                                code.write_u16::<BigEndian>(equals).unwrap();
+                                bump(stack, max_stack, -1);
+                            } else {
+                                // Regular class: Object.equals (virtual dispatch).
+                                let equals = cp.methodref(
+                                    "java/lang/Object",
+                                    "equals",
+                                    "(Ljava/lang/Object;)Z",
+                                );
+                                code.push(0xB6); // invokevirtual
+                                code.write_u16::<BigEndian>(equals).unwrap();
+                                bump(stack, max_stack, -1);
+                            }
+
                             if *op == MBinOp::CmpNe {
                                 code.push(0x04); // iconst_1
                                 bump(stack, max_stack, 1);
@@ -2376,6 +2397,16 @@ fn walk_block(
                 code.push((class_idx >> 8) as u8);
                 code.push(class_idx as u8);
                 // instanceof pops objectref, pushes int (0 or 1): net 0
+                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+            }
+            Rvalue::CheckCast { obj, target_class } => {
+                // Push the object onto the stack, then emit `checkcast`.
+                load_local(code, stack, max_stack, slots, *obj, &func.locals);
+                let class_idx = cp.class(target_class);
+                code.push(0xC0); // checkcast
+                code.push((class_idx >> 8) as u8);
+                code.push(class_idx as u8);
+                // checkcast pops objectref, pushes objectref: net 0
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::NewIntArray(size) => {
