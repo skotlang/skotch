@@ -895,10 +895,8 @@ pub fn lower_file(
                     for stmt in &mut block.stmts {
                         let MStmt::Assign { value, .. } = stmt;
                         match value {
-                            Rvalue::NewInstance(ref mut n) => {
-                                if user_classes.contains(n.as_str()) {
-                                    *n = format!("{prefix}/{n}");
-                                }
+                            Rvalue::NewInstance(ref mut n) if user_classes.contains(n.as_str()) => {
+                                *n = format!("{prefix}/{n}");
                             }
                             Rvalue::GetField {
                                 ref mut class_name, ..
@@ -909,16 +907,14 @@ pub fn lower_file(
                             Rvalue::InstanceOf {
                                 ref mut type_descriptor,
                                 ..
-                            } => {
-                                if user_classes.contains(type_descriptor.as_str()) {
-                                    *type_descriptor = format!("{prefix}/{type_descriptor}");
-                                }
+                            } if user_classes.contains(type_descriptor.as_str()) => {
+                                *type_descriptor = format!("{prefix}/{type_descriptor}");
                             }
                             Rvalue::Call { ref mut kind, .. } => match kind {
-                                CallKind::Constructor(ref mut n) => {
-                                    if user_classes.contains(n.as_str()) {
-                                        *n = format!("{prefix}/{n}");
-                                    }
+                                CallKind::Constructor(ref mut n)
+                                    if user_classes.contains(n.as_str()) =>
+                                {
+                                    *n = format!("{prefix}/{n}");
                                 }
                                 CallKind::Virtual {
                                     ref mut class_name, ..
@@ -1269,15 +1265,11 @@ fn body_contains_suspend_call(
     ) -> bool {
         for stmt in &b.stmts {
             match stmt {
-                Stmt::Expr(e) => {
-                    if scan_expr(e, module, interner, name_to_func) {
-                        return true;
-                    }
+                Stmt::Expr(e) if scan_expr(e, module, interner, name_to_func) => {
+                    return true;
                 }
-                Stmt::Val(v) => {
-                    if scan_expr(&v.init, module, interner, name_to_func) {
-                        return true;
-                    }
+                Stmt::Val(v) if scan_expr(&v.init, module, interner, name_to_func) => {
+                    return true;
                 }
                 Stmt::Return { value: Some(e), .. }
                     if scan_expr(e, module, interner, name_to_func) =>

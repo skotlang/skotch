@@ -183,8 +183,13 @@ impl<'a> Emitter<'a> {
             writeln!(self.out).unwrap();
         }
 
-        // Functions in source order.
+        // Functions in source order. Skip abstract stubs (e.g.
+        // coroutine intrinsics like delay/yield/withContext that are
+        // resolved at runtime, not compiled).
         for func in &self.module.functions {
+            if func.is_abstract {
+                continue;
+            }
             self.emit_function(func);
             writeln!(self.out).unwrap();
         }
