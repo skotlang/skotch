@@ -1,0 +1,133 @@
+dex_version   035
+strings       68
+types         18
+methods       16
+classes       2
+
+--- strings ---
+  ""
+  "$ENTRIES"
+  "$VALUES"
+  "$enum$name"
+  "$enum$ordinal"
+  "$values"
+  "()"
+  "()I"
+  "(I)V"
+  "(Ljava/lang/String;II)V"
+  "<clinit>"
+  "<init>"
+  ">;"
+  "DIME"
+  "I"
+  "IL"
+  "L"
+  "LCoin;"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Class;"
+  "Ljava/lang/Enum;"
+  "Ljava/lang/Enum<"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/enums/EnumEntries;"
+  "Lkotlin/enums/EnumEntries<"
+  "Lkotlin/enums/EnumEntriesKt;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "NICKEL"
+  "PENNY"
+  "QUARTER"
+  "V"
+  "VI"
+  "VL"
+  "VLI"
+  "VLII"
+  "VLL"
+  "[LCoin;"
+  "[Ljava/lang/Enum;"
+  "[Ljava/lang/String;"
+  "c"
+  "cents"
+  "checkNotNullParameter"
+  "clone"
+  "d1"
+  "d2"
+  "enumEntries"
+  "getCents"
+  "getEntries"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "value"
+  "valueOf"
+  "values"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}\u{10}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{8}\u{8}\u{86}\u{81}\u{2}\u{18}��2\u{8}\u{12}\u{4}\u{12}\u{2}0��0\u{1}B\u{11}\u{8}\u{2}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}j\u{2}\u{8}\u{8}j\u{2}\u{8}\tj\u{2}\u{8}\nj\u{2}\u{8}\u{b}"
+  "��\u{12}\n��\n\u{2}\u{10}\u{8}\n��\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{1a}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{5}"
+
+--- types ---
+  I
+  LCoin;
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Class;
+  Ljava/lang/Enum;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/enums/EnumEntries;
+  Lkotlin/enums/EnumEntriesKt;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [LCoin;
+  [Ljava/lang/Enum;
+  [Ljava/lang/String;
+
+--- methods ---
+  LCoin;.$values()[LCoin;
+  LCoin;.<clinit>()V
+  LCoin;.<init>(Ljava/lang/String;II)V
+  LCoin;.getCents()I
+  LCoin;.getEntries()Lkotlin/enums/EnumEntries;
+  LCoin;.valueOf(Ljava/lang/String;)LCoin;
+  LCoin;.values()[LCoin;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.value(LCoin;)I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Enum;.<init>(Ljava/lang/String;I)V
+  Ljava/lang/Enum;.valueOf(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;
+  Ljava/lang/Object;.clone()Ljava/lang/Object;
+  Lkotlin/enums/EnumEntriesKt;.enumEntries([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LCoin;
+  super        Ljava/lang/Enum;
+  source_file  input.kt
+  method       $values()[LCoin; flags=0x101A regs=3 ins=0 outs=0 insns=24
+  method       <clinit>()V flags=0x10008 regs=4 ins=0 outs=4 insns=62
+  method       <init>(Ljava/lang/String;II)V flags=0x10002 regs=4 ins=4 outs=3 insns=6
+  method       getCents()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getEntries()Lkotlin/enums/EnumEntries; flags=0x0009 regs=1 ins=0 outs=0 insns=3
+  method       valueOf(Ljava/lang/String;)LCoin; flags=0x0009 regs=2 ins=1 outs=2 insns=9
+  method       values()[LCoin; flags=0x0009 regs=1 ins=0 outs=1 insns=9
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=2 ins=0 outs=2 insns=34
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       value(LCoin;)I flags=0x0019 regs=2 ins=1 outs=2 insns=10

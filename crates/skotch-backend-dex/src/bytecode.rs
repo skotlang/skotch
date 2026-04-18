@@ -764,11 +764,24 @@ fn emit_call(
 ) -> u16 {
     match kind {
         CallKind::Println | CallKind::Print => {
-            // Use scratch register 0 for System.out. The slot map
-            // already reserves the lowest `scratch_needed` registers
-            // for this.
             let sysout_reg: u16 = 0;
             debug_assert!(scratch_base >= 1, "println requires scratch reservation");
+
+            // Zero-arg println(): sget-object System.out, invoke-virtual println()V
+            if args.is_empty() {
+                let field_idx =
+                    pools.intern_field("Ljava/lang/System;", "out", "Ljava/io/PrintStream;");
+                code.push(opcode_aa(0x62, sysout_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
+                let method_idx = pools.intern_method("Ljava/io/PrintStream;", "println", "V", &[]);
+                emit_invoke(code, patches, 0x6E, 0x74, method_idx, &[sysout_reg]);
+                return 2;
+            }
 
             let arg = args[0];
             let arg_reg = slot[&arg.0];

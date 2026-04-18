@@ -79,6 +79,10 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     let mut method_codes: Vec<(String, String, Vec<&str>, MethodCode, u32)> = Vec::new();
     let mut has_no_arg_main = false;
     for func in &module.functions {
+        // Skip abstract stubs (coroutine intrinsics like delay/yield).
+        if func.is_abstract {
+            continue;
+        }
         let params: Vec<&str> = func
             .params
             .iter()

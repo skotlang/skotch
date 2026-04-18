@@ -1,0 +1,133 @@
+dex_version   035
+strings       60
+types         16
+methods       21
+classes       3
+
+--- strings ---
+  ""
+  "$name"
+  "$r8$lambda$UN70obOrChlJn6vq3MeFr5i9sVY"
+  "$r8$lambda$oQneY1dKJysRg3rktyPeLUkqOfA"
+  "$x"
+  ", "
+  "<init>"
+  "D8$$SyntheticClass"
+  "Hello"
+  "I"
+  "III"
+  "L"
+  "LI"
+  "LInputKt$$ExternalSyntheticLambda0;"
+  "LInputKt$$ExternalSyntheticLambda1;"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Number;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/functions/Function1;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "World"
+  "[Ljava/lang/String;"
+  "addX"
+  "append"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "f$0"
+  "greetName"
+  "input.kt"
+  "intValue"
+  "invoke"
+  "k"
+  "main"
+  "main$lambda$0"
+  "main$lambda$1"
+  "mv"
+  "n"
+  "name"
+  "out"
+  "prefix"
+  "println"
+  "toString"
+  "valueOf"
+  "x"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+
+--- types ---
+  I
+  LInputKt$$ExternalSyntheticLambda0;
+  LInputKt$$ExternalSyntheticLambda1;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Number;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/functions/Function1;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$$ExternalSyntheticLambda0;.<init>(I)V
+  LInputKt$$ExternalSyntheticLambda0;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$$ExternalSyntheticLambda1;.<init>(Ljava/lang/String;)V
+  LInputKt$$ExternalSyntheticLambda1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.$r8$lambda$UN70obOrChlJn6vq3MeFr5i9sVY(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.$r8$lambda$oQneY1dKJysRg3rktyPeLUkqOfA(II)I
+  LInputKt;.main$lambda$0(II)I
+  LInputKt;.main$lambda$1(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Number;.intValue()I
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda0;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>(I)V flags=0x11001 regs=2 ins=2 outs=1 insns=6
+  method       invoke(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=3 ins=2 outs=2 insns=17
+
+--- class[1] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda1;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>(Ljava/lang/String;)V flags=0x11001 regs=2 ins=2 outs=1 insns=6
+  method       invoke(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=3 ins=2 outs=2 insns=9
+
+--- class[2] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       $r8$lambda$UN70obOrChlJn6vq3MeFr5i9sVY(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; flags=0x1009 regs=2 ins=2 outs=2 insns=5
+  method       $r8$lambda$oQneY1dKJysRg3rktyPeLUkqOfA(II)I flags=0x1009 regs=2 ins=2 outs=2 insns=5
+  method       main()V flags=0x0019 regs=6 ins=0 outs=2 insns=67
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(II)I flags=0x001A regs=3 ins=2 outs=0 insns=3
+  method       main$lambda$1(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; flags=0x001A regs=4 ins=2 outs=2 insns=29

@@ -1,0 +1,40 @@
+dex_version   035
+strings       12
+types         5
+methods       4
+classes       1
+
+--- strings ---
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "Ljava/lang/Object;"
+  "Lkotlin/jvm/functions/Function2;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "coroutineScope"
+  "input.kt"
+  "main"
+  "sumWithScope"
+
+--- types ---
+  LInputKt;
+  Ljava/lang/Object;
+  Lkotlin/jvm/functions/Function2;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.coroutineScope(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.sumWithScope(Ljava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=0 insns=8
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       sumWithScope(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=5 ins=1 outs=2 insns=9
