@@ -7,21 +7,21 @@ method        main ()V 0x0019
     0000 ldc "file.separator"
     0002 invokestatic Method(java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;)
     0005 invokevirtual Method(java/lang/String.length:()I)
-    0008 op_0x3B
+    0008 istore_0
     0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 op_0x1A
+    0012 iload_0
     0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0016 ldc "100"
     0018 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
-    0021 op_0x3B
+    0021 istore_0
     0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 op_0x1A
+    0025 iload_0
     0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0029 bipush -99
     0031 invokestatic Method(java/lang/Math.abs:(I)I)
-    0034 op_0x3B
+    0034 istore_0
     0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 op_0x1A
+    0038 iload_0
     0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0042 return
 method        main ([Ljava/lang/String;)V 0x1009

@@ -5,53 +5,24 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_3
-    0001 op_0x3B
-    0002 op_0x1A
-    0003 op_0xAA
-    0004 nop
-    0005 nop
-    0006 nop
-    0007 op_0x3D
-    0008 nop
-    0009 nop
-    0010 nop
-    0011 aconst_null
-    0012 nop
-    0013 nop
-    0014 nop
-    0015 iconst_0
-    0016 nop
-    0017 nop
-    0018 nop
-    0019 aload 0
-    0021 nop
-    0022 nop
-    0023 op_0x25
-    0024 nop
-    0025 nop
-    0026 nop
-    0027 op_0x31
+    0001 istore_0
+    0002 iload_0
+    0003 tableswitch default=64 low=1 high=3 1=28 2=40 3=52
     0028 ldc "one"
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 op_0x5F
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0037 op_0xA7
-    0038 nop
-    0039 op_0x24
+    0037 goto 73
     0040 ldc "two"
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0045 op_0x5F
     0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0049 op_0xA7
-    0050 nop
-    0051 op_0x18
+    0049 goto 73
     0052 ldc "three"
     0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0057 op_0x5F
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0061 op_0xA7
-    0062 nop
-    0063 op_0x0C
+    0061 goto 73
     0064 ldc "other"
     0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0069 op_0x5F

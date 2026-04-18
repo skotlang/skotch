@@ -4,47 +4,31 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=3
-    0000 op_0xBB
-    0001 nop
-    0002 iconst_5
-    0003 op_0x59
+    0000 new Class(kotlin/jvm/internal/Ref$IntRef)
+    0003 dup
     0004 invokespecial Method(kotlin/jvm/internal/Ref$IntRef.<init>:()V)
-    0007 op_0x4B
-    0008 op_0x2A
+    0007 astore_0
+    0008 aload_0
     0009 op_0xBA
     0010 nop
     0011 op_0x1F
     0012 nop
     0013 nop
-    0014 op_0x4C
-    0015 op_0x2B
-    0016 op_0xB9
-    0017 nop
-    0018 op_0x23
-    0019 aconst_null
-    0020 nop
-    0021 op_0x57
-    0022 op_0x2B
-    0023 op_0xB9
-    0024 nop
-    0025 op_0x23
-    0026 aconst_null
-    0027 nop
-    0028 op_0x57
-    0029 op_0x2B
-    0030 op_0xB9
-    0031 nop
-    0032 op_0x23
-    0033 aconst_null
-    0034 nop
-    0035 op_0x57
-    0036 op_0x2A
-    0037 op_0xB4
-    0038 nop
-    0039 op_0x27
-    0040 op_0x3D
+    0014 astore_1
+    0015 aload_1
+    0016 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0021 pop
+    0022 aload_1
+    0023 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0028 pop
+    0029 aload_1
+    0030 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0035 pop
+    0036 aload_0
+    0037 getfield Field(kotlin/jvm/internal/Ref$IntRef.element:I)
+    0040 istore_2
     0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0044 op_0x1C
+    0044 iload_2
     0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0048 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -53,17 +37,13 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        main$lambda$0 (Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/Unit; 0x001A
   code        max_stack=3 max_locals=1
-    0000 op_0x2A
-    0001 op_0x2A
-    0002 op_0xB4
-    0003 nop
-    0004 op_0x27
+    0000 aload_0
+    0001 aload_0
+    0002 getfield Field(kotlin/jvm/internal/Ref$IntRef.element:I)
     0005 iconst_1
     0006 iadd
-    0007 op_0xB5
-    0008 nop
-    0009 op_0x27
+    0007 putfield Field(kotlin/jvm/internal/Ref$IntRef.element:I)
     0010 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0013 op_0xB0
+    0013 areturn
 class_attr    InnerClasses (10 bytes)
 class_attr    BootstrapMethods (12 bytes)

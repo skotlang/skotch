@@ -5,74 +5,65 @@ access_flags  0x0031
 method        findFirst (I)I 0x0019
   code        max_stack=2 max_locals=2
     0000 iconst_1
-    0001 op_0x3C
-    0002 op_0x1B
+    0001 istore_1
+    0002 iload_1
     0003 bipush 101
     0005 op_0xA2
     0006 nop
     0007 ldc "([Ljava/lang/String;)V"
-    0009 op_0x1B
+    0009 iload_1
     0010 imul
-    0011 op_0x1A
+    0011 iload_0
     0012 op_0xA4
     0013 nop
     0014 iconst_2
-    0015 op_0x1B
+    0015 iload_1
     0016 op_0xAC
     0017 op_0x84
     0018 aconst_null
     0019 aconst_null
-    0020 op_0xA7
-    0021 op_0xFF
-    0022 op_0xEE
+    0020 goto 2
     0023 iconst_m1
     0024 op_0xAC
     sub_attr  StackMapTable (8 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 iconst_0
-    0001 op_0x3B
+    0001 istore_0
     0002 iconst_1
-    0003 op_0x3C
-    0004 op_0x1B
+    0003 istore_1
+    0004 iload_1
     0005 bipush 101
     0007 op_0xA2
     0008 nop
     0009 op_0x1F
-    0010 op_0x1B
+    0010 iload_1
     0011 iconst_3
     0012 irem
-    0013 op_0x99
-    0014 nop
-    0015 iconst_3
-    0016 op_0xA7
-    0017 nop
-    0018 bipush 26
-    0020 op_0x1B
+    0013 ifeq 19
+    0016 goto 32
+    0019 iload_0
+    0020 iload_1
     0021 iadd
-    0022 op_0x3B
-    0023 op_0x1A
+    0022 istore_0
+    0023 iload_0
     0024 bipush 50
     0026 op_0xA4
     0027 nop
     0028 iconst_3
-    0029 op_0xA7
-    0030 nop
-    0031 op_0x09
+    0029 goto 38
     0032 op_0x84
     0033 aconst_null
     0034 aconst_null
-    0035 op_0xA7
-    0036 op_0xFF
-    0037 op_0xE1
+    0035 goto 4
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 op_0x1A
+    0041 iload_0
     0042 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0045 bipush 50
     0047 invokestatic Method(InputKt.findFirst:(I)I)
-    0050 op_0x3C
+    0050 istore_1
     0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 op_0x1B
+    0054 iload_1
     0055 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0058 return
     sub_attr  StackMapTable (10 bytes)

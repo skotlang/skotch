@@ -248,33 +248,29 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                 let span = self.bump();
                 let name = self.text(span);
                 match name {
-                    "kotlin" => {
-                        if self.peek() == TokenKind::LParen {
-                            self.bump();
-                            if let Some(val) = self.try_consume_string() {
-                                self.project.is_kotlin = true;
-                                match val.as_str() {
-                                    "jvm" | "multiplatform" => {
-                                        self.project.target.get_or_insert(BuildTarget::Jvm);
-                                    }
-                                    "android" => {
-                                        self.project.is_android = true;
-                                        self.project.target = Some(BuildTarget::Android);
-                                    }
-                                    _ => {}
+                    "kotlin" if self.peek() == TokenKind::LParen => {
+                        self.bump();
+                        if let Some(val) = self.try_consume_string() {
+                            self.project.is_kotlin = true;
+                            match val.as_str() {
+                                "jvm" | "multiplatform" => {
+                                    self.project.target.get_or_insert(BuildTarget::Jvm);
                                 }
+                                "android" => {
+                                    self.project.is_android = true;
+                                    self.project.target = Some(BuildTarget::Android);
+                                }
+                                _ => {}
                             }
-                            self.skip_past(TokenKind::RParen);
                         }
+                        self.skip_past(TokenKind::RParen);
                     }
-                    "id" => {
-                        if self.peek() == TokenKind::LParen {
-                            self.bump();
-                            if let Some(val) = self.try_consume_string() {
-                                self.apply_plugin_id(&val);
-                            }
-                            self.skip_past(TokenKind::RParen);
+                    "id" if self.peek() == TokenKind::LParen => {
+                        self.bump();
+                        if let Some(val) = self.try_consume_string() {
+                            self.apply_plugin_id(&val);
                         }
+                        self.skip_past(TokenKind::RParen);
                     }
                     "application" => { /* marker plugin; nothing to record */ }
                     _ => {}

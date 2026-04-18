@@ -5,58 +5,50 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=5 max_locals=2
     0000 ldc "Hello, World!"
-    0002 op_0x4B
-    0003 op_0x2A
-    0004 op_0xC0
-    0005 nop
-    0006 op_0x0A
+    0002 astore_0
+    0003 aload_0
+    0004 checkcast Class(java/lang/CharSequence)
     0007 ldc "World"
-    0009 op_0xC0
-    0010 nop
-    0011 op_0x0A
+    0009 checkcast Class(java/lang/CharSequence)
     0012 iconst_0
     0013 iconst_2
     0014 aconst_null
     0015 invokestatic Method(kotlin/text/StringsKt.contains$default:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;ZILjava/lang/Object;)Z)
-    0018 op_0x3C
+    0018 istore_1
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x1B
+    0022 iload_1
     0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0026 op_0x2A
-    0027 op_0xC0
-    0028 nop
-    0029 op_0x0A
+    0026 aload_0
+    0027 checkcast Class(java/lang/CharSequence)
     0030 ldc "Kotlin"
-    0032 op_0xC0
-    0033 nop
-    0034 op_0x0A
+    0032 checkcast Class(java/lang/CharSequence)
     0035 iconst_0
     0036 iconst_2
     0037 aconst_null
     0038 invokestatic Method(kotlin/text/StringsKt.contains$default:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;ZILjava/lang/Object;)Z)
-    0041 op_0x3C
+    0041 istore_1
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 op_0x1B
+    0045 iload_1
     0046 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0049 op_0x2A
+    0049 aload_0
     0050 ldc "Hello"
     0052 iconst_0
     0053 iconst_2
     0054 aconst_null
     0055 invokestatic Method(kotlin/text/StringsKt.startsWith$default:(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z)
-    0058 op_0x3C
+    0058 istore_1
     0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0062 op_0x1B
+    0062 iload_1
     0063 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0066 op_0x2A
+    0066 aload_0
     0067 ldc "!"
     0069 iconst_0
     0070 iconst_2
     0071 aconst_null
     0072 invokestatic Method(kotlin/text/StringsKt.endsWith$default:(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z)
-    0075 op_0x3C
+    0075 istore_1
     0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0079 op_0x1B
+    0079 iload_1
     0080 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0083 return
 method        main ([Ljava/lang/String;)V 0x1009

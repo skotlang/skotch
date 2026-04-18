@@ -79,7 +79,8 @@ method        classify (I)Ljava/lang/String; 0x0009
     0135 goto 138
     0138 aload 16
     0140 astore 10
-    0142 goto 86
+    0142 aload 16
+    0144 areturn
     sub_attr  StackMapTable (217 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=9

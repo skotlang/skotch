@@ -5,70 +5,64 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=4
     0000 iconst_0
-    0001 op_0x3B
+    0001 istore_0
     0002 iconst_1
-    0003 op_0x3C
-    0004 op_0x1B
+    0003 istore_1
+    0004 iload_1
     0005 bipush 6
     0007 op_0xA2
     0008 nop
     0009 op_0x0D
-    0010 op_0x1A
-    0011 op_0x1B
+    0010 iload_0
+    0011 iload_1
     0012 iadd
-    0013 op_0x3B
+    0013 istore_0
     0014 op_0x84
     0015 aconst_null
     0016 aconst_null
-    0017 op_0xA7
-    0018 op_0xFF
-    0019 op_0xF3
+    0017 goto 4
     0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0023 op_0x1A
+    0023 iload_0
     0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0027 iconst_0
-    0028 op_0x3C
+    0028 istore_1
     0029 iconst_1
-    0030 op_0x3D
-    0031 op_0x1C
+    0030 istore_2
+    0031 iload_2
     0032 bipush 6
     0034 op_0xA2
     0035 nop
     0036 op_0x0D
-    0037 op_0x1B
-    0038 op_0x1C
+    0037 iload_1
+    0038 iload_2
     0039 iadd
-    0040 op_0x3C
+    0040 istore_1
     0041 op_0x84
     0042 iconst_m1
     0043 aconst_null
-    0044 op_0xA7
-    0045 op_0xFF
-    0046 op_0xF3
+    0044 goto 31
     0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0050 op_0x1B
+    0050 iload_1
     0051 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0054 iconst_0
-    0055 op_0x3D
+    0055 istore_2
     0056 iconst_5
-    0057 op_0x3E
+    0057 istore_3
     0058 iconst_0
-    0059 op_0x1D
+    0059 iload_3
     0060 op_0xA2
     0061 nop
     0062 op_0x0D
-    0063 op_0x1C
-    0064 op_0x1D
+    0063 iload_2
+    0064 iload_3
     0065 iadd
-    0066 op_0x3D
+    0066 istore_2
     0067 op_0x84
     0068 iconst_0
     0069 op_0xFF
-    0070 op_0xA7
-    0071 op_0xFF
-    0072 op_0xF4
+    0070 goto 58
     0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0076 op_0x1C
+    0076 iload_2
     0077 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0080 return
     sub_attr  StackMapTable (18 bytes)

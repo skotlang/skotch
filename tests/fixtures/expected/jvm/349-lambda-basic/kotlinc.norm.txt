@@ -6,81 +6,59 @@ method        main ()V 0x0019
   code        max_stack=3 max_locals=4
     0000 op_0xBA
     0001 nop
-    0002 op_0x1A
+    0002 iload_0
     0003 nop
     0004 nop
-    0005 op_0x4B
-    0006 op_0x2A
+    0005 astore_0
+    0006 aload_0
     0007 iconst_5
     0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0011 op_0xB9
-    0012 nop
-    0013 op_0x24
-    0014 iconst_m1
-    0015 nop
-    0016 op_0xC0
-    0017 nop
-    0018 op_0x26
+    0011 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0016 checkcast Class(java/lang/Number)
     0019 invokevirtual Method(java/lang/Number.intValue:()I)
-    0022 op_0x3C
+    0022 istore_1
     0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 op_0x1B
+    0026 iload_1
     0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0030 op_0x2A
+    0030 aload_0
     0031 bipush 21
     0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0036 op_0xB9
-    0037 nop
-    0038 op_0x24
-    0039 iconst_m1
-    0040 nop
-    0041 op_0xC0
-    0042 nop
-    0043 op_0x26
+    0036 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0041 checkcast Class(java/lang/Number)
     0044 invokevirtual Method(java/lang/Number.intValue:()I)
-    0047 op_0x3C
+    0047 istore_1
     0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 op_0x1B
+    0051 iload_1
     0052 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0055 op_0xBA
     0056 nop
-    0057 op_0x3D
+    0057 istore_2
     0058 nop
     0059 nop
-    0060 op_0x4C
-    0061 op_0x2B
+    0060 astore_1
+    0061 aload_1
     0062 ldc "World"
-    0064 op_0xB9
-    0065 nop
-    0066 op_0x24
-    0067 iconst_m1
-    0068 nop
+    0064 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0072 op_0x5F
     0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0076 op_0xBA
     0077 nop
-    0078 op_0x4E
+    0078 astore_3
     0079 nop
     0080 nop
-    0081 op_0x4D
-    0082 op_0x2C
+    0081 astore_2
+    0082 aload_2
     0083 iconst_3
     0084 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0087 iconst_4
     0088 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0091 op_0xB9
-    0092 nop
-    0093 op_0x52
-    0094 iconst_0
-    0095 nop
-    0096 op_0xC0
-    0097 nop
-    0098 op_0x26
+    0091 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function2.invoke:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0096 checkcast Class(java/lang/Number)
     0099 invokevirtual Method(java/lang/Number.intValue:()I)
-    0102 op_0x3E
+    0102 istore_3
     0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0106 op_0x1D
+    0106 iload_3
     0107 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0110 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -89,26 +67,26 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        main$lambda$0 (I)I 0x001A
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 iconst_2
     0002 imul
     0003 op_0xAC
 method        main$lambda$1 (Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
+    0006 aload_0
     0007 op_0xBA
     0008 nop
     0009 op_0x71
     0010 nop
     0011 nop
-    0012 op_0xB0
+    0012 areturn
 method        main$lambda$2 (II)I 0x001A
   code        max_stack=2 max_locals=2
-    0000 op_0x1A
-    0001 op_0x1B
+    0000 iload_0
+    0001 iload_1
     0002 iadd
     0003 op_0xAC
 class_attr    BootstrapMethods (38 bytes)
