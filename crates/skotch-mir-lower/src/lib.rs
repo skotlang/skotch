@@ -1279,10 +1279,10 @@ fn body_contains_suspend_call(
                         return true;
                     }
                 }
-                Stmt::Return { value: Some(e), .. } => {
-                    if scan_expr(e, module, interner, name_to_func) {
-                        return true;
-                    }
+                Stmt::Return { value: Some(e), .. }
+                    if scan_expr(e, module, interner, name_to_func) =>
+                {
+                    return true;
                 }
                 _ => {}
             }
@@ -1350,13 +1350,11 @@ fn collect_free_in_expr(
     seen: &mut rustc_hash::FxHashSet<Symbol>,
 ) {
     match e {
-        Expr::Ident(name, _) => {
-            if !param_names.contains(name) && !seen.contains(name) {
-                if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
-                    let ty = fb.mf.locals[local_id.0 as usize].clone();
-                    free.push((*name, *local_id, ty));
-                    seen.insert(*name);
-                }
+        Expr::Ident(name, _) if !param_names.contains(name) && !seen.contains(name) => {
+            if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
+                let ty = fb.mf.locals[local_id.0 as usize].clone();
+                free.push((*name, *local_id, ty));
+                seen.insert(*name);
             }
         }
         Expr::Binary { lhs, rhs, .. } => {
@@ -1399,15 +1397,15 @@ fn collect_free_in_expr(
                     skotch_syntax::TemplatePart::Expr(inner) => {
                         collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
                     }
-                    skotch_syntax::TemplatePart::IdentRef(sym, _) => {
-                        if !param_names.contains(sym) && !seen.contains(sym) {
-                            if let Some((_, local_id)) =
-                                outer_scope.iter().rev().find(|(s, _)| s == sym)
-                            {
-                                let ty = fb.mf.locals[local_id.0 as usize].clone();
-                                free.push((*sym, *local_id, ty));
-                                seen.insert(*sym);
-                            }
+                    skotch_syntax::TemplatePart::IdentRef(sym, _)
+                        if !param_names.contains(sym) && !seen.contains(sym) =>
+                    {
+                        if let Some((_, local_id)) =
+                            outer_scope.iter().rev().find(|(s, _)| s == sym)
+                        {
+                            let ty = fb.mf.locals[local_id.0 as usize].clone();
+                            free.push((*sym, *local_id, ty));
+                            seen.insert(*sym);
                         }
                     }
                     _ => {}
