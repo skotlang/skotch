@@ -1,4 +1,4 @@
 name   = "89-smart-cast-null-check"
-status = "stub"
+status = "supported"
 features = ["smart-cast", "null-check", "nullable", "branch"]
 reason = "Requires null-check smart cast (s != null narrows String? to String)."

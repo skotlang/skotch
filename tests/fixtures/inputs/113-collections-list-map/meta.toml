@@ -1,4 +1,4 @@
 name   = "113-collections-list-map"
-status = "stub"
+status = "supported"
 features = ["list", "map", "lambda", "it", "stdlib"]
 reason = "Requires stdlib listOf + map extension + lambda."

@@ -1,4 +1,4 @@
 name   = "80-named-arguments"
-status = "stub"
+status = "supported"
 features = ["named-arguments", "argument-reordering"]
 reason = "Requires call-site argument reordering by name."

@@ -1,4 +1,4 @@
 name   = "114-collections-filter"
-status = "stub"
+status = "supported"
 features = ["list", "filter", "lambda", "modulo", "stdlib"]
 reason = "Requires stdlib filter extension + lambda predicate."

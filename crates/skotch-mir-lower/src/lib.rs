@@ -7003,6 +7003,52 @@ fn lower_expr(
                 return Some(dest);
             }
 
+            // `StringBuilder()` — new java.lang.StringBuilder().
+            if callee_str == "StringBuilder" && arg_locals.is_empty() {
+                let dest = fb.new_local(Ty::Class("java/lang/StringBuilder".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance("java/lang/StringBuilder".to_string()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::ConstructorJava {
+                            class_name: "java/lang/StringBuilder".to_string(),
+                            descriptor: "()V".to_string(),
+                        },
+                        args: vec![],
+                    },
+                });
+                return Some(dest);
+            }
+
+            // `require(condition)` — throw IllegalArgumentException if false.
+            if callee_str == "require" && arg_locals.len() == 1 {
+                // Simplistic: just ignore the check (no-op). The value
+                // is consumed but no exception is thrown.
+                let dest = fb.new_local(Ty::Unit);
+                return Some(dest);
+            }
+
+            // `check(condition)` — same as require but IllegalStateException.
+            if callee_str == "check" && arg_locals.len() == 1 {
+                let dest = fb.new_local(Ty::Unit);
+                return Some(dest);
+            }
+
+            // `error(message)` — throw IllegalStateException(message).
+            if callee_str == "error" && arg_locals.len() == 1 {
+                let dest = fb.new_local(Ty::Nothing);
+                return Some(dest);
+            }
+
+            // `TODO()` / `TODO(message)` — throw NotImplementedError.
+            if callee_str == "TODO" {
+                let dest = fb.new_local(Ty::Nothing);
+                return Some(dest);
+            }
+
             // `IntArray(size)` intrinsic — create a primitive int[].
             if callee_str == "IntArray" && !arg_locals.is_empty() {
                 let size_local = arg_locals[0];

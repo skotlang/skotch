@@ -1,4 +1,4 @@
 name   = "62-data-class-basic"
-status = "stub"
+status = "supported"
 features = ["data-class", "toString", "property-access"]
 reason = "Requires data class synthesis: toString, equals, hashCode, componentN."
