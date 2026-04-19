@@ -61,12 +61,12 @@ project:
     producing debug APKs that install and launch on an Android emulator.
     No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
   codebase_stats:
-    rust_lines: 48092
+    rust_lines: 48500          # approximate, grows with each feature
     crates: 36
-    active_fixtures: 377
-    stub_fixtures: 32
-    jvm_e2e_fixtures: 368
-    dex_e2e_fixtures: 345
+    active_fixtures: 379
+    stub_fixtures: 30
+    jvm_e2e_fixtures: 370
+    dex_e2e_fixtures: 347
 
 # ============================================================================
 # COMPLETED MILESTONES (v0.1.0 – v0.5.0)
@@ -759,7 +759,7 @@ milestones:
 
   - version: "0.11.0"
     title: "Advanced Functions and Expressions"
-    status: in_progress    # 8/9 features done — only when-smart-casts remains
+    status: completed      # all 9 features done
     depends_on: ["0.10.0"]
     description: >
       try-as-expression, multi-statement try bodies, labeled returns,
@@ -821,10 +821,14 @@ milestones:
           `val r = 1..10` creates an IntRange via rangeTo. Parsed at
           the infix level; desugars to IntRange constructor call.
 
-      - name: "When with smart casts in all branches"
+      - name: "When with smart casts in all branches (landed)"
+        completed: true
         description: >
-          when (x) { is String -> x.length } narrows x to String.
-          when { x is String -> x.length } also narrows.
+          when (obj) { is String -> obj.uppercase() } narrows obj to String
+          in the branch body. Also works for primitive types (is Int, is Boolean)
+          with unboxing. if-smart-casts also work. Emits checkcast + optional
+          unbox (intValue/longValue/etc.). See fixtures 32-smart-cast,
+          88-smart-cast-is.
 
     risks:
       - description: "Labeled returns interact with closures and inline functions"

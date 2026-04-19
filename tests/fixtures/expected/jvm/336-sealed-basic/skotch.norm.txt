@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LResult;)Ljava/lang/String; 0x0009
-  code        max_stack=1 max_locals=10
+  code        max_stack=1 max_locals=12
     0000 iconst_1
     0001 istore 1
     0003 goto 6
@@ -14,33 +14,39 @@ method        describe (LResult;)Ljava/lang/String; 0x0009
     0015 instanceof Class(Ok)
     0018 istore 3
     0020 iload 3
-    0022 ifeq 36
-    0025 ldc "ok"
-    0027 astore 4
-    0029 aload 4
-    0031 astore 5
-    0033 goto 77
-    0036 aload 0
-    0038 checkcast Class(Result)
-    0041 astore 6
-    0043 aload 6
-    0045 instanceof Class(Err)
-    0048 istore 7
-    0050 iload 7
-    0052 ifeq 66
-    0055 ldc "err"
-    0057 astore 8
-    0059 aload 8
-    0061 astore 5
-    0063 goto 77
-    0066 ldc "unknown"
-    0068 astore 9
-    0070 aload 9
-    0072 astore 5
-    0074 goto 77
-    0077 aload 5
-    0079 areturn
-    sub_attr  StackMapTable (67 bytes)
+    0022 ifeq 43
+    0025 aload 0
+    0027 checkcast Class(Ok)
+    0030 astore 4
+    0032 ldc "ok"
+    0034 astore 5
+    0036 aload 5
+    0038 astore 6
+    0040 goto 91
+    0043 aload 0
+    0045 checkcast Class(Result)
+    0048 astore 7
+    0050 aload 7
+    0052 instanceof Class(Err)
+    0055 istore 8
+    0057 iload 8
+    0059 ifeq 80
+    0062 aload 0
+    0064 checkcast Class(Err)
+    0067 astore 9
+    0069 ldc "err"
+    0071 astore 10
+    0073 aload 10
+    0075 astore 6
+    0077 goto 91
+    0080 ldc "unknown"
+    0082 astore 11
+    0084 aload 11
+    0086 astore 6
+    0088 goto 91
+    0091 aload 6
+    0093 areturn
+    sub_attr  StackMapTable (69 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=7
     0000 bipush 42

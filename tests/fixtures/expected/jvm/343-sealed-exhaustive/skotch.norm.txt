@@ -26,7 +26,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0048 return
 method        name (LShape;)Ljava/lang/String; 0x0009
-  code        max_stack=1 max_locals=10
+  code        max_stack=1 max_locals=12
     0000 aload 0
     0002 checkcast Class(Shape)
     0005 astore 1
@@ -38,30 +38,36 @@ method        name (LShape;)Ljava/lang/String; 0x0009
     0019 instanceof Class(Circle)
     0022 istore 3
     0024 iload 3
-    0026 ifeq 40
-    0029 ldc "circle"
-    0031 astore 4
-    0033 aload 4
-    0035 astore 5
-    0037 goto 81
-    0040 aload 0
-    0042 checkcast Class(Shape)
-    0045 astore 6
-    0047 aload 6
-    0049 instanceof Class(Rect)
-    0052 istore 7
-    0054 iload 7
-    0056 ifeq 70
-    0059 ldc "rect"
-    0061 astore 8
-    0063 aload 8
-    0065 astore 5
-    0067 goto 81
-    0070 ldc "unknown"
-    0072 astore 9
-    0074 aload 9
-    0076 astore 5
-    0078 goto 81
-    0081 aload 5
-    0083 areturn
-    sub_attr  StackMapTable (75 bytes)
+    0026 ifeq 47
+    0029 aload 0
+    0031 checkcast Class(Circle)
+    0034 astore 4
+    0036 ldc "circle"
+    0038 astore 5
+    0040 aload 5
+    0042 astore 6
+    0044 goto 95
+    0047 aload 0
+    0049 checkcast Class(Shape)
+    0052 astore 7
+    0054 aload 7
+    0056 instanceof Class(Rect)
+    0059 istore 8
+    0061 iload 8
+    0063 ifeq 84
+    0066 aload 0
+    0068 checkcast Class(Rect)
+    0071 astore 9
+    0073 ldc "rect"
+    0075 astore 10
+    0077 aload 10
+    0079 astore 6
+    0081 goto 95
+    0084 ldc "unknown"
+    0086 astore 11
+    0088 aload 11
+    0090 astore 6
+    0092 goto 95
+    0095 aload 6
+    0097 areturn
+    sub_attr  StackMapTable (77 bytes)

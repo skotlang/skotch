@@ -36,7 +36,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0070 return
 method        typeOf (Ljava/lang/Object;)Ljava/lang/String; 0x0009
-  code        max_stack=1 max_locals=13
+  code        max_stack=1 max_locals=16
     0000 iconst_1
     0001 istore 1
     0003 goto 6
@@ -46,41 +46,52 @@ method        typeOf (Ljava/lang/Object;)Ljava/lang/String; 0x0009
     0012 instanceof Class(java/lang/String)
     0015 istore 3
     0017 iload 3
-    0019 ifeq 33
-    0022 ldc "String"
-    0024 astore 4
-    0026 aload 4
-    0028 astore 5
-    0030 goto 98
-    0033 aload 0
+    0019 ifeq 40
+    0022 aload 0
+    0024 checkcast Class(java/lang/String)
+    0027 astore 4
+    0029 ldc "String"
+    0031 astore 5
+    0033 aload 5
     0035 astore 6
-    0037 aload 6
-    0039 instanceof Class(java/lang/Integer)
-    0042 istore 7
-    0044 iload 7
-    0046 ifeq 60
-    0049 ldc "Int"
-    0051 astore 8
-    0053 aload 8
-    0055 astore 5
-    0057 goto 98
-    0060 aload 0
-    0062 astore 9
-    0064 aload 9
-    0066 instanceof Class(java/lang/Boolean)
-    0069 istore 10
-    0071 iload 10
-    0073 ifeq 87
-    0076 ldc "Boolean"
-    0078 astore 11
-    0080 aload 11
-    0082 astore 5
-    0084 goto 98
-    0087 ldc "Other"
-    0089 astore 12
-    0091 aload 12
-    0093 astore 5
-    0095 goto 98
-    0098 aload 5
-    0100 areturn
-    sub_attr  StackMapTable (93 bytes)
+    0037 goto 125
+    0040 aload 0
+    0042 astore 7
+    0044 aload 7
+    0046 instanceof Class(java/lang/Integer)
+    0049 istore 8
+    0051 iload 8
+    0053 ifeq 77
+    0056 aload 0
+    0058 checkcast Class(java/lang/Integer)
+    0061 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0064 istore 9
+    0066 ldc "Int"
+    0068 astore 10
+    0070 aload 10
+    0072 astore 6
+    0074 goto 125
+    0077 aload 0
+    0079 astore 11
+    0081 aload 11
+    0083 instanceof Class(java/lang/Boolean)
+    0086 istore 12
+    0088 iload 12
+    0090 ifeq 114
+    0093 aload 0
+    0095 checkcast Class(java/lang/Boolean)
+    0098 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
+    0101 istore 13
+    0103 ldc "Boolean"
+    0105 astore 14
+    0107 aload 14
+    0109 astore 6
+    0111 goto 125
+    0114 ldc "Other"
+    0116 astore 15
+    0118 aload 15
+    0120 astore 6
+    0122 goto 125
+    0125 aload 6
+    0127 areturn
+    sub_attr  StackMapTable (98 bytes)

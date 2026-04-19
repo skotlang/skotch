@@ -8114,6 +8114,47 @@ fn lower_expr(
                     body_blks[i],
                 );
 
+                // Smart cast: if the branch pattern is `is Type`, narrow the
+                // subject variable to that type in the branch body scope.
+                // e.g. `when (obj) { is String -> obj.length }` — obj is
+                // narrowed to String inside the branch.
+                let smart_cast_entries = if let Expr::IsCheck {
+                    expr: checked_expr,
+                    type_name,
+                    negated: false,
+                    ..
+                } = &branch.pattern
+                {
+                    if let Expr::Ident(var_name, _) = checked_expr.as_ref() {
+                        let type_str = interner.resolve(*type_name);
+                        let narrowed_ty =
+                            skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
+                                if module.classes.iter().any(|c| c.name == type_str) {
+                                    Ty::Class(type_str.to_string())
+                                } else {
+                                    Ty::Any
+                                }
+                            });
+                        if let Some((_, old_local)) =
+                            scope.iter().rev().find(|(s, _)| s == var_name)
+                        {
+                            let cast_local = fb.new_local(narrowed_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: cast_local,
+                                value: Rvalue::Local(*old_local),
+                            });
+                            scope.push((*var_name, cast_local));
+                            1usize
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+
                 // Lower body in body_blks[i].
                 // Session 30: when branch bodies that are `{ stmts }` parse
                 // as Expr::Lambda with no params. Inline them as blocks
@@ -8187,6 +8228,12 @@ fn lower_expr(
                         loop_ctx,
                     )
                 };
+
+                // Pop smart-cast scope entries.
+                for _ in 0..smart_cast_entries {
+                    scope.pop();
+                }
+
                 if let Some(val) = body_val {
                     if i == 0 {
                         let ty = fb.mf.locals[val.0 as usize].clone();
