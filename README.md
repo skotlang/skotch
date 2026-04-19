@@ -388,6 +388,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | Coroutines | [§7.2.11](https://kotlinlang.org/spec/expressions.html#coroutine-builder-invocations) | Very Hard | `suspend`, CPS state machine, runBlocking/launch/async/delay/withContext/coroutineScope/yield, structured concurrency |
 | Field assignment | [§7.1.1](https://kotlinlang.org/spec/expressions.html#simple-assignments) | Easy | `receiver.field = value` on class instances |
 | tailrec keyword | [§4.5.6](https://kotlinlang.org/spec/declarations.html#tail-recursive-functions) | Easy | Parser support; optimization deferred |
+| Range expressions | [§7.2.6](https://kotlinlang.org/spec/expressions.html#range-expression) | Medium | `val r = 1..10` creates IntRange via rangeTo |
+| Infix operators | [§7.2.5](https://kotlinlang.org/spec/expressions.html#infix-function-call) | Easy | `to`, `shl`, `shr`, `and`, `or`, `xor`, `contains`, `zip` |
 | Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
 
 ## Running the tests

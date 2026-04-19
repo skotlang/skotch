@@ -795,12 +795,17 @@ milestones:
           val String.lastChar: Char get() = this[length - 1].
           Parser and MIR lowering for extension property access.
 
-      - name: "Infix call syntax"
+      - name: "Infix call syntax (landed)"
+        completed: true
         description: >
-          a to b, a shl b. Parser recognizes identifier-as-infix after
-          an expression. Desugars to a.to(b).
-        acceptance_criteria:
-          - "1 to \"one\" creates a Pair"
+          a to b, a shl b, a contains b, a zip b. Parser recognizes
+          identifier-as-infix after an expression. Desugars to a.to(b).
+
+      - name: "Range expression `..` operator (landed)"
+        completed: true
+        description: >
+          `val r = 1..10` creates an IntRange via rangeTo. Parsed at
+          the infix level; desugars to IntRange constructor call.
 
       - name: "When with smart casts in all branches"
         description: >

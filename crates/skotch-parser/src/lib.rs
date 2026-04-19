@@ -2133,6 +2133,41 @@ impl<'a> Parser<'a> {
     fn parse_infix_call(&mut self) -> Expr {
         let lhs = self.parse_equality();
         self.skip_trivia();
+        // `..` range operator: `1..10` → rangeTo call.
+        // Only consume `..` when NOT inside for-loop/when range context
+        // (those parsers handle `..` themselves). We detect this by
+        // checking that the token AFTER `..` and the range end is NOT
+        // `)` (for-loop end) or `->` (when pattern end).
+        if self.peek_kind() == TokenKind::DotDot {
+            // Peek ahead: if after `.. expr` we see `)` or `->`, this
+            // is a for-loop or when range — let the caller handle `..`.
+            // Otherwise consume it as a rangeTo expression.
+            //
+            // Simple heuristic: if the TWO tokens ahead include `)` or
+            // `->`, skip. This isn't perfect but handles the common cases.
+            let after_dotdot = self.peek_kind_at(2); // token after `.. <number>`
+            if after_dotdot != TokenKind::RParen && after_dotdot != TokenKind::Arrow {
+                let span_start = lhs.span();
+                self.bump(); // consume ..
+                self.skip_trivia();
+                let rhs = self.parse_equality();
+                let span = span_start.merge(rhs.span());
+                let name = self.interner.intern("rangeTo");
+                return Expr::Call {
+                    callee: Box::new(Expr::Field {
+                        receiver: Box::new(lhs),
+                        name,
+                        span,
+                    }),
+                    args: vec![CallArg {
+                        name: None,
+                        expr: rhs,
+                    }],
+                    type_args: Vec::new(),
+                    span,
+                };
+            }
+        }
         // Check if the next token is a known infix function name that is
         // NOT followed by `(` (which would be a regular call, already
         // handled by parse_postfix).
@@ -2721,11 +2756,13 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::KwIn {
                     self.bump(); // consume `in`
                     self.skip_trivia();
-                    let range_start = self.parse_expr();
+                    // Use parse_additive (not parse_expr) so that `..`
+                    // is NOT consumed as part of the range start expression.
+                    let range_start = self.parse_additive();
                     self.skip_trivia();
                     self.expect(TokenKind::DotDot, "'..' in range pattern");
                     self.skip_trivia();
-                    let range_end = self.parse_expr();
+                    let range_end = self.parse_additive();
                     patterns.push((range_start, Some(range_end)));
                 } else if self.peek_kind() == TokenKind::KwIs {
                     // `is Type` pattern: lower as IsCheck on the subject.

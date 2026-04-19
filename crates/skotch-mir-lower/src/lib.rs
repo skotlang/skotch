@@ -116,6 +116,8 @@ fn stdlib_extension(
     method: &str,
 ) -> Option<(&'static str, &'static str, &'static str, Ty)> {
     match (receiver_ty, method) {
+        // ── kotlin.ranges — rangeTo: handled as ConstructorJava below ──
+
         // ── kotlin.collections — Iterable/Collection/List extensions ──
         (_, "map") => Some((
             "kotlin/collections/CollectionsKt",
@@ -4410,6 +4412,28 @@ fn lower_expr(
                                 descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)V".to_string(),
                             },
                             args: vec![a_boxed, b_boxed],
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // ── Int.rangeTo(Int) → new IntRange(start, end) ─────
+                if method_name_str == "rangeTo" && args.len() == 1 {
+                    let start = recv_local;
+                    let end = all_args[1];
+                    let dest = fb.new_local(Ty::Class("kotlin/ranges/IntRange".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::NewInstance("kotlin/ranges/IntRange".to_string()),
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::ConstructorJava {
+                                class_name: "kotlin/ranges/IntRange".to_string(),
+                                descriptor: "(II)V".to_string(),
+                            },
+                            args: vec![start, end],
                         },
                     });
                     return Some(dest);
