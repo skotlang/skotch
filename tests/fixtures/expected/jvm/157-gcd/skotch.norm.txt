@@ -12,9 +12,7 @@ method        gcd (II)I 0x0009
     0010 istore 4
     0012 iload 4
     0014 istore 5
-    0016 op_0xA7
-    0017 nop
-    0018 iconst_0
+    0016 goto 19
     0019 iload 5
     0021 istore 6
     0023 iconst_0
@@ -25,15 +23,11 @@ method        gcd (II)I 0x0009
     0031 nop
     0032 iconst_4
     0033 iconst_0
-    0034 op_0xA7
-    0035 nop
-    0036 iconst_1
+    0034 goto 38
     0037 iconst_1
     0038 istore 8
     0040 iload 8
-    0042 op_0x99
-    0043 nop
-    0044 op_0x29
+    0042 ifeq 83
     0045 iload 5
     0047 istore 9
     0049 iload 9
@@ -52,9 +46,7 @@ method        gcd (II)I 0x0009
     0074 istore 14
     0076 iload 14
     0078 istore 3
-    0080 op_0xA7
-    0081 op_0xFF
-    0082 op_0xC3
+    0080 goto 19
     0083 iload 3
     0085 istore 15
     0087 iload 15

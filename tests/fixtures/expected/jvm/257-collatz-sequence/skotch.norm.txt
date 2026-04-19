@@ -12,9 +12,7 @@ method        collatz (I)I 0x0009
     0009 istore 3
     0011 iload 3
     0013 istore 4
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_0
+    0015 goto 18
     0018 iload 4
     0020 istore 5
     0022 iconst_1
@@ -25,15 +23,11 @@ method        collatz (I)I 0x0009
     0030 nop
     0031 iconst_4
     0032 iconst_0
-    0033 op_0xA7
-    0034 nop
-    0035 iconst_1
+    0033 goto 37
     0036 iconst_1
     0037 istore 7
     0039 iload 7
-    0041 op_0x99
-    0042 nop
-    0043 op_0x2A
+    0041 ifeq 83
     0044 iload 4
     0046 istore 8
     0048 iconst_2
@@ -50,18 +44,12 @@ method        collatz (I)I 0x0009
     0066 nop
     0067 iconst_4
     0068 iconst_0
-    0069 op_0xA7
-    0070 nop
-    0071 iconst_1
+    0069 goto 73
     0072 iconst_1
     0073 istore 12
     0075 iload 12
-    0077 op_0x99
-    0078 nop
-    0079 op_0x22
-    0080 op_0xA7
-    0081 nop
-    0082 op_0x0A
+    0077 ifeq 111
+    0080 goto 90
     0083 iload 2
     0085 istore 13
     0087 iload 13
@@ -76,9 +64,7 @@ method        collatz (I)I 0x0009
     0102 istore 16
     0104 iload 16
     0106 istore 4
-    0108 op_0xA7
-    0109 nop
-    0110 op_0x22
+    0108 goto 142
     0111 iload 4
     0113 istore 17
     0115 iconst_3
@@ -95,9 +81,7 @@ method        collatz (I)I 0x0009
     0133 istore 21
     0135 iload 21
     0137 istore 4
-    0139 op_0xA7
-    0140 nop
-    0141 iconst_0
+    0139 goto 142
     0142 iload 2
     0144 istore 22
     0146 iconst_1
@@ -108,9 +92,7 @@ method        collatz (I)I 0x0009
     0154 istore 24
     0156 iload 24
     0158 istore 2
-    0160 op_0xA7
-    0161 op_0xFF
-    0162 op_0x72
+    0160 goto 18
     sub_attr  StackMapTable (157 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7

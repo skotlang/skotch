@@ -4,14 +4,14 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=3 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 op_0xC6
     0002 nop
     0003 op_0x16
-    0004 op_0x2A
+    0004 aload_0
     0005 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
     0008 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
-    0011 op_0x59
+    0011 dup
     0012 ldc "toUpperCase(...)"
     0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
     0017 op_0xBA
@@ -19,9 +19,9 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0019 op_0x27
     0020 nop
     0021 nop
-    0022 op_0xB0
+    0022 areturn
     0023 ldc "Hello, stranger"
-    0025 op_0xB0
+    0025 areturn
     sub_attr  StackMapTable (3 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

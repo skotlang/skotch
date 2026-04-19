@@ -8,10 +8,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 istore 1
     0003 iconst_2
     0004 istore 2
-    0006 op_0xBB
-    0007 nop
-    0008 op_0x0B
-    0009 op_0x59
+    0006 new Class(Point)
+    0009 dup
     0010 iload 1
     0012 iload 2
     0014 invokespecial Method(Point.<init>:(II)V)
@@ -23,10 +21,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0029 istore 4
     0031 iconst_5
     0032 istore 5
-    0034 op_0xBB
-    0035 nop
-    0036 op_0x1D
-    0037 op_0x59
+    0034 new Class(Size)
+    0037 dup
     0038 iload 4
     0040 iload 5
     0042 invokespecial Method(Size.<init>:(II)V)

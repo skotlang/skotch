@@ -1,0 +1,1123 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "String",
+        "Int",
+        {
+          "Class": "Person"
+        },
+        "Unit",
+        "String",
+        "Int",
+        {
+          "Class": "Person"
+        },
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "String": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 30
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "NewInstance": "Person"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Person"
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "String": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 25
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "NewInstance": "Person"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Person"
+                    },
+                    "args": [
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Person",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "name",
+          "ty": "String"
+        },
+        {
+          "name": "age",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 8,
+          "name": "toString",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "Int",
+            "String",
+            "String",
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Const": {
+                        "String": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Const": {
+                        "String": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 5
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "String": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 6
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 7
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "Const": {
+                        "String": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 8
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 9,
+                        "rhs": 10
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 11
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 12,
+                    "value": {
+                      "Const": {
+                        "String": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 13,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 12
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 13
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "component1",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 10,
+          "name": "component2",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "equals",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "Any",
+            "Any",
+            "Bool",
+            "Bool",
+            "Bool",
+            "Bool",
+            {
+              "Class": "Person"
+            },
+            "String",
+            "String",
+            "Bool",
+            "Int",
+            "Int",
+            "Bool",
+            "Bool"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Local": 0
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "BinOp": {
+                        "op": "CmpEq",
+                        "lhs": 2,
+                        "rhs": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Branch": {
+                  "cond": 3,
+                  "then_block": 1,
+                  "else_block": 2
+                }
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "Bool": true
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 4
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "InstanceOf": {
+                        "obj": 1,
+                        "type_descriptor": "Person"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Branch": {
+                  "cond": 5,
+                  "then_block": 4,
+                  "else_block": 3
+                }
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "Bool": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 6
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "CheckCast": {
+                        "obj": 1,
+                        "target_class": "Person"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "GetField": {
+                        "receiver": 7,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "java/lang/String",
+                            "method_name": "equals",
+                            "descriptor": "(Ljava/lang/Object;)Z"
+                          }
+                        },
+                        "args": [
+                          8,
+                          9
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 12,
+                    "value": {
+                      "GetField": {
+                        "receiver": 7,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 13,
+                    "value": {
+                      "BinOp": {
+                        "op": "CmpEq",
+                        "lhs": 11,
+                        "rhs": 12
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 14,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 10,
+                        "rhs": 13
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 14
+              }
+            }
+          ],
+          "return_ty": "Bool"
+        },
+        {
+          "id": 12,
+          "name": "hashCode",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "String",
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "java/lang/String",
+                            "method_name": "hashCode",
+                            "descriptor": "()I"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "Int": 31
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 4,
+                        "rhs": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 5,
+                        "rhs": 3
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 6
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 13,
+          "name": "copy",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "String",
+            "Int",
+            {
+              "Class": "Person"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "NewInstance": "Person"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Constructor": "Person"
+                        },
+                        "args": [
+                          1,
+                          2
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 3
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Person"
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1,
+          2
+        ],
+        "locals": [
+          {
+            "Class": "Person"
+          },
+          "String",
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Person",
+                      "field_name": "name",
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Person",
+                      "field_name": "age",
+                      "value": 2
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "Person(",
+    "name=",
+    ", ",
+    "age=",
+    ")",
+    "Alice",
+    "Bob"
+  ]
+}

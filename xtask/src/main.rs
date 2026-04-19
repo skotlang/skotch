@@ -310,15 +310,36 @@ fn gen_one_jvm(
         if !status.success() {
             eprintln!("  kotlinc failed; skipping reference for {}", f.dir_name);
         } else {
-            // Find the produced .class file.
-            let mut class_path = None;
+            // Find the produced .class file. When `kotlinc` emits
+            // multiple classes (e.g. Session 3 coroutines, where
+            // the wrapper class is accompanied by a synthetic
+            // `$run$1` continuation), prefer a top-level
+            // wrapper-shaped name — one whose stem ends with `Kt`
+            // and contains no `$` separators — so the primary
+            // reference matches the file skotch writes to
+            // `skotch.class`. Falls back to the first class file
+            // for inputs that don't follow the `*Kt` convention.
+            let mut all_classes: Vec<std::path::PathBuf> = Vec::new();
             for e in walkdir::WalkDir::new(&tmp) {
                 let e = e?;
                 if e.path().extension().and_then(|s| s.to_str()) == Some("class") {
-                    class_path = Some(e.path().to_path_buf());
-                    break;
+                    all_classes.push(e.path().to_path_buf());
                 }
             }
+            let class_path = all_classes
+                .iter()
+                .find(|p| {
+                    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                    !stem.contains('$') && stem.ends_with("Kt")
+                })
+                .or_else(|| {
+                    all_classes.iter().find(|p| {
+                        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                        !stem.contains('$')
+                    })
+                })
+                .or_else(|| all_classes.first())
+                .cloned();
             if let Some(cp) = class_path {
                 let bytes = std::fs::read(&cp)?;
                 std::fs::write(expected.join("kotlinc.class"), &bytes)?;

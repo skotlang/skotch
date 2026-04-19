@@ -5,61 +5,55 @@ access_flags  0x0031
 method        collatz (I)I 0x0019
   code        max_stack=2 max_locals=3
     0000 iconst_0
-    0001 op_0x3C
-    0002 op_0x1A
-    0003 op_0x3D
-    0004 op_0x1C
+    0001 istore_1
+    0002 iload_0
+    0003 istore_2
+    0004 iload_2
     0005 iconst_1
     0006 op_0x9F
     0007 nop
-    0008 op_0x1C
-    0009 op_0x1C
+    0008 iload_2
+    0009 iload_2
     0010 iconst_2
     0011 irem
-    0012 op_0x9A
-    0013 nop
-    0014 op_0x0A
-    0015 op_0x1C
+    0012 ifne 22
+    0015 iload_2
     0016 iconst_2
     0017 idiv
-    0018 op_0x3D
-    0019 op_0xA7
-    0020 nop
-    0021 op_0x09
-    0022 op_0x1C
+    0018 istore_2
+    0019 goto 28
+    0022 iload_2
     0023 iconst_3
     0024 imul
     0025 iconst_1
     0026 iadd
-    0027 op_0x3D
+    0027 istore_2
     0028 op_0x84
     0029 aconst_null
     0030 aconst_null
-    0031 op_0xA7
-    0032 op_0xFF
-    0033 op_0xE5
-    0034 op_0x1B
+    0031 goto 4
+    0034 iload_1
     0035 op_0xAC
     sub_attr  StackMapTable (10 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 27
     0002 invokestatic Method(InputKt.collatz:(I)I)
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 iconst_1
     0014 invokestatic Method(InputKt.collatz:(I)I)
-    0017 op_0x3B
+    0017 istore_0
     0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 op_0x1A
+    0021 iload_0
     0022 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0025 bipush 6
     0027 invokestatic Method(InputKt.collatz:(I)I)
-    0030 op_0x3B
+    0030 istore_0
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 op_0x1A
+    0034 iload_0
     0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0038 return
 method        main ([Ljava/lang/String;)V 0x1009

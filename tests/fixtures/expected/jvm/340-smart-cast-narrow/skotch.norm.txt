@@ -7,18 +7,12 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0009
     0000 aload 0
     0002 astore 1
     0004 aload 1
-    0006 op_0xC1
-    0007 nop
-    0008 op_0x0B
+    0006 instanceof Class(java/lang/String)
     0009 istore 2
     0011 iload 2
-    0013 op_0x99
-    0014 nop
-    0015 op_0x28
+    0013 ifeq 53
     0016 aload 0
-    0018 op_0xC0
-    0019 nop
-    0020 op_0x0B
+    0018 checkcast Class(java/lang/String)
     0021 astore 3
     0023 ldc "length="
     0025 astore 4
@@ -33,14 +27,12 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0009
     0045 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0048 astore 7
     0050 aload 7
-    0052 op_0xB0
-    0053 op_0xA7
-    0054 nop
-    0055 iconst_0
+    0052 areturn
+    0053 goto 56
     0056 ldc "not string"
     0058 astore 8
     0060 aload 8
-    0062 op_0xB0
+    0062 areturn
     sub_attr  StackMapTable (30 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=6

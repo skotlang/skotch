@@ -57,15 +57,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0058 aload 24
     0060 iconst_4
     0061 op_0x39
-    0062 op_0x1B
+    0062 iload_1
     0063 op_0x18
     0064 aload 24
-    0066 op_0x1B
+    0066 iload_1
     0067 op_0x67
     0068 op_0x39
-    0069 op_0x1D
+    0069 iload_3
     0070 op_0x18
-    0071 op_0x1D
+    0071 iload_3
     0072 op_0x39
     0073 op_0x1F
     0074 op_0x18
@@ -97,16 +97,16 @@ method        main ([Ljava/lang/String;)V 0x0009
     0100 op_0x29
     0101 op_0x6B
     0102 op_0x39
-    0103 op_0x2B
+    0103 aload_1
     0104 op_0x18
     0105 op_0x25
     0106 op_0x18
-    0107 op_0x2B
+    0107 aload_1
     0108 op_0x63
     0109 op_0x39
-    0110 op_0x2D
+    0110 aload_3
     0111 op_0x18
-    0112 op_0x2D
+    0112 aload_3
     0113 op_0x39
     0114 op_0x2F
     0115 op_0x18

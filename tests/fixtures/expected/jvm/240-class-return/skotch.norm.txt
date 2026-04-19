@@ -13,14 +13,10 @@ method        main ([Ljava/lang/String;)V 0x0009
     0012 invokestatic Method(InputKt.makePair:(II)LPair;)
     0015 astore 3
     0017 aload 3
-    0019 op_0xC0
-    0020 nop
-    0021 op_0x0B
+    0019 checkcast Class(Pair)
     0022 astore 4
     0024 aload 4
-    0026 op_0xC0
-    0027 nop
-    0028 op_0x0B
+    0026 checkcast Class(Pair)
     0029 astore 5
     0031 aload 5
     0033 invokevirtual Method(kotlin/Pair.getFirst:()Ljava/lang/Object;)
@@ -29,9 +25,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0041 aload 6
     0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0046 aload 4
-    0048 op_0xC0
-    0049 nop
-    0050 op_0x0B
+    0048 checkcast Class(Pair)
     0051 astore 7
     0053 aload 7
     0055 invokevirtual Method(kotlin/Pair.getSecond:()Ljava/lang/Object;)
@@ -46,13 +40,11 @@ method        makePair (II)LPair; 0x0009
     0002 istore 2
     0004 iload 1
     0006 istore 3
-    0008 op_0xBB
-    0009 nop
-    0010 op_0x0B
-    0011 op_0x59
+    0008 new Class(Pair)
+    0011 dup
     0012 iload 2
     0014 iload 3
     0016 invokespecial Method(Pair.<init>:(II)V)
     0019 astore 4
     0021 aload 4
-    0023 op_0xB0
+    0023 areturn

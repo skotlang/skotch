@@ -4,9 +4,7 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=6
-    0000 op_0xA7
-    0001 nop
-    0002 iconst_0
+    0000 goto 3
     0003 ldc "one"
     0005 astore 1
     0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -22,17 +20,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0034 aload 3
     0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0039 op_0xA7
-    0040 nop
-    0041 op_0x14
+    0039 goto 59
     0042 astore 4
     0044 ldc "caught"
     0046 astore 5
     0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0051 aload 5
     0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0056 op_0xA7
-    0057 nop
-    0058 iconst_0
+    0056 goto 59
     0059 return
     sub_attr  StackMapTable (35 bytes)

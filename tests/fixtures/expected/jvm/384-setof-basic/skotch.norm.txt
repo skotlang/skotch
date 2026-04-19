@@ -70,29 +70,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0112 invokestatic Method(kotlin/collections/SetsKt.setOf:([Ljava/lang/Object;)Ljava/util/Set;)
     0115 astore 18
     0117 aload 18
-    0119 op_0xC0
-    0120 nop
-    0121 op_0x17
+    0119 checkcast Class(java/util/Set)
     0122 astore 19
     0124 aload 19
-    0126 op_0xC0
-    0127 nop
-    0128 op_0x17
+    0126 checkcast Class(java/util/Set)
     0129 astore 20
     0131 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0134 aload 20
     0136 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0139 aload 19
-    0141 op_0xC0
-    0142 nop
-    0143 op_0x17
+    0141 checkcast Class(java/util/Set)
     0144 astore 21
     0146 aload 21
-    0148 op_0xB9
-    0149 nop
-    0150 op_0x27
-    0151 aconst_null
-    0152 nop
+    0148 invokeinterface InterfaceMethod(java/util/Set.size:()I)
     0153 istore 22
     0155 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0158 iload 22

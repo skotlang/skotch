@@ -1,0 +1,1106 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Direction"
+        },
+        {
+          "Class": "Direction"
+        },
+        {
+          "Class": "Direction"
+        },
+        "Unit",
+        {
+          "Class": "Direction"
+        },
+        "String",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 8
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "GetField": {
+                    "receiver": 4,
+                    "class_name": "Direction",
+                    "field_name": "name"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    },
+    {
+      "id": 8,
+      "name": "NORTH",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Direction"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Direction"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Direction"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Direction"
+      }
+    },
+    {
+      "id": 9,
+      "name": "SOUTH",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Direction"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Direction"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Direction"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Direction"
+      }
+    },
+    {
+      "id": 10,
+      "name": "EAST",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Direction"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Direction"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Direction"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Direction"
+      }
+    },
+    {
+      "id": 11,
+      "name": "WEST",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Direction"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Direction"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Direction"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Direction"
+      }
+    },
+    {
+      "id": 12,
+      "name": "Direction$values",
+      "params": [],
+      "locals": [
+        {
+          "Class": "java/util/ArrayList"
+        },
+        {
+          "Class": "Direction"
+        },
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "Bool"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "java/util/ArrayList"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "java/util/ArrayList"
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 8
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 10
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 11
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      7
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "java/util/ArrayList"
+      }
+    },
+    {
+      "id": 13,
+      "name": "Direction$valueOf",
+      "params": [
+        0
+      ],
+      "locals": [
+        "String",
+        "String",
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Direction"
+        },
+        {
+          "Class": "Direction"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 10
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 11,
+              "then_block": 8,
+              "else_block": 6
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 8
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 13
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 2,
+              "then_block": 3,
+              "else_block": 1
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 11
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 4
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 5,
+              "then_block": 5,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 10
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 7
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 8,
+              "then_block": 7,
+              "else_block": 4
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 9
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 8
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 12
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Direction"
+      },
+      "required_params": 1,
+      "param_names": [
+        "name"
+      ]
+    }
+  ],
+  "classes": [
+    {
+      "name": "Direction",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "name",
+          "ty": "String"
+        }
+      ],
+      "methods": [
+        {
+          "id": 0,
+          "name": "toString",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Direction"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Direction",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Direction"
+          },
+          "String"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Direction",
+                      "field_name": "name",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "NORTH",
+    "SOUTH",
+    "EAST",
+    "WEST"
+  ],
+  "enum_names": [
+    "Direction"
+  ]
+}

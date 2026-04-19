@@ -8,23 +8,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 istore 1
     0003 iload 1
     0005 istore 2
-    0007 op_0xBB
-    0008 nop
-    0009 op_0x0B
-    0010 op_0x59
+    0007 new Class($Ref$0)
+    0010 dup
     0011 iload 2
     0013 invokespecial Method($Ref$0.<init>:(I)V)
     0016 astore 3
-    0018 op_0xBB
-    0019 nop
-    0020 sipush 22809
-    0023 iconst_0
+    0018 new Class(InputKt$Lambda$1)
+    0021 dup
+    0022 aload 3
     0024 invokespecial Method(InputKt$Lambda$1.<init>:(L$Ref$0;)V)
     0027 astore 4
     0029 aload 4
-    0031 op_0xC0
-    0032 nop
-    0033 sipush 14853
+    0031 checkcast Class(InputKt$Lambda$1)
+    0034 astore 5
     0036 aload 5
     0038 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
     0041 aload 5
@@ -32,9 +28,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0046 aload 5
     0048 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
     0051 aload 3
-    0053 op_0xB4
-    0054 nop
-    0055 op_0x1C
+    0053 getfield Field($Ref$0.element:I)
     0056 istore 6
     0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0061 iload 6

@@ -11,21 +11,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0007 iload 1
     0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0012 astore 3
-    0014 op_0xBB
-    0015 nop
-    0016 ldc_w #22809
-    0019 iconst_0
+    0014 new Class(kotlin/Pair)
+    0017 dup
+    0018 aload 3
     0020 aload 2
     0022 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
     0025 astore 4
     0027 aload 4
-    0029 op_0xC0
-    0030 nop
-    0031 ldc_w #14853
+    0029 checkcast Class(kotlin/Pair)
+    0032 astore 5
     0034 aload 5
-    0036 op_0xC0
-    0037 nop
-    0038 ldc_w #14854
+    0036 checkcast Class(kotlin/Pair)
+    0039 astore 6
     0041 aload 6
     0043 invokevirtual Method(kotlin/Pair.getFirst:()Ljava/lang/Object;)
     0046 astore 7
@@ -33,9 +30,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0051 aload 7
     0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0056 aload 5
-    0058 op_0xC0
-    0059 nop
-    0060 ldc_w #14856
+    0058 checkcast Class(kotlin/Pair)
+    0061 astore 8
     0063 aload 8
     0065 invokevirtual Method(kotlin/Pair.getSecond:()Ljava/lang/Object;)
     0068 astore 9
@@ -43,9 +39,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0073 aload 9
     0075 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0078 aload 5
-    0080 op_0xC0
-    0081 nop
-    0082 ldc_w #14858
+    0080 checkcast Class(kotlin/Pair)
+    0083 astore 10
     0085 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0088 aload 10
     0090 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

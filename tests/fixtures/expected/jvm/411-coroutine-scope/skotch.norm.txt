@@ -1,0 +1,98 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=8
+    0000 new Class(InputKt$Lambda$3)
+    0003 dup
+    0004 aconst_null
+    0005 astore 2
+    0007 aload 2
+    0009 invokespecial Method(InputKt$Lambda$3.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0012 astore 1
+    0014 aconst_null
+    0015 astore 3
+    0017 aload 1
+    0019 checkcast Class(kotlin/jvm/functions/Function2)
+    0022 astore 4
+    0024 iconst_1
+    0025 istore 5
+    0027 aconst_null
+    0028 astore 6
+    0030 aload 3
+    0032 aload 4
+    0034 iload 5
+    0036 aload 6
+    0038 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0041 astore 7
+    0043 return
+method        sumWithScope (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
+  code        max_stack=16 max_locals=32
+    0000 aload_0
+    0001 instanceof Class(InputKt$sumWithScope$1)
+    0004 ifeq 40
+    0007 aload_0
+    0008 checkcast Class(InputKt$sumWithScope$1)
+    0011 astore 6
+    0013 aload 6
+    0015 getfield Field(InputKt$sumWithScope$1.label:I)
+    0018 ldc int(-2147483648)
+    0020 iand
+    0021 ifeq 40
+    0024 aload 6
+    0026 aload 6
+    0028 getfield Field(InputKt$sumWithScope$1.label:I)
+    0031 ldc int(-2147483648)
+    0033 isub
+    0034 putfield Field(InputKt$sumWithScope$1.label:I)
+    0037 goto 50
+    0040 new Class(InputKt$sumWithScope$1)
+    0043 dup
+    0044 aload_0
+    0045 invokespecial Method(InputKt$sumWithScope$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0048 astore 6
+    0050 aload 6
+    0052 getfield Field(InputKt$sumWithScope$1.result:Ljava/lang/Object;)
+    0055 astore 5
+    0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0060 astore 7
+    0062 aload 6
+    0064 getfield Field(InputKt$sumWithScope$1.label:I)
+    0067 tableswitch default=152 low=0 high=1 0=88 1=137
+    0088 aload 5
+    0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0093 new Class(InputKt$Lambda$0)
+    0096 astore 1
+    0098 aconst_null
+    0099 astore 2
+    0101 aload 1
+    0103 aload 2
+    0105 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0108 aload 1
+    0110 checkcast Class(kotlin/jvm/functions/Function2)
+    0113 astore 3
+    0115 aload 3
+    0117 aload 6
+    0119 iconst_1
+    0120 putfield Field(InputKt$sumWithScope$1.label:I)
+    0123 aload 6
+    0125 invokestatic Method(kotlinx/coroutines/CoroutineScopeKt.coroutineScope:(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0128 dup
+    0129 aload 7
+    0131 if_acmpne 144
+    0134 aload 7
+    0136 areturn
+    0137 aload 5
+    0139 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0142 aload 5
+    0144 checkcast Class(java/lang/Object)
+    0147 astore 4
+    0149 aload 4
+    0151 areturn
+    0152 new Class(java/lang/IllegalStateException)
+    0155 dup
+    0156 ldc "call to 'resume' before 'invoke' with coroutine"
+    0158 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0161 athrow
+    sub_attr  StackMapTable (125 bytes)

@@ -73,15 +73,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0087 op_0x18
     0088 iconst_0
     0089 op_0x39
-    0090 op_0x1B
+    0090 iload_1
     0091 op_0x18
     0092 iconst_4
     0093 op_0x39
-    0094 op_0x1D
+    0094 iload_3
     0095 op_0x18
-    0096 op_0x1B
+    0096 iload_1
     0097 op_0x18
-    0098 op_0x1D
+    0098 iload_3
     0099 op_0x6F
     0100 op_0x39
     0101 op_0x1F

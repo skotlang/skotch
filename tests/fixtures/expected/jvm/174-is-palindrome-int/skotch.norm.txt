@@ -14,22 +14,16 @@ method        isPalindrome (I)Z 0x0009
     0012 nop
     0013 iconst_4
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 3
     0021 iload 3
-    0023 op_0x99
-    0024 nop
-    0025 op_0x09
+    0023 ifeq 32
     0026 iconst_0
     0027 istore 4
     0029 iload 4
     0031 op_0xAC
-    0032 op_0xA7
-    0033 nop
-    0034 iconst_0
+    0032 goto 35
     0035 iload 0
     0037 istore 5
     0039 iload 5
@@ -38,9 +32,7 @@ method        isPalindrome (I)Z 0x0009
     0044 istore 7
     0046 iload 7
     0048 istore 8
-    0050 op_0xA7
-    0051 nop
-    0052 iconst_0
+    0050 goto 53
     0053 iload 6
     0055 istore 9
     0057 iconst_0
@@ -51,15 +43,11 @@ method        isPalindrome (I)Z 0x0009
     0065 nop
     0066 iconst_4
     0067 iconst_0
-    0068 op_0xA7
-    0069 nop
-    0070 iconst_1
+    0068 goto 72
     0071 iconst_1
     0072 istore 11
     0074 iload 11
-    0076 op_0x99
-    0077 nop
-    0078 op_0x42
+    0076 ifeq 142
     0079 iload 8
     0081 istore 12
     0083 bipush 10
@@ -92,9 +80,7 @@ method        isPalindrome (I)Z 0x0009
     0133 istore 21
     0135 iload 21
     0137 istore 6
-    0139 op_0xA7
-    0140 op_0xFF
-    0141 op_0xAA
+    0139 goto 53
     0142 iload 8
     0144 istore 22
     0146 iload 0
@@ -105,9 +91,7 @@ method        isPalindrome (I)Z 0x0009
     0155 nop
     0156 iconst_4
     0157 iconst_0
-    0158 op_0xA7
-    0159 nop
-    0160 iconst_1
+    0158 goto 162
     0161 iconst_1
     0162 istore 24
     0164 iload 24

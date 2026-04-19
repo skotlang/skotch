@@ -1,0 +1,1450 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "move",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        {
+          "Class": "Dir"
+        },
+        "String",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        "String",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        "String",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        "String",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        "String",
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 3
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 4,
+              "then_block": 2,
+              "else_block": 3
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 5
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 10
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 10
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 6
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 7,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "String": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 8
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 10
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 11
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 9
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 10,
+              "then_block": 6,
+              "else_block": 7
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Const": {
+                    "String": 6
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 11
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 10
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 12
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 12
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 13,
+              "then_block": 8,
+              "else_block": 9
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Const": {
+                    "String": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 14
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 10
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Const": {
+                    "String": 8
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 15
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 10
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 2
+          }
+        }
+      ],
+      "return_ty": "String",
+      "required_params": 1,
+      "param_names": [
+        "d"
+      ],
+      "param_defaults": [
+        null
+      ]
+    },
+    {
+      "id": 1,
+      "name": "main",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        "String",
+        "Unit",
+        {
+          "Class": "Dir"
+        },
+        "String",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 12
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 4,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 8,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    },
+    {
+      "id": 9,
+      "name": "NORTH",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Dir"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Dir"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Dir"
+      }
+    },
+    {
+      "id": 10,
+      "name": "SOUTH",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Dir"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Dir"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Dir"
+      }
+    },
+    {
+      "id": 11,
+      "name": "EAST",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Dir"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Dir"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Dir"
+      }
+    },
+    {
+      "id": 12,
+      "name": "WEST",
+      "params": [],
+      "locals": [
+        {
+          "Class": "Dir"
+        },
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "Dir"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Dir"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Dir"
+      }
+    },
+    {
+      "id": 13,
+      "name": "Dir$values",
+      "params": [],
+      "locals": [
+        {
+          "Class": "java/util/ArrayList"
+        },
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "Bool"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "java/util/ArrayList"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "java/util/ArrayList"
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 10
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 11
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 12
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/ArrayList",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      7
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "java/util/ArrayList"
+      }
+    },
+    {
+      "id": 14,
+      "name": "Dir$valueOf",
+      "params": [
+        0
+      ],
+      "locals": [
+        "String",
+        "String",
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        "String",
+        "Bool",
+        {
+          "Class": "Dir"
+        },
+        {
+          "Class": "Dir"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 10
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 11,
+              "then_block": 8,
+              "else_block": 6
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 13
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 2,
+              "then_block": 3,
+              "else_block": 1
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 12
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 4
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 5,
+              "then_block": 5,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 11
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 7
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 8,
+              "then_block": 7,
+              "else_block": 4
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 10
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 9
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 9
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 12
+          }
+        }
+      ],
+      "return_ty": {
+        "Class": "Dir"
+      },
+      "required_params": 1,
+      "param_names": [
+        "name"
+      ]
+    }
+  ],
+  "classes": [
+    {
+      "name": "Dir",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "name",
+          "ty": "String"
+        }
+      ],
+      "methods": [
+        {
+          "id": 0,
+          "name": "toString",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Dir"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Dir",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Dir"
+          },
+          "String"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Dir",
+                      "field_name": "name",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "NORTH",
+    "SOUTH",
+    "EAST",
+    "WEST",
+    "up",
+    "down",
+    "right",
+    "left",
+    "?"
+  ],
+  "enum_names": [
+    "Dir"
+  ]
+}

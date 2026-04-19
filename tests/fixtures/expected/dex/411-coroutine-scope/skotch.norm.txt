@@ -1,0 +1,56 @@
+dex_version   035
+strings       20
+types         10
+methods       7
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LInputKt$Lambda$0;"
+  "LInputKt$Lambda$3;"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "LLLIL"
+  "Ljava/lang/Object;"
+  "Lkotlin/coroutines/CoroutineContext;"
+  "Lkotlin/jvm/functions/Function2;"
+  "Lkotlinx/coroutines/BuildersKt;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "coroutineScope"
+  "input.kt"
+  "main"
+  "runBlocking$default"
+  "sumWithScope"
+
+--- types ---
+  I
+  LInputKt$Lambda$0;
+  LInputKt$Lambda$3;
+  LInputKt;
+  Ljava/lang/Object;
+  Lkotlin/coroutines/CoroutineContext;
+  Lkotlin/jvm/functions/Function2;
+  Lkotlinx/coroutines/BuildersKt;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$Lambda$0;.<init>(Ljava/lang/Object;)V
+  LInputKt$Lambda$3;.<init>(Ljava/lang/Object;)V
+  LInputKt;.coroutineScope(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.sumWithScope(Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlinx/coroutines/BuildersKt;.runBlocking$default(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=4 insns=17
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       sumWithScope(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=5 ins=1 outs=2 insns=14

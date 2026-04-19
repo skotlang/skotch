@@ -59,17 +59,13 @@ method        min3 (III)I 0x0009
     0013 nop
     0014 iconst_4
     0015 iconst_0
-    0016 op_0xA7
-    0017 nop
-    0018 iconst_1
+    0016 goto 20
     0019 iconst_1
     0020 istore 5
     0022 iconst_0
     0023 istore 6
     0025 iload 5
-    0027 op_0x99
-    0028 nop
-    0029 op_0x20
+    0027 ifeq 59
     0030 iload 0
     0032 istore 7
     0034 iload 2
@@ -80,27 +76,19 @@ method        min3 (III)I 0x0009
     0043 nop
     0044 iconst_4
     0045 iconst_0
-    0046 op_0xA7
-    0047 nop
-    0048 iconst_1
+    0046 goto 50
     0049 iconst_1
     0050 istore 9
     0052 iload 9
     0054 istore 6
-    0056 op_0xA7
-    0057 nop
-    0058 iconst_0
+    0056 goto 59
     0059 iload 6
-    0061 op_0x99
-    0062 nop
-    0063 op_0x0A
+    0061 ifeq 71
     0064 iload 0
     0066 istore 10
     0068 iload 10
     0070 op_0xAC
-    0071 op_0xA7
-    0072 nop
-    0073 iconst_0
+    0071 goto 74
     0074 iload 1
     0076 istore 11
     0078 iload 2
@@ -111,22 +99,16 @@ method        min3 (III)I 0x0009
     0087 nop
     0088 iconst_4
     0089 iconst_0
-    0090 op_0xA7
-    0091 nop
-    0092 iconst_1
+    0090 goto 94
     0093 iconst_1
     0094 istore 13
     0096 iload 13
-    0098 op_0x99
-    0099 nop
-    0100 op_0x0A
+    0098 ifeq 108
     0101 iload 1
     0103 istore 14
     0105 iload 14
     0107 op_0xAC
-    0108 op_0xA7
-    0109 nop
-    0110 iconst_0
+    0108 goto 111
     0111 iload 2
     0113 istore 15
     0115 iload 15

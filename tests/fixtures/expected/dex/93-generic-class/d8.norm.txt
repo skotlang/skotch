@@ -1,0 +1,94 @@
+dex_version   035
+strings       46
+types         12
+methods       10
+classes       2
+
+--- strings ---
+  ""
+  "()Ljava/lang/Object;"
+  "()TT;"
+  "(Ljava/lang/Object;)V"
+  "(TT;)V"
+  "<T:"
+  "<init>"
+  ">"
+  "I"
+  "L"
+  "LBox;"
+  "LI"
+  "LInputKt;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Number;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "T"
+  "TT;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "d1"
+  "d2"
+  "get"
+  "getValue"
+  "hello"
+  "input.kt"
+  "intBox"
+  "intValue"
+  "k"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "strBox"
+  "value"
+  "valueOf"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{e}\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}��\n\u{2}\u{8}\u{7}\u{18}��*\u{4}\u{8}��\u{10}\u{1}2\u{2}0\u{2}B\u{f}\u{12}\u{6}\u{10}\u{3}\u{1a}\u{2}8��¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{b}\u{10}\t\u{1a}\u{2}8��¢\u{6}\u{2}\u{10}\u{7}R\u{13}\u{10}\u{3}\u{1a}\u{2}8��¢\u{6}\n\n\u{2}\u{10}\u{8}\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+
+--- types ---
+  I
+  LBox;
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Number;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBox;.<init>(Ljava/lang/Object;)V
+  LBox;.get()Ljava/lang/Object;
+  LBox;.getValue()Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Number;.intValue()I
+  Ljava/lang/Object;.<init>()V
+
+--- class[0] ---
+  descriptor   LBox;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/Object;)V flags=0x10001 regs=2 ins=2 outs=1 insns=6
+  method       get()Ljava/lang/Object; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getValue()Ljava/lang/Object; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=43
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

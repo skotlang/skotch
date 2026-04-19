@@ -1,0 +1,11 @@
+name     = "398-runblocking-capture"
+status   = "supported"
+features = ["suspend", "suspend-lambda", "coroutines", "runBlocking", "delay", "capture"]
+notes    = """
+Session 11: captures in suspend lambdas. The lambda class has a \
+`final String $message` capture field, constructor takes \
+`(String, Continuation)V`, and invokeSuspend accesses the captured \
+value via `aload_0; getfield $message`. At the call site, the \
+captured value is passed before the null completion in the \
+constructor call.
+"""

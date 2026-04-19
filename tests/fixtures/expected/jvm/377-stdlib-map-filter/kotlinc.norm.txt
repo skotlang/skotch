@@ -1,0 +1,146 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=13
+    0000 iconst_5
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_5
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 iconst_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 op_0x53
+    0012 aload_1
+    0013 iconst_1
+    0014 iconst_2
+    0015 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0018 op_0x53
+    0019 aload_1
+    0020 iconst_2
+    0021 iconst_3
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 op_0x53
+    0026 aload_1
+    0027 iconst_3
+    0028 iconst_4
+    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0032 op_0x53
+    0033 aload_1
+    0034 iconst_4
+    0035 iconst_5
+    0036 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0039 op_0x53
+    0040 aload_1
+    0041 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0044 astore_0
+    0045 aload_0
+    0046 checkcast Class(java/lang/Iterable)
+    0049 astore_2
+    0050 iconst_0
+    0051 istore_3
+    0052 aload_2
+    0053 astore 4
+    0055 new Class(java/util/ArrayList)
+    0058 dup
+    0059 aload_2
+    0060 bipush 10
+    0062 invokestatic Method(kotlin/collections/CollectionsKt.collectionSizeOrDefault:(Ljava/lang/Iterable;I)I)
+    0065 invokespecial Method(java/util/ArrayList.<init>:(I)V)
+    0068 checkcast Class(java/util/Collection)
+    0071 astore 5
+    0073 iconst_0
+    0074 istore 6
+    0076 aload 4
+    0078 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0083 astore 7
+    0085 aload 7
+    0087 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0092 ifeq 140
+    0095 aload 7
+    0097 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0102 astore 8
+    0104 aload 5
+    0106 aload 8
+    0108 checkcast Class(java/lang/Number)
+    0111 invokevirtual Method(java/lang/Number.intValue:()I)
+    0114 istore 9
+    0116 astore 12
+    0118 iconst_0
+    0119 istore 10
+    0121 iload 9
+    0123 iconst_2
+    0124 imul
+    0125 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0128 aload 12
+    0130 op_0x5F
+    0131 invokeinterface InterfaceMethod(java/util/Collection.add:(Ljava/lang/Object;)Z)
+    0136 pop
+    0137 goto 85
+    0140 aload 5
+    0142 checkcast Class(java/util/List)
+    0145 nop
+    0146 astore_1
+    0147 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0150 aload_1
+    0151 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0154 aload_0
+    0155 checkcast Class(java/lang/Iterable)
+    0158 astore_3
+    0159 iconst_0
+    0160 istore 4
+    0162 aload_3
+    0163 astore 5
+    0165 new Class(java/util/ArrayList)
+    0168 dup
+    0169 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0172 checkcast Class(java/util/Collection)
+    0175 astore 6
+    0177 iconst_0
+    0178 istore 7
+    0180 aload 5
+    0182 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0187 astore 8
+    0189 aload 8
+    0191 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0196 ifeq 249
+    0199 aload 8
+    0201 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0206 astore 9
+    0208 aload 9
+    0210 checkcast Class(java/lang/Number)
+    0213 invokevirtual Method(java/lang/Number.intValue:()I)
+    0216 istore 10
+    0218 iconst_0
+    0219 istore 11
+    0221 iload 10
+    0223 iconst_2
+    0224 irem
+    0225 ifne 232
+    0228 iconst_1
+    0229 goto 233
+    0232 iconst_0
+    0233 ifeq 189
+    0236 aload 6
+    0238 aload 9
+    0240 invokeinterface InterfaceMethod(java/util/Collection.add:(Ljava/lang/Object;)Z)
+    0245 pop
+    0246 goto 189
+    0249 aload 6
+    0251 checkcast Class(java/util/List)
+    0254 nop
+    0255 astore_2
+    0256 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0259 aload_2
+    0260 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0263 return
+    sub_attr  StackMapTable (73 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    SourceDebugExtension (252 bytes)
+class_attr    RuntimeInvisibleAnnotations (14 bytes)

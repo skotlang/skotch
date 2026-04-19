@@ -1,0 +1,1449 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Bool",
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Bool",
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        "Int",
+        {
+          "Class": "Point"
+        },
+        "Int",
+        "Bool",
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Unit",
+        {
+          "Class": "Point"
+        },
+        {
+          "Class": "Point"
+        },
+        "Bool",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 6
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      8,
+                      9
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Local": 10
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 12,
+                    "rhs": 13
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      14
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Local": 11
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 16,
+                    "rhs": 17
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      18
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "hashCode"
+                      }
+                    },
+                    "args": [
+                      20
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "hashCode"
+                      }
+                    },
+                    "args": [
+                      22
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 21,
+                    "rhs": 23
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 25,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      24
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 26,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 27,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "copy"
+                      }
+                    },
+                    "args": [
+                      26
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 28,
+                "value": {
+                  "Local": 27
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 29,
+                "value": {
+                  "Local": 28
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 30,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      29
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 31,
+                "value": {
+                  "Local": 28
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 32,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 33,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 31,
+                    "rhs": 32
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 34,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      33
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Point",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "x",
+          "ty": "Int"
+        },
+        {
+          "name": "y",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 8,
+          "name": "toString",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "String",
+            "String",
+            "String",
+            "Int",
+            "String",
+            "String",
+            "String",
+            "String",
+            "String",
+            "Int",
+            "String",
+            "String",
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Const": {
+                        "String": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Const": {
+                        "String": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 5
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "String": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 6
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 7
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "Const": {
+                        "String": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 8
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 9,
+                        "rhs": 10
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Local": 11
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 12,
+                    "value": {
+                      "Const": {
+                        "String": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 13,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 1,
+                        "rhs": 12
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 13
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "component1",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "component2",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "equals",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Any",
+            "Any",
+            "Bool",
+            "Bool",
+            "Bool",
+            "Bool",
+            {
+              "Class": "Point"
+            },
+            "Int",
+            "Int",
+            "Bool",
+            "Int",
+            "Int",
+            "Bool",
+            "Bool"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Local": 0
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "BinOp": {
+                        "op": "CmpEq",
+                        "lhs": 2,
+                        "rhs": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Branch": {
+                  "cond": 3,
+                  "then_block": 1,
+                  "else_block": 2
+                }
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "Bool": true
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 4
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "InstanceOf": {
+                        "obj": 1,
+                        "type_descriptor": "Point"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Branch": {
+                  "cond": 5,
+                  "then_block": 4,
+                  "else_block": 3
+                }
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "Bool": false
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 6
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "CheckCast": {
+                        "obj": 1,
+                        "target_class": "Point"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "GetField": {
+                        "receiver": 7,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "BinOp": {
+                        "op": "CmpEq",
+                        "lhs": 8,
+                        "rhs": 9
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 12,
+                    "value": {
+                      "GetField": {
+                        "receiver": 7,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 13,
+                    "value": {
+                      "BinOp": {
+                        "op": "CmpEq",
+                        "lhs": 11,
+                        "rhs": 12
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 14,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 10,
+                        "rhs": 13
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 14
+              }
+            }
+          ],
+          "return_ty": "Bool"
+        },
+        {
+          "id": 12,
+          "name": "hashCode",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int",
+            "Int",
+            "Int",
+            "Int",
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Const": {
+                        "Int": 31
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 3,
+                        "rhs": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 4,
+                        "rhs": 2
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 5
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 13,
+          "name": "copy",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int",
+            "Int",
+            {
+              "Class": "Point"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "NewInstance": "Point"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Constructor": "Point"
+                        },
+                        "args": [
+                          1,
+                          2
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 3
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Point"
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1,
+          2
+        ],
+        "locals": [
+          {
+            "Class": "Point"
+          },
+          "Int",
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "x",
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "y",
+                      "value": 2
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "Point(",
+    "x=",
+    ", ",
+    "y=",
+    ")"
+  ]
+}

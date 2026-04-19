@@ -1,0 +1,105 @@
+dex_version   035
+strings       42
+types         13
+methods       11
+classes       4
+
+--- strings ---
+  ""
+  "$$delegate_0"
+  "()I"
+  "(I)V"
+  "(LBase;)V"
+  "<init>"
+  "I"
+  "LBase;"
+  "LBaseImpl;"
+  "LDerived;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "b"
+  "base"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "getX"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "out"
+  "print"
+  "println"
+  "x"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{e}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{2}\u{8}f\u{18}��2\u{2}0\u{1}J\u{8}\u{10}\u{2}\u{1a}\u{2}0\u{3}H&À\u{6}\u{3}"
+  "��\u{10}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{4}\n\u{2}\u{10}\u{2}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{1}¢\u{6}\u{4}\u{8}\u{3}\u{10}\u{4}J\t\u{10}\u{5}\u{1a}\u{2}0\u{6}H\u{96}\u{1}"
+  "��\u{16}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{5}\n\u{2}\u{10}\u{2}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{8}\u{10}\u{8}\u{1a}\u{2}0\tH\u{16}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+
+--- types ---
+  I
+  LBase;
+  LBaseImpl;
+  LDerived;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBase;.print()V
+  LBaseImpl;.<init>(I)V
+  LBaseImpl;.getX()I
+  LBaseImpl;.print()V
+  LDerived;.<init>(LBase;)V
+  LDerived;.print()V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Object;.<init>()V
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LBase;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       print()V flags=0x0401 regs=0 ins=0 outs=0 insns=0
+
+--- class[1] ---
+  descriptor   LBaseImpl;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10001 regs=2 ins=2 outs=1 insns=6
+  method       getX()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       print()V flags=0x0001 regs=3 ins=1 outs=2 insns=8
+
+--- class[2] ---
+  descriptor   LDerived;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(LBase;)V flags=0x10001 regs=3 ins=2 outs=2 insns=11
+  method       print()V flags=0x0001 regs=2 ins=1 outs=1 insns=6
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=19
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

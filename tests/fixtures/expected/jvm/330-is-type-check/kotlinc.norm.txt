@@ -28,39 +28,27 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        typeOf (Ljava/lang/Object;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "x"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 nop
-    0007 op_0x2A
-    0008 op_0xC1
-    0009 nop
-    0010 sipush -26368
-    0013 iconst_5
+    0007 aload_0
+    0008 instanceof Class(java/lang/String)
+    0011 ifeq 19
     0014 ldc "String"
-    0016 op_0xA7
-    0017 nop
-    0018 op_0x1D
-    0019 op_0x2A
-    0020 op_0xC1
-    0021 nop
-    0022 iload 153
-    0024 nop
-    0025 iconst_5
+    0016 goto 45
+    0019 aload_0
+    0020 instanceof Class(java/lang/Integer)
+    0023 ifeq 31
     0026 ldc "Int"
-    0028 op_0xA7
-    0029 nop
-    0030 sipush 10945
-    0033 nop
-    0034 aload 153
-    0036 nop
-    0037 iconst_5
+    0028 goto 45
+    0031 aload_0
+    0032 instanceof Class(java/lang/Boolean)
+    0035 ifeq 43
     0038 ldc "Boolean"
-    0040 op_0xA7
-    0041 nop
-    0042 iconst_2
+    0040 goto 45
     0043 ldc "Other"
-    0045 op_0xB0
+    0045 areturn
     sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

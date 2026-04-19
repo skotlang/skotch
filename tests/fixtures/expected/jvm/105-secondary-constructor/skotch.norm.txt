@@ -6,10 +6,8 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=6
     0000 iconst_5
     0001 istore 1
-    0003 op_0xBB
-    0004 nop
-    0005 op_0x0B
-    0006 op_0x59
+    0003 new Class(Square)
+    0006 dup
     0007 iload 1
     0009 invokespecial Method(Square.<init>:(I)V)
     0012 astore 2
@@ -19,10 +17,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0024 iload 3
     0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0029 op_0xBB
-    0030 nop
-    0031 op_0x0B
-    0032 op_0x59
+    0029 new Class(Square)
+    0032 dup
     0033 invokespecial Method(Square.<init>:()V)
     0036 astore 4
     0038 aload 4

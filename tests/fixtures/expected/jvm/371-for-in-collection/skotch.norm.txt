@@ -39,50 +39,28 @@ method        main ([Ljava/lang/String;)V 0x0009
     0054 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0057 astore 9
     0059 aload 9
-    0061 op_0xC0
-    0062 nop
-    0063 op_0x17
+    0061 checkcast Class(java/util/List)
     0064 astore 10
     0066 aload 10
-    0068 op_0xC0
-    0069 nop
-    0070 op_0x17
+    0068 checkcast Class(java/util/List)
     0071 astore 11
     0073 aload 11
-    0075 op_0xB9
-    0076 nop
-    0077 op_0x1D
-    0078 aconst_null
-    0079 nop
+    0075 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
     0080 astore 12
-    0082 op_0xA7
-    0083 nop
-    0084 iconst_0
+    0082 goto 85
     0085 aload 12
-    0087 op_0xB9
-    0088 nop
-    0089 op_0x23
-    0090 aconst_null
-    0091 nop
+    0087 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0092 istore 13
     0094 iload 13
-    0096 op_0x99
-    0097 nop
-    0098 op_0x1B
+    0096 ifeq 123
     0099 aload 12
-    0101 op_0xB9
-    0102 nop
-    0103 op_0x27
-    0104 aconst_null
-    0105 nop
+    0101 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0106 astore 14
     0108 aload 14
     0110 astore 15
     0112 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0115 aload 15
     0117 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0120 op_0xA7
-    0121 op_0xFF
-    0122 op_0xDD
+    0120 goto 85
     0123 return
     sub_attr  StackMapTable (79 bytes)

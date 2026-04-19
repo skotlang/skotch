@@ -105,6 +105,16 @@ pub fn resolve_file(
         "mutableSetOf",
         "Pair",
         "Triple",
+        "runBlocking",
+        "delay",
+        "launch",
+        "async",
+        "withContext",
+        "coroutineScope",
+        "supervisorScope",
+        "withTimeout",
+        "withTimeoutOrNull",
+        "yield",
     ] {
         let sym = r.interner.intern(name);
         r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId

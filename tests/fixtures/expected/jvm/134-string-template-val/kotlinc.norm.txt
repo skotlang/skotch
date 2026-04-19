@@ -5,31 +5,31 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=4
     0000 ldc "World"
-    0002 op_0x4B
-    0003 op_0x2A
+    0002 astore_0
+    0003 aload_0
     0004 op_0xBA
     0005 nop
     0006 op_0x14
     0007 nop
     0008 nop
-    0009 op_0x4C
+    0009 astore_1
     0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0013 op_0x2B
+    0013 aload_1
     0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0017 bipush 7
-    0019 op_0x3D
-    0020 op_0x1C
-    0021 op_0x1C
-    0022 op_0x1C
+    0019 istore_2
+    0020 iload_2
+    0021 iload_2
+    0022 iload_2
     0023 imul
     0024 op_0xBA
     0025 nop
     0026 op_0x25
     0027 nop
     0028 nop
-    0029 op_0x4E
+    0029 astore_3
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 op_0x2D
+    0033 aload_3
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0037 return
 method        main ([Ljava/lang/String;)V 0x1009

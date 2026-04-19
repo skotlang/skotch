@@ -11,15 +11,10 @@ method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0009
     0009 astore 3
     0011 aload 0
     0013 aload 3
-    0015 op_0xB9
-    0016 nop
-    0017 iload 2
-    0019 nop
+    0015 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0020 astore 4
     0022 aload 4
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(java/lang/Integer)
     0027 invokevirtual Method(java/lang/Integer.intValue:()I)
     0030 istore 5
     0032 iload 5
@@ -33,15 +28,10 @@ method        combine (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Fun
     0009 astore 4
     0011 aload 0
     0013 aload 4
-    0015 op_0xB9
-    0016 nop
-    0017 iload 2
-    0019 nop
+    0015 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0020 astore 5
     0022 aload 5
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(java/lang/Integer)
     0027 invokevirtual Method(java/lang/Integer.intValue:()I)
     0030 istore 6
     0032 iload 6
@@ -49,25 +39,18 @@ method        combine (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Fun
     0037 astore 7
     0039 aload 1
     0041 aload 7
-    0043 op_0xB9
-    0044 nop
-    0045 iload 2
-    0047 nop
+    0043 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0048 astore 8
     0050 aload 8
-    0052 op_0xC0
-    0053 nop
-    0054 op_0x0B
+    0052 checkcast Class(java/lang/Integer)
     0055 invokevirtual Method(java/lang/Integer.intValue:()I)
     0058 istore 9
     0060 iload 9
     0062 op_0xAC
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=14
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x20
-    0003 op_0x59
+    0000 new Class(InputKt$Lambda$0)
+    0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0007 astore 1
     0009 iconst_5
@@ -79,10 +62,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0024 iload 3
     0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0029 op_0xBB
-    0030 nop
-    0031 op_0x34
-    0032 op_0x59
+    0029 new Class(InputKt$Lambda$1)
+    0032 dup
     0033 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0036 astore 4
     0038 bipush 10
@@ -94,10 +75,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0054 iload 6
     0056 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0059 op_0xBB
-    0060 nop
-    0061 op_0x39
-    0062 op_0x59
+    0059 new Class(InputKt$Lambda$2)
+    0062 dup
     0063 invokespecial Method(InputKt$Lambda$2.<init>:()V)
     0066 astore 7
     0068 bipush 10
@@ -109,16 +88,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0084 iload 9
     0086 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0089 op_0xBB
-    0090 nop
-    0091 op_0x3C
-    0092 op_0x59
+    0089 new Class(InputKt$Lambda$3)
+    0092 dup
     0093 invokespecial Method(InputKt$Lambda$3.<init>:()V)
     0096 astore 10
-    0098 op_0xBB
-    0099 nop
-    0100 op_0x3F
-    0101 op_0x59
+    0098 new Class(InputKt$Lambda$4)
+    0101 dup
     0102 invokespecial Method(InputKt$Lambda$4.<init>:()V)
     0105 astore 11
     0107 iconst_5
@@ -141,15 +116,10 @@ method        transform (Lkotlin/jvm/functions/Function1;I)I 0x0009
     0009 astore 3
     0011 aload 0
     0013 aload 3
-    0015 op_0xB9
-    0016 nop
-    0017 iload 2
-    0019 nop
+    0015 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0020 astore 4
     0022 aload 4
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(java/lang/Integer)
     0027 invokevirtual Method(java/lang/Integer.intValue:()I)
     0030 istore 5
     0032 iload 5

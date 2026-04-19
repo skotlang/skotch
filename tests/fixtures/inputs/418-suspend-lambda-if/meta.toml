@@ -1,0 +1,2 @@
+status = "supported"
+features = ["suspend-lambda-if", "delay", "multi-block"]

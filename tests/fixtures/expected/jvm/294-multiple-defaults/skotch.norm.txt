@@ -11,11 +11,9 @@ method        configure (Ljava/lang/String;I)V 0x0009
     0008 iload 1
     0010 istore 4
     0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 op_0xBB
-    0016 nop
-    0017 ldc_w #22967
-    0020 nop
-    0021 op_0x17
+    0015 new Class(java/lang/StringBuilder)
+    0018 dup
+    0019 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0022 aload 2
     0024 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
     0027 aload 3

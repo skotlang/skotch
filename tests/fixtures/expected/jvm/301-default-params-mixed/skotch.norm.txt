@@ -20,7 +20,7 @@ method        format (ILjava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0
     0028 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0031 astore 7
     0033 aload 7
-    0035 op_0xB0
+    0035 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=13
     0000 bipush 42

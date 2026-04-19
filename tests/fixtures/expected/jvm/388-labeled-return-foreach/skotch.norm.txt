@@ -69,46 +69,26 @@ method        main ([Ljava/lang/String;)V 0x0009
     0110 aload 7
     0112 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0115 astore 18
-    0117 op_0xBB
-    0118 nop
-    0119 op_0x17
-    0120 op_0x59
+    0117 new Class(InputKt$Lambda$0)
+    0120 dup
     0121 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0124 astore 19
     0126 aload 18
-    0128 op_0xB9
-    0129 nop
-    0130 op_0x21
-    0131 aconst_null
-    0132 nop
+    0128 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
     0133 astore 20
-    0135 op_0xA7
-    0136 nop
-    0137 iconst_0
+    0135 goto 138
     0138 aload 20
-    0140 op_0xB9
-    0141 nop
-    0142 op_0x27
-    0143 aconst_null
-    0144 nop
+    0140 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0145 istore 21
     0147 iload 21
-    0149 op_0x99
-    0150 nop
-    0151 op_0x16
+    0149 ifeq 171
     0152 aload 20
-    0154 op_0xB9
-    0155 nop
-    0156 op_0x2B
-    0157 aconst_null
-    0158 nop
+    0154 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0159 astore 22
     0161 aload 19
     0163 aload 22
     0165 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0168 op_0xA7
-    0169 op_0xFF
-    0170 op_0xE2
+    0168 goto 138
     0171 ldc "done"
     0173 astore 23
     0175 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)

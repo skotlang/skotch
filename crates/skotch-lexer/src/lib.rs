@@ -852,6 +852,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "vararg" => TokenKind::KwVararg,
         "constructor" => TokenKind::KwConstructor,
         "lateinit" => TokenKind::KwLateinit,
+        "suspend" => TokenKind::KwSuspend,
         _ => return None,
     })
 }
@@ -1102,6 +1103,29 @@ mod tests {
             })
             .collect();
         assert_eq!(chunks, vec!["hello".to_string()]);
+    }
+
+    #[test]
+    fn lex_suspend_keyword() {
+        // `suspend fun` should produce KwSuspend, KwFun, ...
+        // The `suspend` modifier is recognised but the CPS transform
+        // that would make a suspend function actually suspend is still
+        // outstanding (v0.9.0 milestone).
+        let (lf, d) = lex_str("suspend fun compute() {}");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::KwSuspend,
+                TokenKind::KwFun,
+                TokenKind::Ident,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::Eof,
+            ]
+        );
     }
 
     // ─── future test stubs ───────────────────────────────────────────────

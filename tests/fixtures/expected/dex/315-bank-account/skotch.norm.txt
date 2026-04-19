@@ -1,0 +1,50 @@
+dex_version   035
+strings       18
+types         8
+methods       6
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LBankAccount;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "balance"
+  "deposit"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "withdraw"
+
+--- types ---
+  I
+  LBankAccount;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBankAccount;.<init>(I)V
+  LBankAccount;.deposit(I)V
+  LBankAccount;.withdraw(I)V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=10 ins=0 outs=2 insns=29
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

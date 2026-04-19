@@ -4,17 +4,15 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        BLUE ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x25
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "BLUE"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
   code        max_stack=4 max_locals=11
     0000 ldc "RED"
@@ -24,16 +22,12 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0011 istore 2
     0013 iload 2
-    0015 op_0x99
-    0016 nop
-    0017 op_0x28
-    0018 op_0xA7
-    0019 nop
-    0020 op_0x3F
+    0015 ifeq 55
+    0018 goto 81
     0021 invokestatic Method(InputKt.RED:()LColor;)
     0024 astore 3
     0026 aload 3
-    0028 op_0xB0
+    0028 areturn
     0029 ldc "BLUE"
     0031 astore 4
     0033 aload 0
@@ -41,13 +35,11 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0040 istore 5
     0042 iload 5
-    0044 op_0x99
-    0045 op_0xFF
-    0046 op_0xE9
+    0044 ifeq 21
     0047 invokestatic Method(InputKt.BLUE:()LColor;)
     0050 astore 6
     0052 aload 6
-    0054 op_0xB0
+    0054 areturn
     0055 ldc "GREEN"
     0057 astore 7
     0059 aload 0
@@ -55,24 +47,20 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0063 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0066 istore 8
     0068 iload 8
-    0070 op_0x99
-    0071 op_0xFF
-    0072 op_0xD7
+    0070 ifeq 29
     0073 invokestatic Method(InputKt.GREEN:()LColor;)
     0076 astore 9
     0078 aload 9
-    0080 op_0xB0
+    0080 areturn
     0081 invokestatic Method(InputKt.RED:()LColor;)
     0084 astore 10
     0086 aload 10
-    0088 op_0xB0
+    0088 areturn
     sub_attr  StackMapTable (76 bytes)
 method        Color$values ()Ljava/util/ArrayList; 0x0009
   code        max_stack=2 max_locals=7
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x31
-    0003 op_0x59
+    0000 new Class(java/util/ArrayList)
+    0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore 0
     0009 invokestatic Method(InputKt.RED:()LColor;)
@@ -94,72 +82,62 @@ method        Color$values ()Ljava/util/ArrayList; 0x0009
     0046 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0049 istore 6
     0051 aload 0
-    0053 op_0xB0
+    0053 areturn
 method        GREEN ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x25
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "GREEN"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        LARGE ()LSize; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x44
-    0003 op_0x59
+    0000 new Class(Size)
+    0003 dup
     0004 ldc "LARGE"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        MEDIUM ()LSize; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x44
-    0003 op_0x59
+    0000 new Class(Size)
+    0003 dup
     0004 ldc "MEDIUM"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        RED ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x25
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "RED"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        SMALL ()LSize; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x44
-    0003 op_0x59
+    0000 new Class(Size)
+    0003 dup
     0004 ldc "SMALL"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        Size$valueOf (Ljava/lang/String;)LSize; 0x0009
   code        max_stack=4 max_locals=11
     0000 ldc "SMALL"
@@ -169,16 +147,12 @@ method        Size$valueOf (Ljava/lang/String;)LSize; 0x0009
     0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0011 istore 2
     0013 iload 2
-    0015 op_0x99
-    0016 nop
-    0017 op_0x28
-    0018 op_0xA7
-    0019 nop
-    0020 op_0x3F
+    0015 ifeq 55
+    0018 goto 81
     0021 invokestatic Method(InputKt.SMALL:()LSize;)
     0024 astore 3
     0026 aload 3
-    0028 op_0xB0
+    0028 areturn
     0029 ldc "LARGE"
     0031 astore 4
     0033 aload 0
@@ -186,13 +160,11 @@ method        Size$valueOf (Ljava/lang/String;)LSize; 0x0009
     0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0040 istore 5
     0042 iload 5
-    0044 op_0x99
-    0045 op_0xFF
-    0046 op_0xE9
+    0044 ifeq 21
     0047 invokestatic Method(InputKt.LARGE:()LSize;)
     0050 astore 6
     0052 aload 6
-    0054 op_0xB0
+    0054 areturn
     0055 ldc "MEDIUM"
     0057 astore 7
     0059 aload 0
@@ -200,24 +172,20 @@ method        Size$valueOf (Ljava/lang/String;)LSize; 0x0009
     0063 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0066 istore 8
     0068 iload 8
-    0070 op_0x99
-    0071 op_0xFF
-    0072 op_0xD7
+    0070 ifeq 29
     0073 invokestatic Method(InputKt.MEDIUM:()LSize;)
     0076 astore 9
     0078 aload 9
-    0080 op_0xB0
+    0080 areturn
     0081 invokestatic Method(InputKt.SMALL:()LSize;)
     0084 astore 10
     0086 aload 10
-    0088 op_0xB0
+    0088 areturn
     sub_attr  StackMapTable (76 bytes)
 method        Size$values ()Ljava/util/ArrayList; 0x0009
   code        max_stack=2 max_locals=7
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x31
-    0003 op_0x59
+    0000 new Class(java/util/ArrayList)
+    0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore 0
     0009 invokestatic Method(InputKt.SMALL:()LSize;)
@@ -239,7 +207,7 @@ method        Size$values ()Ljava/util/ArrayList; 0x0009
     0046 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0049 istore 6
     0051 aload 0
-    0053 op_0xB0
+    0053 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5
     0000 invokestatic Method(InputKt.RED:()LColor;)

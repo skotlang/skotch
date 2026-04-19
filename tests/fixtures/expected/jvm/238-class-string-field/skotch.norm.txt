@@ -8,41 +8,29 @@ method        main ([Ljava/lang/String;)V 0x0009
     0002 astore 1
     0004 bipush 30
     0006 istore 2
-    0008 op_0xBB
-    0009 nop
-    0010 op_0x0D
-    0011 op_0x59
+    0008 new Class(Person)
+    0011 dup
     0012 aload 1
     0014 iload 2
     0016 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
     0019 astore 3
     0021 aload 3
-    0023 op_0xC0
-    0024 nop
-    0025 op_0x0D
+    0023 checkcast Class(Person)
     0026 astore 4
     0028 aload 4
-    0030 op_0xC0
-    0031 nop
-    0032 op_0x0D
+    0030 checkcast Class(Person)
     0033 astore 5
     0035 aload 5
-    0037 op_0xB4
-    0038 nop
-    0039 iload 58
-    0041 iconst_3
+    0037 getfield Field(Person.name:Ljava/lang/String;)
+    0040 astore 6
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0045 aload 6
     0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0050 aload 4
-    0052 op_0xC0
-    0053 nop
-    0054 op_0x0D
+    0052 checkcast Class(Person)
     0055 astore 7
     0057 aload 7
-    0059 op_0xB4
-    0060 nop
-    0061 op_0x25
+    0059 getfield Field(Person.age:I)
     0062 istore 8
     0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0067 iload 8

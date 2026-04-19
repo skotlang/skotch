@@ -10,21 +10,21 @@ method        main ()V 0x0019
     0007 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0010 getstatic Field(Color.RED:LColor;)
     0013 invokevirtual Method(Color.getHex:()I)
-    0016 op_0x3B
+    0016 istore_0
     0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 op_0x1A
+    0020 iload_0
     0021 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0024 getstatic Field(Color.GREEN:LColor;)
     0027 invokevirtual Method(Color.getHex:()I)
-    0030 op_0x3B
+    0030 istore_0
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 op_0x1A
+    0034 iload_0
     0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0038 getstatic Field(Color.BLUE:LColor;)
     0041 invokevirtual Method(Color.getHex:()I)
-    0044 op_0x3B
+    0044 istore_0
     0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 op_0x1A
+    0048 iload_0
     0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0052 return
 method        main ([Ljava/lang/String;)V 0x1009

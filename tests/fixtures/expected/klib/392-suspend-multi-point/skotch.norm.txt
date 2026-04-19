@@ -1,0 +1,741 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "yield_",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        },
+        "Any"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 1
+          }
+        }
+      ],
+      "return_ty": "Any",
+      "required_params": 1,
+      "param_names": [
+        "$completion"
+      ],
+      "param_defaults": [
+        null
+      ],
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "run",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        },
+        "Int",
+        "Int",
+        "Any",
+        "Int",
+        "Int",
+        "Any",
+        "Int",
+        "Int",
+        "Int",
+        "Any"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 20
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 4
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 5
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "BinOp": {
+                    "op": "AddI",
+                    "lhs": 7,
+                    "rhs": 8
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      9
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 10
+          }
+        }
+      ],
+      "return_ty": "Any",
+      "required_params": 1,
+      "param_names": [
+        "$completion"
+      ],
+      "param_defaults": [
+        null
+      ],
+      "is_suspend": true,
+      "suspend_original_return_ty": "Int",
+      "suspend_state_machine": {
+        "continuation_class": "InputKt$run$1",
+        "outer_class": "InputKt",
+        "outer_method": "run",
+        "suspend_call_class": "InputKt",
+        "suspend_call_method": "yield_",
+        "resume_return_text": "",
+        "sites": [
+          {
+            "block_idx": 0,
+            "stmt_idx": 2,
+            "callee_class": "InputKt",
+            "callee_method": "yield_",
+            "return_ty": "Unit",
+            "result_local": 3,
+            "live_spills": [
+              {
+                "local": 2,
+                "slot": 0
+              }
+            ]
+          },
+          {
+            "block_idx": 0,
+            "stmt_idx": 5,
+            "callee_class": "InputKt",
+            "callee_method": "yield_",
+            "return_ty": "Unit",
+            "result_local": 6,
+            "live_spills": [
+              {
+                "local": 2,
+                "slot": 0
+              },
+              {
+                "local": 5,
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "spill_layout": [
+          {
+            "name": "I$0",
+            "kind": "Int"
+          },
+          {
+            "name": "I$1",
+            "kind": "Int"
+          }
+        ],
+        "is_instance_method": false
+      }
+    },
+    {
+      "id": 2,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 4,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 8,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "InputKt$run$1",
+      "super_class": "kotlin/coroutines/jvm/internal/ContinuationImpl",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "I$0",
+          "ty": "Int"
+        },
+        {
+          "name": "I$1",
+          "ty": "Int"
+        },
+        {
+          "name": "result",
+          "ty": "Any"
+        },
+        {
+          "name": "label",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 0,
+          "name": "invokeSuspend",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$run$1"
+            },
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Any",
+          "param_names": [
+            "$result"
+          ],
+          "suspend_state_machine": {
+            "continuation_class": "InputKt$run$1",
+            "outer_class": "InputKt",
+            "outer_method": "run",
+            "suspend_call_class": "InputKt",
+            "suspend_call_method": "yield_",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 2,
+                "callee_class": "InputKt",
+                "callee_method": "yield_",
+                "return_ty": "Unit",
+                "result_local": 3,
+                "live_spills": [
+                  {
+                    "local": 2,
+                    "slot": 0
+                  }
+                ]
+              },
+              {
+                "block_idx": 0,
+                "stmt_idx": 5,
+                "callee_class": "InputKt",
+                "callee_method": "yield_",
+                "return_ty": "Unit",
+                "result_local": 6,
+                "live_spills": [
+                  {
+                    "local": 2,
+                    "slot": 0
+                  },
+                  {
+                    "local": 5,
+                    "slot": 1
+                  }
+                ]
+              }
+            ],
+            "spill_layout": [
+              {
+                "name": "I$0",
+                "kind": "Int"
+              },
+              {
+                "name": "I$1",
+                "kind": "Int"
+              }
+            ],
+            "is_instance_method": false
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$run$1"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          },
+          "Unit"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 2,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "kotlin/coroutines/jvm/internal/ContinuationImpl"
+                      },
+                      "args": [
+                        0,
+                        1
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "InputKt$run$1",
+      "super_class": "kotlin/coroutines/jvm/internal/ContinuationImpl",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "I$0",
+          "ty": "Int"
+        },
+        {
+          "name": "I$1",
+          "ty": "Int"
+        },
+        {
+          "name": "result",
+          "ty": "Any"
+        },
+        {
+          "name": "label",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 0,
+          "name": "invokeSuspend",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$run$1"
+            },
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Any",
+          "param_names": [
+            "$result"
+          ],
+          "suspend_state_machine": {
+            "continuation_class": "InputKt$run$1",
+            "outer_class": "InputKt",
+            "outer_method": "run",
+            "suspend_call_class": "InputKt",
+            "suspend_call_method": "yield_",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 2,
+                "callee_class": "InputKt",
+                "callee_method": "yield_",
+                "return_ty": "Unit",
+                "result_local": 3,
+                "live_spills": [
+                  {
+                    "local": 2,
+                    "slot": 0
+                  }
+                ]
+              },
+              {
+                "block_idx": 0,
+                "stmt_idx": 5,
+                "callee_class": "InputKt",
+                "callee_method": "yield_",
+                "return_ty": "Unit",
+                "result_local": 6,
+                "live_spills": [
+                  {
+                    "local": 2,
+                    "slot": 0
+                  },
+                  {
+                    "local": 5,
+                    "slot": 1
+                  }
+                ]
+              }
+            ],
+            "spill_layout": [
+              {
+                "name": "I$0",
+                "kind": "Int"
+              },
+              {
+                "name": "I$1",
+                "kind": "Int"
+              }
+            ],
+            "is_instance_method": false
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$run$1"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          },
+          "Unit"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 2,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "kotlin/coroutines/jvm/internal/ContinuationImpl"
+                      },
+                      "args": [
+                        0,
+                        1
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

@@ -14,24 +14,18 @@ method        joinNumbers (I)Ljava/lang/String; 0x0009
     0013 istore 4
     0015 iload 3
     0017 istore 5
-    0019 op_0xA7
-    0020 nop
-    0021 iconst_0
+    0019 goto 22
     0022 iload 5
     0024 iload 4
     0026 op_0xA4
     0027 nop
     0028 iconst_4
     0029 iconst_0
-    0030 op_0xA7
-    0031 nop
-    0032 iconst_1
+    0030 goto 34
     0033 iconst_1
     0034 istore 6
     0036 iload 6
-    0038 op_0x99
-    0039 nop
-    0040 op_0x31
+    0038 ifeq 87
     0041 iload 5
     0043 istore 7
     0045 iconst_1
@@ -42,17 +36,12 @@ method        joinNumbers (I)Ljava/lang/String; 0x0009
     0053 nop
     0054 iconst_4
     0055 iconst_0
-    0056 op_0xA7
-    0057 nop
-    0058 iconst_1
+    0056 goto 60
     0059 iconst_1
     0060 istore 9
     0062 iload 9
-    0064 op_0x99
-    0065 nop
-    0066 istore 167
-    0068 nop
-    0069 op_0x1B
+    0064 ifeq 118
+    0067 goto 94
     0070 iconst_1
     0071 istore 10
     0073 iload 5
@@ -61,13 +50,11 @@ method        joinNumbers (I)Ljava/lang/String; 0x0009
     0078 istore 11
     0080 iload 11
     0082 istore 5
-    0084 op_0xA7
-    0085 op_0xFF
-    0086 op_0xC2
+    0084 goto 22
     0087 aload 2
     0089 astore 12
     0091 aload 12
-    0093 op_0xB0
+    0093 areturn
     0094 aload 2
     0096 astore 13
     0098 ldc ", "
@@ -78,12 +65,8 @@ method        joinNumbers (I)Ljava/lang/String; 0x0009
     0109 astore 15
     0111 aload 15
     0113 astore 2
-    0115 op_0xA7
-    0116 nop
-    0117 iconst_3
-    0118 op_0xA7
-    0119 nop
-    0120 iconst_0
+    0115 goto 121
+    0118 goto 121
     0121 aload 2
     0123 astore 16
     0125 iload 5
@@ -95,9 +78,7 @@ method        joinNumbers (I)Ljava/lang/String; 0x0009
     0139 astore 18
     0141 aload 18
     0143 astore 2
-    0145 op_0xA7
-    0146 op_0xFF
-    0147 op_0xB5
+    0145 goto 70
     sub_attr  StackMapTable (210 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5

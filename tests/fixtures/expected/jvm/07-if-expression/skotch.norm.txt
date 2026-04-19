@@ -7,23 +7,17 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 iconst_1
     0001 istore 1
     0003 iload 1
-    0005 op_0x99
-    0006 nop
-    0007 op_0x0D
+    0005 ifeq 18
     0008 iconst_1
     0009 istore 2
     0011 iload 2
     0013 istore 3
-    0015 op_0xA7
-    0016 nop
-    0017 op_0x0D
+    0015 goto 28
     0018 iconst_2
     0019 istore 4
     0021 iload 4
     0023 istore 3
-    0025 op_0xA7
-    0026 nop
-    0027 iconst_0
+    0025 goto 28
     0028 iload 3
     0030 istore 5
     0032 iload 5

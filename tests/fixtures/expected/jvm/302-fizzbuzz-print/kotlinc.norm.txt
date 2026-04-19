@@ -5,49 +5,38 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 iconst_1
-    0001 op_0x3B
-    0002 op_0x1A
+    0001 istore_0
+    0002 iload_0
     0003 bipush 21
     0005 op_0xA2
     0006 nop
     0007 op_0x47
     0008 nop
-    0009 op_0x1A
+    0009 iload_0
     0010 bipush 15
     0012 irem
-    0013 op_0x9A
-    0014 nop
-    0015 iconst_5
+    0013 ifne 21
     0016 ldc "FizzBuzz"
-    0018 op_0xA7
-    0019 nop
-    0020 op_0x1D
-    0021 op_0x1A
+    0018 goto 47
+    0021 iload_0
     0022 iconst_3
     0023 irem
-    0024 op_0x9A
-    0025 nop
-    0026 iconst_5
+    0024 ifne 32
     0027 ldc "Fizz"
-    0029 op_0xA7
-    0030 nop
-    0031 ldc Class(java/io/PrintStream)
+    0029 goto 47
+    0032 iload_0
     0033 iconst_5
     0034 irem
-    0035 op_0x9A
-    0036 nop
-    0037 iconst_5
+    0035 ifne 43
     0038 ldc "Buzz"
-    0040 op_0xA7
-    0041 nop
-    0042 iconst_4
-    0043 op_0x1A
+    0040 goto 47
+    0043 iload_0
     0044 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0047 op_0x4C
+    0047 astore_1
     0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 op_0x2B
+    0051 aload_1
     0052 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
-    0055 op_0x1A
+    0055 iload_0
     0056 bipush 20
     0058 op_0xA2
     0059 nop
@@ -59,9 +48,7 @@ method        main ()V 0x0019
     0070 op_0x84
     0071 nop
     0072 aconst_null
-    0073 op_0xA7
-    0074 op_0xFF
-    0075 op_0xB9
+    0073 goto 2
     0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0079 invokevirtual Method(java/io/PrintStream.println:()V)
     0082 return

@@ -1,10 +1,12 @@
 dex_version   035
-strings       20
-types         9
-methods       4
+strings       23
+types         10
+methods       6
 classes       1
 
 --- strings ---
+  "<init>"
+  "I"
   "LErr;"
   "LInputKt;"
   "LL"
@@ -14,6 +16,7 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/lang/System;"
   "V"
+  "VI"
   "VL"
   "[Ljava/lang/String;"
   "describe"
@@ -27,6 +30,7 @@ classes       1
   "unknown"
 
 --- types ---
+  I
   LErr;
   LInputKt;
   LOk;
@@ -38,9 +42,11 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
+  LErr;.<init>(Ljava/lang/String;)V
   LInputKt;.describe(Ljava/lang/Object;)Ljava/lang/String;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
+  LOk;.<init>(I)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
 
 --- class[0] ---
@@ -48,5 +54,5 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=10 ins=1 outs=0 insns=25
-  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=23
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=33
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

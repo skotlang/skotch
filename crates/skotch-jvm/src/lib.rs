@@ -93,10 +93,14 @@ impl EmbeddedJvm {
             }
         }
 
-        // Build classpath: include kotlin-stdlib.jar if found.
+        // Build classpath: include kotlin-stdlib.jar and
+        // kotlinx-coroutines-core-jvm.jar if found.
         let mut cp_parts: Vec<String> = Vec::new();
         if let Some(stdlib) = Self::find_kotlin_stdlib() {
             cp_parts.push(stdlib);
+        }
+        if let Some(coroutines) = Self::find_coroutines_jar() {
+            cp_parts.push(coroutines);
         }
         let mut builder = InitArgsBuilder::new().version(JNIVersion::V8);
         let cp_opt = if !cp_parts.is_empty() {
@@ -119,6 +123,23 @@ impl EmbeddedJvm {
             )
         })?;
         Ok(jvm)
+    }
+
+    /// Locate kotlinx-coroutines-core-jvm.jar in the same directory
+    /// as kotlin-stdlib.jar. Returns `None` if not found.
+    fn find_coroutines_jar() -> Option<String> {
+        // The coroutines jar lives next to kotlin-stdlib.jar in the
+        // Homebrew layout: `libexec/lib/kotlinx-coroutines-core-jvm.jar`.
+        if let Some(stdlib) = Self::find_kotlin_stdlib() {
+            let stdlib_path = std::path::Path::new(&stdlib);
+            if let Some(dir) = stdlib_path.parent() {
+                let coroutines = dir.join("kotlinx-coroutines-core-jvm.jar");
+                if coroutines.exists() {
+                    return Some(coroutines.to_string_lossy().into_owned());
+                }
+            }
+        }
+        None
     }
 
     /// Locate kotlin-stdlib.jar by checking KOTLIN_HOME and kotlinc on PATH.

@@ -1,21 +1,18 @@
 class_version major=61 minor=0
-this_class    Child
-super_class   Base
+this_class    InputKt
+super_class   java/lang/Object
 access_flags  0x0031
-method        <init> ()V 0x0001
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(Base.<init>:()V)
-    0004 return
-method        greet ()Ljava/lang/String; 0x0001
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(Base.greet:()Ljava/lang/String;)
-    0004 op_0xBA
-    0005 nop
-    0006 op_0x1B
-    0007 nop
-    0008 nop
-    0009 op_0xB0
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-class_attr    BootstrapMethods (8 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 new Class(Child)
+    0003 dup
+    0004 invokespecial Method(Child.<init>:()V)
+    0007 invokevirtual Method(Child.greet:()Ljava/lang/String;)
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 op_0x5F
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

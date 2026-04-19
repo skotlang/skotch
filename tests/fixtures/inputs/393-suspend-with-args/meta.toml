@@ -1,0 +1,4 @@
+name     = "393-suspend-with-args"
+status   = "supported"
+features = ["suspend", "cps-state-machine", "suspend-call-args"]
+notes    = "Session 5 of the coroutine transform: a suspend fun called with a user-supplied argument. `run()` passes the literal `\"World\"` to `greet(name)` and binds the returned `String` to `result` before returning it. The emitted state machine (a) builds the callee descriptor `(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;`, (b) pushes the user arg ahead of the label-write + invoke sequence, and (c) `checkcast`s the Object `$result` back to `java/lang/String` on the resume case before storing into `result`. The callee `greet` itself has no suspension points of its own, so it compiles via the Session 2 signature rewrite. Exceptions across suspend points and primitive-return suspends are still future work."

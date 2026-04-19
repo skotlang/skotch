@@ -1,0 +1,28 @@
+name     = "394-suspend-lambda-shell"
+status   = "stub"
+features = ["suspend", "suspend-lambda", "state-machine"]
+notes    = """
+Session 7 part 2 of the coroutine transform: a lambda whose body calls \
+a suspend function compiles to a `SuspendLambda`-extending class with \
+the canonical kotlinc 5-method shell (`<init>(Continuation)V`, \
+`invokeSuspend(Object)Object`, `create(Continuation)Continuation`, \
+`invoke(Continuation)Object`, and the erased `invoke(Object)Object` \
+bridge). The `invokeSuspend` method now carries a REAL CPS state \
+machine for lambdas with 0 or 1 suspension points — kotlinc's \
+tableswitch-on-label pattern, specialised for lambdas (which ARE their \
+own continuation, so the instanceof-dispatcher is skipped and every \
+`aload $cont` becomes `aload_0`). \
+\
+At the definition site the lambda is still instantiated with a `null` \
+`Continuation`; a real completion will only flow in once higher-order \
+suspend-fun parameters are plumbed end-to-end through coroutine \
+builders (tracked for future sessions). Marked `stub` because running \
+`invoke(…)` would NPE when the SuspendLambda super-ctor dereferences \
+that null completion. The generated classfile is still useful for \
+verifying the class shape AND the bytecode-level state machine body. \
+\
+SCOPE LIMITS: only 0/1 suspension points; no local variable spilling; \
+no captures across suspend boundaries; single-statement bodies + a \
+literal-string tail. Multi-suspension inside lambdas is Session 7 \
+part 3+ work.
+"""

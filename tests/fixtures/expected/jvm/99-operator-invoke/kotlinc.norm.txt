@@ -4,26 +4,24 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 iconst_5
-    0003 op_0x59
+    0000 new Class(Multiplier)
+    0003 dup
     0004 iconst_2
     0005 invokespecial Method(Multiplier.<init>:(I)V)
-    0008 op_0x4B
-    0009 op_0x2A
+    0008 astore_0
+    0009 aload_0
     0010 iconst_5
     0011 invokevirtual Method(Multiplier.invoke:(I)I)
-    0014 op_0x3C
+    0014 istore_1
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 op_0x1B
+    0018 iload_1
     0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0022 op_0x2A
+    0022 aload_0
     0023 bipush 21
     0025 invokevirtual Method(Multiplier.invoke:(I)I)
-    0028 op_0x3C
+    0028 istore_1
     0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 op_0x1B
+    0032 iload_1
     0033 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0036 return
 method        main ([Ljava/lang/String;)V 0x1009

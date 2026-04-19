@@ -1,0 +1,21 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        compute (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
+  code        max_stack=1 max_locals=3
+    0000 bipush 42
+    0002 istore 1
+    0004 iload 1
+    0006 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0009 astore 2
+    0011 aload 2
+    0013 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=2
+    0000 ldc "skotch parses suspend"
+    0002 astore 1
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 aload 1
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0012 return

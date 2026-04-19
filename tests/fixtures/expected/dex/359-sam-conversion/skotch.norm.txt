@@ -1,13 +1,19 @@
 dex_version   035
-strings       16
-types         7
-methods       5
+strings       24
+types         11
+methods       9
 classes       1
 
 --- strings ---
+  "<init>"
   "I"
+  "II"
   "ILI"
+  "L$Object$2;"
+  "L$Object$3;"
+  "LAction;"
   "LInputKt;"
+  "LTransform;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
@@ -15,6 +21,8 @@ classes       1
   "VI"
   "VL"
   "[Ljava/lang/String;"
+  "apply"
+  "execute"
   "input.kt"
   "main"
   "out"
@@ -24,7 +32,11 @@ classes       1
 
 --- types ---
   I
+  L$Object$2;
+  L$Object$3;
+  LAction;
   LInputKt;
+  LTransform;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
   Ljava/lang/System;
@@ -32,17 +44,21 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
+  L$Object$2;.<init>()V
+  L$Object$3;.<init>()V
+  LAction;.execute()V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.process(Ljava/lang/Object;I)I
   LInputKt;.runAction(Ljava/lang/Object;)V
+  LTransform;.apply(I)I
   Ljava/io/PrintStream;.println(I)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=14
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=24
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       process(Ljava/lang/Object;I)I flags=0x0019 regs=5 ins=2 outs=0 insns=3
-  method       runAction(Ljava/lang/Object;)V flags=0x0019 regs=2 ins=1 outs=0 insns=2
+  method       process(Ljava/lang/Object;I)I flags=0x0019 regs=5 ins=2 outs=2 insns=7
+  method       runAction(Ljava/lang/Object;)V flags=0x0019 regs=2 ins=1 outs=1 insns=5

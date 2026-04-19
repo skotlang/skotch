@@ -9,23 +9,17 @@ method        main ([Ljava/lang/String;)V 0x0009
     0002 op_0x0A
     0003 op_0x39
     0004 aconst_null
-    0005 op_0xBB
-    0006 nop
-    0007 op_0x0D
-    0008 op_0x59
+    0005 new Class(Temperature)
+    0008 dup
     0009 op_0x18
     0010 aconst_null
     0011 invokespecial Method(Temperature.<init>:(D)V)
     0014 astore 3
     0016 aload 3
-    0018 op_0xC0
-    0019 nop
-    0020 op_0x0D
+    0018 checkcast Class(Temperature)
     0021 astore 4
     0023 aload 4
-    0025 op_0xC0
-    0026 nop
-    0027 op_0x0D
+    0025 checkcast Class(Temperature)
     0028 astore 5
     0030 aload 5
     0032 invokevirtual Method(Temperature.getFahrenheit:()D)

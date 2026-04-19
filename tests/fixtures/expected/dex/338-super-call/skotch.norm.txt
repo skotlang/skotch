@@ -1,10 +1,13 @@
 dex_version   035
-strings       12
-types         7
-methods       3
+strings       16
+types         8
+methods       5
 classes       1
 
 --- strings ---
+  "<init>"
+  "L"
+  "LChild;"
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
@@ -13,12 +16,14 @@ classes       1
   "V"
   "VL"
   "[Ljava/lang/String;"
+  "greet"
   "input.kt"
   "main"
   "out"
   "println"
 
 --- types ---
+  LChild;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
@@ -28,6 +33,8 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
+  LChild;.<init>()V
+  LChild;.greet()Ljava/lang/String;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
@@ -36,5 +43,5 @@ classes       1
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=6
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=15
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

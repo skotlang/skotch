@@ -28,29 +28,23 @@ method        formatEntry (Ljava/lang/String;IZ)Ljava/lang/String; 0x0009
     0046 iload 2
     0048 istore 10
     0050 iload 10
-    0052 op_0x99
-    0053 nop
-    0054 op_0x0E
+    0052 ifeq 66
     0055 ldc "active"
     0057 astore 11
     0059 aload 11
     0061 astore 12
-    0063 op_0xA7
-    0064 nop
-    0065 op_0x0E
+    0063 goto 77
     0066 ldc "inactive"
     0068 astore 13
     0070 aload 13
     0072 astore 12
-    0074 op_0xA7
-    0075 nop
-    0076 iconst_0
+    0074 goto 77
     0077 aload 9
     0079 aload 12
     0081 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0084 astore 14
     0086 aload 14
-    0088 op_0xB0
+    0088 areturn
     sub_attr  StackMapTable (70 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=9

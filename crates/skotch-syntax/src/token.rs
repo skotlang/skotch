@@ -86,6 +86,11 @@ pub enum TokenKind {
     KwVararg,
     KwConstructor,
     KwLateinit,
+    /// `suspend` modifier on a function declaration. Recognised so the
+    /// parser can accept Kotlin source that uses coroutines; the CPS
+    /// transform that would make a suspend function *actually* suspend
+    /// is not yet implemented (tracked in milestones.yaml v0.9.0).
+    KwSuspend,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,

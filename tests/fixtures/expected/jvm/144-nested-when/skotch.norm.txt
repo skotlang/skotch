@@ -6,9 +6,7 @@ method        classify (II)Ljava/lang/String; 0x0009
   code        max_stack=3 max_locals=37
     0000 iconst_1
     0001 istore 2
-    0003 op_0xA7
-    0004 nop
-    0005 iconst_0
+    0003 goto 6
     0006 iload 0
     0008 istore 3
     0010 iconst_0
@@ -19,27 +17,19 @@ method        classify (II)Ljava/lang/String; 0x0009
     0018 nop
     0019 iconst_4
     0020 iconst_0
-    0021 op_0xA7
-    0022 nop
-    0023 iconst_1
+    0021 goto 25
     0024 iconst_1
     0025 istore 5
     0027 iconst_0
     0028 istore 6
     0030 iload 5
-    0032 op_0x99
-    0033 nop
-    0034 op_0xBC
-    0035 op_0xA7
-    0036 nop
-    0037 op_0x9D
+    0032 ifeq 220
+    0035 goto 192
     0038 ldc "Q1"
     0040 astore 7
     0042 aload 7
     0044 astore 8
-    0046 op_0xA7
-    0047 nop
-    0048 op_0x8F
+    0046 goto 189
     0049 iload 0
     0051 istore 9
     0053 iconst_0
@@ -50,27 +40,19 @@ method        classify (II)Ljava/lang/String; 0x0009
     0061 nop
     0062 iconst_4
     0063 iconst_0
-    0064 op_0xA7
-    0065 nop
-    0066 iconst_1
+    0064 goto 68
     0067 iconst_1
     0068 istore 11
     0070 iconst_0
     0071 istore 12
     0073 iload 11
-    0075 op_0x99
-    0076 nop
-    0077 op_0xB5
-    0078 op_0xA7
-    0079 nop
-    0080 op_0x96
+    0075 ifeq 256
+    0078 goto 228
     0081 ldc "Q2"
     0083 astore 13
     0085 aload 13
     0087 astore 8
-    0089 op_0xA7
-    0090 nop
-    0091 isub
+    0089 goto 189
     0092 iload 0
     0094 istore 14
     0096 iconst_0
@@ -81,27 +63,19 @@ method        classify (II)Ljava/lang/String; 0x0009
     0104 nop
     0105 iconst_4
     0106 iconst_0
-    0107 op_0xA7
-    0108 nop
-    0109 iconst_1
+    0107 goto 111
     0110 iconst_1
     0111 istore 16
     0113 iconst_0
     0114 istore 17
     0116 iload 16
-    0118 op_0x99
-    0119 nop
-    0120 op_0xAE
-    0121 op_0xA7
-    0122 nop
-    0123 op_0x8F
+    0118 ifeq 292
+    0121 goto 264
     0124 ldc "Q3"
     0126 astore 18
     0128 aload 18
     0130 astore 8
-    0132 op_0xA7
-    0133 nop
-    0134 op_0x39
+    0132 goto 189
     0135 iload 0
     0137 istore 19
     0139 iconst_0
@@ -112,36 +86,26 @@ method        classify (II)Ljava/lang/String; 0x0009
     0147 nop
     0148 iconst_4
     0149 iconst_0
-    0150 op_0xA7
-    0151 nop
-    0152 iconst_1
+    0150 goto 154
     0153 iconst_1
     0154 istore 21
     0156 iconst_0
     0157 istore 22
     0159 iload 21
-    0161 op_0x99
-    0162 nop
-    0163 op_0xA7
-    0164 op_0xA7
-    0165 nop
-    0166 op_0x88
+    0161 ifeq 328
+    0164 goto 300
     0167 ldc "Q4"
     0169 astore 23
     0171 aload 23
     0173 astore 8
-    0175 op_0xA7
-    0176 nop
-    0177 op_0x0E
+    0175 goto 189
     0178 ldc "axis"
     0180 astore 24
     0182 aload 24
     0184 astore 8
-    0186 op_0xA7
-    0187 nop
-    0188 iconst_0
+    0186 goto 189
     0189 aload 8
-    0191 op_0xB0
+    0191 areturn
     0192 iload 1
     0194 istore 25
     0196 iconst_0
@@ -152,23 +116,15 @@ method        classify (II)Ljava/lang/String; 0x0009
     0204 nop
     0205 iconst_4
     0206 iconst_0
-    0207 op_0xA7
-    0208 nop
-    0209 iconst_1
+    0207 goto 211
     0210 iconst_1
     0211 istore 27
     0213 iload 27
     0215 istore 6
-    0217 op_0xA7
-    0218 nop
-    0219 iconst_0
+    0217 goto 220
     0220 iload 6
-    0222 op_0x99
-    0223 op_0xFF
-    0224 op_0x53
-    0225 op_0xA7
-    0226 op_0xFF
-    0227 op_0x45
+    0222 ifeq 49
+    0225 goto 38
     0228 iload 1
     0230 istore 28
     0232 iconst_0
@@ -179,23 +135,15 @@ method        classify (II)Ljava/lang/String; 0x0009
     0240 nop
     0241 iconst_4
     0242 iconst_0
-    0243 op_0xA7
-    0244 nop
-    0245 iconst_1
+    0243 goto 247
     0246 iconst_1
     0247 istore 30
     0249 iload 30
     0251 istore 12
-    0253 op_0xA7
-    0254 nop
-    0255 iconst_0
+    0253 goto 256
     0256 iload 12
-    0258 op_0x99
-    0259 op_0xFF
-    0260 op_0x5A
-    0261 op_0xA7
-    0262 op_0xFF
-    0263 op_0x4C
+    0258 ifeq 92
+    0261 goto 81
     0264 iload 1
     0266 istore 31
     0268 iconst_0
@@ -206,23 +154,15 @@ method        classify (II)Ljava/lang/String; 0x0009
     0276 nop
     0277 iconst_4
     0278 iconst_0
-    0279 op_0xA7
-    0280 nop
-    0281 iconst_1
+    0279 goto 283
     0282 iconst_1
     0283 istore 33
     0285 iload 33
     0287 istore 17
-    0289 op_0xA7
-    0290 nop
-    0291 iconst_0
+    0289 goto 292
     0292 iload 17
-    0294 op_0x99
-    0295 op_0xFF
-    0296 op_0x61
-    0297 op_0xA7
-    0298 op_0xFF
-    0299 op_0x53
+    0294 ifeq 135
+    0297 goto 124
     0300 iload 1
     0302 istore 34
     0304 iconst_0
@@ -233,23 +173,15 @@ method        classify (II)Ljava/lang/String; 0x0009
     0312 nop
     0313 iconst_4
     0314 iconst_0
-    0315 op_0xA7
-    0316 nop
-    0317 iconst_1
+    0315 goto 319
     0318 iconst_1
     0319 istore 36
     0321 iload 36
     0323 istore 22
-    0325 op_0xA7
-    0326 nop
-    0327 iconst_0
+    0325 goto 328
     0328 iload 22
-    0330 op_0x99
-    0331 op_0xFF
-    0332 imul
-    0333 op_0xA7
-    0334 op_0xFF
-    0335 op_0x5A
+    0330 ifeq 178
+    0333 goto 167
     sub_attr  StackMapTable (864 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=16

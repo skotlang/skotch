@@ -70,42 +70,22 @@ method        main ([Ljava/lang/String;)V 0x0009
     0112 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0115 astore 18
     0117 aload 18
-    0119 op_0xC0
-    0120 nop
-    0121 op_0x17
+    0119 checkcast Class(java/util/List)
     0122 astore 19
     0124 aload 19
-    0126 op_0xC0
-    0127 nop
-    0128 op_0x17
+    0126 checkcast Class(java/util/List)
     0129 astore 20
     0131 aload 20
-    0133 op_0xB9
-    0134 nop
-    0135 op_0x1D
-    0136 aconst_null
-    0137 nop
+    0133 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
     0138 astore 21
-    0140 op_0xA7
-    0141 nop
-    0142 iconst_0
+    0140 goto 143
     0143 aload 21
-    0145 op_0xB9
-    0146 nop
-    0147 op_0x23
-    0148 aconst_null
-    0149 nop
+    0145 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0150 istore 22
     0152 iload 22
-    0154 op_0x99
-    0155 nop
-    0156 op_0x27
+    0154 ifeq 193
     0157 aload 21
-    0159 op_0xB9
-    0160 nop
-    0161 op_0x27
-    0162 aconst_null
-    0163 nop
+    0159 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0164 astore 23
     0166 aload 23
     0168 astore 24
@@ -117,25 +97,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0180 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
     0183 istore 26
     0185 iload 26
-    0187 op_0x99
-    0188 nop
-    0189 op_0x0A
-    0190 op_0xA7
-    0191 nop
-    0192 iconst_1
+    0187 ifeq 197
+    0190 goto 194
     0193 return
-    0194 op_0xA7
-    0195 op_0xFF
-    0196 op_0xFF
-    0197 op_0xA7
-    0198 nop
-    0199 iconst_0
+    0194 goto 193
+    0197 goto 200
     0200 aload 23
     0202 astore 27
     0204 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0207 aload 27
     0209 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0212 op_0xA7
-    0213 op_0xFF
-    0214 op_0xBB
+    0212 goto 143
     sub_attr  StackMapTable (285 bytes)

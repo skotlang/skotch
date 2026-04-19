@@ -39,18 +39,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0054 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0057 astore 9
     0059 aload 9
-    0061 op_0xC0
-    0062 nop
-    0063 op_0x17
+    0061 checkcast Class(java/util/List)
     0064 astore 10
     0066 aload 10
-    0068 op_0xC0
-    0069 nop
-    0070 op_0x17
+    0068 checkcast Class(java/util/List)
     0071 astore 11
-    0073 op_0xBB
-    0074 nop
-    0075 aload 89
+    0073 new Class(InputKt$Lambda$0)
+    0076 dup
     0077 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0080 astore 12
     0082 aload 11
@@ -58,14 +53,10 @@ method        main ([Ljava/lang/String;)V 0x0009
     0086 invokestatic Method(kotlin/collections/CollectionsKt.associateWith:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;)
     0089 astore 13
     0091 aload 13
-    0093 op_0xC0
-    0094 nop
-    0095 op_0x23
+    0093 checkcast Class(java/util/Map)
     0096 astore 14
     0098 aload 14
-    0100 op_0xC0
-    0101 nop
-    0102 op_0x23
+    0100 checkcast Class(java/util/Map)
     0103 astore 15
     0105 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0108 aload 15

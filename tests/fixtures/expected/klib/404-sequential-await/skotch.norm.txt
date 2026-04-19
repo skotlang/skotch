@@ -1,0 +1,1064 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        {
+          "Class": "InputKt$Lambda$0"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        },
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        "Int",
+        "Any",
+        "Any"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "InputKt$Lambda$0"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "InputKt$Lambda$0"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "CheckCast": {
+                    "obj": 0,
+                    "target_class": "kotlin/jvm/functions/Function2"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlinx/coroutines/BuildersKt",
+                        "method_name": "runBlocking$default",
+                        "descriptor": "(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "InputKt$Lambda$0",
+      "super_class": "kotlin/coroutines/jvm/internal/SuspendLambda",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function2"
+      ],
+      "fields": [
+        {
+          "name": "p$0",
+          "ty": "Any"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1008,
+          "name": "invoke",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$0"
+            },
+            {
+              "Class": "InputKt$Lambda$1"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            {
+              "Class": "kotlinx/coroutines/GlobalScope"
+            },
+            {
+              "Class": "kotlin/coroutines/CoroutineContext"
+            },
+            {
+              "Class": "kotlinx/coroutines/CoroutineStart"
+            },
+            {
+              "Class": "kotlin/jvm/functions/Function2"
+            },
+            "Int",
+            "Any",
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            "Any",
+            "Any",
+            "Any",
+            "Unit",
+            {
+              "Class": "InputKt$Lambda$2"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            {
+              "Class": "kotlinx/coroutines/GlobalScope"
+            },
+            {
+              "Class": "kotlin/coroutines/CoroutineContext"
+            },
+            {
+              "Class": "kotlinx/coroutines/CoroutineStart"
+            },
+            {
+              "Class": "kotlin/jvm/functions/Function2"
+            },
+            "Int",
+            "Any",
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlinx/coroutines/Deferred"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            "Any",
+            "Any",
+            "Any",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "NewInstance": "InputKt$Lambda$1"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Constructor": "InputKt$Lambda$1"
+                        },
+                        "args": [
+                          2
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "GetStaticField": {
+                        "class_name": "kotlinx/coroutines/GlobalScope",
+                        "field_name": "INSTANCE",
+                        "descriptor": "Lkotlinx/coroutines/GlobalScope;"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "CheckCast": {
+                        "obj": 1,
+                        "target_class": "kotlin/jvm/functions/Function2"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "Const": {
+                        "Int": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "StaticJava": {
+                            "class_name": "kotlinx/coroutines/BuildersKt",
+                            "method_name": "async$default",
+                            "descriptor": "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Deferred;"
+                          }
+                        },
+                        "args": [
+                          3,
+                          4,
+                          5,
+                          6,
+                          7,
+                          8
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "Local": 9
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "Local": 10
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 12,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 13,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "kotlinx/coroutines/Deferred",
+                            "method_name": "await",
+                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                          }
+                        },
+                        "args": [
+                          11,
+                          12
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 14,
+                    "value": {
+                      "Local": 13
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 15,
+                    "value": {
+                      "Local": 14
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 16,
+                    "value": {
+                      "Call": {
+                        "kind": "Println",
+                        "args": [
+                          15
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 17,
+                    "value": {
+                      "NewInstance": "InputKt$Lambda$2"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 18,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 17,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Constructor": "InputKt$Lambda$2"
+                        },
+                        "args": [
+                          18
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 19,
+                    "value": {
+                      "GetStaticField": {
+                        "class_name": "kotlinx/coroutines/GlobalScope",
+                        "field_name": "INSTANCE",
+                        "descriptor": "Lkotlinx/coroutines/GlobalScope;"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 20,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 21,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 22,
+                    "value": {
+                      "CheckCast": {
+                        "obj": 17,
+                        "target_class": "kotlin/jvm/functions/Function2"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 23,
+                    "value": {
+                      "Const": {
+                        "Int": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 24,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 25,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "StaticJava": {
+                            "class_name": "kotlinx/coroutines/BuildersKt",
+                            "method_name": "async$default",
+                            "descriptor": "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Deferred;"
+                          }
+                        },
+                        "args": [
+                          19,
+                          20,
+                          21,
+                          22,
+                          23,
+                          24
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 26,
+                    "value": {
+                      "Local": 25
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 27,
+                    "value": {
+                      "Local": 26
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 28,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 29,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "kotlinx/coroutines/Deferred",
+                            "method_name": "await",
+                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                          }
+                        },
+                        "args": [
+                          27,
+                          28
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 30,
+                    "value": {
+                      "Local": 29
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 31,
+                    "value": {
+                      "Local": 30
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 32,
+                    "value": {
+                      "Call": {
+                        "kind": "Println",
+                        "args": [
+                          31
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit",
+          "is_suspend": true,
+          "suspend_state_machine": {
+            "continuation_class": "InputKt$Lambda$0",
+            "outer_class": "InputKt",
+            "outer_method": "InputKt$Lambda$0",
+            "suspend_call_class": "InputKt",
+            "suspend_call_method": "",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 13,
+                "callee_class": "kotlinx/coroutines/Deferred",
+                "callee_method": "await",
+                "args": [
+                  11
+                ],
+                "arg_tys": [
+                  {
+                    "Class": "kotlinx/coroutines/Deferred"
+                  }
+                ],
+                "return_ty": "Any",
+                "is_virtual": true,
+                "result_local": 13
+              },
+              {
+                "block_idx": 0,
+                "stmt_idx": 30,
+                "callee_class": "kotlinx/coroutines/Deferred",
+                "callee_method": "await",
+                "args": [
+                  27
+                ],
+                "arg_tys": [
+                  {
+                    "Class": "kotlinx/coroutines/Deferred"
+                  }
+                ],
+                "return_ty": "Any",
+                "is_virtual": true,
+                "result_local": 29
+              }
+            ],
+            "is_instance_method": false
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$0"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      },
+      "is_suspend_lambda": true
+    },
+    {
+      "name": "InputKt$Lambda$1",
+      "super_class": "kotlin/coroutines/jvm/internal/SuspendLambda",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function2"
+      ],
+      "fields": [
+        {
+          "name": "p$0",
+          "ty": "Any"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1009,
+          "name": "invoke",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$1"
+            },
+            "Int",
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Const": {
+                        "Int": 10
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "StaticJava": {
+                            "class_name": "java/lang/Integer",
+                            "method_name": "valueOf",
+                            "descriptor": "(I)Ljava/lang/Integer;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 2
+              }
+            }
+          ],
+          "return_ty": "Any"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$1"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      },
+      "is_suspend_lambda": true
+    },
+    {
+      "name": "InputKt$Lambda$2",
+      "super_class": "kotlin/coroutines/jvm/internal/SuspendLambda",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function2"
+      ],
+      "fields": [
+        {
+          "name": "p$0",
+          "ty": "Any"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1010,
+          "name": "invoke",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$2"
+            },
+            "Int",
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Const": {
+                        "Int": 20
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "StaticJava": {
+                            "class_name": "java/lang/Integer",
+                            "method_name": "valueOf",
+                            "descriptor": "(I)Ljava/lang/Integer;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 2
+              }
+            }
+          ],
+          "return_ty": "Any"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$2"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      },
+      "is_suspend_lambda": true
+    }
+  ],
+  "strings": []
+}

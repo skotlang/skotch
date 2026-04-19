@@ -29,34 +29,22 @@ method        nameOrDefault (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0005 astore 2
     0007 aload 1
     0009 aload 2
-    0011 op_0xA6
-    0012 nop
-    0013 iconst_4
+    0011 if_acmpne 18
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 3
     0021 iload 3
-    0023 op_0x99
-    0024 nop
-    0025 op_0x0A
+    0023 ifeq 33
     0026 aload 1
     0028 astore 4
-    0030 op_0xA7
-    0031 nop
-    0032 op_0x0E
+    0030 goto 44
     0033 ldc "anonymous"
     0035 astore 5
     0037 aload 5
     0039 astore 4
-    0041 op_0xA7
-    0042 nop
-    0043 iconst_0
+    0041 goto 44
     0044 aload 4
-    0046 op_0xC0
-    0047 nop
-    0048 op_0x0D
-    0049 op_0xB0
+    0046 checkcast Class(java/lang/String)
+    0049 areturn
     sub_attr  StackMapTable (72 bytes)

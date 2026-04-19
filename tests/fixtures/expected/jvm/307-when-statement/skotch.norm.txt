@@ -10,9 +10,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0005 istore 2
     0007 iload 2
     0009 istore 3
-    0011 op_0xA7
-    0012 nop
-    0013 iconst_0
+    0011 goto 14
     0014 iconst_1
     0015 istore 4
     0017 iload 3
@@ -21,23 +19,17 @@ method        main ([Ljava/lang/String;)V 0x0009
     0022 nop
     0023 iconst_4
     0024 iconst_0
-    0025 op_0xA7
-    0026 nop
-    0027 iconst_1
+    0025 goto 29
     0028 iconst_1
     0029 istore 5
     0031 iload 5
-    0033 op_0x99
-    0034 nop
-    0035 ldc "java/io/PrintStream"
-    0037 op_0x0B
+    0033 ifeq 51
+    0036 ldc "one"
     0038 astore 6
     0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0043 aload 6
     0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0048 op_0xA7
-    0049 nop
-    0050 op_0x5C
+    0048 goto 140
     0051 iconst_2
     0052 istore 7
     0054 iload 3
@@ -46,23 +38,17 @@ method        main ([Ljava/lang/String;)V 0x0009
     0059 nop
     0060 iconst_4
     0061 iconst_0
-    0062 op_0xA7
-    0063 nop
-    0064 iconst_1
+    0062 goto 66
     0065 iconst_1
     0066 istore 8
     0068 iload 8
-    0070 op_0x99
-    0071 nop
-    0072 ldc "java/io/PrintStream"
-    0074 aload 58
-    0076 op_0x09
+    0070 ifeq 88
+    0073 ldc "two"
+    0075 astore 9
     0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0080 aload 9
     0082 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0085 op_0xA7
-    0086 nop
-    0087 op_0x37
+    0085 goto 140
     0088 iconst_3
     0089 istore 10
     0091 iload 3
@@ -71,36 +57,26 @@ method        main ([Ljava/lang/String;)V 0x0009
     0096 nop
     0097 iconst_4
     0098 iconst_0
-    0099 op_0xA7
-    0100 nop
-    0101 iconst_1
+    0099 goto 103
     0102 iconst_1
     0103 istore 11
     0105 iload 11
-    0107 op_0x99
-    0108 nop
-    0109 ldc "java/io/PrintStream"
-    0111 op_0x1B
+    0107 ifeq 125
+    0110 ldc "three"
     0112 astore 12
     0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0117 aload 12
     0119 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0122 op_0xA7
-    0123 nop
-    0124 ldc "java/io/PrintStream"
-    0126 op_0x1D
+    0122 goto 140
+    0125 ldc "other"
     0127 astore 13
     0129 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0132 aload 13
     0134 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0137 op_0xA7
-    0138 nop
-    0139 iconst_0
+    0137 goto 140
     0140 iconst_1
     0141 istore 14
-    0143 op_0xA7
-    0144 nop
-    0145 iconst_0
+    0143 goto 146
     0146 iload 2
     0148 istore 15
     0150 iconst_0
@@ -111,23 +87,17 @@ method        main ([Ljava/lang/String;)V 0x0009
     0158 nop
     0159 iconst_4
     0160 iconst_0
-    0161 op_0xA7
-    0162 nop
-    0163 iconst_1
+    0161 goto 165
     0164 iconst_1
     0165 istore 17
     0167 iload 17
-    0169 op_0x99
-    0170 nop
-    0171 ldc "java/io/PrintStream"
-    0173 op_0x1F
+    0169 ifeq 187
+    0172 ldc "negative"
     0174 astore 18
     0176 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0179 aload 18
     0181 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0184 op_0xA7
-    0185 nop
-    0186 op_0x3B
+    0184 goto 243
     0187 iload 2
     0189 istore 19
     0191 iconst_0
@@ -138,30 +108,22 @@ method        main ([Ljava/lang/String;)V 0x0009
     0199 nop
     0200 iconst_4
     0201 iconst_0
-    0202 op_0xA7
-    0203 nop
-    0204 iconst_1
+    0202 goto 206
     0205 iconst_1
     0206 istore 21
     0208 iload 21
-    0210 op_0x99
-    0211 nop
-    0212 ldc "java/io/PrintStream"
-    0214 op_0x21
+    0210 ifeq 228
+    0213 ldc "zero"
     0215 astore 22
     0217 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0220 aload 22
     0222 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0225 op_0xA7
-    0226 nop
-    0227 ldc "java/io/PrintStream"
-    0229 op_0x23
+    0225 goto 243
+    0228 ldc "positive"
     0230 astore 23
     0232 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0235 aload 23
     0237 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0240 op_0xA7
-    0241 nop
-    0242 iconst_0
+    0240 goto 243
     0243 return
     sub_attr  StackMapTable (412 bytes)

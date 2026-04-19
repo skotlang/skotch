@@ -5,38 +5,38 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=3
     0000 iconst_1
-    0001 op_0x3B
+    0001 istore_0
     0002 iconst_0
-    0003 op_0x3C
+    0003 istore_1
     0004 iconst_0
-    0005 op_0x3D
+    0005 istore_2
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1C
+    0009 iload_2
     0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0013 iconst_1
-    0014 op_0x3D
+    0014 istore_2
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 op_0x1C
+    0018 iload_2
     0019 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0022 iconst_0
-    0023 op_0x3D
+    0023 istore_2
     0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 op_0x1C
+    0027 iload_2
     0028 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0031 iconst_1
-    0032 op_0x3D
+    0032 istore_2
     0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 op_0x1C
+    0036 iload_2
     0037 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0040 iconst_1
-    0041 op_0x3D
+    0041 istore_2
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 op_0x1C
+    0045 iload_2
     0046 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0049 iconst_1
-    0050 op_0x3D
+    0050 istore_2
     0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 op_0x1C
+    0054 iload_2
     0055 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0058 return
 method        main ([Ljava/lang/String;)V 0x1009

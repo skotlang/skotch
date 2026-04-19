@@ -25,7 +25,7 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0015 astore 3
     0017 aload 3
-    0019 op_0xB0
+    0019 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5
     0000 bipush 21

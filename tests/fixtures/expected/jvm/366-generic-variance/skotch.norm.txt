@@ -6,56 +6,40 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=11
     0000 ldc "hello"
     0002 astore 1
-    0004 op_0xBB
-    0005 nop
-    0006 op_0x0D
-    0007 op_0x59
+    0004 new Class(Producer)
+    0007 dup
     0008 aload 1
     0010 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
     0013 astore 2
     0015 aload 2
-    0017 op_0xC0
-    0018 nop
-    0019 op_0x0D
+    0017 checkcast Class(Producer)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0D
+    0024 checkcast Class(Producer)
     0027 astore 4
     0029 aload 4
-    0031 op_0xB4
-    0032 nop
-    0033 iload 58
-    0035 iconst_2
+    0031 getfield Field(Producer.value:Ljava/lang/Object;)
+    0034 astore 5
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0039 aload 5
     0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0044 bipush 42
     0046 istore 6
-    0048 op_0xBB
-    0049 nop
-    0050 op_0x0D
-    0051 op_0x59
+    0048 new Class(Producer)
+    0051 dup
     0052 iload 6
     0054 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0057 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
     0060 astore 7
     0062 aload 7
-    0064 op_0xC0
-    0065 nop
-    0066 op_0x0D
+    0064 checkcast Class(Producer)
     0067 astore 8
     0069 aload 8
-    0071 op_0xC0
-    0072 nop
-    0073 op_0x0D
+    0071 checkcast Class(Producer)
     0074 astore 9
     0076 aload 9
-    0078 op_0xB4
-    0079 nop
-    0080 iload 58
-    0082 op_0x0A
+    0078 getfield Field(Producer.value:Ljava/lang/Object;)
+    0081 astore 10
     0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0086 aload 10
     0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

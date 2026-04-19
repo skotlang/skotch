@@ -14,22 +14,16 @@ method        fib (I)I 0x0009
     0012 nop
     0013 iconst_4
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 3
     0021 iload 3
-    0023 op_0x99
-    0024 nop
-    0025 op_0x0A
+    0023 ifeq 33
     0026 iload 0
     0028 istore 4
     0030 iload 4
     0032 op_0xAC
-    0033 op_0xA7
-    0034 nop
-    0035 iconst_0
+    0033 goto 36
     0036 iconst_0
     0037 istore 5
     0039 iload 5
@@ -44,25 +38,19 @@ method        fib (I)I 0x0009
     0055 istore 10
     0057 iload 9
     0059 istore 11
-    0061 op_0xA7
-    0062 nop
-    0063 iconst_0
+    0061 goto 64
     0064 iload 11
     0066 iload 10
     0068 op_0xA4
     0069 nop
     0070 iconst_4
     0071 iconst_0
-    0072 op_0xA7
-    0073 nop
-    0074 iconst_1
+    0072 goto 76
     0075 iconst_1
     0076 istore 12
     0078 iload 12
-    0080 op_0x99
-    0081 nop
-    0082 astore 21
-    0084 iconst_3
+    0080 ifeq 138
+    0083 iload 6
     0085 istore 13
     0087 iload 8
     0089 istore 14
@@ -80,9 +68,7 @@ method        fib (I)I 0x0009
     0112 istore 18
     0114 iload 18
     0116 istore 8
-    0118 op_0xA7
-    0119 nop
-    0120 iconst_0
+    0118 goto 121
     0121 iconst_1
     0122 istore 19
     0124 iload 11
@@ -91,9 +77,7 @@ method        fib (I)I 0x0009
     0129 istore 20
     0131 iload 20
     0133 istore 11
-    0135 op_0xA7
-    0136 op_0xFF
-    0137 op_0xB9
+    0135 goto 64
     0138 iload 8
     0140 istore 21
     0142 iload 21
@@ -107,24 +91,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0005 istore 2
     0007 iload 1
     0009 istore 3
-    0011 op_0xA7
-    0012 nop
-    0013 iconst_0
+    0011 goto 14
     0014 iload 3
     0016 iload 2
     0018 op_0xA4
     0019 nop
     0020 iconst_4
     0021 iconst_0
-    0022 op_0xA7
-    0023 nop
-    0024 iconst_1
+    0022 goto 26
     0025 iconst_1
     0026 istore 4
     0028 iload 4
-    0030 op_0x99
-    0031 nop
-    0032 op_0x52
+    0030 ifeq 112
     0033 ldc "fib("
     0035 astore 5
     0037 iload 3
@@ -137,10 +115,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0051 invokestatic Method(InputKt.fib:(I)I)
     0054 istore 9
     0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0059 op_0xBB
-    0060 nop
-    0061 op_0x1A
-    0062 op_0x59
+    0059 new Class(java/lang/StringBuilder)
+    0062 dup
     0063 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0066 aload 5
     0068 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
@@ -152,9 +128,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0083 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
     0086 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
     0089 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0092 op_0xA7
-    0093 nop
-    0094 iconst_0
+    0092 goto 95
     0095 iconst_1
     0096 istore 10
     0098 iload 3
@@ -163,8 +137,6 @@ method        main ([Ljava/lang/String;)V 0x0009
     0103 istore 11
     0105 iload 11
     0107 istore 3
-    0109 op_0xA7
-    0110 op_0xFF
-    0111 op_0xA1
+    0109 goto 14
     0112 return
     sub_attr  StackMapTable (79 bytes)

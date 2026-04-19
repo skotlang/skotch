@@ -4,10 +4,10 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        doubleBox (LBox;)I 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "b"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
+    0006 aload_0
     0007 invokevirtual Method(Box.getValue:()I)
     0010 iconst_2
     0011 imul
@@ -15,24 +15,22 @@ method        doubleBox (LBox;)I 0x0019
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 sipush 22800
-    0005 iload 183
-    0007 nop
-    0008 op_0x1D
-    0009 op_0x4B
-    0010 op_0x2A
+    0000 new Class(Box)
+    0003 dup
+    0004 bipush 21
+    0006 invokespecial Method(Box.<init>:(I)V)
+    0009 astore_0
+    0010 aload_0
     0011 invokestatic Method(InputKt.unbox:(LBox;)I)
-    0014 op_0x3C
+    0014 istore_1
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 op_0x1B
+    0018 iload_1
     0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0022 op_0x2A
+    0022 aload_0
     0023 invokestatic Method(InputKt.doubleBox:(LBox;)I)
-    0026 op_0x3C
+    0026 istore_1
     0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 op_0x1B
+    0030 iload_1
     0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0034 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -41,10 +39,10 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        unbox (LBox;)I 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "b"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
+    0006 aload_0
     0007 invokevirtual Method(Box.getValue:()I)
     0010 op_0xAC
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

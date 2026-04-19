@@ -1,0 +1,17 @@
+name     = "399-launch-basic"
+status   = "supported"
+features = ["suspend", "suspend-lambda", "coroutines", "runBlocking", "launch"]
+notes    = """
+Session 12: `launch { }` builder inside `runBlocking { }`. \
+\
+Uses `GlobalScope.launch$default` rather than structured \
+concurrency scope threading (CoroutineScope from the \
+runBlocking lambda receiver). This means the launched \
+coroutine is not bound to the runBlocking scope, but it \
+works for basic fire-and-forget patterns. \
+\
+LIMITATION: GlobalScope launches are not cancelled when \
+the runBlocking scope completes. For this test we use \
+`delay` in the outer scope to ensure the launched \
+coroutine finishes before main exits.
+"""

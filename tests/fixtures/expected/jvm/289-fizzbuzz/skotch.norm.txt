@@ -6,9 +6,7 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=23
     0000 iconst_1
     0001 istore 1
-    0003 op_0xA7
-    0004 nop
-    0005 iconst_0
+    0003 goto 6
     0006 iload 0
     0008 istore 2
     0010 bipush 15
@@ -25,22 +23,16 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0029 nop
     0030 iconst_4
     0031 iconst_0
-    0032 op_0xA7
-    0033 nop
-    0034 iconst_1
+    0032 goto 36
     0035 iconst_1
     0036 istore 6
     0038 iload 6
-    0040 op_0x99
-    0041 nop
-    0042 op_0x0E
+    0040 ifeq 54
     0043 ldc "FizzBuzz"
     0045 astore 7
     0047 aload 7
     0049 astore 8
-    0051 op_0xA7
-    0052 nop
-    0053 op_0x73
+    0051 goto 166
     0054 iload 0
     0056 istore 9
     0058 iconst_3
@@ -57,22 +49,16 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0076 nop
     0077 iconst_4
     0078 iconst_0
-    0079 op_0xA7
-    0080 nop
-    0081 iconst_1
+    0079 goto 83
     0082 iconst_1
     0083 istore 13
     0085 iload 13
-    0087 op_0x99
-    0088 nop
-    0089 op_0x0E
+    0087 ifeq 101
     0090 ldc "Fizz"
     0092 astore 14
     0094 aload 14
     0096 astore 8
-    0098 op_0xA7
-    0099 nop
-    0100 op_0x44
+    0098 goto 166
     0101 iload 0
     0103 istore 15
     0105 iconst_5
@@ -89,34 +75,26 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0123 nop
     0124 iconst_4
     0125 iconst_0
-    0126 op_0xA7
-    0127 nop
-    0128 iconst_1
+    0126 goto 130
     0129 iconst_1
     0130 istore 19
     0132 iload 19
-    0134 op_0x99
-    0135 nop
-    0136 op_0x0E
+    0134 ifeq 148
     0137 ldc "Buzz"
     0139 astore 20
     0141 aload 20
     0143 astore 8
-    0145 op_0xA7
-    0146 nop
-    0147 iload 21
-    0149 nop
+    0145 goto 166
+    0148 iload 0
     0150 istore 21
     0152 iload 21
     0154 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
     0157 astore 22
     0159 aload 22
     0161 astore 8
-    0163 op_0xA7
-    0164 nop
-    0165 iconst_0
+    0163 goto 166
     0166 aload 8
-    0168 op_0xB0
+    0168 areturn
     sub_attr  StackMapTable (212 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=9
@@ -126,24 +104,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0005 istore 2
     0007 iload 1
     0009 istore 3
-    0011 op_0xA7
-    0012 nop
-    0013 iconst_0
+    0011 goto 14
     0014 iload 3
     0016 iload 2
     0018 op_0xA4
     0019 nop
     0020 iconst_4
     0021 iconst_0
-    0022 op_0xA7
-    0023 nop
-    0024 iconst_1
+    0022 goto 26
     0025 iconst_1
     0026 istore 4
     0028 iload 4
-    0030 op_0x99
-    0031 nop
-    0032 op_0x2A
+    0030 ifeq 72
     0033 iload 3
     0035 istore 5
     0037 iload 5
@@ -152,9 +124,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0047 aload 6
     0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0052 op_0xA7
-    0053 nop
-    0054 iconst_0
+    0052 goto 55
     0055 iconst_1
     0056 istore 7
     0058 iload 3
@@ -163,8 +133,6 @@ method        main ([Ljava/lang/String;)V 0x0009
     0063 istore 8
     0065 iload 8
     0067 istore 3
-    0069 op_0xA7
-    0070 op_0xFF
-    0071 op_0xC9
+    0069 goto 14
     0072 return
     sub_attr  StackMapTable (74 bytes)

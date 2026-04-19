@@ -16,9 +16,7 @@ method        fibonacci (I)I 0x0009
     0015 istore 5
     0017 iload 5
     0019 istore 6
-    0021 op_0xA7
-    0022 nop
-    0023 iconst_0
+    0021 goto 24
     0024 iload 6
     0026 istore 7
     0028 iload 0
@@ -29,15 +27,11 @@ method        fibonacci (I)I 0x0009
     0037 nop
     0038 iconst_4
     0039 iconst_0
-    0040 op_0xA7
-    0041 nop
-    0042 iconst_1
+    0040 goto 44
     0043 iconst_1
     0044 istore 9
     0046 iload 9
-    0048 op_0x99
-    0049 nop
-    0050 op_0x3B
+    0048 ifeq 107
     0051 iload 2
     0053 istore 10
     0055 iload 4
@@ -66,9 +60,7 @@ method        fibonacci (I)I 0x0009
     0098 istore 18
     0100 iload 18
     0102 istore 6
-    0104 op_0xA7
-    0105 op_0xFF
-    0106 op_0xB0
+    0104 goto 24
     0107 iload 2
     0109 istore 19
     0111 iload 19

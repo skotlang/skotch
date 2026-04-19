@@ -17,30 +17,28 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        printTimes (Ljava/lang/String;I)V 0x0019
   code        max_stack=2 max_locals=3
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "msg"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 iconst_1
-    0007 op_0x3D
-    0008 op_0x1C
-    0009 op_0x1B
+    0007 istore_2
+    0008 iload_2
+    0009 iload_1
     0010 op_0xA3
     0011 nop
     0012 iload 178
     0014 nop
     0015 iload 42
     0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0020 op_0x1C
-    0021 op_0x1B
+    0020 iload_2
+    0021 iload_1
     0022 op_0x9F
     0023 nop
     0024 op_0x09
     0025 op_0x84
     0026 iconst_m1
     0027 aconst_null
-    0028 op_0xA7
-    0029 op_0xFF
-    0030 op_0xF1
+    0028 goto 13
     0031 return
     sub_attr  StackMapTable (7 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

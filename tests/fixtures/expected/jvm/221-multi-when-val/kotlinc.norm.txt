@@ -5,52 +5,44 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=3
     0000 iconst_1
-    0001 op_0x3B
-    0002 op_0x1A
+    0001 istore_0
+    0002 iload_0
     0003 bipush 6
     0005 op_0xA2
     0006 nop
     0007 op_0x3F
     0008 nop
-    0009 op_0x1A
+    0009 iload_0
     0010 iconst_2
     0011 op_0xA3
     0012 nop
     0013 iconst_5
     0014 ldc "small"
-    0016 op_0xA7
-    0017 nop
-    0018 op_0x0F
-    0019 op_0x1A
+    0016 goto 31
+    0019 iload_0
     0020 iconst_4
     0021 op_0xA3
     0022 nop
     0023 iconst_5
     0024 ldc "medium"
-    0026 op_0xA7
-    0027 nop
-    0028 iconst_2
+    0026 goto 31
     0029 ldc "large"
-    0031 op_0x4C
+    0031 astore_1
     0032 nop
-    0033 op_0x1A
+    0033 iload_0
     0034 iconst_2
     0035 irem
-    0036 op_0x9A
-    0037 nop
-    0038 iconst_5
+    0036 ifne 44
     0039 ldc "even"
-    0041 op_0xA7
-    0042 nop
-    0043 iconst_2
+    0041 goto 46
     0044 ldc "odd"
-    0046 op_0x4D
-    0047 op_0x1A
-    0048 op_0x2B
-    0049 op_0x2C
+    0046 astore_2
+    0047 iload_0
+    0048 aload_1
+    0049 aload_2
     0050 op_0xBA
     0051 nop
-    0052 op_0x1C
+    0052 iload_2
     0053 nop
     0054 nop
     0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -59,9 +51,7 @@ method        main ()V 0x0019
     0062 op_0x84
     0063 nop
     0064 aconst_null
-    0065 op_0xA7
-    0066 op_0xFF
-    0067 op_0xC1
+    0065 goto 2
     0068 return
     sub_attr  StackMapTable (25 bytes)
 method        main ([Ljava/lang/String;)V 0x1009

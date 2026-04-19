@@ -6,9 +6,7 @@ method        calculate (III)I 0x0009
   code        max_stack=2 max_locals=26
     0000 iload 1
     0002 istore 3
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 iconst_1
     0008 istore 4
     0010 iload 3
@@ -17,16 +15,12 @@ method        calculate (III)I 0x0009
     0015 nop
     0016 iconst_4
     0017 iconst_0
-    0018 op_0xA7
-    0019 nop
-    0020 iconst_1
+    0018 goto 22
     0021 iconst_1
     0022 istore 5
     0024 iload 5
-    0026 op_0x99
-    0027 nop
-    0028 aload 21
-    0030 nop
+    0026 ifeq 51
+    0029 iload 0
     0031 istore 6
     0033 iload 2
     0035 istore 7
@@ -36,9 +30,7 @@ method        calculate (III)I 0x0009
     0042 istore 8
     0044 iload 8
     0046 istore 9
-    0048 op_0xA7
-    0049 nop
-    0050 op_0x91
+    0048 goto 193
     0051 iconst_2
     0052 istore 10
     0054 iload 3
@@ -47,16 +39,12 @@ method        calculate (III)I 0x0009
     0059 nop
     0060 iconst_4
     0061 iconst_0
-    0062 op_0xA7
-    0063 nop
-    0064 iconst_1
+    0062 goto 66
     0065 iconst_1
     0066 istore 11
     0068 iload 11
-    0070 op_0x99
-    0071 nop
-    0072 aload 21
-    0074 nop
+    0070 ifeq 95
+    0073 iload 0
     0075 istore 12
     0077 iload 2
     0079 istore 13
@@ -66,9 +54,7 @@ method        calculate (III)I 0x0009
     0086 istore 14
     0088 iload 14
     0090 istore 9
-    0092 op_0xA7
-    0093 nop
-    0094 op_0x65
+    0092 goto 193
     0095 iconst_3
     0096 istore 15
     0098 iload 3
@@ -77,16 +63,12 @@ method        calculate (III)I 0x0009
     0103 nop
     0104 iconst_4
     0105 iconst_0
-    0106 op_0xA7
-    0107 nop
-    0108 iconst_1
+    0106 goto 110
     0109 iconst_1
     0110 istore 16
     0112 iload 16
-    0114 op_0x99
-    0115 nop
-    0116 aload 21
-    0118 nop
+    0114 ifeq 139
+    0117 iload 0
     0119 istore 17
     0121 iload 2
     0123 istore 18
@@ -96,9 +78,7 @@ method        calculate (III)I 0x0009
     0130 istore 19
     0132 iload 19
     0134 istore 9
-    0136 op_0xA7
-    0137 nop
-    0138 op_0x39
+    0136 goto 193
     0139 iconst_4
     0140 istore 20
     0142 iload 3
@@ -107,16 +87,12 @@ method        calculate (III)I 0x0009
     0147 nop
     0148 iconst_4
     0149 iconst_0
-    0150 op_0xA7
-    0151 nop
-    0152 iconst_1
+    0150 goto 154
     0153 iconst_1
     0154 istore 21
     0156 iload 21
-    0158 op_0x99
-    0159 nop
-    0160 aload 21
-    0162 nop
+    0158 ifeq 183
+    0161 iload 0
     0163 istore 22
     0165 iload 2
     0167 istore 23
@@ -126,16 +102,12 @@ method        calculate (III)I 0x0009
     0174 istore 24
     0176 iload 24
     0178 istore 9
-    0180 op_0xA7
-    0181 nop
-    0182 op_0x0D
+    0180 goto 193
     0183 iconst_0
     0184 istore 25
     0186 iload 25
     0188 istore 9
-    0190 op_0xA7
-    0191 nop
-    0192 iconst_0
+    0190 goto 193
     0193 iload 9
     0195 op_0xAC
     sub_attr  StackMapTable (281 bytes)

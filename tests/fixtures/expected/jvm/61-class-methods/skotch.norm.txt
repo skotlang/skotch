@@ -4,21 +4,15 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=11
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x0B
-    0003 op_0x59
+    0000 new Class(Calculator)
+    0003 dup
     0004 invokespecial Method(Calculator.<init>:()V)
     0007 astore 1
     0009 aload 1
-    0011 op_0xC0
-    0012 nop
-    0013 op_0x0B
+    0011 checkcast Class(Calculator)
     0014 astore 2
     0016 aload 2
-    0018 op_0xC0
-    0019 nop
-    0020 op_0x0B
+    0018 checkcast Class(Calculator)
     0021 astore 3
     0023 iconst_2
     0024 istore 4
@@ -33,9 +27,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0043 iload 6
     0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0048 aload 2
-    0050 op_0xC0
-    0051 nop
-    0052 op_0x0B
+    0050 checkcast Class(Calculator)
     0053 astore 7
     0055 iconst_4
     0056 istore 8

@@ -6,22 +6,16 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=9
     0000 bipush 42
     0002 istore 1
-    0004 op_0xBB
-    0005 nop
-    0006 op_0x0B
-    0007 op_0x59
+    0004 new Class(Counter)
+    0007 dup
     0008 iload 1
     0010 invokespecial Method(Counter.<init>:(I)V)
     0013 astore 2
     0015 aload 2
-    0017 op_0xC0
-    0018 nop
-    0019 op_0x0B
+    0017 checkcast Class(Counter)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(Counter)
     0027 astore 4
     0029 aload 4
     0031 invokevirtual Method(Counter.value:()I)
@@ -31,10 +25,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0044 bipush 100
     0046 istore 6
-    0048 op_0xBB
-    0049 nop
-    0050 op_0x0B
-    0051 op_0x59
+    0048 new Class(Counter)
+    0051 dup
     0052 iload 6
     0054 invokespecial Method(Counter.<init>:(I)V)
     0057 astore 7

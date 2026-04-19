@@ -7,7 +7,7 @@ method        identity (Ljava/lang/Object;)Ljava/lang/Object; 0x0009
     0000 aload 0
     0002 astore 1
     0004 aload 1
-    0006 op_0xB0
+    0006 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=4
     0000 bipush 7

@@ -14,22 +14,16 @@ method        clamp (I)I 0x0009
     0013 nop
     0014 iconst_4
     0015 iconst_0
-    0016 op_0xA7
-    0017 nop
-    0018 iconst_1
+    0016 goto 20
     0019 iconst_1
     0020 istore 3
     0022 iload 3
-    0024 op_0x99
-    0025 nop
-    0026 op_0x0A
+    0024 ifeq 34
     0027 bipush 100
     0029 istore 4
     0031 iload 4
     0033 op_0xAC
-    0034 op_0xA7
-    0035 nop
-    0036 iconst_0
+    0034 goto 37
     0037 iload 0
     0039 istore 5
     0041 iconst_0
@@ -40,22 +34,16 @@ method        clamp (I)I 0x0009
     0049 nop
     0050 iconst_4
     0051 iconst_0
-    0052 op_0xA7
-    0053 nop
-    0054 iconst_1
+    0052 goto 56
     0055 iconst_1
     0056 istore 7
     0058 iload 7
-    0060 op_0x99
-    0061 nop
-    0062 op_0x09
+    0060 ifeq 69
     0063 iconst_0
     0064 istore 8
     0066 iload 8
     0068 op_0xAC
-    0069 op_0xA7
-    0070 nop
-    0071 iconst_0
+    0069 goto 72
     0072 iload 0
     0074 istore 9
     0076 iload 9

@@ -32,9 +32,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0025 invokestatic Method(InputKt.double:(I)I)
     0028 istore 7
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 op_0xBB
-    0034 nop
-    0035 aload 89
+    0033 new Class(java/lang/StringBuilder)
+    0036 dup
     0037 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0040 aload 3
     0042 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
@@ -63,9 +62,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0094 imul
     0095 istore 14
     0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0100 op_0xBB
-    0101 nop
-    0102 aload 89
+    0100 new Class(java/lang/StringBuilder)
+    0103 dup
     0104 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0107 iload 8
     0109 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)

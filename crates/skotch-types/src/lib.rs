@@ -38,7 +38,15 @@ pub enum Ty {
     /// A user-defined class type. Carries the fully-qualified class name.
     Class(std::string::String),
     /// Function type: `(Int, String) -> Boolean`. Used for lambda parameters.
-    Function { params: Vec<Ty>, ret: Box<Ty> },
+    /// When `is_suspend` is true, this represents a `suspend` function type
+    /// (e.g. `suspend () -> String`). On the JVM the arity is bumped by +1
+    /// for the implicit `Continuation` parameter.
+    Function {
+        params: Vec<Ty>,
+        ret: Box<Ty>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        is_suspend: bool,
+    },
     /// Sentinel emitted when type-checking fails for an expression. The
     /// downstream pass should propagate it without complaining.
     Error,

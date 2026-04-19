@@ -5,14 +5,10 @@ access_flags  0x0031
 method        doubleBox (LBox;)I 0x0009
   code        max_stack=2 max_locals=5
     0000 aload 0
-    0002 op_0xC0
-    0003 nop
-    0004 op_0x0B
+    0002 checkcast Class(Box)
     0005 astore 1
     0007 aload 1
-    0009 op_0xB4
-    0010 nop
-    0011 op_0x0F
+    0009 getfield Field(Box.value:I)
     0012 istore 2
     0014 iconst_2
     0015 istore 3
@@ -26,22 +22,16 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=8
     0000 bipush 21
     0002 istore 1
-    0004 op_0xBB
-    0005 nop
-    0006 op_0x0B
-    0007 op_0x59
+    0004 new Class(Box)
+    0007 dup
     0008 iload 1
     0010 invokespecial Method(Box.<init>:(I)V)
     0013 astore 2
     0015 aload 2
-    0017 op_0xC0
-    0018 nop
-    0019 op_0x0B
+    0017 checkcast Class(Box)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(Box)
     0027 astore 4
     0029 aload 4
     0031 invokestatic Method(InputKt.unbox:(LBox;)I)
@@ -50,9 +40,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0039 iload 5
     0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0044 aload 3
-    0046 op_0xC0
-    0047 nop
-    0048 op_0x0B
+    0046 checkcast Class(Box)
     0049 astore 6
     0051 aload 6
     0053 invokestatic Method(InputKt.doubleBox:(LBox;)I)
@@ -64,14 +52,10 @@ method        main ([Ljava/lang/String;)V 0x0009
 method        unbox (LBox;)I 0x0009
   code        max_stack=1 max_locals=3
     0000 aload 0
-    0002 op_0xC0
-    0003 nop
-    0004 op_0x0B
+    0002 checkcast Class(Box)
     0005 astore 1
     0007 aload 1
-    0009 op_0xB4
-    0010 nop
-    0011 op_0x0F
+    0009 getfield Field(Box.value:I)
     0012 istore 2
     0014 iload 2
     0016 op_0xAC

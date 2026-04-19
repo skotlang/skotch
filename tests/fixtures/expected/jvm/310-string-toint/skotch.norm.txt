@@ -53,7 +53,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0072 op_0x18
     0073 bipush -74
     0075 nop
-    0076 op_0x2A
+    0076 aload_0
     0077 ldc "100"
     0079 astore 18
     0081 aload 18
@@ -73,9 +73,9 @@ method        main ([Ljava/lang/String;)V 0x0009
     0103 op_0x16
     0104 aload 105
     0106 op_0x37
-    0107 op_0x1B
+    0107 iload_1
     0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0111 op_0x16
-    0112 op_0x1B
+    0112 iload_1
     0113 invokevirtual Method(java/io/PrintStream.println:(J)V)
     0116 return

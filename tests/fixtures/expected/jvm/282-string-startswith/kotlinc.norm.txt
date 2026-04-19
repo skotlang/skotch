@@ -4,10 +4,10 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        isUrl (Ljava/lang/String;)Z 0x0019
   code        max_stack=5 max_locals=1
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
+    0006 aload_0
     0007 ldc "http"
     0009 iconst_0
     0010 iconst_2
@@ -19,21 +19,21 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 ldc "https://example.com"
     0002 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0013 ldc "ftp://files.example.com"
     0015 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0018 op_0x3B
+    0018 istore_0
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x1A
+    0022 iload_0
     0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0026 ldc "not a url"
     0028 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0031 op_0x3B
+    0031 istore_0
     0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 op_0x1A
+    0035 iload_0
     0036 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0039 return
 method        main ([Ljava/lang/String;)V 0x1009

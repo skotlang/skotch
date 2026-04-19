@@ -1,14 +1,16 @@
 dex_version   035
-strings       15
-types         7
-methods       3
+strings       18
+types         8
+methods       4
 classes       1
 
 --- strings ---
   "I"
+  "IL"
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
+  "Ljava/lang/String;"
   "Ljava/lang/System;"
   "V"
   "VI"
@@ -16,6 +18,7 @@ classes       1
   "[Ljava/lang/String;"
   "apple"
   "banana"
+  "compareTo"
   "input.kt"
   "main"
   "out"
@@ -26,6 +29,7 @@ classes       1
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
+  Ljava/lang/String;
   Ljava/lang/System;
   V
   [Ljava/lang/String;
@@ -34,10 +38,11 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/String;.compareTo(Ljava/lang/String;)I
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=14 ins=0 outs=2 insns=28
+  method       main()V flags=0x0019 regs=14 ins=0 outs=2 insns=40
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

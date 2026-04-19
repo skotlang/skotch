@@ -70,24 +70,18 @@ method        sum ([I)I 0x0009
     0014 aload 3
     0016 op_0xBE
     0017 istore 5
-    0019 op_0xA7
-    0020 nop
-    0021 iconst_0
+    0019 goto 22
     0022 iload 4
     0024 iload 5
     0026 op_0xA1
     0027 nop
     0028 iconst_4
     0029 iconst_0
-    0030 op_0xA7
-    0031 nop
-    0032 iconst_1
+    0030 goto 34
     0033 iconst_1
     0034 istore 6
     0036 iload 6
-    0038 op_0x99
-    0039 nop
-    0040 op_0x2E
+    0038 ifeq 84
     0041 aload 3
     0043 iload 4
     0045 op_0x2E
@@ -110,9 +104,7 @@ method        sum ([I)I 0x0009
     0075 istore 12
     0077 iload 12
     0079 istore 4
-    0081 op_0xA7
-    0082 op_0xFF
-    0083 op_0xC5
+    0081 goto 22
     0084 iload 2
     0086 istore 13
     0088 iload 13

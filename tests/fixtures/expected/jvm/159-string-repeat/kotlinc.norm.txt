@@ -23,39 +23,37 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        repeat (Ljava/lang/String;I)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=4
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 ldc ""
-    0008 op_0x4D
+    0008 astore_2
     0009 iconst_1
-    0010 op_0x3E
-    0011 op_0x1D
-    0012 op_0x1B
+    0010 istore_3
+    0011 iload_3
+    0012 iload_1
     0013 op_0xA3
     0014 nop
     0015 op_0x16
-    0016 op_0x2C
-    0017 op_0x2A
+    0016 aload_2
+    0017 aload_0
     0018 op_0xBA
     0019 nop
-    0020 op_0x1D
+    0020 iload_3
     0021 nop
     0022 nop
-    0023 op_0x4D
-    0024 op_0x1D
-    0025 op_0x1B
+    0023 astore_2
+    0024 iload_3
+    0025 iload_1
     0026 op_0x9F
     0027 nop
     0028 op_0x09
     0029 op_0x84
     0030 iconst_0
     0031 aconst_null
-    0032 op_0xA7
-    0033 op_0xFF
-    0034 op_0xF0
-    0035 op_0x2C
-    0036 op_0xB0
+    0032 goto 16
+    0035 aload_2
+    0036 areturn
     sub_attr  StackMapTable (10 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

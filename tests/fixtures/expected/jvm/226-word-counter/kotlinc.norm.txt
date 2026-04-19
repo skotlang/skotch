@@ -4,36 +4,30 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        countVowels (Ljava/lang/String;)I 0x0019
   code        max_stack=2 max_locals=2
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 iconst_0
-    0007 op_0x3C
-    0008 op_0x2A
+    0007 istore_1
+    0008 aload_0
     0009 ldc "hello"
     0011 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0014 op_0x99
-    0015 nop
-    0016 iconst_2
+    0014 ifeq 19
     0017 iconst_2
     0018 op_0xAC
-    0019 op_0x2A
+    0019 aload_0
     0020 ldc "world"
     0022 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0025 op_0x99
-    0026 nop
-    0027 iconst_2
+    0025 ifeq 30
     0028 iconst_1
     0029 op_0xAC
-    0030 op_0x2A
+    0030 aload_0
     0031 ldc "kotlin"
     0033 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0036 op_0x99
-    0037 nop
-    0038 iconst_2
+    0036 ifeq 41
     0039 iconst_2
     0040 op_0xAC
-    0041 op_0x1B
+    0041 iload_1
     0042 op_0xAC
     sub_attr  StackMapTable (8 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
@@ -41,21 +35,21 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 ldc "hello"
     0002 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 ldc "world"
     0015 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
-    0018 op_0x3B
+    0018 istore_0
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x1A
+    0022 iload_0
     0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 ldc "kotlin"
     0028 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
-    0031 op_0x3B
+    0031 istore_0
     0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 op_0x1A
+    0035 iload_0
     0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0039 return
 method        main ([Ljava/lang/String;)V 0x1009

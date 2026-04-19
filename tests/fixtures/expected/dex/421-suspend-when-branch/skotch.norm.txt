@@ -1,0 +1,58 @@
+dex_version   035
+strings       23
+types         10
+methods       6
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "J"
+  "LIL"
+  "LInputKt$Lambda$0;"
+  "LInputKt;"
+  "LJL"
+  "LLLIL"
+  "Ljava/lang/Object;"
+  "Lkotlin/coroutines/CoroutineContext;"
+  "Lkotlin/jvm/functions/Function2;"
+  "Lkotlinx/coroutines/BuildersKt;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "delay"
+  "fetch"
+  "input.kt"
+  "main"
+  "one"
+  "other"
+  "runBlocking$default"
+  "two"
+
+--- types ---
+  I
+  J
+  LInputKt$Lambda$0;
+  LInputKt;
+  Ljava/lang/Object;
+  Lkotlin/coroutines/CoroutineContext;
+  Lkotlin/jvm/functions/Function2;
+  Lkotlinx/coroutines/BuildersKt;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$Lambda$0;.<init>(Ljava/lang/Object;)V
+  LInputKt;.delay(JLjava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.fetch(ILjava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Lkotlinx/coroutines/BuildersKt;.runBlocking$default(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fetch(ILjava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=15 ins=2 outs=2 insns=47
+  method       main()V flags=0x0019 regs=7 ins=0 outs=4 insns=17
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

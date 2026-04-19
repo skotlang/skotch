@@ -18,7 +18,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0027 op_0x14
     0028 nop
-    0029 op_0x1C
+    0029 iload_2
     0030 op_0x39
     0031 iconst_2
     0032 op_0x18

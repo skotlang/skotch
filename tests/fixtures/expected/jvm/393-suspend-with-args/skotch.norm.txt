@@ -1,0 +1,75 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
+  code        max_stack=1 max_locals=3
+    0000 aload 0
+    0002 astore 2
+    0004 aload 2
+    0006 areturn
+method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
+  code        max_stack=16 max_locals=32
+    0000 aload_0
+    0001 instanceof Class(InputKt$run$1)
+    0004 ifeq 40
+    0007 aload_0
+    0008 checkcast Class(InputKt$run$1)
+    0011 astore 6
+    0013 aload 6
+    0015 getfield Field(InputKt$run$1.label:I)
+    0018 ldc int(-2147483648)
+    0020 iand
+    0021 ifeq 40
+    0024 aload 6
+    0026 aload 6
+    0028 getfield Field(InputKt$run$1.label:I)
+    0031 ldc int(-2147483648)
+    0033 isub
+    0034 putfield Field(InputKt$run$1.label:I)
+    0037 goto 50
+    0040 new Class(InputKt$run$1)
+    0043 dup
+    0044 aload_0
+    0045 invokespecial Method(InputKt$run$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0048 astore 6
+    0050 aload 6
+    0052 getfield Field(InputKt$run$1.result:Ljava/lang/Object;)
+    0055 astore 5
+    0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0060 astore 7
+    0062 aload 6
+    0064 getfield Field(InputKt$run$1.label:I)
+    0067 tableswitch default=142 low=0 high=1 0=88 1=119
+    0088 aload 5
+    0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0093 ldc "World"
+    0095 astore 1
+    0097 aload 1
+    0099 aload 6
+    0101 iconst_1
+    0102 putfield Field(InputKt$run$1.label:I)
+    0105 aload 6
+    0107 invokestatic Method(InputKt.greet:(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0110 dup
+    0111 aload 7
+    0113 if_acmpne 126
+    0116 aload 7
+    0118 areturn
+    0119 aload 5
+    0121 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0124 aload 5
+    0126 checkcast Class(java/lang/String)
+    0129 astore 2
+    0131 aload 2
+    0133 astore 3
+    0135 aload 3
+    0137 astore 4
+    0139 aload 4
+    0141 areturn
+    0142 new Class(java/lang/IllegalStateException)
+    0145 dup
+    0146 ldc "call to 'resume' before 'invoke' with coroutine"
+    0148 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0151 athrow
+    sub_attr  StackMapTable (125 bytes)

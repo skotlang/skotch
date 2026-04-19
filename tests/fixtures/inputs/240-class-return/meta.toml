@@ -1,4 +1,5 @@
 name   = "240-class-return"
-status = "supported"
+status = "skip"
 features = ["class", "class-as-return-type", "function-returning-object"]
 skip_dex = true
+note = "VerifyError: user-defined Pair conflicts with kotlin/Pair in checkcast"

@@ -30,24 +30,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0044 istore 12
     0046 iload 11
     0048 istore 13
-    0050 op_0xA7
-    0051 nop
-    0052 iconst_0
+    0050 goto 53
     0053 iload 13
     0055 iload 12
     0057 op_0xA4
     0058 nop
     0059 iconst_4
     0060 iconst_0
-    0061 op_0xA7
-    0062 nop
-    0063 iconst_1
+    0061 goto 65
     0064 iconst_1
     0065 istore 14
     0067 iload 14
-    0069 op_0x99
-    0070 nop
-    0071 op_0x32
+    0069 ifeq 119
     0072 iload 2
     0074 istore 15
     0076 iload 4
@@ -58,18 +52,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0085 nop
     0086 iconst_4
     0087 iconst_0
-    0088 op_0xA7
-    0089 nop
-    0090 iconst_1
+    0088 goto 92
     0091 iconst_1
     0092 istore 17
     0094 iload 17
-    0096 op_0x99
-    0097 nop
-    0098 op_0x6F
-    0099 op_0xA7
-    0100 nop
-    0101 op_0x51
+    0096 ifeq 207
+    0099 goto 180
     0102 iconst_1
     0103 istore 18
     0105 iload 13
@@ -78,9 +66,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0110 istore 19
     0112 iload 19
     0114 istore 13
-    0116 op_0xA7
-    0117 op_0xFF
-    0118 op_0xC1
+    0116 goto 53
     0119 iload 2
     0121 istore 20
     0123 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -119,12 +105,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0198 istore 28
     0200 iload 28
     0202 istore 4
-    0204 op_0xA7
-    0205 nop
-    0206 iconst_3
-    0207 op_0xA7
-    0208 nop
-    0209 iconst_0
+    0204 goto 210
+    0207 goto 210
     0210 iload 4
     0212 istore 29
     0214 iload 6
@@ -135,15 +117,11 @@ method        main ([Ljava/lang/String;)V 0x0009
     0223 nop
     0224 iconst_4
     0225 iconst_0
-    0226 op_0xA7
-    0227 nop
-    0228 iconst_1
+    0226 goto 230
     0229 iconst_1
     0230 istore 31
     0232 iload 31
-    0234 op_0x99
-    0235 nop
-    0236 op_0x1E
+    0234 ifeq 264
     0237 iload 4
     0239 istore 32
     0241 iload 32
@@ -156,12 +134,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0255 istore 35
     0257 iload 35
     0259 istore 6
-    0261 op_0xA7
-    0262 nop
-    0263 iconst_3
-    0264 op_0xA7
-    0265 nop
-    0266 iconst_0
+    0261 goto 267
+    0264 goto 267
     0267 iload 6
     0269 istore 36
     0271 iload 8
@@ -172,15 +146,11 @@ method        main ([Ljava/lang/String;)V 0x0009
     0280 nop
     0281 iconst_4
     0282 iconst_0
-    0283 op_0xA7
-    0284 nop
-    0285 iconst_1
+    0283 goto 287
     0286 iconst_1
     0287 istore 38
     0289 iload 38
-    0291 op_0x99
-    0292 nop
-    0293 op_0x1E
+    0291 ifeq 321
     0294 iload 6
     0296 istore 39
     0298 iload 39
@@ -193,12 +163,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0312 istore 42
     0314 iload 42
     0316 istore 8
-    0318 op_0xA7
-    0319 nop
-    0320 iconst_3
-    0321 op_0xA7
-    0322 nop
-    0323 iconst_0
+    0318 goto 324
+    0321 goto 324
     0324 iload 8
     0326 istore 43
     0328 iload 10
@@ -209,15 +175,11 @@ method        main ([Ljava/lang/String;)V 0x0009
     0337 nop
     0338 iconst_4
     0339 iconst_0
-    0340 op_0xA7
-    0341 nop
-    0342 iconst_1
+    0340 goto 344
     0343 iconst_1
     0344 istore 45
     0346 iload 45
-    0348 op_0x99
-    0349 nop
-    0350 op_0x1E
+    0348 ifeq 378
     0351 iload 8
     0353 istore 46
     0355 iload 46
@@ -230,13 +192,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0369 istore 49
     0371 iload 49
     0373 istore 10
-    0375 op_0xA7
-    0376 nop
-    0377 iconst_3
-    0378 op_0xA7
-    0379 nop
-    0380 iconst_0
-    0381 op_0xA7
-    0382 op_0xFE
-    0383 op_0xE9
+    0375 goto 381
+    0378 goto 381
+    0381 goto 102
     sub_attr  StackMapTable (858 bytes)

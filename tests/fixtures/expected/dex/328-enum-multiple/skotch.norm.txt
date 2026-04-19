@@ -1,0 +1,87 @@
+dex_version   035
+strings       31
+types         11
+methods       17
+classes       1
+
+--- strings ---
+  "<init>"
+  "BLUE"
+  "Color$valueOf"
+  "Color$values"
+  "GREEN"
+  "L"
+  "LARGE"
+  "LColor;"
+  "LInputKt;"
+  "LL"
+  "LSize;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "MEDIUM"
+  "RED"
+  "SMALL"
+  "Size$valueOf"
+  "Size$values"
+  "V"
+  "VL"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "add"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  LColor;
+  LInputKt;
+  LSize;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LColor;.<init>(Ljava/lang/String;)V
+  LInputKt;.BLUE()Ljava/lang/Object;
+  LInputKt;.Color$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Color$values()Ljava/lang/Object;
+  LInputKt;.GREEN()Ljava/lang/Object;
+  LInputKt;.LARGE()Ljava/lang/Object;
+  LInputKt;.MEDIUM()Ljava/lang/Object;
+  LInputKt;.RED()Ljava/lang/Object;
+  LInputKt;.SMALL()Ljava/lang/Object;
+  LInputKt;.Size$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Size$values()Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LSize;.<init>(Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       BLUE()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       Color$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=11 ins=1 outs=0 insns=45
+  method       Color$values()Ljava/lang/Object; flags=0x0019 regs=7 ins=0 outs=2 insns=30
+  method       GREEN()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       LARGE()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       MEDIUM()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       RED()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       SMALL()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       Size$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=11 ins=1 outs=0 insns=45
+  method       Size$values()Ljava/lang/Object; flags=0x0019 regs=7 ins=0 outs=2 insns=30
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=37
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

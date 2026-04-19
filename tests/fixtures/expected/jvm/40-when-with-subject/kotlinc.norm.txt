@@ -4,10 +4,10 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        describe (I)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=2
-    0000 op_0x1A
-    0001 op_0x3C
+    0000 iload_0
+    0001 istore_1
     0002 iconst_0
-    0003 op_0x1B
+    0003 iload_1
     0004 op_0xA3
     0005 nop
     0006 sipush 6928
@@ -16,23 +16,15 @@ method        describe (I)Ljava/lang/String; 0x0019
     0011 nop
     0012 iconst_4
     0013 iconst_1
-    0014 op_0xA7
-    0015 nop
-    0016 iconst_5
+    0014 goto 22
     0017 iconst_0
-    0018 op_0xA7
-    0019 nop
-    0020 iconst_1
+    0018 goto 22
     0021 iconst_0
-    0022 op_0x99
-    0023 nop
-    0024 iconst_5
+    0022 ifeq 30
     0025 ldc "small"
-    0027 op_0xA7
-    0028 nop
-    0029 op_0x22
+    0027 goto 61
     0030 bipush 10
-    0032 op_0x1B
+    0032 iload_1
     0033 op_0xA3
     0034 nop
     0035 sipush 6928
@@ -41,23 +33,15 @@ method        describe (I)Ljava/lang/String; 0x0019
     0040 nop
     0041 iconst_4
     0042 iconst_1
-    0043 op_0xA7
-    0044 nop
-    0045 iconst_5
+    0043 goto 51
     0046 iconst_0
-    0047 op_0xA7
-    0048 nop
-    0049 iconst_1
+    0047 goto 51
     0050 iconst_0
-    0051 op_0x99
-    0052 nop
-    0053 iconst_5
+    0051 ifeq 59
     0054 ldc "medium"
-    0056 op_0xA7
-    0057 nop
-    0058 iconst_2
+    0056 goto 61
     0059 ldc "large"
-    0061 op_0xB0
+    0061 areturn
     sub_attr  StackMapTable (19 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

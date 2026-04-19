@@ -11,9 +11,8 @@ method        greet (Ljava/lang/String;)V 0x0009
     0008 ldc "!"
     0010 astore 3
     0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 op_0xBB
-    0016 nop
-    0017 iload 89
+    0015 new Class(java/lang/StringBuilder)
+    0018 dup
     0019 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0022 aload 1
     0024 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)

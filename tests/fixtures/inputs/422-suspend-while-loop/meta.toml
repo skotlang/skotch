@@ -1,0 +1,2 @@
+status = "supported"
+features = ["while-loop", "suspend", "delay", "var"]

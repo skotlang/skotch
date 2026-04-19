@@ -668,6 +668,8 @@ fn unique_class_name(prefix: &str) -> String {
 /// `fun` definitions. Shared by both the interactive (reedline) and
 /// piped (BufRead) REPL paths.
 struct ReplState {
+    /// Import statements that go at the very top of the file.
+    imports: Vec<String>,
     /// Top-level declarations (class, fun) that go outside fun main().
     top_decls: Vec<String>,
     /// Local declarations (val, var) that go inside fun main().
@@ -686,6 +688,7 @@ struct ReplState {
 impl ReplState {
     fn new() -> Self {
         ReplState {
+            imports: Vec::new(),
             top_decls: Vec::new(),
             local_decls: Vec::new(),
             turn: 0,
@@ -698,6 +701,7 @@ impl ReplState {
     /// Clear accumulated declarations but keep the turn counter so
     /// generated class names don't collide with already-loaded JVM classes.
     fn reset(&mut self) {
+        self.imports.clear();
         self.top_decls.clear();
         self.local_decls.clear();
         self.var_types.clear();
@@ -720,14 +724,11 @@ impl ReplState {
     fn process(&mut self, line: &str, jvm: &EmbeddedJvm) -> Result<String> {
         // Split on semicolons to handle multi-statement lines like:
         // "data class User(...); val user = User(...); println(user)"
-        let parts: Vec<&str> = line
-            .split(';')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .collect();
+        // BUT only split at the top level — not inside braces or strings.
+        let parts = split_top_level_semicolons(line);
         if parts.len() > 1 {
             let mut combined_output = String::new();
-            for part in parts {
+            for part in &parts {
                 let out = self.process_single(part, jvm)?;
                 combined_output.push_str(&out);
             }
@@ -740,23 +741,46 @@ impl ReplState {
         self.turn += 1;
 
         match classify_input(line) {
+            DeclKind::Import => {
+                // Import statements go at the very top of the file.
+                // Verify it parses by compiling a stub with the import.
+                let imports = self.imports.join("\n");
+                let candidate = format!("{imports}\n{line}\nfun main() {{}}\n");
+                let class_name = format!("ReplTurn{}Kt", self.turn);
+                compile_only(&candidate, &class_name)?;
+                self.imports.push(line.to_string());
+                Ok(String::new())
+            }
             DeclKind::TopLevel => {
                 // Class/fun declarations go at top level.
+                let imports = self.imports.join("\n");
                 let top = self.top_decls.join("\n");
                 let locals = self.local_decls.join("\n    ");
-                let candidate = format!("{top}\n{line}\nfun main() {{\n    {locals}\n}}\n");
+                // If the user defines `fun main()`, don't add a synthetic one.
+                let trimmed = line.trim_start();
+                let has_main = trimmed.contains("fun main(") || trimmed.contains("fun main()");
+                let candidate = if has_main {
+                    format!("{imports}\n{top}\n{line}\n")
+                } else {
+                    format!("{imports}\n{top}\n{line}\nfun main() {{\n    {locals}\n}}\n")
+                };
                 let class_name = format!("ReplTurn{}Kt", self.turn);
                 compile_only(&candidate, &class_name)?;
                 self.top_decls.push(line.to_string());
+                // If the user defined main(), execute it immediately.
+                if has_main {
+                    return compile_and_run_jni(&candidate, jvm, &class_name);
+                }
                 Ok(String::new())
             }
             DeclKind::LocalDecl => {
                 // val/var declarations go inside fun main() as locals.
+                let imports = self.imports.join("\n");
                 let top = self.top_decls.join("\n");
                 let mut locals: Vec<String> = self.local_decls.clone();
                 locals.push(line.to_string());
                 let locals_str = locals.join("\n    ");
-                let candidate = format!("{top}\nfun main() {{\n    {locals_str}\n}}\n");
+                let candidate = format!("{imports}\n{top}\nfun main() {{\n    {locals_str}\n}}\n");
                 let class_name = format!("ReplTurn{}Kt", self.turn);
                 compile_only(&candidate, &class_name)?;
                 self.local_decls.push(line.to_string());
@@ -764,15 +788,18 @@ impl ReplState {
             }
             DeclKind::Statement => {
                 // Statements (for, while, if, etc.) — execute inside fun main().
+                let imports = self.imports.join("\n");
                 let top = self.top_decls.join("\n");
                 let locals = self.local_decls.join("\n    ");
                 let body = line.trim_end();
-                let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                let source =
+                    format!("{imports}\n{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
                 let class_name = format!("ReplTurn{}Kt", self.turn);
                 compile_and_run_jni(&source, jvm, &class_name)
             }
             DeclKind::Expr => {
                 // Expression: assign to resN, print type + value, store for future use.
+                let imports = self.imports.join("\n");
                 let top = self.top_decls.join("\n");
                 let locals = self.local_decls.join("\n    ");
                 let body = line.trim_end();
@@ -781,7 +808,8 @@ impl ReplState {
                 // just execute it without capturing (it returns Unit).
                 let is_print = body.starts_with("println(") || body.starts_with("print(");
                 if is_print {
-                    let source = format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                    let source =
+                        format!("{imports}\n{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
                     let class_name = format!("ReplTurn{}Kt", self.turn);
                     return compile_and_run_jni(&source, jvm, &class_name);
                 }
@@ -792,7 +820,7 @@ impl ReplState {
                 let res_name = format!("res{}", self.res_counter);
                 let type_var = format!("__type{}", self.res_counter);
                 let source = format!(
-                    "{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
+                    "{imports}\n{top}\nfun main() {{\n    {locals}\n    val {res_name} = {body}\n    \
                      val {type_var} = {res_name}.getClass()\n    \
                      println({type_var}.toString())\n    \
                      println({res_name})\n}}\n"
@@ -818,7 +846,7 @@ impl ReplState {
                         // isn't assignable. Try without the type query.
                         self.turn += 1;
                         let source_simple = format!(
-                            "{top}\nfun main() {{\n    {locals}\n    \
+                            "{imports}\n{top}\nfun main() {{\n    {locals}\n    \
                              val {res_name} = {body}\n    \
                              println({res_name})\n}}\n"
                         );
@@ -836,8 +864,9 @@ impl ReplState {
                             Err(_) => {
                                 // Last resort: plain statement, no capture.
                                 self.turn += 1;
-                                let source =
-                                    format!("{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n");
+                                let source = format!(
+                                    "{imports}\n{top}\nfun main() {{\n    {locals}\n    {body}\n}}\n"
+                                );
                                 let cn3 = format!("ReplTurn{}Kt", self.turn);
                                 compile_and_run_jni(&source, jvm, &cn3)
                             }
@@ -853,9 +882,48 @@ impl ReplState {
 /// Returns `Some(Decl variant)` for declarations, `None` for expressions.
 enum DeclKind {
     TopLevel,  // class, fun, interface, object, enum, typealias
+    Import,    // import statements — go at the top of the file
     LocalDecl, // val, var
     Statement, // for, while, if, try — statements that don't produce a value
     Expr,      // everything else (expressions to be captured in resN)
+}
+
+/// Split a REPL line on `;` only at the top level — NOT inside
+/// braces `{ }` or string literals `" "`.
+fn split_top_level_semicolons(line: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut brace_depth = 0u32;
+    let mut in_string = false;
+    let mut prev = '\0';
+
+    for ch in line.chars() {
+        if ch == '"' && prev != '\\' {
+            in_string = !in_string;
+        }
+        if !in_string {
+            if ch == '{' {
+                brace_depth += 1;
+            } else if ch == '}' {
+                brace_depth = brace_depth.saturating_sub(1);
+            } else if ch == ';' && brace_depth == 0 {
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() {
+                    parts.push(trimmed);
+                }
+                current.clear();
+                prev = ch;
+                continue;
+            }
+        }
+        current.push(ch);
+        prev = ch;
+    }
+    let trimmed = current.trim().to_string();
+    if !trimmed.is_empty() {
+        parts.push(trimmed);
+    }
+    parts
 }
 
 fn classify_input(line: &str) -> DeclKind {
@@ -864,6 +932,11 @@ fn classify_input(line: &str) -> DeclKind {
     let file_id = FileId(0);
     let lexed = skotch_lexer::lex(file_id, line, &mut diags);
     let ast = skotch_parser::parse_file(&lexed, &mut interner, &mut diags);
+
+    // Check for import statements first.
+    if !ast.imports.is_empty() {
+        return DeclKind::Import;
+    }
 
     // If parsing produced a single top-level declaration, classify it.
     if let Some(decl) = ast.decls.first() {

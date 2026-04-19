@@ -1,0 +1,51 @@
+dex_version   035
+strings       18
+types         9
+methods       6
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "L$Ref$0;"
+  "LInputKt$Lambda$1;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "element"
+  "input.kt"
+  "invoke"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  I
+  L$Ref$0;
+  LInputKt$Lambda$1;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  L$Ref$0;.<init>(I)V
+  LInputKt$Lambda$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$Lambda$1;.invoke()V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=30
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

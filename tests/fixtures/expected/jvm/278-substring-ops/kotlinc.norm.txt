@@ -5,37 +5,35 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
     0000 ldc "Hello, World!"
-    0002 op_0x4B
-    0003 op_0x2A
+    0002 astore_0
+    0003 aload_0
     0004 bipush 7
     0006 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
-    0009 op_0x59
+    0009 dup
     0010 ldc "substring(...)"
     0012 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0015 op_0x4C
+    0015 astore_1
     0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0019 op_0x2B
+    0019 aload_1
     0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0023 op_0x2A
+    0023 aload_0
     0024 iconst_0
     0025 iconst_5
     0026 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
-    0029 op_0x59
+    0029 dup
     0030 ldc "substring(...)"
     0032 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0035 op_0x4C
+    0035 astore_1
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 op_0x2B
+    0039 aload_1
     0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0043 op_0x2A
-    0044 op_0xC0
-    0045 nop
-    0046 op_0x27
+    0043 aload_0
+    0044 checkcast Class(java/lang/CharSequence)
     0047 invokestatic Method(kotlin/text/StringsKt.trim:(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;)
     0050 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0053 op_0x4C
+    0053 astore_1
     0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 op_0x2B
+    0057 aload_1
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0061 return
 method        main ([Ljava/lang/String;)V 0x1009

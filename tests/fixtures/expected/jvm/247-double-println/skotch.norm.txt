@@ -24,7 +24,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0023 invokevirtual Method(java/io/PrintStream.println:(D)V)
     0026 op_0x14
     0027 nop
-    0028 op_0x1A
+    0028 iload_0
     0029 op_0x39
     0030 iconst_2
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -33,7 +33,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0036 invokevirtual Method(java/io/PrintStream.println:(D)V)
     0039 op_0x14
     0040 nop
-    0041 op_0x1C
+    0041 iload_2
     0042 op_0x39
     0043 iconst_4
     0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)

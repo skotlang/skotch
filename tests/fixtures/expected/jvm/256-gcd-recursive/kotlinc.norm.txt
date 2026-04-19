@@ -4,15 +4,13 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        gcd (II)I 0x0019
   code        max_stack=3 max_locals=2
-    0000 op_0x1B
-    0001 op_0x9A
-    0002 nop
-    0003 iconst_2
-    0004 op_0x1A
+    0000 iload_1
+    0001 ifne 6
+    0004 iload_0
     0005 op_0xAC
-    0006 op_0x1B
-    0007 op_0x1A
-    0008 op_0x1B
+    0006 iload_1
+    0007 iload_0
+    0008 iload_1
     0009 irem
     0010 invokestatic Method(InputKt.gcd:(II)I)
     0013 op_0xAC
@@ -22,16 +20,16 @@ method        main ()V 0x0019
     0000 bipush 48
     0002 bipush 18
     0004 invokestatic Method(InputKt.gcd:(II)I)
-    0007 op_0x3B
+    0007 istore_0
     0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0011 op_0x1A
+    0011 iload_0
     0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0015 bipush 100
     0017 bipush 75
     0019 invokestatic Method(InputKt.gcd:(II)I)
-    0022 op_0x3B
+    0022 istore_0
     0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 op_0x1A
+    0026 iload_0
     0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0030 return
 method        main ([Ljava/lang/String;)V 0x1009

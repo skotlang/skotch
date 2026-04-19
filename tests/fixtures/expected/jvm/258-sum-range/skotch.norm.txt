@@ -39,24 +39,18 @@ method        sumRange (II)I 0x0009
     0013 istore 5
     0015 iload 4
     0017 istore 6
-    0019 op_0xA7
-    0020 nop
-    0021 iconst_0
+    0019 goto 22
     0022 iload 6
     0024 iload 5
     0026 op_0xA4
     0027 nop
     0028 iconst_4
     0029 iconst_0
-    0030 op_0xA7
-    0031 nop
-    0032 iconst_1
+    0030 goto 34
     0033 iconst_1
     0034 istore 7
     0036 iload 7
-    0038 op_0x99
-    0039 nop
-    0040 op_0x2A
+    0038 ifeq 80
     0041 iload 3
     0043 istore 8
     0045 iload 6
@@ -67,9 +61,7 @@ method        sumRange (II)I 0x0009
     0054 istore 10
     0056 iload 10
     0058 istore 3
-    0060 op_0xA7
-    0061 nop
-    0062 iconst_0
+    0060 goto 63
     0063 iconst_1
     0064 istore 11
     0066 iload 6
@@ -78,9 +70,7 @@ method        sumRange (II)I 0x0009
     0071 istore 12
     0073 iload 12
     0075 istore 6
-    0077 op_0xA7
-    0078 op_0xFF
-    0079 op_0xC9
+    0077 goto 22
     0080 iload 3
     0082 istore 13
     0084 iload 13

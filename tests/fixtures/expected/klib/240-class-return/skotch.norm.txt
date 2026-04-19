@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.1.9
+compiler_version=0.8.3
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -78,7 +78,16 @@ unique_name=inputkt
       ],
       "return_ty": {
         "Class": "Pair"
-      }
+      },
+      "required_params": 2,
+      "param_names": [
+        "a",
+        "b"
+      ],
+      "param_defaults": [
+        null,
+        null
+      ]
     },
     {
       "id": 1,
@@ -96,12 +105,12 @@ unique_name=inputkt
         {
           "Class": "Pair"
         },
-        "Int",
+        "Any",
         "Unit",
         {
           "Class": "Pair"
         },
-        "Int",
+        "Any",
         "Unit"
       ],
       "blocks": [
@@ -163,10 +172,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 4,
-                    "class_name": "Pair",
-                    "field_name": "first"
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/Pair",
+                        "method_name": "getFirst",
+                        "descriptor": "()Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
                   }
                 }
               }
@@ -196,10 +212,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "GetField": {
-                    "receiver": 7,
-                    "class_name": "Pair",
-                    "field_name": "second"
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/Pair",
+                        "method_name": "getSecond",
+                        "descriptor": "()Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      7
+                    ]
                   }
                 }
               }
@@ -222,11 +245,201 @@ unique_name=inputkt
         }
       ],
       "return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 4,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 8,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
     }
   ],
   "classes": [
     {
       "name": "Pair",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
       "fields": [
         {
           "name": "first",
@@ -256,6 +469,21 @@ unique_name=inputkt
         "blocks": [
           {
             "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
               {
                 "Assign": {
                   "dest": 0,

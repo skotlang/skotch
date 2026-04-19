@@ -8,14 +8,12 @@ method        main ()V 0x0019
     0001 bipush 10
     0003 iconst_0
     0004 idiv
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0013 op_0xA7
-    0014 nop
-    0015 op_0x0D
-    0016 op_0x4B
+    0013 goto 26
+    0016 astore_0
     0017 ldc "caught: division by zero"
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0022 op_0x5F

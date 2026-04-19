@@ -1,0 +1,4 @@
+name     = "392-suspend-multi-point"
+status   = "supported"
+features = ["suspend", "cps-state-machine", "spill-slots"]
+notes    = "Session 4 of the coroutine transform: a suspend function with two suspension points and locals (`x`, `y`) live across them. The emitted state machine spills `x` to `I$0` before the first `yield_()`, spills both `x` and `y` before the second, restores them at the matching case entries, and returns `x + y` autoboxed to `Integer` on the final case. Suspend calls with non-`$completion` arguments, try/catch across suspend points, and precise liveness are all still future work (Sessions 5+)."

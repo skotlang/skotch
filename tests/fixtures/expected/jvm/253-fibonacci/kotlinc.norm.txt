@@ -4,66 +4,62 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        fibonacci (I)I 0x0019
   code        max_stack=2 max_locals=5
-    0000 op_0x1A
+    0000 iload_0
     0001 iconst_1
     0002 op_0xA3
     0003 nop
     0004 iconst_2
-    0005 op_0x1A
+    0005 iload_0
     0006 op_0xAC
     0007 iconst_0
-    0008 op_0x3C
+    0008 istore_1
     0009 iconst_1
-    0010 op_0x3D
+    0010 istore_2
     0011 iconst_2
-    0012 op_0x3E
-    0013 op_0x1D
-    0014 op_0x1A
+    0012 istore_3
+    0013 iload_3
+    0014 iload_0
     0015 op_0xA3
     0016 nop
     0017 op_0x18
-    0018 op_0x1B
-    0019 op_0x1C
+    0018 iload_1
+    0019 iload_2
     0020 iadd
     0021 istore 4
-    0023 op_0x1C
-    0024 op_0x3C
+    0023 iload_2
+    0024 istore_1
     0025 iload 4
-    0027 op_0x3D
-    0028 op_0x1D
-    0029 op_0x1A
+    0027 istore_2
+    0028 iload_3
+    0029 iload_0
     0030 op_0x9F
     0031 nop
     0032 op_0x09
     0033 op_0x84
     0034 iconst_0
     0035 aconst_null
-    0036 op_0xA7
-    0037 op_0xFF
-    0038 op_0xEE
-    0039 op_0x1C
+    0036 goto 18
+    0039 iload_2
     0040 op_0xAC
     sub_attr  StackMapTable (10 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 iconst_0
-    0001 op_0x3B
-    0002 op_0x1A
+    0001 istore_0
+    0002 iload_0
     0003 bipush 11
     0005 op_0xA2
     0006 nop
     0007 iload 26
     0009 invokestatic Method(InputKt.fibonacci:(I)I)
-    0012 op_0x3C
+    0012 istore_1
     0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0016 op_0x1B
+    0016 iload_1
     0017 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0020 op_0x84
     0021 nop
     0022 aconst_null
-    0023 op_0xA7
-    0024 op_0xFF
-    0025 op_0xEB
+    0023 goto 2
     0026 return
     sub_attr  StackMapTable (7 bytes)
 method        main ([Ljava/lang/String;)V 0x1009

@@ -20,22 +20,16 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0023 nop
     0024 iconst_4
     0025 iconst_0
-    0026 op_0xA7
-    0027 nop
-    0028 iconst_1
+    0026 goto 30
     0029 iconst_1
     0030 istore 5
     0032 iload 5
-    0034 op_0x99
-    0035 nop
-    0036 op_0x0A
+    0034 ifeq 44
     0037 ldc "FizzBuzz"
     0039 astore 6
     0041 aload 6
-    0043 op_0xB0
-    0044 op_0xA7
-    0045 nop
-    0046 iconst_0
+    0043 areturn
+    0044 goto 47
     0047 iload 0
     0049 istore 7
     0051 iconst_3
@@ -52,22 +46,16 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0069 nop
     0070 iconst_4
     0071 iconst_0
-    0072 op_0xA7
-    0073 nop
-    0074 iconst_1
+    0072 goto 76
     0075 iconst_1
     0076 istore 11
     0078 iload 11
-    0080 op_0x99
-    0081 nop
-    0082 op_0x0A
+    0080 ifeq 90
     0083 ldc "Fizz"
     0085 astore 12
     0087 aload 12
-    0089 op_0xB0
-    0090 op_0xA7
-    0091 nop
-    0092 iconst_0
+    0089 areturn
+    0090 goto 93
     0093 iload 0
     0095 istore 13
     0097 iconst_5
@@ -84,26 +72,20 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0009
     0115 nop
     0116 iconst_4
     0117 iconst_0
-    0118 op_0xA7
-    0119 nop
-    0120 iconst_1
+    0118 goto 122
     0121 iconst_1
     0122 istore 17
     0124 iload 17
-    0126 op_0x99
-    0127 nop
-    0128 op_0x0A
+    0126 ifeq 136
     0129 ldc "Buzz"
     0131 astore 18
     0133 aload 18
-    0135 op_0xB0
-    0136 op_0xA7
-    0137 nop
-    0138 iconst_0
+    0135 areturn
+    0136 goto 139
     0139 ldc "other"
     0141 astore 19
     0143 aload 19
-    0145 op_0xB0
+    0145 areturn
     sub_attr  StackMapTable (227 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=9

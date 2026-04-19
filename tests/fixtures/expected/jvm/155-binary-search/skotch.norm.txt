@@ -18,9 +18,7 @@ method        binarySearch (II)I 0x0009
     0019 istore 6
     0021 iload 6
     0023 istore 7
-    0025 op_0xA7
-    0026 nop
-    0027 iconst_0
+    0025 goto 28
     0028 iload 3
     0030 istore 8
     0032 iload 7
@@ -31,15 +29,11 @@ method        binarySearch (II)I 0x0009
     0041 nop
     0042 iconst_4
     0043 iconst_0
-    0044 op_0xA7
-    0045 nop
-    0046 iconst_1
+    0044 goto 48
     0047 iconst_1
     0048 istore 10
     0050 iload 10
-    0052 op_0x99
-    0053 nop
-    0054 op_0x3E
+    0052 ifeq 114
     0055 iload 3
     0057 istore 11
     0059 iload 7
@@ -66,16 +60,12 @@ method        binarySearch (II)I 0x0009
     0097 nop
     0098 iconst_4
     0099 iconst_0
-    0100 op_0xA7
-    0101 nop
-    0102 iconst_1
+    0100 goto 104
     0103 iconst_1
     0104 istore 19
     0106 iload 19
-    0108 op_0x99
-    0109 nop
-    0110 ldc_w #42752
-    0113 op_0x09
+    0108 ifeq 127
+    0111 goto 120
     0114 iconst_m1
     0115 istore 20
     0117 iload 20
@@ -84,9 +74,7 @@ method        binarySearch (II)I 0x0009
     0122 istore 21
     0124 iload 21
     0126 op_0xAC
-    0127 op_0xA7
-    0128 nop
-    0129 iconst_0
+    0127 goto 130
     0130 iload 16
     0132 istore 22
     0134 iload 0
@@ -97,15 +85,11 @@ method        binarySearch (II)I 0x0009
     0143 nop
     0144 iconst_4
     0145 iconst_0
-    0146 op_0xA7
-    0147 nop
-    0148 iconst_1
+    0146 goto 150
     0149 iconst_1
     0150 istore 24
     0152 iload 24
-    0154 op_0x99
-    0155 nop
-    0156 op_0x18
+    0154 ifeq 178
     0157 iload 16
     0159 istore 25
     0161 iconst_1
@@ -116,9 +100,7 @@ method        binarySearch (II)I 0x0009
     0169 istore 27
     0171 iload 27
     0173 istore 3
-    0175 op_0xA7
-    0176 nop
-    0177 op_0x18
+    0175 goto 199
     0178 iload 16
     0180 istore 28
     0182 iconst_1
@@ -129,12 +111,8 @@ method        binarySearch (II)I 0x0009
     0190 istore 30
     0192 iload 30
     0194 istore 7
-    0196 op_0xA7
-    0197 nop
-    0198 iconst_0
-    0199 op_0xA7
-    0200 op_0xFF
-    0201 op_0x55
+    0196 goto 199
+    0199 goto 28
     sub_attr  StackMapTable (331 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=13

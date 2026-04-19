@@ -1,28 +1,34 @@
 dex_version   035
-strings       13
-types         7
-methods       3
+strings       18
+types         8
+methods       6
 classes       1
 
 --- strings ---
   "I"
+  "III"
   "LInputKt;"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Math;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "V"
   "VI"
   "VL"
   "[Ljava/lang/String;"
+  "addExact"
   "input.kt"
   "main"
+  "multiplyExact"
   "out"
   "println"
+  "subtractExact"
 
 --- types ---
   I
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Math;
   Ljava/lang/Object;
   Ljava/lang/System;
   V
@@ -32,10 +38,13 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Math;.addExact(II)I
+  Ljava/lang/Math;.multiplyExact(II)I
+  Ljava/lang/Math;.subtractExact(II)I
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=10 ins=0 outs=2 insns=26
+  method       main()V flags=0x0019 regs=10 ins=0 outs=2 insns=38
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

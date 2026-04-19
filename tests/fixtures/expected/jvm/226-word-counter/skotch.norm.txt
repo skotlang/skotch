@@ -17,16 +17,12 @@ method        countVowels (Ljava/lang/String;)I 0x0009
     0019 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0022 istore 5
     0024 iload 5
-    0026 op_0x99
-    0027 nop
-    0028 op_0x09
+    0026 ifeq 35
     0029 iconst_2
     0030 istore 6
     0032 iload 6
     0034 op_0xAC
-    0035 op_0xA7
-    0036 nop
-    0037 iconst_0
+    0035 goto 38
     0038 aload 0
     0040 astore 7
     0042 ldc "world"
@@ -36,16 +32,12 @@ method        countVowels (Ljava/lang/String;)I 0x0009
     0050 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0053 istore 9
     0055 iload 9
-    0057 op_0x99
-    0058 nop
-    0059 op_0x09
+    0057 ifeq 66
     0060 iconst_1
     0061 istore 10
     0063 iload 10
     0065 op_0xAC
-    0066 op_0xA7
-    0067 nop
-    0068 iconst_0
+    0066 goto 69
     0069 aload 0
     0071 astore 11
     0073 ldc "kotlin"
@@ -55,16 +47,12 @@ method        countVowels (Ljava/lang/String;)I 0x0009
     0081 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0084 istore 13
     0086 iload 13
-    0088 op_0x99
-    0089 nop
-    0090 op_0x09
+    0088 ifeq 97
     0091 iconst_2
     0092 istore 14
     0094 iload 14
     0096 op_0xAC
-    0097 op_0xA7
-    0098 nop
-    0099 iconst_0
+    0097 goto 100
     0100 iload 2
     0102 istore 15
     0104 iload 15

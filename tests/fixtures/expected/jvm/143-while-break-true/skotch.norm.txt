@@ -8,15 +8,11 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 istore 1
     0003 iload 1
     0005 istore 2
-    0007 op_0xA7
-    0008 nop
-    0009 iconst_0
+    0007 goto 10
     0010 iconst_1
     0011 istore 3
     0013 iload 3
-    0015 op_0x99
-    0016 nop
-    0017 op_0x20
+    0015 ifeq 47
     0018 iload 2
     0020 istore 4
     0022 iconst_5
@@ -27,25 +23,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0030 nop
     0031 iconst_4
     0032 iconst_0
-    0033 op_0xA7
-    0034 nop
-    0035 iconst_1
+    0033 goto 37
     0036 iconst_1
     0037 istore 6
     0039 iload 6
-    0041 op_0x99
-    0042 nop
-    0043 op_0x0A
-    0044 op_0xA7
-    0045 nop
-    0046 iconst_1
+    0041 ifeq 51
+    0044 goto 48
     0047 return
-    0048 op_0xA7
-    0049 op_0xFF
-    0050 op_0xFF
-    0051 op_0xA7
-    0052 nop
-    0053 iconst_0
+    0048 goto 47
+    0051 goto 54
     0054 iload 2
     0056 istore 7
     0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -61,7 +47,5 @@ method        main ([Ljava/lang/String;)V 0x0009
     0078 istore 10
     0080 iload 10
     0082 istore 2
-    0084 op_0xA7
-    0085 op_0xFF
-    0086 op_0xB6
+    0084 goto 10
     sub_attr  StackMapTable (106 bytes)

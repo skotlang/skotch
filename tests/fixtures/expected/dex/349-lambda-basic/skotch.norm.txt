@@ -1,12 +1,21 @@
 dex_version   035
-strings       12
-types         6
-methods       3
+strings       23
+types         11
+methods       10
 classes       1
 
 --- strings ---
+  "<init>"
+  "I"
+  "LI"
+  "LInputKt$Lambda$0;"
+  "LInputKt$Lambda$1;"
+  "LInputKt$Lambda$2;"
   "LInputKt;"
+  "LL"
+  "LLL"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "V"
@@ -14,26 +23,40 @@ classes       1
   "World"
   "[Ljava/lang/String;"
   "input.kt"
+  "invoke"
   "main"
   "out"
   "println"
+  "valueOf"
 
 --- types ---
+  I
+  LInputKt$Lambda$0;
+  LInputKt$Lambda$1;
+  LInputKt$Lambda$2;
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/System;
   V
   [Ljava/lang/String;
 
 --- methods ---
+  LInputKt$Lambda$0;.<init>()V
+  LInputKt$Lambda$0;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$Lambda$1;.<init>()V
+  LInputKt$Lambda$1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$Lambda$2;.<init>()V
+  LInputKt$Lambda$2;.invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=21 ins=0 outs=2 insns=34
+  method       main()V flags=0x0019 regs=21 ins=0 outs=3 insns=81
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

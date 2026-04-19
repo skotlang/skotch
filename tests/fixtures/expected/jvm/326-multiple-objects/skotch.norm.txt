@@ -7,7 +7,7 @@ method        appName ()Ljava/lang/String; 0x0009
     0000 ldc "MyApp"
     0002 astore 0
     0004 aload 0
-    0006 op_0xB0
+    0006 areturn
 method        info (Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=3
     0000 ldc "[INFO] "
@@ -15,10 +15,8 @@ method        info (Ljava/lang/String;)V 0x0009
     0004 aload 0
     0006 astore 2
     0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0011 op_0xBB
-    0012 nop
-    0013 op_0x1D
-    0014 op_0x59
+    0011 new Class(java/lang/StringBuilder)
+    0014 dup
     0015 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0018 aload 1
     0020 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)

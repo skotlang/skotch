@@ -565,11 +565,10 @@ fn definition_for_def(
                         }
                         fn_count += 1;
                     }
-                    skotch_syntax::ast::Decl::Class(c) => {
-                        // Check if this class got this index.
-                        if resolved.top_level.values().any(|&d| d == def) {
-                            return Some(span_to_location(c.name_span, sm));
-                        }
+                    skotch_syntax::ast::Decl::Class(c)
+                        if resolved.top_level.values().any(|&d| d == def) =>
+                    {
+                        return Some(span_to_location(c.name_span, sm));
                     }
                     _ => {}
                 }

@@ -284,7 +284,7 @@ impl Pools {
                 ((class_idx, type_idx, name_idx), old_i)
             })
             .collect();
-        field_keys.sort_by(|a, b| a.0.cmp(&b.0));
+        field_keys.sort_by_key(|a| a.0);
         let mut fields: Vec<FieldRow> = Vec::with_capacity(self.fields.len());
         let mut field_remap_old_to_new = vec![0u32; self.fields.len()];
         for (new_i, ((class_idx, type_idx, name_idx), old_i)) in field_keys.iter().enumerate() {
@@ -312,7 +312,7 @@ impl Pools {
                 ((class_idx, name_idx, proto_idx), old_i)
             })
             .collect();
-        method_keys.sort_by(|a, b| a.0.cmp(&b.0));
+        method_keys.sort_by_key(|a| a.0);
         let mut methods: Vec<MethodRow> = Vec::with_capacity(self.methods.len());
         let mut method_remap_old_to_new = vec![0u32; self.methods.len()];
         for (new_i, ((class_idx, name_idx, proto_idx), old_i)) in method_keys.iter().enumerate() {

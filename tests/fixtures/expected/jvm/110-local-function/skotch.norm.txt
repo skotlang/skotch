@@ -14,22 +14,16 @@ method        factorial (I)I 0x0009
     0012 nop
     0013 iconst_4
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 3
     0021 iload 3
-    0023 op_0x99
-    0024 nop
-    0025 op_0x0D
+    0023 ifeq 36
     0026 iconst_1
     0027 istore 4
     0029 iload 4
     0031 istore 5
-    0033 op_0xA7
-    0034 nop
-    0035 op_0x2A
+    0033 goto 75
     0036 iload 0
     0038 istore 6
     0040 iload 0
@@ -49,9 +43,7 @@ method        factorial (I)I 0x0009
     0066 istore 11
     0068 iload 11
     0070 istore 5
-    0072 op_0xA7
-    0073 nop
-    0074 iconst_0
+    0072 goto 75
     0075 iload 5
     0077 op_0xAC
     sub_attr  StackMapTable (47 bytes)

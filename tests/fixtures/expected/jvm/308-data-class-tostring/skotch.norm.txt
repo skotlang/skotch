@@ -8,31 +8,23 @@ method        main ([Ljava/lang/String;)V 0x0009
     0002 astore 1
     0004 sipush 8080
     0007 istore 2
-    0009 op_0xBB
-    0010 nop
-    0011 op_0x0D
-    0012 op_0x59
+    0009 new Class(Config)
+    0012 dup
     0013 aload 1
     0015 iload 2
     0017 invokespecial Method(Config.<init>:(Ljava/lang/String;I)V)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0D
+    0024 checkcast Class(Config)
     0027 astore 4
     0029 aload 4
-    0031 op_0xC0
-    0032 nop
-    0033 op_0x0D
+    0031 checkcast Class(Config)
     0034 astore 5
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0039 aload 5
     0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0044 aload 4
-    0046 op_0xC0
-    0047 nop
-    0048 op_0x0D
+    0046 checkcast Class(Config)
     0049 astore 6
     0051 aload 6
     0053 invokevirtual Method(Config.toString:()Ljava/lang/String;)

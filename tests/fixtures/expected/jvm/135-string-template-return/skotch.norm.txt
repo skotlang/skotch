@@ -14,7 +14,7 @@ method        describe (I)Ljava/lang/String; 0x0009
     0015 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0018 astore 3
     0020 aload 3
-    0022 op_0xB0
+    0022 areturn
 method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=6
     0000 ldc "Hello, "
@@ -32,7 +32,7 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0028 astore 5
     0030 aload 5
-    0032 op_0xB0
+    0032 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5
     0000 ldc "Kotlin"

@@ -1,0 +1,54 @@
+dex_version   035
+strings       20
+types         9
+methods       6
+classes       1
+
+--- strings ---
+  "I"
+  "III"
+  "LInputKt;"
+  "LLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Math;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "input.kt"
+  "intValue"
+  "main"
+  "max"
+  "maxOf"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Math;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.maxOf(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Math;.max(II)I
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=24
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       maxOf(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=10 ins=2 outs=1 insns=23
