@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 377 language-feature fixtures validated across 5 targets.
+> implemented. 379 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-377 active test fixtures (409 total, 32 stubs for upcoming features).
+379 active test fixtures (409 total, 30 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -339,7 +339,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Abstract classes](https://kotlinlang.org/spec/declarations.html#abstract-classes) | §4.5.1 | `abstract class` with `abstract fun`, template method pattern |
 | [Sealed classes](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | §4.5.5 | Sealed hierarchies, exhaustive `when` + `is` patterns, smart cast narrowing |
 | [Enum classes](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | §4.5.7 | Real MirClass with constructor params, `.name`, `when` matching |
-| [Smart casts](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `is`/`!is` type checks (instanceof + checkcast), null-check narrowing |
+| [Smart casts](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `is`/`!is` type checks, `when` branch narrowing with checkcast + unbox, `if` narrowing, null-check narrowing |
 | [Lambda expressions](https://kotlinlang.org/spec/expressions.html#lambda-literals) | §7.2.10 | Closure capture (val + var with Ref boxing), trailing lambda, `it`, nested lambdas |
 | [Function types](https://kotlinlang.org/spec/type-system.html#function-types) | §3.5 | `(Int) -> String` syntax, receiver types, erased to Object on JVM |
 | [Scope functions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/let.html) | stdlib | `let`, `also`, `run`, `apply`, `with`, `repeat` — MIR intrinsics |
@@ -413,8 +413,8 @@ expectations and verify them end-to-end (compile → run → compare stdout).
 There are no hardcoded fixture lists — if a fixture is marked supported, it's
 tested.
 
-- **JVM e2e**: 368 fixtures compiled and run under `java` (gated on JDK)
-- **DEX e2e**: 345 fixtures compile to valid DEX verified by `dexdump`
+- **JVM e2e**: 370 fixtures compiled and run under `java` (gated on JDK)
+- **DEX e2e**: 347 fixtures compile to valid DEX verified by `dexdump`
 - **Golden comparison**: JVM and DEX goldens are checked for byte-exact
   match against committed files
 

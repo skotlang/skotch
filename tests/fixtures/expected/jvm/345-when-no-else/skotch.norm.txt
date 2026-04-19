@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        f (LS;)Ljava/lang/String; 0x0009
-  code        max_stack=1 max_locals=9
+  code        max_stack=1 max_locals=11
     0000 aload 0
     0002 checkcast Class(S)
     0005 astore 1
@@ -15,31 +15,37 @@ method        f (LS;)Ljava/lang/String; 0x0009
     0019 instanceof Class(A)
     0022 istore 3
     0024 iload 3
-    0026 ifeq 40
-    0029 ldc "a"
-    0031 astore 4
-    0033 aload 4
-    0035 astore 5
-    0037 goto 76
-    0040 aload 0
-    0042 checkcast Class(S)
-    0045 astore 6
-    0047 aload 6
-    0049 instanceof Class(B)
-    0052 istore 7
-    0054 iload 7
-    0056 ifeq 70
-    0059 ldc "b"
-    0061 astore 8
-    0063 aload 8
-    0065 astore 5
-    0067 goto 76
-    0070 aconst_null
-    0071 astore 5
-    0073 goto 76
-    0076 aload 5
-    0078 areturn
-    sub_attr  StackMapTable (75 bytes)
+    0026 ifeq 47
+    0029 aload 0
+    0031 checkcast Class(A)
+    0034 astore 4
+    0036 ldc "a"
+    0038 astore 5
+    0040 aload 5
+    0042 astore 6
+    0044 goto 90
+    0047 aload 0
+    0049 checkcast Class(S)
+    0052 astore 7
+    0054 aload 7
+    0056 instanceof Class(B)
+    0059 istore 8
+    0061 iload 8
+    0063 ifeq 84
+    0066 aload 0
+    0068 checkcast Class(B)
+    0071 astore 9
+    0073 ldc "b"
+    0075 astore 10
+    0077 aload 10
+    0079 astore 6
+    0081 goto 90
+    0084 aconst_null
+    0085 astore 6
+    0087 goto 90
+    0090 aload 6
+    0092 areturn
+    sub_attr  StackMapTable (77 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5
     0000 new Class(A)

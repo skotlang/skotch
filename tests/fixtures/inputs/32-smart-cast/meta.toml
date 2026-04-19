@@ -1,3 +1,4 @@
 name = "32-smart-cast"
-status = "stub"
-reason = "Smart casts need flow-sensitive typing."
+status = "active"
+features = ["smart-cast", "is-check", "if"]
+expected_output = "5\n"

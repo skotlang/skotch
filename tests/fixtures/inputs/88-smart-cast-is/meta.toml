@@ -1,4 +1,4 @@
 name   = "88-smart-cast-is"
-status = "stub"
+status = "active"
 features = ["smart-cast", "is-check", "when", "Any"]
-reason = "Requires type-check (instanceof) + smart cast to narrowed type."
+expected_output = "integer\nstring of length 5\nboolean\n"

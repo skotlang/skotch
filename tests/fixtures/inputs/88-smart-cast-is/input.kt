@@ -1,7 +1,7 @@
 fun describe(obj: Any): String = when (obj) {
-    is Int -> "integer: $obj"
+    is Int -> "integer"
     is String -> "string of length ${obj.length}"
-    is Boolean -> "boolean: $obj"
+    is Boolean -> "boolean"
     else -> "unknown"
 }
 

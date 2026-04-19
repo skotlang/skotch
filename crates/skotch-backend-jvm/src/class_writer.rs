@@ -4098,6 +4098,88 @@ fn emit_mir_segment(
             }
             Rvalue::Local(src) => {
                 emit_load_mir_local(code, func, local_slot, *src);
+                // Smart cast: if copying from a broader type (e.g. Any) to
+                // a narrower type (e.g. String, Class), emit checkcast so
+                // the JVM verifier accepts method calls on the narrowed type.
+                // For primitive types (Int, Long, Double, Bool), also unbox.
+                let src_ty = &func.locals[src.0 as usize];
+                let dest_ty = &func.locals[dest.0 as usize];
+                let needs_cast =
+                    matches!(src_ty, Ty::Any | Ty::Nullable(_))
+                        && !matches!(dest_ty, Ty::Any | Ty::Nullable(_) | Ty::Unit);
+                if needs_cast {
+                    match dest_ty {
+                        Ty::Int => {
+                            let ci = cp.class("java/lang/Integer");
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                            let m = cp.methodref(
+                                "java/lang/Integer",
+                                "intValue",
+                                "()I",
+                            );
+                            code.push(0xB6); // invokevirtual
+                            code.push((m >> 8) as u8);
+                            code.push(m as u8);
+                        }
+                        Ty::Long => {
+                            let ci = cp.class("java/lang/Long");
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                            let m = cp.methodref(
+                                "java/lang/Long",
+                                "longValue",
+                                "()J",
+                            );
+                            code.push(0xB6);
+                            code.push((m >> 8) as u8);
+                            code.push(m as u8);
+                        }
+                        Ty::Double => {
+                            let ci = cp.class("java/lang/Double");
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                            let m = cp.methodref(
+                                "java/lang/Double",
+                                "doubleValue",
+                                "()D",
+                            );
+                            code.push(0xB6);
+                            code.push((m >> 8) as u8);
+                            code.push(m as u8);
+                        }
+                        Ty::Bool => {
+                            let ci = cp.class("java/lang/Boolean");
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                            let m = cp.methodref(
+                                "java/lang/Boolean",
+                                "booleanValue",
+                                "()Z",
+                            );
+                            code.push(0xB6);
+                            code.push((m >> 8) as u8);
+                            code.push(m as u8);
+                        }
+                        Ty::String => {
+                            let ci = cp.class("java/lang/String");
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                        }
+                        Ty::Class(cn) => {
+                            let ci = cp.class(cn);
+                            code.push(0xC0);
+                            code.push((ci >> 8) as u8);
+                            code.push(ci as u8);
+                        }
+                        _ => {}
+                    }
+                }
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
             Rvalue::BinOp { op, lhs, rhs } => {
@@ -6834,22 +6916,57 @@ fn walk_block(
             }
             Rvalue::Local(src) => {
                 load_local(code, stack, max_stack, slots, *src, &func.locals);
-                // Emit checkcast when narrowing from a wider reference type
-                // (e.g., Any→String for smart casts).
+                // Smart cast: checkcast + unbox when narrowing from Any to
+                // a concrete type (e.g., `when (obj) { is String -> ... }`).
                 let src_ty = &func.locals[src.0 as usize];
                 let dest_ty_here = &func.locals[dest.0 as usize];
                 if matches!(src_ty, Ty::Any | Ty::Class(_) | Ty::Nullable(_))
-                    && !matches!(dest_ty_here, Ty::Any | Ty::Nullable(_))
+                    && !matches!(dest_ty_here, Ty::Any | Ty::Nullable(_) | Ty::Unit)
                 {
-                    let target = match dest_ty_here {
-                        Ty::String => Some("java/lang/String"),
-                        Ty::Class(name) => Some(name.as_str()),
-                        _ => None,
-                    };
-                    if let Some(t) = target {
-                        let ci = cp.class(t);
-                        code.push(0xC0); // checkcast
-                        code.write_u16::<BigEndian>(ci).unwrap();
+                    match dest_ty_here {
+                        Ty::Int => {
+                            let ci = cp.class("java/lang/Integer");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Long => {
+                            let ci = cp.class("java/lang/Long");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Double => {
+                            let ci = cp.class("java/lang/Double");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Bool => {
+                            let ci = cp.class("java/lang/Boolean");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Boolean", "booleanValue", "()Z");
+                            code.push(0xB6);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::String => {
+                            let ci = cp.class("java/lang/String");
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        Ty::Class(name) => {
+                            let ci = cp.class(name);
+                            code.push(0xC0);
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        _ => {}
                     }
                 }
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);

@@ -1,17 +1,15 @@
 dex_version   035
-strings       23
-types         10
+strings       20
+types         9
 methods       6
 classes       1
 
 --- strings ---
-  "<init>"
   "I"
-  "LErr;"
+  "LI"
   "LInputKt;"
-  "LL"
-  "LOk;"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
@@ -20,21 +18,19 @@ classes       1
   "VL"
   "[Ljava/lang/String;"
   "describe"
-  "err"
-  "fail"
+  "hello"
   "input.kt"
+  "length"
   "main"
-  "ok"
   "out"
   "println"
-  "unknown"
+  "valueOf"
 
 --- types ---
   I
-  LErr;
   LInputKt;
-  LOk;
   Ljava/io/PrintStream;
+  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
@@ -42,17 +38,17 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LErr;.<init>(Ljava/lang/String;)V
-  LInputKt;.describe(Ljava/lang/Object;)Ljava/lang/String;
+  LInputKt;.describe(Ljava/lang/Object;)V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
-  LOk;.<init>(I)V
-  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/String;.length()I
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=12 ins=1 outs=0 insns=27
-  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=33
+  method       describe(Ljava/lang/Object;)V flags=0x0019 regs=7 ins=1 outs=2 insns=19
+  method       main()V flags=0x0019 regs=3 ins=0 outs=1 insns=15
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
