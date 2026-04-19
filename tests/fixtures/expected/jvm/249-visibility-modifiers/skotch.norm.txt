@@ -7,7 +7,7 @@ method        helper ()Ljava/lang/String; 0x0009
     0000 ldc "help"
     0002 astore 0
     0004 aload 0
-    0006 op_0xB0
+    0006 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=3
     0000 invokestatic Method(InputKt.secret:()I)

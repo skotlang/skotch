@@ -46,7 +46,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0047 op_0x0D
     0048 op_0x14
     0049 nop
-    0050 op_0x1A
+    0050 iload_0
     0051 op_0x37
     0052 op_0x0F
     0053 op_0x16

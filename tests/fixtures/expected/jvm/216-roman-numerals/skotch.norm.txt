@@ -55,9 +55,7 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0010 istore 3
     0012 iload 3
     0014 istore 4
-    0016 op_0xA7
-    0017 nop
-    0018 iconst_0
+    0016 goto 19
     0019 iload 4
     0021 istore 5
     0023 sipush 1000
@@ -68,15 +66,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0033 nop
     0034 iconst_4
     0035 iconst_0
-    0036 op_0xA7
-    0037 nop
-    0038 iconst_1
+    0036 goto 40
     0039 iconst_1
     0040 istore 7
     0042 iload 7
-    0044 op_0x99
-    0045 nop
-    0046 op_0x2F
+    0044 ifeq 91
     0047 aload 2
     0049 astore 8
     0051 ldc "M"
@@ -97,12 +91,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0082 istore 13
     0084 iload 13
     0086 istore 4
-    0088 op_0xA7
-    0089 op_0xFF
-    0090 op_0xBB
-    0091 op_0xA7
-    0092 nop
-    0093 iconst_0
+    0088 goto 19
+    0091 goto 94
     0094 iload 4
     0096 istore 14
     0098 sipush 900
@@ -113,15 +103,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0108 nop
     0109 iconst_4
     0110 iconst_0
-    0111 op_0xA7
-    0112 nop
-    0113 iconst_1
+    0111 goto 115
     0114 iconst_1
     0115 istore 16
     0117 iload 16
-    0119 op_0x99
-    0120 nop
-    0121 op_0x2F
+    0119 ifeq 166
     0122 aload 2
     0124 astore 17
     0126 ldc "CM"
@@ -142,12 +128,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0157 istore 22
     0159 iload 22
     0161 istore 4
-    0163 op_0xA7
-    0164 op_0xFF
-    0165 op_0xBB
-    0166 op_0xA7
-    0167 nop
-    0168 iconst_0
+    0163 goto 94
+    0166 goto 169
     0169 iload 4
     0171 istore 23
     0173 sipush 500
@@ -158,15 +140,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0183 nop
     0184 iconst_4
     0185 iconst_0
-    0186 op_0xA7
-    0187 nop
-    0188 iconst_1
+    0186 goto 190
     0189 iconst_1
     0190 istore 25
     0192 iload 25
-    0194 op_0x99
-    0195 nop
-    0196 op_0x2F
+    0194 ifeq 241
     0197 aload 2
     0199 astore 26
     0201 ldc "D"
@@ -187,12 +165,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0232 istore 31
     0234 iload 31
     0236 istore 4
-    0238 op_0xA7
-    0239 op_0xFF
-    0240 op_0xBB
-    0241 op_0xA7
-    0242 nop
-    0243 iconst_0
+    0238 goto 169
+    0241 goto 244
     0244 iload 4
     0246 istore 32
     0248 sipush 400
@@ -203,15 +177,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0258 nop
     0259 iconst_4
     0260 iconst_0
-    0261 op_0xA7
-    0262 nop
-    0263 iconst_1
+    0261 goto 265
     0264 iconst_1
     0265 istore 34
     0267 iload 34
-    0269 op_0x99
-    0270 nop
-    0271 op_0x2F
+    0269 ifeq 316
     0272 aload 2
     0274 astore 35
     0276 ldc "CD"
@@ -232,12 +202,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0307 istore 40
     0309 iload 40
     0311 istore 4
-    0313 op_0xA7
-    0314 op_0xFF
-    0315 op_0xBB
-    0316 op_0xA7
-    0317 nop
-    0318 iconst_0
+    0313 goto 244
+    0316 goto 319
     0319 iload 4
     0321 istore 41
     0323 bipush 100
@@ -248,15 +214,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0332 nop
     0333 iconst_4
     0334 iconst_0
-    0335 op_0xA7
-    0336 nop
-    0337 iconst_1
+    0335 goto 339
     0338 iconst_1
     0339 istore 43
     0341 iload 43
-    0343 op_0x99
-    0344 nop
-    0345 op_0x2E
+    0343 ifeq 389
     0346 aload 2
     0348 astore 44
     0350 ldc "C"
@@ -277,12 +239,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0380 istore 49
     0382 iload 49
     0384 istore 4
-    0386 op_0xA7
-    0387 op_0xFF
-    0388 op_0xBD
-    0389 op_0xA7
-    0390 nop
-    0391 iconst_0
+    0386 goto 319
+    0389 goto 392
     0392 iload 4
     0394 istore 50
     0396 bipush 90
@@ -293,15 +251,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0405 nop
     0406 iconst_4
     0407 iconst_0
-    0408 op_0xA7
-    0409 nop
-    0410 iconst_1
+    0408 goto 412
     0411 iconst_1
     0412 istore 52
     0414 iload 52
-    0416 op_0x99
-    0417 nop
-    0418 op_0x2E
+    0416 ifeq 462
     0419 aload 2
     0421 astore 53
     0423 ldc "XC"
@@ -322,12 +276,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0453 istore 58
     0455 iload 58
     0457 istore 4
-    0459 op_0xA7
-    0460 op_0xFF
-    0461 op_0xBD
-    0462 op_0xA7
-    0463 nop
-    0464 iconst_0
+    0459 goto 392
+    0462 goto 465
     0465 iload 4
     0467 istore 59
     0469 bipush 50
@@ -338,15 +288,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0478 nop
     0479 iconst_4
     0480 iconst_0
-    0481 op_0xA7
-    0482 nop
-    0483 iconst_1
+    0481 goto 485
     0484 iconst_1
     0485 istore 61
     0487 iload 61
-    0489 op_0x99
-    0490 nop
-    0491 op_0x2E
+    0489 ifeq 535
     0492 aload 2
     0494 astore 62
     0496 ldc "L"
@@ -367,12 +313,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0526 istore 67
     0528 iload 67
     0530 istore 4
-    0532 op_0xA7
-    0533 op_0xFF
-    0534 op_0xBD
-    0535 op_0xA7
-    0536 nop
-    0537 iconst_0
+    0532 goto 465
+    0535 goto 538
     0538 iload 4
     0540 istore 68
     0542 bipush 40
@@ -383,15 +325,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0551 nop
     0552 iconst_4
     0553 iconst_0
-    0554 op_0xA7
-    0555 nop
-    0556 iconst_1
+    0554 goto 558
     0557 iconst_1
     0558 istore 70
     0560 iload 70
-    0562 op_0x99
-    0563 nop
-    0564 op_0x2E
+    0562 ifeq 608
     0565 aload 2
     0567 astore 71
     0569 ldc "XL"
@@ -412,12 +350,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0599 istore 76
     0601 iload 76
     0603 istore 4
-    0605 op_0xA7
-    0606 op_0xFF
-    0607 op_0xBD
-    0608 op_0xA7
-    0609 nop
-    0610 iconst_0
+    0605 goto 538
+    0608 goto 611
     0611 iload 4
     0613 istore 77
     0615 bipush 10
@@ -428,15 +362,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0624 nop
     0625 iconst_4
     0626 iconst_0
-    0627 op_0xA7
-    0628 nop
-    0629 iconst_1
+    0627 goto 631
     0630 iconst_1
     0631 istore 79
     0633 iload 79
-    0635 op_0x99
-    0636 nop
-    0637 op_0x2E
+    0635 ifeq 681
     0638 aload 2
     0640 astore 80
     0642 ldc "X"
@@ -457,12 +387,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0672 istore 85
     0674 iload 85
     0676 istore 4
-    0678 op_0xA7
-    0679 op_0xFF
-    0680 op_0xBD
-    0681 op_0xA7
-    0682 nop
-    0683 iconst_0
+    0678 goto 611
+    0681 goto 684
     0684 iload 4
     0686 istore 86
     0688 bipush 9
@@ -473,15 +399,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0697 nop
     0698 iconst_4
     0699 iconst_0
-    0700 op_0xA7
-    0701 nop
-    0702 iconst_1
+    0700 goto 704
     0703 iconst_1
     0704 istore 88
     0706 iload 88
-    0708 op_0x99
-    0709 nop
-    0710 op_0x2E
+    0708 ifeq 754
     0711 aload 2
     0713 astore 89
     0715 ldc "IX"
@@ -502,12 +424,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0745 istore 94
     0747 iload 94
     0749 istore 4
-    0751 op_0xA7
-    0752 op_0xFF
-    0753 op_0xBD
-    0754 op_0xA7
-    0755 nop
-    0756 iconst_0
+    0751 goto 684
+    0754 goto 757
     0757 iload 4
     0759 istore 95
     0761 iconst_5
@@ -518,15 +436,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0769 nop
     0770 iconst_4
     0771 iconst_0
-    0772 op_0xA7
-    0773 nop
-    0774 iconst_1
+    0772 goto 776
     0775 iconst_1
     0776 istore 97
     0778 iload 97
-    0780 op_0x99
-    0781 nop
-    0782 op_0x2D
+    0780 ifeq 825
     0783 aload 2
     0785 astore 98
     0787 ldc "V"
@@ -547,12 +461,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0816 istore 103
     0818 iload 103
     0820 istore 4
-    0822 op_0xA7
-    0823 op_0xFF
-    0824 op_0xBF
-    0825 op_0xA7
-    0826 nop
-    0827 iconst_0
+    0822 goto 757
+    0825 goto 828
     0828 iload 4
     0830 istore 104
     0832 iconst_4
@@ -563,15 +473,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0840 nop
     0841 iconst_4
     0842 iconst_0
-    0843 op_0xA7
-    0844 nop
-    0845 iconst_1
+    0843 goto 847
     0846 iconst_1
     0847 istore 106
     0849 iload 106
-    0851 op_0x99
-    0852 nop
-    0853 op_0x2D
+    0851 ifeq 896
     0854 aload 2
     0856 astore 107
     0858 ldc "IV"
@@ -592,12 +498,8 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0887 istore 112
     0889 iload 112
     0891 istore 4
-    0893 op_0xA7
-    0894 op_0xFF
-    0895 op_0xBF
-    0896 op_0xA7
-    0897 nop
-    0898 iconst_0
+    0893 goto 828
+    0896 goto 899
     0899 iload 4
     0901 istore 113
     0903 iconst_1
@@ -608,15 +510,11 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0911 nop
     0912 iconst_4
     0913 iconst_0
-    0914 op_0xA7
-    0915 nop
-    0916 iconst_1
+    0914 goto 918
     0917 iconst_1
     0918 istore 115
     0920 iload 115
-    0922 op_0x99
-    0923 nop
-    0924 op_0x2D
+    0922 ifeq 967
     0925 aload 2
     0927 astore 116
     0929 ldc "I"
@@ -637,11 +535,9 @@ method        toRoman (I)Ljava/lang/String; 0x0009
     0958 istore 121
     0960 iload 121
     0962 istore 4
-    0964 op_0xA7
-    0965 op_0xFF
-    0966 op_0xBF
+    0964 goto 899
     0967 aload 2
     0969 astore 122
     0971 aload 122
-    0973 op_0xB0
+    0973 areturn
     sub_attr  StackMapTable (3674 bytes)

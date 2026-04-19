@@ -1,17 +1,27 @@
 dex_version   035
-strings       18
-types         7
-methods       6
+strings       31
+types         14
+methods       14
 classes       1
 
 --- strings ---
+  "<init>"
   "I"
   "ILI"
   "ILLI"
+  "LI"
+  "LInputKt$Lambda$0;"
+  "LInputKt$Lambda$1;"
+  "LInputKt$Lambda$2;"
+  "LInputKt$Lambda$3;"
+  "LInputKt$Lambda$4;"
   "LInputKt;"
+  "LL"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
+  "Lkotlin/jvm/functions/Function1;"
   "V"
   "VI"
   "VL"
@@ -19,34 +29,52 @@ classes       1
   "apply"
   "combine"
   "input.kt"
+  "intValue"
+  "invoke"
   "main"
   "out"
   "println"
   "transform"
+  "valueOf"
 
 --- types ---
   I
+  LInputKt$Lambda$0;
+  LInputKt$Lambda$1;
+  LInputKt$Lambda$2;
+  LInputKt$Lambda$3;
+  LInputKt$Lambda$4;
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/System;
+  Lkotlin/jvm/functions/Function1;
   V
   [Ljava/lang/String;
 
 --- methods ---
+  LInputKt$Lambda$0;.<init>()V
+  LInputKt$Lambda$1;.<init>()V
+  LInputKt$Lambda$2;.<init>()V
+  LInputKt$Lambda$3;.<init>()V
+  LInputKt$Lambda$4;.<init>()V
   LInputKt;.apply(Ljava/lang/Object;I)I
   LInputKt;.combine(Ljava/lang/Object;Ljava/lang/Object;I)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.transform(Ljava/lang/Object;I)I
   Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=0 insns=2
-  method       combine(Ljava/lang/Object;Ljava/lang/Object;I)I flags=0x0019 regs=10 ins=3 outs=0 insns=2
-  method       main()V flags=0x0019 regs=14 ins=0 outs=3 insns=43
+  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=2 insns=14
+  method       combine(Ljava/lang/Object;Ljava/lang/Object;I)I flags=0x0019 regs=10 ins=3 outs=2 insns=26
+  method       main()V flags=0x0019 regs=14 ins=0 outs=3 insns=68
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       transform(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=0 insns=2
+  method       transform(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=2 insns=14

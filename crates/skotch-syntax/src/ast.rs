@@ -131,6 +131,11 @@ pub struct FunDecl {
     pub is_open: bool,
     pub is_override: bool,
     pub is_abstract: bool,
+    /// True when declared with the `suspend` modifier. The keyword is
+    /// currently accepted for source compatibility but no CPS transform
+    /// is applied; the function is lowered as a normal (non-suspending)
+    /// function. See milestones.yaml v0.9.0 for the full coroutine plan.
+    pub is_suspend: bool,
     pub span: Span,
 }
 
@@ -269,6 +274,10 @@ pub struct TypeRef {
     pub func_params: Option<Vec<TypeRef>>,
     /// Generic type arguments: `List<Int>`, `Map<String, Int>`.
     pub type_args: Vec<TypeRef>,
+    /// True when this function type is declared `suspend`, e.g.
+    /// `suspend () -> String`.  Non-function TypeRefs always have
+    /// this set to `false`.
+    pub is_suspend: bool,
     pub span: Span,
 }
 
@@ -460,6 +469,19 @@ pub enum Expr {
     Lambda {
         params: Vec<Param>,
         body: Block,
+        /// `true` if this lambda is declared `suspend` (e.g. via the
+        /// `suspend` keyword on the containing function-type parameter,
+        /// or when the body contains suspend calls). Suspend lambdas
+        /// compile to a `kotlin/coroutines/jvm/internal/SuspendLambda`
+        /// subclass instead of a regular `$Lambda$N` class.
+        ///
+        /// **Session 6 scope:** flag is carried through the AST and MIR
+        /// but full SuspendLambda codegen (SuspendLambda superclass,
+        /// invokeSuspend state machine, create/invoke/bridge methods)
+        /// is not yet emitted. Lambdas with suspend bodies currently
+        /// fall back to the regular $Lambda$N class, which means they
+        /// won't work at runtime when passed to coroutine builders.
+        is_suspend: bool,
         span: Span,
     },
     /// `object : InterfaceName { override fun method() { } }` — anonymous object.

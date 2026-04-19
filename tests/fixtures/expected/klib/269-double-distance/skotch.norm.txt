@@ -1,0 +1,485 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Double",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Double": 0.0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "Double": 0.0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Double": 3.0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Local": 4
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": {
+                    "Double": 4.0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Local": 6
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 5
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "BinOp": {
+                    "op": "SubD",
+                    "lhs": 8,
+                    "rhs": 9
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Local": 10
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "BinOp": {
+                    "op": "SubD",
+                    "lhs": 12,
+                    "rhs": 13
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Local": 14
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Local": 11
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Local": 11
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "BinOp": {
+                    "op": "MulD",
+                    "lhs": 16,
+                    "rhs": 17
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "BinOp": {
+                    "op": "MulD",
+                    "lhs": 19,
+                    "rhs": 20
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "BinOp": {
+                    "op": "AddD",
+                    "lhs": 18,
+                    "rhs": 21
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Local": 22
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
+                "value": {
+                  "Local": 23
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 25,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      24
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [],
+  "strings": []
+}

@@ -1,0 +1,2 @@
+status = "supported"
+features = ["try-catch", "suspend", "delay", "Goto-terminator"]

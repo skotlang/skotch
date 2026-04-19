@@ -1,24 +1,23 @@
 class_version major=61 minor=0
-this_class    Config$Companion
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        <init> ()V 0x0002
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 return
-method        <init> (Lkotlin/jvm/internal/DefaultConstructorMarker;)V 0x1001
-  code        max_stack=1 max_locals=2
-    0000 op_0x2A
-    0001 invokespecial Method(Config$Companion.<init>:()V)
-    0004 return
-method        appName ()Ljava/lang/String; 0x0011
-  code        max_stack=1 max_locals=1
-    0000 ldc "MyApp"
-    0002 op_0xB0
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        version ()I 0x0011
-  code        max_stack=1 max_locals=1
-    0000 iconst_1
-    0001 op_0xAC
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(Config.Companion:LConfig$Companion;)
+    0003 invokevirtual Method(Config$Companion.appName:()Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 op_0x5F
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(Config.Companion:LConfig$Companion;)
+    0016 invokevirtual Method(Config$Companion.version:()I)
+    0019 istore_0
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload_0
+    0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0027 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
 class_attr    InnerClasses (10 bytes)

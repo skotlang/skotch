@@ -1,31 +1,44 @@
 dex_version   035
-strings       15
-types         7
-methods       3
+strings       25
+types         10
+methods       7
 classes       1
 
 --- strings ---
   "100"
   "I"
+  "II"
+  "IL"
   "LInputKt;"
+  "LL"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Math;"
   "Ljava/lang/Object;"
+  "Ljava/lang/String;"
   "Ljava/lang/System;"
   "V"
   "VI"
   "VL"
   "[Ljava/lang/String;"
+  "abs"
   "file.separator"
+  "getProperty"
   "input.kt"
+  "length"
   "main"
   "out"
+  "parseInt"
   "println"
 
 --- types ---
   I
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Math;
   Ljava/lang/Object;
+  Ljava/lang/String;
   Ljava/lang/System;
   V
   [Ljava/lang/String;
@@ -34,10 +47,14 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.parseInt(Ljava/lang/String;)I
+  Ljava/lang/Math;.abs(I)I
+  Ljava/lang/String;.length()I
+  Ljava/lang/System;.getProperty(Ljava/lang/String;)Ljava/lang/String;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=8 ins=0 outs=2 insns=22
+  method       main()V flags=0x0019 regs=8 ins=0 outs=2 insns=38
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

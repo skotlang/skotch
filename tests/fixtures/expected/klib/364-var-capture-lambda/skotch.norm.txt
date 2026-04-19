@@ -1,0 +1,624 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        {
+          "Class": "$Ref$0"
+        },
+        {
+          "Class": "InputKt$Lambda$1"
+        },
+        {
+          "Class": "InputKt$Lambda$1"
+        },
+        "Unit",
+        "Unit",
+        "Unit",
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "NewInstance": "$Ref$0"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "$Ref$0"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "NewInstance": "InputKt$Lambda$1"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "InputKt$Lambda$1"
+                    },
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "InputKt$Lambda$1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "InputKt$Lambda$1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "InputKt$Lambda$1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "$Ref$0",
+                    "field_name": "element"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      8
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "$Ref$0",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "element",
+          "ty": "Int"
+        }
+      ],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "$Ref$0"
+          },
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "$Ref$0",
+                      "field_name": "element",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "InputKt$Lambda$1",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function0"
+      ],
+      "fields": [
+        {
+          "name": "count",
+          "ty": {
+            "Class": "$Ref$0"
+          }
+        }
+      ],
+      "methods": [
+        {
+          "id": 1009,
+          "name": "invoke",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$1"
+            },
+            {
+              "Class": "$Ref$0"
+            },
+            "Int",
+            "Int",
+            "Int",
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "InputKt$Lambda$1",
+                        "field_name": "count"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 1,
+                        "class_name": "$Ref$0",
+                        "field_name": "element"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "Int": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "PutField": {
+                        "receiver": 1,
+                        "class_name": "$Ref$0",
+                        "field_name": "element",
+                        "value": 5
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Local": 5
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$1"
+          },
+          {
+            "Class": "$Ref$0"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "InputKt$Lambda$1",
+                      "field_name": "count",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": []
+}

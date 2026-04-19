@@ -4,10 +4,8 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x0D
-    0003 op_0x59
+    0000 new Class(Circle)
+    0003 dup
     0004 invokespecial Method(Circle.<init>:()V)
     0007 astore 1
     0009 aload 1
@@ -16,11 +14,9 @@ method        main ([Ljava/lang/String;)V 0x0009
     0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0019 aload 2
     0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0024 op_0xBB
-    0025 nop
-    0026 sipush 22967
-    0029 nop
-    0030 op_0x2D
+    0024 new Class(Rect)
+    0027 dup
+    0028 invokespecial Method(Rect.<init>:()V)
     0031 astore 3
     0033 aload 3
     0035 invokestatic Method(InputKt.name:(LShape;)Ljava/lang/String;)
@@ -32,61 +28,40 @@ method        main ([Ljava/lang/String;)V 0x0009
 method        name (LShape;)Ljava/lang/String; 0x0009
   code        max_stack=1 max_locals=10
     0000 aload 0
-    0002 op_0xC0
-    0003 nop
-    0004 op_0x0B
+    0002 checkcast Class(Shape)
     0005 astore 1
-    0007 op_0xA7
-    0008 nop
-    0009 iconst_0
+    0007 goto 10
     0010 aload 0
-    0012 op_0xC0
-    0013 nop
-    0014 op_0x0B
+    0012 checkcast Class(Shape)
     0015 astore 2
     0017 aload 2
-    0019 op_0xC1
-    0020 nop
-    0021 op_0x0D
+    0019 instanceof Class(Circle)
     0022 istore 3
     0024 iload 3
-    0026 op_0x99
-    0027 nop
-    0028 op_0x0E
+    0026 ifeq 40
     0029 ldc "circle"
     0031 astore 4
     0033 aload 4
     0035 astore 5
-    0037 op_0xA7
-    0038 nop
-    0039 op_0x2C
+    0037 goto 81
     0040 aload 0
-    0042 op_0xC0
-    0043 nop
-    0044 op_0x0B
+    0042 checkcast Class(Shape)
     0045 astore 6
     0047 aload 6
-    0049 op_0xC1
-    0050 nop
-    0051 sipush 13831
+    0049 instanceof Class(Rect)
+    0052 istore 7
     0054 iload 7
-    0056 op_0x99
-    0057 nop
-    0058 op_0x0E
+    0056 ifeq 70
     0059 ldc "rect"
     0061 astore 8
     0063 aload 8
     0065 astore 5
-    0067 op_0xA7
-    0068 nop
-    0069 op_0x0E
+    0067 goto 81
     0070 ldc "unknown"
     0072 astore 9
     0074 aload 9
     0076 astore 5
-    0078 op_0xA7
-    0079 nop
-    0080 iconst_0
+    0078 goto 81
     0081 aload 5
-    0083 op_0xB0
+    0083 areturn
     sub_attr  StackMapTable (75 bytes)

@@ -5,29 +5,19 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 invokestatic Method(java/lang/System.lineSeparator:()Ljava/lang/String;)
-    0003 op_0x4B
-    0004 op_0x2A
+    0003 astore_0
+    0004 aload_0
     0005 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNull:(Ljava/lang/Object;)V)
-    0008 op_0x2A
-    0009 op_0xC0
-    0010 nop
-    0011 op_0x14
-    0012 op_0xB9
-    0013 nop
-    0014 op_0x18
-    0015 aconst_null
-    0016 nop
-    0017 op_0x9A
-    0018 nop
-    0019 iconst_4
+    0008 aload_0
+    0009 checkcast Class(java/lang/CharSequence)
+    0012 invokeinterface InterfaceMethod(java/lang/CharSequence.length:()I)
+    0017 ifne 24
     0020 iconst_1
-    0021 op_0xA7
-    0022 nop
-    0023 iconst_1
+    0021 goto 25
     0024 iconst_0
-    0025 op_0x3C
+    0025 istore_1
     0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 op_0x1B
+    0029 iload_1
     0030 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0033 return
     sub_attr  StackMapTable (10 bytes)

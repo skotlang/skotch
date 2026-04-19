@@ -1,0 +1,95 @@
+dex_version   035
+strings       35
+types         11
+methods       10
+classes       4
+
+--- strings ---
+  ""
+  "()V"
+  "..."
+  "<init>"
+  "L"
+  "LAnimal;"
+  "LCat;"
+  "LDog;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Meow"
+  "V"
+  "VL"
+  "Woof"
+  "[Ljava/lang/String;"
+  "cat"
+  "d1"
+  "d2"
+  "dog"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "speak"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{10}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n\u{2}\u{8}\u{3}\n\u{2}\u{10}\u{e}\u{8}\u{16}\u{18}��2\u{2}0\u{1}B\u{7}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}J\u{8}\u{10}\u{4}\u{1a}\u{2}0\u{5}H\u{16}"
+  "��\u{10}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{3}\n\u{2}\u{10}\u{e}\u{18}��2\u{2}0\u{1}B\u{7}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}J\u{8}\u{10}\u{4}\u{1a}\u{2}0\u{5}H\u{16}"
+
+--- types ---
+  LAnimal;
+  LCat;
+  LDog;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LAnimal;.<init>()V
+  LAnimal;.speak()Ljava/lang/String;
+  LCat;.<init>()V
+  LCat;.speak()Ljava/lang/String;
+  LDog;.<init>()V
+  LDog;.speak()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+
+--- class[0] ---
+  descriptor   LAnimal;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>()V flags=0x10001 regs=1 ins=1 outs=1 insns=4
+  method       speak()Ljava/lang/String; flags=0x0001 regs=2 ins=1 outs=0 insns=3
+
+--- class[1] ---
+  descriptor   LCat;
+  super        LAnimal;
+  source_file  input.kt
+  method       <init>()V flags=0x10001 regs=1 ins=1 outs=1 insns=4
+  method       speak()Ljava/lang/String; flags=0x0001 regs=2 ins=1 outs=0 insns=3
+
+--- class[2] ---
+  descriptor   LDog;
+  super        LAnimal;
+  source_file  input.kt
+  method       <init>()V flags=0x10001 regs=1 ins=1 outs=1 insns=4
+  method       speak()Ljava/lang/String; flags=0x0001 regs=2 ins=1 outs=0 insns=3
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=29
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

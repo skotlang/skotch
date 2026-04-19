@@ -1,47 +1,24 @@
 class_version major=61 minor=0
-this_class    Temperature
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-field         celsius : D 0x0002
-method        <init> (D)V 0x0001
-  code        max_stack=3 max_locals=3
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 op_0x2A
-    0005 op_0x27
-    0006 op_0xB5
-    0007 nop
-    0008 op_0x0D
-    0009 return
-method        getCelsius ()D 0x0011
-  code        max_stack=2 max_locals=1
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 op_0x0D
-    0004 op_0xAF
-method        getFahrenheit ()D 0x0011
-  code        max_stack=4 max_locals=1
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 op_0x0D
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=3
+    0000 new Class(Temperature)
+    0003 dup
     0004 op_0x14
     0005 nop
-    0006 iload 107
-    0008 op_0x14
-    0009 nop
-    0010 op_0x17
-    0011 op_0x6F
-    0012 op_0x14
-    0013 nop
-    0014 aload 99
-    0016 op_0xAF
-method        setCelsius (D)V 0x0011
-  code        max_stack=3 max_locals=3
-    0000 op_0x2A
-    0001 op_0x27
-    0002 op_0xB5
-    0003 nop
-    0004 op_0x0D
-    0005 return
+    0006 op_0x09
+    0007 invokespecial Method(Temperature.<init>:(D)V)
+    0010 astore_0
+    0011 aload_0
+    0012 invokevirtual Method(Temperature.getFahrenheit:()D)
+    0015 op_0x48
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 op_0x27
+    0020 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0023 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

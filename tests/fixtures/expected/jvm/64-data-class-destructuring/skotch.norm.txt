@@ -8,10 +8,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0002 istore 1
     0004 bipush 20
     0006 istore 2
-    0008 op_0xBB
-    0009 nop
-    0010 op_0x0B
-    0011 op_0x59
+    0008 new Class(Point)
+    0011 dup
     0012 iload 1
     0014 iload 2
     0016 invokespecial Method(Point.<init>:(II)V)
@@ -31,10 +29,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0047 iload 5
     0049 istore 9
     0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 op_0xBB
-    0055 nop
-    0056 op_0x22
-    0057 op_0x59
+    0054 new Class(java/lang/StringBuilder)
+    0057 dup
     0058 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0061 aload 6
     0063 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)

@@ -1,28 +1,13 @@
 class_version major=61 minor=0
-this_class    Singleton
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-field         INSTANCE : LSingleton; 0x0019
-method        <clinit> ()V 0x0008
-  code        max_stack=2 max_locals=0
-    0000 op_0xBB
-    0001 nop
-    0002 iconst_m1
-    0003 op_0x59
-    0004 invokespecial Method(Singleton.<init>:()V)
-    0007 op_0xB3
-    0008 nop
-    0009 op_0x1E
-    0010 return
-method        <init> ()V 0x0002
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 return
-method        greet ()V 0x0011
-  code        max_stack=2 max_locals=1
-    0000 ldc "hi from singleton"
-    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0005 op_0x5F
-    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0009 return
+method        main ()V 0x0019
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Singleton.INSTANCE:LSingleton;)
+    0003 invokevirtual Method(Singleton.greet:()V)
+    0006 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

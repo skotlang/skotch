@@ -6,9 +6,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=28
     0000 iload 0
     0002 istore 1
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 iconst_0
     0008 istore 2
     0010 bipush 12
@@ -19,9 +17,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0019 nop
     0020 iconst_4
     0021 iconst_0
-    0022 op_0xA7
-    0023 nop
-    0024 iconst_1
+    0022 goto 26
     0025 iconst_1
     0026 istore 4
     0028 iload 1
@@ -30,9 +26,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0033 nop
     0034 iconst_4
     0035 iconst_0
-    0036 op_0xA7
-    0037 nop
-    0038 iconst_1
+    0036 goto 40
     0039 iconst_1
     0040 istore 5
     0042 iload 4
@@ -40,16 +34,12 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0046 imul
     0047 istore 6
     0049 iload 6
-    0051 op_0x99
-    0052 nop
-    0053 op_0x0E
+    0051 ifeq 65
     0054 ldc "child"
     0056 astore 7
     0058 aload 7
     0060 astore 8
-    0062 op_0xA7
-    0063 nop
-    0064 op_0xBF
+    0062 goto 253
     0065 bipush 13
     0067 istore 9
     0069 bipush 17
@@ -60,9 +50,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0078 nop
     0079 iconst_4
     0080 iconst_0
-    0081 op_0xA7
-    0082 nop
-    0083 iconst_1
+    0081 goto 85
     0084 iconst_1
     0085 istore 11
     0087 iload 1
@@ -71,9 +59,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0092 nop
     0093 iconst_4
     0094 iconst_0
-    0095 op_0xA7
-    0096 nop
-    0097 iconst_1
+    0095 goto 99
     0098 iconst_1
     0099 istore 12
     0101 iload 11
@@ -81,16 +67,12 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0105 imul
     0106 istore 13
     0108 iload 13
-    0110 op_0x99
-    0111 nop
-    0112 op_0x0E
+    0110 ifeq 124
     0113 ldc "teenager"
     0115 astore 14
     0117 aload 14
     0119 astore 8
-    0121 op_0xA7
-    0122 nop
-    0123 op_0x84
+    0121 goto 253
     0124 bipush 18
     0126 istore 15
     0128 bipush 64
@@ -101,9 +83,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0137 nop
     0138 iconst_4
     0139 iconst_0
-    0140 op_0xA7
-    0141 nop
-    0142 iconst_1
+    0140 goto 144
     0143 iconst_1
     0144 istore 17
     0146 iload 1
@@ -112,9 +92,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0151 nop
     0152 iconst_4
     0153 iconst_0
-    0154 op_0xA7
-    0155 nop
-    0156 iconst_1
+    0154 goto 158
     0157 iconst_1
     0158 istore 18
     0160 iload 17
@@ -122,16 +100,12 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0164 imul
     0165 istore 19
     0167 iload 19
-    0169 op_0x99
-    0170 nop
-    0171 op_0x0E
+    0169 ifeq 183
     0172 ldc "adult"
     0174 astore 20
     0176 aload 20
     0178 astore 8
-    0180 op_0xA7
-    0181 nop
-    0182 op_0x49
+    0180 goto 253
     0183 bipush 65
     0185 istore 21
     0187 bipush 120
@@ -142,9 +116,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0196 nop
     0197 iconst_4
     0198 iconst_0
-    0199 op_0xA7
-    0200 nop
-    0201 iconst_1
+    0199 goto 203
     0202 iconst_1
     0203 istore 23
     0205 iload 1
@@ -153,9 +125,7 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0210 nop
     0211 iconst_4
     0212 iconst_0
-    0213 op_0xA7
-    0214 nop
-    0215 iconst_1
+    0213 goto 217
     0216 iconst_1
     0217 istore 24
     0219 iload 23
@@ -163,25 +133,19 @@ method        ageGroup (I)Ljava/lang/String; 0x0009
     0223 imul
     0224 istore 25
     0226 iload 25
-    0228 op_0x99
-    0229 nop
-    0230 op_0x0E
+    0228 ifeq 242
     0231 ldc "senior"
     0233 astore 26
     0235 aload 26
     0237 astore 8
-    0239 op_0xA7
-    0240 nop
-    0241 op_0x0E
+    0239 goto 253
     0242 ldc "invalid"
     0244 astore 27
     0246 aload 27
     0248 astore 8
-    0250 op_0xA7
-    0251 nop
-    0252 iconst_0
+    0250 goto 253
     0253 aload 8
-    0255 op_0xB0
+    0255 areturn
     sub_attr  StackMapTable (472 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=11

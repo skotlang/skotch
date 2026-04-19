@@ -354,8 +354,87 @@ fn walk_block(
             Rvalue::BinOp { op, lhs, rhs } => {
                 emit_binop(*op, *lhs, *rhs, *dest, slot, cmp_scratch, code);
             }
-            Rvalue::NewInstance(_) | Rvalue::GetField { .. } | Rvalue::PutField { .. } => {
-                // TODO: class support in DEX backend
+            Rvalue::NewInstance(class_name) => {
+                // new-instance vAA, type@BBBB (format 21c, opcode 0x22)
+                let dest_reg = slot[&dest.0];
+                let type_idx = pools.intern_type(&format!("L{class_name};"));
+                code.push(opcode_aa(0x22, dest_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Type,
+                    old_idx: type_idx,
+                });
+                code.push(0);
+            }
+            Rvalue::GetField {
+                receiver,
+                class_name,
+                field_name,
+            } => {
+                // iget-object vA, vB, field@CCCC (format 22c, opcode 0x54)
+                let recv_reg = slot[&receiver.0];
+                let dest_reg = slot[&dest.0];
+                let dest_ty = &locals[dest.0 as usize];
+                let (op, field_desc) = match dest_ty {
+                    Ty::Int | Ty::Bool => (0x52_u16, "I"),
+                    Ty::Long => (0x53, "J"),
+                    Ty::Double => (0x53, "D"), // iget-wide
+                    _ => (0x54, "Ljava/lang/Object;"),
+                };
+                let field_idx =
+                    pools.intern_field(&format!("L{class_name};"), field_name, field_desc);
+                let ba = ((recv_reg & 0x0F) << 4) | (dest_reg & 0x0F);
+                code.push((ba << 8) | op);
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
+            }
+            Rvalue::PutField {
+                receiver,
+                class_name,
+                field_name,
+                value: val,
+            } => {
+                // iput vA, vB, field@CCCC (format 22c, opcode 0x59)
+                let recv_reg = slot[&receiver.0];
+                let val_reg = slot[&val.0];
+                let val_ty = &locals[val.0 as usize];
+                let (op, field_desc) = match val_ty {
+                    Ty::Int | Ty::Bool => (0x59_u16, "I"),
+                    Ty::Long => (0x5A, "J"),
+                    Ty::Double => (0x5A, "D"),
+                    _ => (0x5B, "Ljava/lang/Object;"),
+                };
+                let field_idx =
+                    pools.intern_field(&format!("L{class_name};"), field_name, field_desc);
+                let ba = ((recv_reg & 0x0F) << 4) | (val_reg & 0x0F);
+                code.push((ba << 8) | op);
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
+            }
+            Rvalue::GetStaticField {
+                class_name,
+                field_name,
+                descriptor,
+            } => {
+                // sget-object vAA, field@BBBB (format 21c, opcode 0x62)
+                let dest_reg = slot[&dest.0];
+                let field_idx =
+                    pools.intern_field(&format!("L{class_name};"), field_name, descriptor);
+                code.push(opcode_aa(0x62, dest_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
             }
             Rvalue::NewIntArray(_)
             | Rvalue::ArrayLoad { .. }
@@ -761,11 +840,24 @@ fn emit_call(
 ) -> u16 {
     match kind {
         CallKind::Println | CallKind::Print => {
-            // Use scratch register 0 for System.out. The slot map
-            // already reserves the lowest `scratch_needed` registers
-            // for this.
             let sysout_reg: u16 = 0;
             debug_assert!(scratch_base >= 1, "println requires scratch reservation");
+
+            // Zero-arg println(): sget-object System.out, invoke-virtual println()V
+            if args.is_empty() {
+                let field_idx =
+                    pools.intern_field("Ljava/lang/System;", "out", "Ljava/io/PrintStream;");
+                code.push(opcode_aa(0x62, sysout_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
+                let method_idx = pools.intern_method("Ljava/io/PrintStream;", "println", "V", &[]);
+                emit_invoke(code, patches, 0x6E, 0x74, method_idx, &[sysout_reg]);
+                return 2;
+            }
 
             let arg = args[0];
             let arg_reg = slot[&arg.0];
@@ -961,14 +1053,169 @@ fn emit_call(
 
             2 // outs_size — every invoke-virtual passes ≤ 2 registers
         }
-        CallKind::StaticJava { .. }
-        | CallKind::Constructor(_)
-        | CallKind::ConstructorJava { .. }
-        | CallKind::Virtual { .. }
-        | CallKind::Super { .. }
-        | CallKind::VirtualJava { .. } => {
-            // TODO: class support in DEX backend
-            0
+        CallKind::StaticJava {
+            class_name,
+            method_name,
+            descriptor,
+        } => {
+            // invoke-static {regs...}, method@BBBB (opcode 0x71)
+            let (param_descs, ret_desc) = parse_jvm_descriptor(descriptor);
+            let method_idx = pools.intern_method(
+                &format!("L{class_name};"),
+                method_name,
+                &ret_desc,
+                &param_descs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            );
+            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            emit_invoke(code, patches, 0x71, 0x77, method_idx, &regs);
+            // Move result to dest if non-void.
+            let dest_ty = &locals[dest.0 as usize];
+            if !matches!(dest_ty, Ty::Unit) {
+                let dest_reg = slot[&dest.0];
+                match dest_ty {
+                    Ty::Long | Ty::Double => {
+                        code.push(opcode_aa(0x0B, dest_reg as u8)); // move-result-wide
+                    }
+                    Ty::Int | Ty::Bool => {
+                        code.push(opcode_aa(0x0A, dest_reg as u8)); // move-result
+                    }
+                    _ => {
+                        code.push(opcode_aa(0x0C, dest_reg as u8)); // move-result-object
+                    }
+                }
+            }
+            regs.len() as u16
+        }
+        CallKind::VirtualJava {
+            class_name,
+            method_name,
+            descriptor,
+        } => {
+            // invoke-virtual {regs...}, method@BBBB (opcode 0x6E)
+            // First arg is the receiver.
+            let (param_descs, ret_desc) = parse_jvm_descriptor(descriptor);
+            let method_idx = pools.intern_method(
+                &format!("L{class_name};"),
+                method_name,
+                &ret_desc,
+                &param_descs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            );
+            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            emit_invoke(code, patches, 0x6E, 0x74, method_idx, &regs);
+            let dest_ty = &locals[dest.0 as usize];
+            if !matches!(dest_ty, Ty::Unit) {
+                let dest_reg = slot[&dest.0];
+                match dest_ty {
+                    Ty::Long | Ty::Double => {
+                        code.push(opcode_aa(0x0B, dest_reg as u8));
+                    }
+                    Ty::Int | Ty::Bool => {
+                        code.push(opcode_aa(0x0A, dest_reg as u8));
+                    }
+                    _ => {
+                        code.push(opcode_aa(0x0C, dest_reg as u8));
+                    }
+                }
+            }
+            regs.len() as u16
+        }
+        CallKind::Constructor(class_name) => {
+            // invoke-direct {this, args...}, method@BBBB (opcode 0x70)
+            // The receiver is the dest local (uninitialized instance from NewInstance).
+            let this_reg = slot[&dest.0];
+            let mut regs = vec![this_reg];
+            for a in args {
+                regs.push(slot[&a.0]);
+            }
+            // Build constructor descriptor from arg types.
+            let param_descs: Vec<&str> = args
+                .iter()
+                .map(|a| type_descriptor(&locals[a.0 as usize]))
+                .collect();
+            let method_idx =
+                pools.intern_method(&format!("L{class_name};"), "<init>", "V", &param_descs);
+            emit_invoke(code, patches, 0x70, 0x76, method_idx, &regs);
+            regs.len() as u16
+        }
+        CallKind::ConstructorJava {
+            class_name,
+            descriptor,
+        } => {
+            let (param_descs, _) = parse_jvm_descriptor(descriptor);
+            let this_reg = slot[&dest.0];
+            let mut regs = vec![this_reg];
+            for a in args {
+                regs.push(slot[&a.0]);
+            }
+            let method_idx = pools.intern_method(
+                &format!("L{class_name};"),
+                "<init>",
+                "V",
+                &param_descs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            );
+            emit_invoke(code, patches, 0x70, 0x76, method_idx, &regs);
+            regs.len() as u16
+        }
+        CallKind::Virtual {
+            class_name,
+            method_name,
+        } => {
+            // invoke-virtual {this, args...}, method@BBBB (opcode 0x6E)
+            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let mut param_descs: Vec<&str> = Vec::new();
+            // Skip first arg (receiver) for the descriptor.
+            for a in args.iter().skip(1) {
+                param_descs.push(type_descriptor(&locals[a.0 as usize]));
+            }
+            let ret_desc = type_descriptor(&locals[dest.0 as usize]);
+            let method_idx = pools.intern_method(
+                &format!("L{class_name};"),
+                method_name,
+                ret_desc,
+                &param_descs,
+            );
+            emit_invoke(code, patches, 0x6E, 0x74, method_idx, &regs);
+            let dest_ty = &locals[dest.0 as usize];
+            if !matches!(dest_ty, Ty::Unit) {
+                let dest_reg = slot[&dest.0];
+                match dest_ty {
+                    Ty::Long | Ty::Double => {
+                        code.push(opcode_aa(0x0B, dest_reg as u8));
+                    }
+                    Ty::Int | Ty::Bool => {
+                        code.push(opcode_aa(0x0A, dest_reg as u8));
+                    }
+                    _ => {
+                        code.push(opcode_aa(0x0C, dest_reg as u8));
+                    }
+                }
+            }
+            regs.len() as u16
+        }
+        CallKind::Super {
+            class_name,
+            method_name,
+        } => {
+            // invoke-super {this, args...}, method@BBBB (opcode 0x6F)
+            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let mut param_descs: Vec<&str> = Vec::new();
+            for a in args.iter().skip(1) {
+                param_descs.push(type_descriptor(&locals[a.0 as usize]));
+            }
+            let ret_desc = type_descriptor(&locals[dest.0 as usize]);
+            let method_idx = pools.intern_method(
+                &format!("L{class_name};"),
+                method_name,
+                ret_desc,
+                &param_descs,
+            );
+            emit_invoke(code, patches, 0x6F, 0x75, method_idx, &regs);
+            let dest_ty = &locals[dest.0 as usize];
+            if !matches!(dest_ty, Ty::Unit) {
+                let dest_reg = slot[&dest.0];
+                code.push(opcode_aa(0x0C, dest_reg as u8)); // move-result-object
+            }
+            regs.len() as u16
         }
     }
 }
@@ -987,6 +1234,63 @@ fn type_descriptor(ty: &Ty) -> &'static str {
         Ty::Nothing => "V", // Nothing → void (unreachable on DEX)
         Ty::Error => "V",
     }
+}
+
+/// Parse a JVM method descriptor like `(ILjava/lang/String;)V` into
+/// (param_descriptors, return_descriptor).
+fn parse_jvm_descriptor(desc: &str) -> (Vec<String>, String) {
+    let mut params = Vec::new();
+    let mut chars = desc.chars().peekable();
+    // Skip '('
+    if chars.peek() == Some(&'(') {
+        chars.next();
+    }
+    while chars.peek() != Some(&')') && chars.peek().is_some() {
+        let c = *chars.peek().unwrap();
+        match c {
+            'I' | 'J' | 'D' | 'Z' | 'B' | 'S' | 'C' | 'F' | 'V' => {
+                params.push(c.to_string());
+                chars.next();
+            }
+            'L' => {
+                let mut s = String::new();
+                for ch in chars.by_ref() {
+                    s.push(ch);
+                    if ch == ';' {
+                        break;
+                    }
+                }
+                params.push(s);
+            }
+            '[' => {
+                let mut s = String::from("[");
+                chars.next();
+                if let Some(&next) = chars.peek() {
+                    if next == 'L' {
+                        for ch in chars.by_ref() {
+                            s.push(ch);
+                            if ch == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        s.push(next);
+                        chars.next();
+                    }
+                }
+                params.push(s);
+            }
+            _ => {
+                chars.next();
+            }
+        }
+    }
+    // Skip ')'
+    if chars.peek() == Some(&')') {
+        chars.next();
+    }
+    let ret: String = chars.collect();
+    (params, ret)
 }
 
 // ─── opcode helpers ──────────────────────────────────────────────────────

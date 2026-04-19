@@ -1,0 +1,811 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        {
+          "Class": "InputKt$Lambda$1"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        },
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        "Int",
+        "Any",
+        "Any"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "NewInstance": "InputKt$Lambda$1"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "InputKt$Lambda$1"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "CheckCast": {
+                    "obj": 0,
+                    "target_class": "kotlin/jvm/functions/Function2"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlinx/coroutines/BuildersKt",
+                        "method_name": "runBlocking$default",
+                        "descriptor": "(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Fetcher",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "fetch",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Fetcher"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            "Long",
+            "Any",
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Const": {
+                        "Long": 10
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Static": 1
+                        },
+                        "args": [
+                          2,
+                          1
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "String": 0
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 4
+              }
+            }
+          ],
+          "return_ty": "Any",
+          "is_suspend": true,
+          "suspend_original_return_ty": "String",
+          "suspend_state_machine": {
+            "continuation_class": "Fetcher$fetch$1",
+            "outer_class": "Fetcher",
+            "outer_method": "fetch",
+            "outer_user_param_tys": [
+              {
+                "Class": "Fetcher"
+              }
+            ],
+            "suspend_call_class": "Fetcher",
+            "suspend_call_method": "delay",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 1,
+                "callee_class": "kotlinx/coroutines/DelayKt",
+                "callee_method": "delay",
+                "args": [
+                  2
+                ],
+                "arg_tys": [
+                  "Long"
+                ],
+                "return_ty": "Unit",
+                "result_local": 3,
+                "live_spills": [
+                  {
+                    "local": 0,
+                    "slot": 0
+                  }
+                ]
+              }
+            ],
+            "spill_layout": [
+              {
+                "name": "L$0",
+                "kind": "Ref"
+              }
+            ],
+            "is_instance_method": true
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0
+        ],
+        "locals": [
+          {
+            "Class": "Fetcher"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "InputKt$Lambda$1",
+      "super_class": "kotlin/coroutines/jvm/internal/SuspendLambda",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function2"
+      ],
+      "fields": [
+        {
+          "name": "p$0",
+          "ty": "Any"
+        }
+      ],
+      "methods": [
+        {
+          "id": 1009,
+          "name": "invoke",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$1"
+            },
+            {
+              "Class": "Fetcher"
+            },
+            {
+              "Class": "Fetcher"
+            },
+            {
+              "Class": "Fetcher"
+            },
+            {
+              "Class": "kotlin/coroutines/Continuation"
+            },
+            "Any",
+            "Any",
+            "Any",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "NewInstance": "Fetcher"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "Constructor": "Fetcher"
+                        },
+                        "args": []
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "Fetcher",
+                            "method_name": "fetch",
+                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                          }
+                        },
+                        "args": [
+                          3,
+                          4
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Local": 5
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "Local": 6
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "Call": {
+                        "kind": "Println",
+                        "args": [
+                          7
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit",
+          "is_suspend": true,
+          "suspend_state_machine": {
+            "continuation_class": "InputKt$Lambda$1",
+            "outer_class": "InputKt",
+            "outer_method": "InputKt$Lambda$1",
+            "suspend_call_class": "InputKt",
+            "suspend_call_method": "",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 5,
+                "callee_class": "Fetcher",
+                "callee_method": "fetch",
+                "args": [
+                  3
+                ],
+                "arg_tys": [
+                  {
+                    "Class": "Fetcher"
+                  }
+                ],
+                "return_ty": "Any",
+                "is_virtual": true,
+                "result_local": 5
+              }
+            ],
+            "is_instance_method": false
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$1"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      },
+      "is_suspend_lambda": true
+    },
+    {
+      "name": "Fetcher$fetch$1",
+      "super_class": "kotlin/coroutines/jvm/internal/ContinuationImpl",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "L$0",
+          "ty": "Any"
+        },
+        {
+          "name": "result",
+          "ty": "Any"
+        },
+        {
+          "name": "label",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 0,
+          "name": "invokeSuspend",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Fetcher$fetch$1"
+            },
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Any",
+          "param_names": [
+            "$result"
+          ],
+          "suspend_state_machine": {
+            "continuation_class": "Fetcher$fetch$1",
+            "outer_class": "Fetcher",
+            "outer_method": "fetch",
+            "outer_user_param_tys": [
+              {
+                "Class": "Fetcher"
+              }
+            ],
+            "suspend_call_class": "Fetcher",
+            "suspend_call_method": "delay",
+            "resume_return_text": "",
+            "sites": [
+              {
+                "block_idx": 0,
+                "stmt_idx": 1,
+                "callee_class": "kotlinx/coroutines/DelayKt",
+                "callee_method": "delay",
+                "args": [
+                  2
+                ],
+                "arg_tys": [
+                  "Long"
+                ],
+                "return_ty": "Unit",
+                "result_local": 3,
+                "live_spills": [
+                  {
+                    "local": 0,
+                    "slot": 0
+                  }
+                ]
+              }
+            ],
+            "spill_layout": [
+              {
+                "name": "L$0",
+                "kind": "Ref"
+              }
+            ],
+            "is_instance_method": true
+          }
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Fetcher$fetch$1"
+          },
+          {
+            "Class": "kotlin/coroutines/Continuation"
+          },
+          "Unit"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 2,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "kotlin/coroutines/jvm/internal/ContinuationImpl"
+                      },
+                      "args": [
+                        0,
+                        1
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "data"
+  ]
+}

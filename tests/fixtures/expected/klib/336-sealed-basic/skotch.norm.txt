@@ -1,0 +1,723 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "describe",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "Result"
+        },
+        "Bool",
+        "String",
+        {
+          "Class": "Result"
+        },
+        "Bool",
+        "String",
+        {
+          "Class": "Result"
+        },
+        "Bool",
+        "String",
+        "String"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Bool": true
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "InstanceOf": {
+                    "obj": 3,
+                    "type_descriptor": "Ok"
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 4,
+              "then_block": 2,
+              "else_block": 3
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 5
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "InstanceOf": {
+                    "obj": 6,
+                    "type_descriptor": "Err"
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 7,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 8
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 9
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 6
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 2
+          }
+        }
+      ],
+      "return_ty": "String",
+      "required_params": 1,
+      "param_names": [
+        "r"
+      ],
+      "param_defaults": [
+        null
+      ]
+    },
+    {
+      "id": 1,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        {
+          "Class": "Ok"
+        },
+        "String",
+        "Unit",
+        "String",
+        {
+          "Class": "Err"
+        },
+        "String",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 42
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "NewInstance": "Ok"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Ok"
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "NewInstance": "Err"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Err"
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 4,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 8,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Result",
+      "super_class": null,
+      "is_open": true,
+      "is_abstract": true,
+      "is_interface": false,
+      "fields": [],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0
+        ],
+        "locals": [
+          {
+            "Class": "Result"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "Ok",
+      "super_class": "Result",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "value",
+          "ty": "Int"
+        }
+      ],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Ok"
+          },
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "Result"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Ok",
+                      "field_name": "value",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "Err",
+      "super_class": "Result",
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "message",
+          "ty": "String"
+        }
+      ],
+      "methods": [],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1
+        ],
+        "locals": [
+          {
+            "Class": "Err"
+          },
+          "String"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "Result"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Err",
+                      "field_name": "message",
+                      "value": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "ok",
+    "err",
+    "unknown",
+    "fail"
+  ]
+}

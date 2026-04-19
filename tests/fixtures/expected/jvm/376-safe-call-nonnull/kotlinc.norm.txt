@@ -5,25 +5,25 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
     0000 ldc "hello"
-    0002 op_0x4B
-    0003 op_0x2A
+    0002 astore_0
+    0003 aload_0
     0004 invokevirtual Method(java/lang/String.length:()I)
     0007 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0013 op_0x5F
     0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0017 op_0x2A
+    0017 aload_0
     0018 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
     0021 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
-    0024 op_0x59
+    0024 dup
     0025 ldc "toUpperCase(...)"
     0027 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0030 op_0x4C
+    0030 astore_1
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 op_0x2B
+    0034 aload_1
     0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0038 aconst_null
-    0039 op_0x4C
+    0039 astore_1
     0040 aconst_null
     0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0044 op_0x5F

@@ -6,9 +6,7 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=16
     0000 aload 0
     0002 astore 1
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 ldc "en"
     0009 astore 2
     0011 aload 1
@@ -16,16 +14,12 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0018 istore 3
     0020 iload 3
-    0022 op_0x99
-    0023 nop
-    0024 op_0x0E
+    0022 ifeq 36
     0025 ldc "Hello"
     0027 astore 4
     0029 aload 4
     0031 astore 5
-    0033 op_0xA7
-    0034 nop
-    0035 op_0x65
+    0033 goto 134
     0036 ldc "es"
     0038 astore 6
     0040 aload 1
@@ -33,16 +27,12 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0044 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0047 istore 7
     0049 iload 7
-    0051 op_0x99
-    0052 nop
-    0053 op_0x0E
+    0051 ifeq 65
     0054 ldc "Hola"
     0056 astore 8
     0058 aload 8
     0060 astore 5
-    0062 op_0xA7
-    0063 nop
-    0064 op_0x48
+    0062 goto 134
     0065 ldc "fr"
     0067 astore 9
     0069 aload 1
@@ -50,16 +40,12 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0073 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0076 istore 10
     0078 iload 10
-    0080 op_0x99
-    0081 nop
-    0082 op_0x0E
+    0080 ifeq 94
     0083 ldc "Bonjour"
     0085 astore 11
     0087 aload 11
     0089 astore 5
-    0091 op_0xA7
-    0092 nop
-    0093 op_0x2B
+    0091 goto 134
     0094 ldc "de"
     0096 astore 12
     0098 aload 1
@@ -67,25 +53,19 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0102 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0105 istore 13
     0107 iload 13
-    0109 op_0x99
-    0110 nop
-    0111 op_0x0E
+    0109 ifeq 123
     0112 ldc "Hallo"
     0114 astore 14
     0116 aload 14
     0118 astore 5
-    0120 op_0xA7
-    0121 nop
-    0122 op_0x0E
+    0120 goto 134
     0123 ldc "Hi"
     0125 astore 15
     0127 aload 15
     0129 astore 5
-    0131 op_0xA7
-    0132 nop
-    0133 iconst_0
+    0131 goto 134
     0134 aload 5
-    0136 op_0xB0
+    0136 areturn
     sub_attr  StackMapTable (137 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=11

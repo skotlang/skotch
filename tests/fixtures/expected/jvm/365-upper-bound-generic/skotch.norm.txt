@@ -34,15 +34,11 @@ method        maxOf (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; 0x0
     0004 aload 1
     0006 astore 3
     0008 aload 2
-    0010 op_0xC0
-    0011 nop
-    0012 op_0x0B
+    0010 checkcast Class(java/lang/Integer)
     0013 invokevirtual Method(java/lang/Integer.intValue:()I)
     0016 istore 4
     0018 aload 3
-    0020 op_0xC0
-    0021 nop
-    0022 op_0x0B
+    0020 checkcast Class(java/lang/Integer)
     0023 invokevirtual Method(java/lang/Integer.intValue:()I)
     0026 istore 5
     0028 iload 4
@@ -51,29 +47,21 @@ method        maxOf (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; 0x0
     0033 nop
     0034 iconst_4
     0035 iconst_0
-    0036 op_0xA7
-    0037 nop
-    0038 iconst_1
+    0036 goto 40
     0039 iconst_1
     0040 istore 6
     0042 iload 6
-    0044 op_0x99
-    0045 nop
-    0046 op_0x0E
+    0044 ifeq 58
     0047 aload 0
     0049 astore 7
     0051 aload 7
     0053 astore 8
-    0055 op_0xA7
-    0056 nop
-    0057 op_0x0E
+    0055 goto 69
     0058 aload 1
     0060 astore 9
     0062 aload 9
     0064 astore 8
-    0066 op_0xA7
-    0067 nop
-    0068 iconst_0
+    0066 goto 69
     0069 aload 8
-    0071 op_0xB0
+    0071 areturn
     sub_attr  StackMapTable (93 bytes)

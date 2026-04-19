@@ -1,0 +1,4 @@
+name     = "391-suspend-state-machine"
+status   = "supported"
+features = ["suspend", "cps-state-machine"]
+notes    = "Session 3 of the coroutine transform: a suspend function with exactly one suspension point is lowered to a state machine. The dispatcher reuses or creates a `ContinuationImpl` subclass, initializes `$result` and `COROUTINE_SUSPENDED`, then `tableswitch`es on `label`. Case 0 runs up to the suspend call, stores the result, and checks the SUSPENDED sentinel; case 1 is the resume path. Multi-suspension-point bodies and local-variable spilling are still future work (Session 4)."

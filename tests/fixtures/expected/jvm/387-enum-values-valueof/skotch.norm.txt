@@ -4,17 +4,15 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        BLUE ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x38
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "BLUE"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
   code        max_stack=4 max_locals=11
     0000 ldc "RED"
@@ -24,16 +22,12 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0011 istore 2
     0013 iload 2
-    0015 op_0x99
-    0016 nop
-    0017 op_0x28
-    0018 op_0xA7
-    0019 nop
-    0020 op_0x3F
+    0015 ifeq 55
+    0018 goto 81
     0021 invokestatic Method(InputKt.RED:()LColor;)
     0024 astore 3
     0026 aload 3
-    0028 op_0xB0
+    0028 areturn
     0029 ldc "BLUE"
     0031 astore 4
     0033 aload 0
@@ -41,13 +35,11 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0040 istore 5
     0042 iload 5
-    0044 op_0x99
-    0045 op_0xFF
-    0046 op_0xE9
+    0044 ifeq 21
     0047 invokestatic Method(InputKt.BLUE:()LColor;)
     0050 astore 6
     0052 aload 6
-    0054 op_0xB0
+    0054 areturn
     0055 ldc "GREEN"
     0057 astore 7
     0059 aload 0
@@ -55,24 +47,20 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0009
     0063 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0066 istore 8
     0068 iload 8
-    0070 op_0x99
-    0071 op_0xFF
-    0072 op_0xD7
+    0070 ifeq 29
     0073 invokestatic Method(InputKt.GREEN:()LColor;)
     0076 astore 9
     0078 aload 9
-    0080 op_0xB0
+    0080 areturn
     0081 invokestatic Method(InputKt.RED:()LColor;)
     0084 astore 10
     0086 aload 10
-    0088 op_0xB0
+    0088 areturn
     sub_attr  StackMapTable (76 bytes)
 method        Color$values ()Ljava/util/ArrayList; 0x0009
   code        max_stack=2 max_locals=7
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x0F
-    0003 op_0x59
+    0000 new Class(java/util/ArrayList)
+    0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore 0
     0009 invokestatic Method(InputKt.RED:()LColor;)
@@ -94,82 +82,57 @@ method        Color$values ()Ljava/util/ArrayList; 0x0009
     0046 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0049 istore 6
     0051 aload 0
-    0053 op_0xB0
+    0053 areturn
 method        GREEN ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x38
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "GREEN"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        RED ()LColor; 0x0009
   code        max_stack=3 max_locals=2
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x38
-    0003 op_0x59
+    0000 new Class(Color)
+    0003 dup
     0004 ldc "RED"
     0006 astore 1
     0008 aload 1
     0010 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
     0013 astore 0
     0015 aload 0
-    0017 op_0xB0
+    0017 areturn
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=10
     0000 invokestatic Method(InputKt.Color$values:()Ljava/util/ArrayList;)
     0003 astore 1
     0005 aload 1
-    0007 op_0xC0
-    0008 nop
-    0009 op_0x0F
+    0007 checkcast Class(java/util/ArrayList)
     0010 astore 2
     0012 aload 2
-    0014 op_0xC0
-    0015 nop
-    0016 op_0x0F
+    0014 checkcast Class(java/util/ArrayList)
     0017 astore 3
     0019 aload 3
-    0021 op_0xB9
-    0022 nop
-    0023 iload 1
-    0025 nop
+    0021 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
     0026 astore 4
-    0028 op_0xA7
-    0029 nop
-    0030 iconst_0
+    0028 goto 31
     0031 aload 4
-    0033 op_0xB9
-    0034 nop
-    0035 op_0x1B
-    0036 aconst_null
-    0037 nop
+    0033 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0038 istore 5
     0040 iload 5
-    0042 op_0x99
-    0043 nop
-    0044 op_0x1B
+    0042 ifeq 69
     0045 aload 4
-    0047 op_0xB9
-    0048 nop
-    0049 op_0x1F
-    0050 aconst_null
-    0051 nop
+    0047 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0052 astore 6
     0054 aload 6
     0056 astore 7
     0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0061 aload 7
     0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0066 op_0xA7
-    0067 op_0xFF
-    0068 op_0xDD
+    0066 goto 31
     0069 ldc "GREEN"
     0071 astore 8
     0073 aload 8

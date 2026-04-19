@@ -471,16 +471,28 @@ fn render_bytecode(out: &mut String, code: &[u8], cp: &[CpEntry]) {
     let mut i = 0;
     while i < code.len() {
         let op = code[i];
-        let (mnem, span) = decode_instruction(op, &code[i..], cp);
+        let (mnem, span) = decode_instruction(op, &code[i..], cp, i);
         let _ = writeln!(out, "    {:04} {}", i, mnem);
         i += span;
     }
 }
 
 /// Decode one instruction. Returns `(mnemonic_with_args, length_in_bytes)`.
-/// PR #1 covers exactly the opcodes the JVM backend can emit; everything
-/// else falls through to a hex byte dump.
-fn decode_instruction(op: u8, slice: &[u8], cp: &[CpEntry]) -> (String, usize) {
+///
+/// The table is organized by numeric opcode so each instruction's span
+/// is computed correctly even when the decoder doesn't recognize it —
+/// mis-sized opcodes would otherwise push the cursor into the middle of
+/// the next instruction. For unknown opcodes we fall back to a single-
+/// byte hex dump (`op_0xXX`). The `code_position` argument is the byte
+/// offset of the opcode within the method's Code; it's currently unused
+/// but provided as a hook for future `tableswitch`/`lookupswitch`
+/// branch-target pretty-printing.
+fn decode_instruction(
+    op: u8,
+    slice: &[u8],
+    cp: &[CpEntry],
+    code_position: usize,
+) -> (String, usize) {
     match op {
         0x00 => ("nop".into(), 1),
         0x01 => ("aconst_null".into(), 1),
@@ -506,17 +518,106 @@ fn decode_instruction(op: u8, slice: &[u8], cp: &[CpEntry]) -> (String, usize) {
         }
         0x15 if slice.len() >= 2 => (format!("iload {}", slice[1]), 2),
         0x19 if slice.len() >= 2 => (format!("aload {}", slice[1]), 2),
+        0x1A => ("iload_0".into(), 1),
+        0x1B => ("iload_1".into(), 1),
+        0x1C => ("iload_2".into(), 1),
+        0x1D => ("iload_3".into(), 1),
+        0x2A => ("aload_0".into(), 1),
+        0x2B => ("aload_1".into(), 1),
+        0x2C => ("aload_2".into(), 1),
+        0x2D => ("aload_3".into(), 1),
         0x36 if slice.len() >= 2 => (format!("istore {}", slice[1]), 2),
         0x3A if slice.len() >= 2 => (format!("astore {}", slice[1]), 2),
+        0x3B => ("istore_0".into(), 1),
+        0x3C => ("istore_1".into(), 1),
+        0x3D => ("istore_2".into(), 1),
+        0x3E => ("istore_3".into(), 1),
+        0x4B => ("astore_0".into(), 1),
+        0x4C => ("astore_1".into(), 1),
+        0x4D => ("astore_2".into(), 1),
+        0x4E => ("astore_3".into(), 1),
+        0x57 => ("pop".into(), 1),
+        0x59 => ("dup".into(), 1),
         0x60 => ("iadd".into(), 1),
         0x64 => ("isub".into(), 1),
         0x68 => ("imul".into(), 1),
         0x6C => ("idiv".into(), 1),
         0x70 => ("irem".into(), 1),
+        0x7E => ("iand".into(), 1),
+        0x80 => ("ior".into(), 1),
+        0x99 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifeq {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9A if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifne {}", (code_position as i32) + off as i32), 3)
+        }
+        0xA5 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_acmpeq {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA6 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_acmpne {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA7 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("goto {}", (code_position as i32) + off as i32), 3)
+        }
+        0xAA => {
+            // tableswitch: 1-byte opcode + 0..3 bytes padding to the
+            // next 4-byte boundary + default:i32 + low:i32 + high:i32
+            // + (high - low + 1) * i32 jump offsets.
+            let pad = 3 - (code_position % 4);
+            if slice.len() < 1 + pad + 12 {
+                return (format!("op_0x{op:02X}"), 1);
+            }
+            let mut p = 1 + pad;
+            let default = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+            p += 4;
+            let low = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+            p += 4;
+            let high = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+            p += 4;
+            let count = (high - low + 1).max(0) as usize;
+            if slice.len() < p + count * 4 {
+                return (format!("op_0x{op:02X}"), 1);
+            }
+            let mut buf = format!(
+                "tableswitch default={} low={low} high={high}",
+                (code_position as i32) + default
+            );
+            for i in 0..count {
+                let off = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+                p += 4;
+                buf.push_str(&format!(
+                    " {}={}",
+                    low + i as i32,
+                    (code_position as i32) + off
+                ));
+            }
+            (buf, p)
+        }
+        0xB0 => ("areturn".into(), 1),
         0xB1 => ("return".into(), 1),
         0xB2 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("getstatic {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xB4 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("getfield {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xB5 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("putfield {}", cp_symbolic(cp, idx)), 3)
         }
         0xB6 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
@@ -529,6 +630,24 @@ fn decode_instruction(op: u8, slice: &[u8], cp: &[CpEntry]) -> (String, usize) {
         0xB8 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("invokestatic {}", cp_symbolic(cp, idx)), 3)
+        }
+        // invokeinterface: 0xB9 <index_hi> <index_lo> <count> <0>
+        0xB9 if slice.len() >= 5 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("invokeinterface {}", cp_symbolic(cp, idx)), 5)
+        }
+        0xBB if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("new {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xBF => ("athrow".into(), 1),
+        0xC0 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("checkcast {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xC1 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("instanceof {}", cp_symbolic(cp, idx)), 3)
         }
         _ => (format!("op_0x{op:02X}"), 1),
     }

@@ -134,13 +134,18 @@ fn skotch_classes_run_under_java_and_stdout_matches() {
             continue;
         }
 
-        // Build classpath: temp dir + kotlin-stdlib.jar if available.
+        // Build classpath: temp dir + kotlin-stdlib.jar + kotlinx-coroutines-core-jvm.jar.
         let sep = if cfg!(windows) { ";" } else { ":" };
-        let cp_str = if let Some(ref stdlib) = kotlin_stdlib {
-            format!("{}{sep}{}", tmp.display(), stdlib.display())
-        } else {
-            tmp.display().to_string()
-        };
+        let mut cp_str = tmp.display().to_string();
+        if let Some(ref stdlib) = kotlin_stdlib {
+            cp_str = format!("{cp_str}{sep}{}", stdlib.display());
+            // Session 10: include kotlinx-coroutines-core-jvm.jar for
+            // coroutine fixtures (runBlocking, delay).
+            let coroutines = stdlib.with_file_name("kotlinx-coroutines-core-jvm.jar");
+            if coroutines.exists() {
+                cp_str = format!("{cp_str}{sep}{}", coroutines.display());
+            }
+        }
 
         // Run under java.
         let out = Command::new(&java)

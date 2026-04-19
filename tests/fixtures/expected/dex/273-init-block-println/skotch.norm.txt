@@ -1,33 +1,41 @@
 dex_version   035
-strings       9
-types         4
-methods       2
+strings       13
+types         6
+methods       4
 classes       1
 
 --- strings ---
+  "<init>"
   "APP"
   "LInputKt;"
+  "LLogger;"
   "Ljava/lang/Object;"
+  "Ljava/lang/String;"
   "V"
   "VL"
   "[Ljava/lang/String;"
   "input.kt"
+  "log"
   "main"
   "started"
 
 --- types ---
   LInputKt;
+  LLogger;
   Ljava/lang/Object;
+  Ljava/lang/String;
   V
   [Ljava/lang/String;
 
 --- methods ---
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
+  LLogger;.<init>(Ljava/lang/String;)V
+  LLogger;.log(Ljava/lang/String;)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=5 ins=0 outs=0 insns=7
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=15
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

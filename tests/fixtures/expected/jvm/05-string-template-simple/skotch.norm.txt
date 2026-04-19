@@ -15,10 +15,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0016 ldc "!"
     0018 astore 5
     0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0023 op_0xBB
-    0024 nop
-    0025 op_0x17
-    0026 op_0x59
+    0023 new Class(java/lang/StringBuilder)
+    0026 dup
     0027 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0030 aload 3
     0032 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)

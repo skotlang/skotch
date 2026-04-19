@@ -6,9 +6,7 @@ method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=10
     0000 aload 0
     0002 astore 1
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 ldc "Saturday"
     0009 astore 2
     0011 aload 1
@@ -16,16 +14,12 @@ method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0018 istore 3
     0020 iload 3
-    0022 op_0x99
-    0023 nop
-    0024 op_0x0E
+    0022 ifeq 36
     0025 ldc "weekend"
     0027 astore 4
     0029 aload 4
     0031 astore 5
-    0033 op_0xA7
-    0034 nop
-    0035 op_0x2B
+    0033 goto 76
     0036 ldc "Sunday"
     0038 astore 6
     0040 aload 1
@@ -33,25 +27,19 @@ method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0044 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0047 istore 7
     0049 iload 7
-    0051 op_0x99
-    0052 nop
-    0053 op_0x0E
+    0051 ifeq 65
     0054 ldc "weekend"
     0056 astore 8
     0058 aload 8
     0060 astore 5
-    0062 op_0xA7
-    0063 nop
-    0064 op_0x0E
+    0062 goto 76
     0065 ldc "weekday"
     0067 astore 9
     0069 aload 9
     0071 astore 5
-    0073 op_0xA7
-    0074 nop
-    0075 iconst_0
+    0073 goto 76
     0076 aload 5
-    0078 op_0xB0
+    0078 areturn
     sub_attr  StackMapTable (76 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7

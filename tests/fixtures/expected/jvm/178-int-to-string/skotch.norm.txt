@@ -22,9 +22,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0032 iload 2
     0034 istore 7
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 op_0xBB
-    0040 nop
-    0041 aload 89
+    0039 new Class(java/lang/StringBuilder)
+    0042 dup
     0043 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0046 aload 6
     0048 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
@@ -41,9 +40,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0073 iadd
     0074 istore 10
     0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0079 op_0xBB
-    0080 nop
-    0081 aload 89
+    0079 new Class(java/lang/StringBuilder)
+    0082 dup
     0083 invokespecial Method(java/lang/StringBuilder.<init>:()V)
     0086 iload 10
     0088 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)

@@ -1,0 +1,125 @@
+dex_version   035
+strings       58
+types         13
+methods       20
+classes       2
+
+--- strings ---
+  ""
+  "()I"
+  "(II)V"
+  ")"
+  ", y="
+  "<init>"
+  "I"
+  "L"
+  "LI"
+  "LII"
+  "LInputKt;"
+  "LL"
+  "LLIIIL"
+  "LVec2;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VII"
+  "VL"
+  "VLL"
+  "Vec2(x="
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "a"
+  "append"
+  "b"
+  "checkNotNullParameter"
+  "component1"
+  "component2"
+  "copy"
+  "copy$default"
+  "d1"
+  "d2"
+  "equals"
+  "getX"
+  "getY"
+  "hashCode"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "other"
+  "out"
+  "plus"
+  "println"
+  "toString"
+  "x"
+  "xi"
+  "y"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{1e}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{c}\n\u{2}\u{10}\u{b}\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{e}\u{8}\u{86}\u{8}\u{18}��2\u{2}0\u{1}B\u{17}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{12}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{5}\u{10}\u{6}J\u{11}\u{10}\n\u{1a}\u{2}0��2\u{6}\u{10}\u{b}\u{1a}\u{2}0��H\u{86}\u{2}J\t\u{10}\u{c}\u{1a}\u{2}0\u{3}HÆ\u{3}J\t\u{10}\r\u{1a}\u{2}0\u{3}HÆ\u{3}J\u{1d}\u{10}\u{e}\u{1a}\u{2}0��2\u{8}\u{8}\u{2}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{8}\u{8}\u{2}\u{10}\u{4}\u{1a}\u{2}0\u{3}HÆ\u{1}J\u{14}\u{10}\u{f}\u{1a}\u{2}0\u{10}2\u{8}\u{10}\u{b}\u{1a}\u{4}\u{18}\u{1}0\u{1}HÖ\u{83}\u{4}J\n\u{10}\u{11}\u{1a}\u{2}0\u{3}HÖ\u{81}\u{4}J\n\u{10}\u{12}\u{1a}\u{2}0\u{13}HÖ\u{81}\u{4}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{7}\u{10}\u{8}R\u{11}\u{10}\u{4}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\t\u{10}\u{8}"
+
+--- types ---
+  I
+  LInputKt;
+  LVec2;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LVec2;.<init>(II)V
+  LVec2;.component1()I
+  LVec2;.component2()I
+  LVec2;.copy$default(LVec2;IIILjava/lang/Object;)LVec2;
+  LVec2;.copy(II)LVec2;
+  LVec2;.equals(Ljava/lang/Object;)Z
+  LVec2;.getX()I
+  LVec2;.getY()I
+  LVec2;.hashCode()I
+  LVec2;.plus(LVec2;)LVec2;
+  LVec2;.toString()Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=4 ins=0 outs=3 insns=24
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+
+--- class[1] ---
+  descriptor   LVec2;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(II)V flags=0x10001 regs=3 ins=3 outs=1 insns=8
+  method       component1()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       component2()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       copy(II)LVec2; flags=0x0011 regs=4 ins=3 outs=3 insns=6
+  method       copy$default(LVec2;IIILjava/lang/Object;)LVec2; flags=0x1009 regs=5 ins=5 outs=3 insns=17
+  method       equals(Ljava/lang/Object;)Z flags=0x0001 regs=7 ins=2 outs=0 insns=28
+  method       getX()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getY()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       hashCode()I flags=0x0001 regs=4 ins=1 outs=0 insns=8
+  method       plus(LVec2;)LVec2; flags=0x0011 regs=6 ins=2 outs=3 insns=21
+  method       toString()Ljava/lang/String; flags=0x0001 regs=5 ins=1 outs=2 insns=40

@@ -1,0 +1,56 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=2
+    0000 iconst_3
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_5
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 iconst_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 ldc "one"
+    0013 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0016 op_0x53
+    0017 aload_1
+    0018 iconst_1
+    0019 iconst_2
+    0020 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0023 ldc "two"
+    0025 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0028 op_0x53
+    0029 aload_1
+    0030 iconst_2
+    0031 iconst_3
+    0032 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0035 ldc "three"
+    0037 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0040 op_0x53
+    0041 aload_1
+    0042 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
+    0045 astore_0
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 aload_0
+    0050 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0053 aload_0
+    0054 iconst_2
+    0055 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0058 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 op_0x5F
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0070 aload_0
+    0071 invokeinterface InterfaceMethod(java/util/Map.size:()I)
+    0076 istore_1
+    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0080 iload_1
+    0081 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0084 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

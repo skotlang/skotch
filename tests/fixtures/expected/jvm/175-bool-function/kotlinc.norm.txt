@@ -4,34 +4,30 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        isAdult (I)Z 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 bipush 18
     0003 op_0xA1
     0004 nop
     0005 iconst_4
     0006 iconst_1
-    0007 op_0xA7
-    0008 nop
-    0009 iconst_1
+    0007 goto 11
     0010 iconst_0
     0011 op_0xAC
     sub_attr  StackMapTable (5 bytes)
 method        isTeenager (I)Z 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 bipush 13
     0003 op_0xA1
     0004 nop
     0005 op_0x0D
-    0006 op_0x1A
+    0006 iload_0
     0007 bipush 18
     0009 op_0xA2
     0010 nop
     0011 iconst_4
     0012 iconst_1
-    0013 op_0xA7
-    0014 nop
-    0015 iconst_1
+    0013 goto 17
     0016 iconst_0
     0017 op_0xAC
     sub_attr  StackMapTable (5 bytes)
@@ -39,27 +35,27 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 20
     0002 invokestatic Method(InputKt.isAdult:(I)Z)
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0013 bipush 10
     0015 invokestatic Method(InputKt.isAdult:(I)Z)
-    0018 op_0x3B
+    0018 istore_0
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x1A
+    0022 iload_0
     0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0026 bipush 15
     0028 invokestatic Method(InputKt.isTeenager:(I)Z)
-    0031 op_0x3B
+    0031 istore_0
     0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 op_0x1A
+    0035 iload_0
     0036 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0039 bipush 20
     0041 invokestatic Method(InputKt.isTeenager:(I)Z)
-    0044 op_0x3B
+    0044 istore_0
     0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 op_0x1A
+    0048 iload_0
     0049 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0052 return
 method        main ([Ljava/lang/String;)V 0x1009

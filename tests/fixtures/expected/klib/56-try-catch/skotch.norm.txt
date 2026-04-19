@@ -1,0 +1,348 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Unit",
+        "Any",
+        "String",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "BinOp": {
+                    "op": "DivI",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit",
+      "exception_handlers": [
+        {
+          "try_start_block": 1,
+          "try_end_block": 2,
+          "handler_block": 2,
+          "catch_type": "java/lang/ArithmeticException"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [],
+  "strings": [
+    "caught: division by zero"
+  ]
+}

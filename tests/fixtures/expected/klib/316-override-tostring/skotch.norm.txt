@@ -1,0 +1,610 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        "Unit",
+        "Int",
+        "Int",
+        {
+          "Class": "Point"
+        },
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      4,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [
+    {
+      "name": "Point",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "fields": [
+        {
+          "name": "x",
+          "ty": "Int"
+        },
+        {
+          "name": "y",
+          "ty": "Int"
+        }
+      ],
+      "methods": [
+        {
+          "id": 8,
+          "name": "toString",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int",
+            "Int",
+            "String",
+            "Int",
+            "String",
+            "String",
+            "String",
+            "Int",
+            "String",
+            "String",
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Const": {
+                        "String": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 3,
+                        "rhs": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "String": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 5,
+                        "rhs": 6
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "Local": 2
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 7,
+                        "rhs": 8
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 10,
+                    "value": {
+                      "Const": {
+                        "String": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 11,
+                    "value": {
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 9,
+                        "rhs": 10
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 0,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x",
+                        "value": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 0,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y",
+                        "value": 2
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 11
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0,
+          1,
+          2
+        ],
+        "locals": [
+          {
+            "Class": "Point"
+          },
+          "Int",
+          "Int"
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "x",
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "PutField": {
+                      "receiver": 0,
+                      "class_name": "Point",
+                      "field_name": "y",
+                      "value": 2
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    }
+  ],
+  "strings": [
+    "(",
+    ", ",
+    ")"
+  ]
+}

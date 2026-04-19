@@ -1,0 +1,4 @@
+name     = "390-suspend-signature"
+status   = "supported"
+features = ["suspend", "cps-signature"]
+notes    = "Session 2 of the coroutine transform: a `suspend fun` grows a trailing `$completion: Continuation` parameter and its return type becomes `java.lang.Object`. The state-machine lowering for multi-suspension-point bodies is still future work — this fixture only exercises the signature half of the CPS transform."

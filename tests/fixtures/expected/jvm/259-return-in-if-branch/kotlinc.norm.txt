@@ -4,47 +4,47 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        abs (I)I 0x0019
   code        max_stack=1 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 op_0x9C
     0002 nop
     0003 iconst_3
-    0004 op_0x1A
+    0004 iload_0
     0005 op_0x74
     0006 op_0xAC
-    0007 op_0x1A
+    0007 iload_0
     0008 op_0xAC
     sub_attr  StackMapTable (3 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush -42
     0002 invokestatic Method(InputKt.abs:(I)I)
-    0005 op_0x3B
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x1A
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 bipush 42
     0015 invokestatic Method(InputKt.abs:(I)I)
-    0018 op_0x3B
+    0018 istore_0
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x1A
+    0022 iload_0
     0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 bipush 10
     0028 invokestatic Method(InputKt.sign:(I)I)
-    0031 op_0x3B
+    0031 istore_0
     0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 op_0x1A
+    0035 iload_0
     0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0039 bipush -5
     0041 invokestatic Method(InputKt.sign:(I)I)
-    0044 op_0x3B
+    0044 istore_0
     0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 op_0x1A
+    0048 iload_0
     0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0052 iconst_0
     0053 invokestatic Method(InputKt.sign:(I)I)
-    0056 op_0x3B
+    0056 istore_0
     0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 op_0x1A
+    0060 iload_0
     0061 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0064 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -53,13 +53,13 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        sign (I)I 0x0019
   code        max_stack=1 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 op_0x9E
     0002 nop
     0003 iconst_2
     0004 iconst_1
     0005 op_0xAC
-    0006 op_0x1A
+    0006 iload_0
     0007 op_0x9C
     0008 nop
     0009 iconst_2

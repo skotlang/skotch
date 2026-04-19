@@ -5,46 +5,44 @@ access_flags  0x0031
 method        joinNumbers (I)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=3
     0000 ldc ""
-    0002 op_0x4C
+    0002 astore_1
     0003 iconst_1
-    0004 op_0x3D
-    0005 op_0x1C
-    0006 op_0x1A
+    0004 istore_2
+    0005 iload_2
+    0006 iload_0
     0007 op_0xA3
     0008 nop
     0009 op_0x22
-    0010 op_0x1C
+    0010 iload_2
     0011 iconst_1
     0012 op_0xA4
     0013 nop
     0014 op_0x0A
-    0015 op_0x2B
+    0015 aload_1
     0016 op_0xBA
     0017 nop
     0018 iload 0
     0020 nop
-    0021 op_0x4C
-    0022 op_0x2B
-    0023 op_0x1C
+    0021 astore_1
+    0022 aload_1
+    0023 iload_2
     0024 op_0xBA
     0025 nop
-    0026 op_0x1A
+    0026 iload_0
     0027 nop
     0028 nop
-    0029 op_0x4C
-    0030 op_0x1C
-    0031 op_0x1A
+    0029 astore_1
+    0030 iload_2
+    0031 iload_0
     0032 op_0x9F
     0033 nop
     0034 op_0x09
     0035 op_0x84
     0036 iconst_m1
     0037 aconst_null
-    0038 op_0xA7
-    0039 op_0xFF
-    0040 op_0xE4
-    0041 op_0x2B
-    0042 op_0xB0
+    0038 goto 10
+    0041 aload_1
+    0042 areturn
     sub_attr  StackMapTable (11 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

@@ -7,9 +7,7 @@ method        isInstance (Ljava/lang/Object;)Z 0x0009
     0000 aload 0
     0002 astore 1
     0004 aload 1
-    0006 op_0xC1
-    0007 nop
-    0008 op_0x0B
+    0006 instanceof Class(T)
     0009 istore 2
     0011 iload 2
     0013 op_0xAC
@@ -18,18 +16,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 ldc "hello"
     0002 astore 1
     0004 aload 1
-    0006 op_0xC1
-    0007 nop
-    0008 sipush 13826
+    0006 instanceof Class(java/lang/String)
+    0009 istore 2
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 iload 2
     0016 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0019 ldc "hello"
     0021 astore 3
     0023 aload 3
-    0025 op_0xC1
-    0026 nop
-    0027 op_0x1F
+    0025 instanceof Class(java/lang/Integer)
     0028 istore 4
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 iload 4
@@ -40,9 +35,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0044 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0047 astore 6
     0049 aload 6
-    0051 op_0xC1
-    0052 nop
-    0053 op_0x1F
+    0051 instanceof Class(java/lang/Integer)
     0054 istore 7
     0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0059 iload 7

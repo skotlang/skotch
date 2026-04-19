@@ -4,20 +4,20 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        first (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=2
-    0000 op_0x2A
-    0001 op_0x59
+    0000 aload_0
+    0001 dup
     0002 op_0xC7
     0003 nop
     0004 op_0x0C
-    0005 op_0x57
-    0006 op_0x2B
-    0007 op_0x59
+    0005 pop
+    0006 aload_1
+    0007 dup
     0008 op_0xC7
     0009 nop
     0010 iconst_3
-    0011 op_0x57
+    0011 pop
     0012 ldc "none"
-    0014 op_0xB0
+    0014 areturn
     sub_attr  StackMapTable (6 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (13 bytes)

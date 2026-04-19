@@ -19,88 +19,38 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        printMonth (I)V 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
-    0001 op_0xAA
-    0002 nop
-    0003 nop
-    0004 nop
-    0005 nop
-    0006 nop
-    0007 op_0x6F
-    0008 nop
-    0009 nop
-    0010 nop
-    0011 aconst_null
-    0012 nop
-    0013 nop
-    0014 nop
-    0015 iconst_3
-    0016 nop
-    0017 nop
-    0018 nop
-    0019 op_0x27
-    0020 nop
-    0021 nop
-    0022 nop
-    0023 op_0x33
-    0024 nop
-    0025 nop
-    0026 nop
-    0027 op_0x3F
-    0028 nop
-    0029 nop
-    0030 nop
-    0031 op_0x4B
-    0032 nop
-    0033 nop
-    0034 nop
-    0035 op_0x57
-    0036 nop
-    0037 nop
-    0038 nop
-    0039 op_0x63
+    0000 iload_0
+    0001 tableswitch default=112 low=1 high=6 1=40 2=52 3=64 4=76 5=88 6=100
     0040 ldc "January"
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0045 op_0x5F
     0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0049 op_0xA7
-    0050 nop
-    0051 op_0x48
+    0049 goto 121
     0052 ldc "February"
     0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0057 op_0x5F
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0061 op_0xA7
-    0062 nop
-    0063 op_0x3C
+    0061 goto 121
     0064 ldc "March"
     0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0069 op_0x5F
     0070 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0073 op_0xA7
-    0074 nop
-    0075 op_0x30
+    0073 goto 121
     0076 ldc "April"
     0078 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0081 op_0x5F
     0082 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0085 op_0xA7
-    0086 nop
-    0087 op_0x24
+    0085 goto 121
     0088 ldc "May"
     0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0093 op_0x5F
     0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0097 op_0xA7
-    0098 nop
-    0099 op_0x18
+    0097 goto 121
     0100 ldc "June"
     0102 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0105 op_0x5F
     0106 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0109 op_0xA7
-    0110 nop
-    0111 op_0x0C
+    0109 goto 121
     0112 ldc "Other"
     0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0117 op_0x5F

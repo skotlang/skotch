@@ -1,0 +1,25 @@
+name     = "396-suspend-runtime"
+status   = "stub"
+features = ["suspend", "suspend-lambda", "suspend-param", "tail-call-suspend"]
+notes    = """
+Session 9 of the coroutine transform: wiring suspend lambdas to work \
+at runtime by correctly handling suspend-typed function parameters and \
+their invocation. \
+\
+`runIt(block: suspend () -> String)` is a suspend function that \
+takes a suspend lambda parameter and invokes it in tail position. \
+The parameter type `suspend () -> String` maps to \
+`kotlin/jvm/functions/Function1` (arity bumped by +1 for the \
+implicit Continuation). Inside `runIt`, `block()` compiles to \
+`invokeinterface Function1.invoke(Object)Object` passing the \
+enclosing function's `$completion` continuation. Because the \
+only suspend call is in tail position, no state machine is \
+generated for `runIt` — it's a straight-through tail call. \
+\
+`run_()` constructs a SuspendLambda whose body calls `yield_()` \
+then returns `"hello"`, and passes it to `runIt`. \
+\
+Marked `stub` because exercising the suspend path end-to-end \
+requires a coroutine builder (`runBlocking` from kotlinx-coroutines); \
+the `main()` just verifies the non-suspend path still works.
+"""

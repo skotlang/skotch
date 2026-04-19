@@ -435,11 +435,13 @@ impl<'a> TypeChecker<'a> {
                 nullable: false,
                 func_params: None,
                 type_args: Vec::new(),
+                is_suspend: false,
                 span: tr.span,
             });
             return Ty::Function {
                 params,
                 ret: Box::new(ret),
+                is_suspend: tr.is_suspend,
             };
         }
         let raw_name = self.interner.resolve(tr.name).to_string();

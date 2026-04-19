@@ -4,14 +4,14 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        httpStatus (I)Ljava/lang/String; 0x0019
   code        max_stack=1 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 op_0xAB
     0002 nop
     0003 nop
     0004 nop
     0005 nop
     0006 nop
-    0007 op_0x4C
+    0007 astore_1
     0008 nop
     0009 nop
     0010 nop
@@ -39,7 +39,7 @@ method        httpStatus (I)Ljava/lang/String; 0x0019
     0032 nop
     0033 nop
     0034 nop
-    0035 op_0x3D
+    0035 istore_2
     0036 nop
     0037 nop
     0038 aconst_null
@@ -57,27 +57,17 @@ method        httpStatus (I)Ljava/lang/String; 0x0019
     0050 nop
     0051 op_0x47
     0052 ldc "OK"
-    0054 op_0xA7
-    0055 nop
-    0056 aload 18
-    0058 op_0x0B
-    0059 op_0xA7
-    0060 nop
-    0061 op_0x14
+    0054 goto 79
+    0057 ldc "Created"
+    0059 goto 79
     0062 ldc "Bad Request"
-    0064 op_0xA7
-    0065 nop
-    0066 op_0x0F
+    0064 goto 79
     0067 ldc "Not Found"
-    0069 op_0xA7
-    0070 nop
-    0071 op_0x0A
+    0069 goto 79
     0072 ldc "Internal Server Error"
-    0074 op_0xA7
-    0075 nop
-    0076 iconst_2
+    0074 goto 79
     0077 ldc "Unknown"
-    0079 op_0xB0
+    0079 areturn
     sub_attr  StackMapTable (12 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

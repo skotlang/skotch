@@ -4,12 +4,12 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=2
-    0000 op_0x2A
+    0000 aload_0
     0001 ldc "lang"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
-    0007 op_0x4C
-    0008 op_0x2B
+    0006 aload_0
+    0007 astore_1
+    0008 aload_1
     0009 invokevirtual Method(java/lang/String.hashCode:()I)
     0012 op_0xAB
     0013 nop
@@ -30,7 +30,7 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0028 nop
     0029 nop
     0030 nop
-    0031 op_0x2C
+    0031 aload_2
     0032 nop
     0033 nop
     0034 op_0x0C
@@ -55,60 +55,36 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0053 nop
     0054 nop
     0055 op_0x44
-    0056 op_0x2B
+    0056 aload_1
     0057 ldc "de"
     0059 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0062 op_0x9A
-    0063 nop
-    0064 op_0x39
-    0065 op_0xA7
-    0066 nop
-    0067 op_0x3B
-    0068 op_0x2B
+    0062 ifne 119
+    0065 goto 124
+    0068 aload_1
     0069 ldc "en"
     0071 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0074 op_0x9A
-    0075 nop
-    0076 op_0x1E
-    0077 op_0xA7
-    0078 nop
-    0079 op_0x2F
-    0080 op_0x2B
+    0074 ifne 104
+    0077 goto 124
+    0080 aload_1
     0081 ldc "fr"
     0083 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0086 op_0x9A
-    0087 nop
-    0088 op_0x1C
-    0089 op_0xA7
-    0090 nop
-    0091 op_0x23
-    0092 op_0x2B
+    0086 ifne 114
+    0089 goto 124
+    0092 aload_1
     0093 ldc "es"
     0095 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0098 op_0x9A
-    0099 nop
-    0100 op_0x0B
-    0101 op_0xA7
-    0102 nop
-    0103 op_0x17
+    0098 ifne 109
+    0101 goto 124
     0104 ldc "Hello"
-    0106 op_0xA7
-    0107 nop
-    0108 op_0x14
+    0106 goto 126
     0109 ldc "Hola"
-    0111 op_0xA7
-    0112 nop
-    0113 op_0x0F
+    0111 goto 126
     0114 ldc "Bonjour"
-    0116 op_0xA7
-    0117 nop
-    0118 op_0x0A
+    0116 goto 126
     0119 ldc "Hallo"
-    0121 op_0xA7
-    0122 nop
-    0123 iconst_2
+    0121 goto 126
     0124 ldc "Hi"
-    0126 op_0xB0
+    0126 areturn
     sub_attr  StackMapTable (20 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

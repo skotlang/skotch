@@ -1,0 +1,88 @@
+dex_version   035
+strings       39
+types         12
+methods       10
+classes       2
+
+--- strings ---
+  ""
+  "$count"
+  "$r8$lambda$L8DLOyum4YTpsv13RvFz9wKuUMM"
+  "<init>"
+  "D8$$SyntheticClass"
+  "I"
+  "INSTANCE"
+  "L"
+  "LInputKt$$ExternalSyntheticLambda0;"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/Unit;"
+  "Lkotlin/jvm/functions/Function0;"
+  "Lkotlin/jvm/internal/Ref$IntRef;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "count"
+  "d1"
+  "d2"
+  "element"
+  "f$0"
+  "inc"
+  "input.kt"
+  "invoke"
+  "k"
+  "main"
+  "main$lambda$0"
+  "mv"
+  "out"
+  "println"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+
+--- types ---
+  I
+  LInputKt$$ExternalSyntheticLambda0;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/Unit;
+  Lkotlin/jvm/functions/Function0;
+  Lkotlin/jvm/internal/Ref$IntRef;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$$ExternalSyntheticLambda0;.<init>(Lkotlin/jvm/internal/Ref$IntRef;)V
+  LInputKt$$ExternalSyntheticLambda0;.invoke()Ljava/lang/Object;
+  LInputKt;.$r8$lambda$L8DLOyum4YTpsv13RvFz9wKuUMM(Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/Unit;
+  LInputKt;.main$lambda$0(Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/Unit;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Object;.<init>()V
+  Lkotlin/jvm/functions/Function0;.invoke()Ljava/lang/Object;
+  Lkotlin/jvm/internal/Ref$IntRef;.<init>()V
+
+--- class[0] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda0;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>(Lkotlin/jvm/internal/Ref$IntRef;)V flags=0x11001 regs=2 ins=2 outs=1 insns=6
+  method       invoke()Ljava/lang/Object; flags=0x0011 regs=2 ins=1 outs=1 insns=7
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       $r8$lambda$L8DLOyum4YTpsv13RvFz9wKuUMM(Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/Unit; flags=0x1009 regs=1 ins=1 outs=1 insns=5
+  method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=27
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/Unit; flags=0x001A regs=2 ins=1 outs=0 insns=9

@@ -5,30 +5,25 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_1
-    0001 op_0x3B
-    0002 op_0x1A
+    0001 istore_0
+    0002 iload_0
     0003 bipush 11
     0005 op_0xA2
     0006 nop
     0007 op_0x18
-    0008 op_0x1A
+    0008 iload_0
     0009 iconst_5
     0010 op_0xA0
     0011 nop
     0012 iconst_3
-    0013 op_0xA7
-    0014 nop
-    0015 bipush -78
-    0017 nop
-    0018 op_0x0C
-    0019 op_0x1A
+    0013 goto 29
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 iload_0
     0020 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0023 op_0x84
     0024 nop
     0025 aconst_null
-    0026 op_0xA7
-    0027 op_0xFF
-    0028 op_0xE8
+    0026 goto 2
     0029 return
     sub_attr  StackMapTable (8 bytes)
 method        main ([Ljava/lang/String;)V 0x1009

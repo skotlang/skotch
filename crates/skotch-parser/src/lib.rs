@@ -230,6 +230,7 @@ impl<'a> Parser<'a> {
             let mut is_open = false;
             let mut is_abstract = false;
             let mut is_sealed = false;
+            let mut is_suspend = false;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -245,6 +246,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwData
                     | TokenKind::KwEnum
                     | TokenKind::KwOperator
+                    | TokenKind::KwSuspend
             ) {
                 match self.peek_kind() {
                     TokenKind::KwData => is_data = true,
@@ -252,6 +254,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwOpen => is_open = true,
                     TokenKind::KwAbstract => is_abstract = true,
                     TokenKind::KwSealed => is_sealed = true,
+                    TokenKind::KwSuspend => is_suspend = true,
                     _ => {}
                 }
                 self.bump();
@@ -263,6 +266,7 @@ impl<'a> Parser<'a> {
                     f.is_open = is_open;
                     f.is_override = false;
                     f.is_abstract = is_abstract;
+                    f.is_suspend = is_suspend;
                     decls.push(Decl::Fun(f));
                 }
                 TokenKind::KwVal | TokenKind::KwVar => {
@@ -536,6 +540,7 @@ impl<'a> Parser<'a> {
                 let mut mem_open = false;
                 let mut mem_lateinit = false;
                 let mut mem_abstract = false;
+                let mut mem_suspend = false;
                 while matches!(
                     self.peek_kind(),
                     TokenKind::KwOverride
@@ -547,12 +552,14 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwInternal
                         | TokenKind::KwOperator
                         | TokenKind::KwLateinit
+                        | TokenKind::KwSuspend
                 ) {
                     match self.peek_kind() {
                         TokenKind::KwOverride => mem_override = true,
                         TokenKind::KwOpen => mem_open = true,
                         TokenKind::KwAbstract => mem_abstract = true,
                         TokenKind::KwLateinit => mem_lateinit = true,
+                        TokenKind::KwSuspend => mem_suspend = true,
                         _ => {}
                     }
                     self.bump();
@@ -564,6 +571,7 @@ impl<'a> Parser<'a> {
                         f.is_override = mem_override;
                         f.is_open = mem_open;
                         f.is_abstract = mem_abstract;
+                        f.is_suspend = mem_suspend;
                         methods.push(f);
                     }
                     TokenKind::KwVal | TokenKind::KwVar => {
@@ -773,6 +781,7 @@ impl<'a> Parser<'a> {
                 // Skip annotations before object members.
                 self.skip_annotations();
                 // Skip modifier keywords.
+                let mut obj_suspend = false;
                 while matches!(
                     self.peek_kind(),
                     TokenKind::KwOverride
@@ -780,12 +789,18 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
+                        | TokenKind::KwSuspend
                 ) {
+                    if self.peek_kind() == TokenKind::KwSuspend {
+                        obj_suspend = true;
+                    }
                     self.bump();
                     self.skip_trivia();
                 }
                 if self.peek_kind() == TokenKind::KwFun {
-                    methods.push(self.parse_fun_decl());
+                    let mut f = self.parse_fun_decl();
+                    f.is_suspend = obj_suspend;
+                    methods.push(f);
                 } else {
                     self.bump(); // skip unknown
                 }
@@ -938,6 +953,7 @@ impl<'a> Parser<'a> {
                 // Skip annotations before interface members.
                 self.skip_annotations();
                 // Skip modifiers.
+                let mut iface_suspend = false;
                 while matches!(
                     self.peek_kind(),
                     TokenKind::KwOverride
@@ -948,12 +964,17 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
                         | TokenKind::KwOperator
+                        | TokenKind::KwSuspend
                 ) {
+                    if self.peek_kind() == TokenKind::KwSuspend {
+                        iface_suspend = true;
+                    }
                     self.bump();
                     self.skip_trivia();
                 }
                 if self.peek_kind() == TokenKind::KwFun {
                     let mut f = self.parse_fun_decl();
+                    f.is_suspend = iface_suspend;
                     // Interface methods without a body are abstract by default.
                     if f.body.stmts.is_empty() {
                         f.is_abstract = true;
@@ -1233,6 +1254,7 @@ impl<'a> Parser<'a> {
                     nullable: false,
                     func_params: None,
                     type_args: Vec::new(),
+                    is_suspend: false,
                     span: recv_span,
                 });
                 self.bump(); // consume `.`
@@ -1312,6 +1334,7 @@ impl<'a> Parser<'a> {
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_suspend: false,
             span,
         }
     }
@@ -1358,6 +1381,17 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let span = self.peek_span();
 
+        // Session 9: `suspend () -> T` function-type prefix. Consume
+        // the `suspend` keyword and remember it so the returned TypeRef
+        // carries `is_suspend = true`. The `suspend` keyword only
+        // applies when followed by a `(`, i.e. a function type.
+        let is_suspend_type =
+            self.peek_kind() == TokenKind::KwSuspend && self.peek_kind_at(1) == TokenKind::LParen;
+        if is_suspend_type {
+            self.bump(); // consume `suspend`
+            self.skip_trivia();
+        }
+
         // Function type: `(Type, Type) -> ReturnType`
         // Disambiguate from parenthesized type `(Type)` by checking for `->`
         // after the closing `)`.
@@ -1389,6 +1423,7 @@ impl<'a> Parser<'a> {
                     nullable: false,
                     func_params: Some(param_types),
                     type_args: Vec::new(),
+                    is_suspend: is_suspend_type,
                     span: span.merge(end),
                 };
             }
@@ -1439,6 +1474,7 @@ impl<'a> Parser<'a> {
                 nullable: false,
                 func_params: None,
                 type_args: Vec::new(),
+                is_suspend: false,
                 span,
             };
             let mut all_params = vec![receiver_type];
@@ -1448,6 +1484,7 @@ impl<'a> Parser<'a> {
                 nullable: false,
                 func_params: Some(all_params),
                 type_args: Vec::new(),
+                is_suspend: false,
                 span: span.merge(end),
             };
         }
@@ -1470,6 +1507,7 @@ impl<'a> Parser<'a> {
                         nullable: false,
                         func_params: None,
                         type_args: Vec::new(),
+                        is_suspend: false,
                         span: star_span,
                     });
                 } else {
@@ -1502,6 +1540,7 @@ impl<'a> Parser<'a> {
             nullable,
             func_params: None,
             type_args,
+            is_suspend: false,
             span: span.merge(end),
         }
     }
@@ -2786,6 +2825,7 @@ impl<'a> Parser<'a> {
                 self.skip_annotations();
                 // Skip modifiers.
                 let mut is_override = false;
+                let mut is_suspend = false;
                 while matches!(
                     self.peek_kind(),
                     TokenKind::KwOverride
@@ -2793,9 +2833,13 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwPrivate
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
+                        | TokenKind::KwSuspend
                 ) {
                     if self.peek_kind() == TokenKind::KwOverride {
                         is_override = true;
+                    }
+                    if self.peek_kind() == TokenKind::KwSuspend {
+                        is_suspend = true;
                     }
                     self.bump();
                     self.skip_trivia();
@@ -2803,6 +2847,7 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::KwFun {
                     let mut f = self.parse_fun_decl();
                     f.is_override = is_override;
+                    f.is_suspend = is_suspend;
                     methods.push(f);
                 } else {
                     self.bump();
@@ -2928,6 +2973,7 @@ impl<'a> Parser<'a> {
                         nullable: false,
                         func_params: None,
                         type_args: Vec::new(),
+                        is_suspend: false,
                         span: start,
                     },
                     default: None,
@@ -2970,6 +3016,7 @@ impl<'a> Parser<'a> {
         Expr::Lambda {
             params,
             body,
+            is_suspend: false,
             span: start.merge(end),
         }
     }
@@ -3292,5 +3339,65 @@ mod tests {
         let (file, d) = parse(src);
         assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
         assert_eq!(file.decls.len(), 1);
+    }
+
+    #[test]
+    fn parse_top_level_suspend_fun() {
+        // `suspend` is accepted as a modifier on top-level functions.
+        // The flag flows into FunDecl so that a future CPS transform
+        // can locate suspend functions; right now they're lowered as
+        // normal functions (see milestones.yaml v0.9.0).
+        let src = r#"
+            suspend fun compute(): Int = 42
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 1);
+        let Decl::Fun(f) = &file.decls[0] else {
+            panic!("expected fun decl");
+        };
+        assert!(f.is_suspend, "expected is_suspend = true");
+    }
+
+    #[test]
+    fn parse_suspend_with_other_modifiers() {
+        // `suspend` composes with other modifiers without order constraints
+        // (private/override/etc.) — kotlinc accepts any order.
+        let src = r#"
+            private suspend fun helper(): Int = 1
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        let Decl::Fun(f) = &file.decls[0] else {
+            panic!("expected fun decl");
+        };
+        assert!(f.is_suspend);
+    }
+
+    #[test]
+    fn parse_class_member_suspend_fun() {
+        let src = r#"
+            class Api {
+                suspend fun fetch(): String { return "x" }
+            }
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        let Decl::Class(c) = &file.decls[0] else {
+            panic!("expected class decl");
+        };
+        assert_eq!(c.methods.len(), 1);
+        assert!(c.methods[0].is_suspend);
+    }
+
+    #[test]
+    fn parse_non_suspend_fun_has_false_flag() {
+        // Regression: a plain function must not inherit the flag.
+        let (file, d) = parse("fun plain(): Int = 1");
+        assert!(d.is_empty(), "{:?}", d);
+        let Decl::Fun(f) = &file.decls[0] else {
+            panic!();
+        };
+        assert!(!f.is_suspend);
     }
 }

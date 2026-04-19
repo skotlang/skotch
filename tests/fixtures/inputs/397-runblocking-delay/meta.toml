@@ -1,0 +1,17 @@
+name     = "397-runblocking-delay"
+status   = "supported"
+features = ["suspend", "suspend-lambda", "coroutines", "runBlocking", "delay"]
+notes    = """
+Session 10 of the coroutine transform: end-to-end coroutines via \
+`runBlocking { delay(10); println("done") }`. \
+\
+This is the first fixture that exercises the full coroutine runtime: \
+kotlinx-coroutines-core provides `runBlocking` (the blocking coroutine \
+builder) and `delay` (a real suspension-point function). The lambda \
+extends SuspendLambda with arity 2 (Function2<CoroutineScope, \
+Continuation, Object>), its invokeSuspend carries a CPS state machine \
+with one suspension point (the delay call), and the resume tail is \
+`println("done")` followed by Unit.INSTANCE return. \
+\
+SCOPE: runBlocking + delay only; no launch/async/withContext/Flow.
+"""

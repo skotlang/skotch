@@ -1,0 +1,26 @@
+name     = "395-suspend-lambda-multi"
+status   = "stub"
+features = ["suspend", "suspend-lambda", "state-machine", "multi-suspension", "spill"]
+notes    = """
+Session 8 of the coroutine transform: a suspend lambda whose body \
+contains TWO suspension points with local variables `x` and `y` that \
+must be spilled/restored across the suspend boundaries. kotlinc emits \
+spill fields (`I$0`, `I$1`) directly on the lambda class (since the \
+lambda IS the continuation) and a 3-arm tableswitch inside \
+`invokeSuspend` whose cases are linked by `dup; aload $SUSPENDED; \
+if_acmpne` returns. The final tail (`x + y`) autoboxes the `int` to \
+`Integer.valueOf` before `areturn`. \
+\
+This fixture's wrapper class still instantiates the lambda with a \
+`null` `Continuation` (the real completion will flow through a real \
+coroutine builder once higher-order suspend-fun parameters are \
+plumbed end-to-end), so running `invoke(…)` on the result would NPE \
+inside the SuspendLambda super-ctor — hence `status = "stub"`. The \
+emitted classfile is useful for verifying the class shape AND the \
+bytecode-level multi-suspension state machine. \
+\
+SCOPE LIMITS: only primitive-typed spill locals (I$n); captures \
+across suspend boundaries are still unsupported; no runtime \
+integration with real coroutine builders. Richer shapes are Session \
+9+ work.
+"""

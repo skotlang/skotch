@@ -4,10 +4,8 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=3
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x0B
-    0003 op_0x59
+    0000 new Class(Child)
+    0003 dup
     0004 invokespecial Method(Child.<init>:()V)
     0007 astore 1
     0009 aload 1

@@ -1,47 +1,25 @@
 class_version major=61 minor=0
-this_class    Config
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-field         greeting$delegate : Lkotlin/Lazy; 0x0012
-method        <init> ()V 0x0001
+method        main ()V 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 op_0x2A
-    0005 op_0xBA
-    0006 nop
-    0007 op_0x1B
-    0008 nop
-    0009 nop
-    0010 invokestatic Method(kotlin/LazyKt.lazy:(Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;)
-    0013 op_0xB5
-    0014 nop
-    0015 op_0x25
-    0016 return
-method        getGreeting ()Ljava/lang/String; 0x0011
-  code        max_stack=1 max_locals=2
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 op_0x25
-    0004 op_0x4C
-    0005 op_0x2B
-    0006 op_0xB9
-    0007 nop
-    0008 op_0x2E
-    0009 aconst_null
-    0010 nop
-    0011 op_0xC0
-    0012 nop
-    0013 op_0x30
-    0014 op_0xB0
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        greeting_delegate$lambda$0 ()Ljava/lang/String; 0x001A
-  code        max_stack=2 max_locals=0
-    0000 ldc "computing..."
-    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0005 op_0x5F
-    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0009 ldc "Hello!"
-    0011 op_0xB0
-class_attr    BootstrapMethods (12 bytes)
+    0000 new Class(Config)
+    0003 dup
+    0004 invokespecial Method(Config.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 invokevirtual Method(Config.getGreeting:()Ljava/lang/String;)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 op_0x5F
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 aload_0
+    0020 invokevirtual Method(Config.getGreeting:()Ljava/lang/String;)
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 op_0x5F
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0030 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

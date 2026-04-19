@@ -4,22 +4,20 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=4 max_locals=3
-    0000 op_0xBB
-    0001 nop
-    0002 iconst_5
-    0003 op_0x59
+    0000 new Class(Point)
+    0003 dup
     0004 bipush 10
     0006 bipush 20
     0008 invokespecial Method(Point.<init>:(II)V)
-    0011 op_0x4B
-    0012 op_0x2A
+    0011 astore_0
+    0012 aload_0
     0013 invokevirtual Method(Point.component1:()I)
-    0016 op_0x3C
-    0017 op_0x2A
+    0016 istore_1
+    0017 aload_0
     0018 invokevirtual Method(Point.component2:()I)
-    0021 op_0x3D
-    0022 op_0x1B
-    0023 op_0x1C
+    0021 istore_2
+    0022 iload_1
+    0023 iload_2
     0024 op_0xBA
     0025 nop
     0026 op_0x1F

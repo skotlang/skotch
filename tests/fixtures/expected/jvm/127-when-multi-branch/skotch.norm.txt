@@ -6,9 +6,7 @@ method        grade (I)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=16
     0000 iload 0
     0002 istore 1
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 bipush 10
     0009 istore 2
     0011 iload 1
@@ -17,22 +15,16 @@ method        grade (I)Ljava/lang/String; 0x0009
     0016 nop
     0017 iconst_4
     0018 iconst_0
-    0019 op_0xA7
-    0020 nop
-    0021 iconst_1
+    0019 goto 23
     0022 iconst_1
     0023 istore 3
     0025 iload 3
-    0027 op_0x99
-    0028 nop
-    0029 op_0x0E
+    0027 ifeq 41
     0030 ldc "A"
     0032 astore 4
     0034 aload 4
     0036 astore 5
-    0038 op_0xA7
-    0039 nop
-    0040 op_0x74
+    0038 goto 154
     0041 bipush 9
     0043 istore 6
     0045 iload 1
@@ -41,22 +33,16 @@ method        grade (I)Ljava/lang/String; 0x0009
     0050 nop
     0051 iconst_4
     0052 iconst_0
-    0053 op_0xA7
-    0054 nop
-    0055 iconst_1
+    0053 goto 57
     0056 iconst_1
     0057 istore 7
     0059 iload 7
-    0061 op_0x99
-    0062 nop
-    0063 op_0x0E
+    0061 ifeq 75
     0064 ldc "A"
     0066 astore 8
     0068 aload 8
     0070 astore 5
-    0072 op_0xA7
-    0073 nop
-    0074 op_0x52
+    0072 goto 154
     0075 bipush 8
     0077 istore 9
     0079 iload 1
@@ -65,22 +51,16 @@ method        grade (I)Ljava/lang/String; 0x0009
     0084 nop
     0085 iconst_4
     0086 iconst_0
-    0087 op_0xA7
-    0088 nop
-    0089 iconst_1
+    0087 goto 91
     0090 iconst_1
     0091 istore 10
     0093 iload 10
-    0095 op_0x99
-    0096 nop
-    0097 op_0x0E
+    0095 ifeq 109
     0098 ldc "B"
     0100 astore 11
     0102 aload 11
     0104 astore 5
-    0106 op_0xA7
-    0107 nop
-    0108 op_0x30
+    0106 goto 154
     0109 bipush 7
     0111 istore 12
     0113 iload 1
@@ -89,31 +69,23 @@ method        grade (I)Ljava/lang/String; 0x0009
     0118 nop
     0119 iconst_4
     0120 iconst_0
-    0121 op_0xA7
-    0122 nop
-    0123 iconst_1
+    0121 goto 125
     0124 iconst_1
     0125 istore 13
     0127 iload 13
-    0129 op_0x99
-    0130 nop
-    0131 op_0x0E
+    0129 ifeq 143
     0132 ldc "C"
     0134 astore 14
     0136 aload 14
     0138 astore 5
-    0140 op_0xA7
-    0141 nop
-    0142 op_0x0E
+    0140 goto 154
     0143 ldc "F"
     0145 astore 15
     0147 aload 15
     0149 astore 5
-    0151 op_0xA7
-    0152 nop
-    0153 iconst_0
+    0151 goto 154
     0154 aload 5
-    0156 op_0xB0
+    0156 areturn
     sub_attr  StackMapTable (217 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=11

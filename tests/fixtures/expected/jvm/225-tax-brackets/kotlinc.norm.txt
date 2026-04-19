@@ -6,27 +6,27 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 sipush 5000
     0003 invokestatic Method(InputKt.tax:(I)I)
-    0006 op_0x3B
+    0006 istore_0
     0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 op_0x1A
+    0010 iload_0
     0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0014 sipush 25000
     0017 invokestatic Method(InputKt.tax:(I)I)
-    0020 op_0x3B
+    0020 istore_0
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 op_0x1A
+    0024 iload_0
     0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0028 ldc int(60000)
     0030 invokestatic Method(InputKt.tax:(I)I)
-    0033 op_0x3B
+    0033 istore_0
     0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 op_0x1A
+    0037 iload_0
     0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0041 ldc int(100000)
     0043 invokestatic Method(InputKt.tax:(I)I)
-    0046 op_0x3B
+    0046 istore_0
     0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0050 op_0x1A
+    0050 iload_0
     0051 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0054 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -36,16 +36,14 @@ method        main ([Ljava/lang/String;)V 0x1009
 method        tax (I)I 0x0019
   code        max_stack=3 max_locals=1
     0000 nop
-    0001 op_0x1A
+    0001 iload_0
     0002 sipush 10000
     0005 op_0xA3
     0006 nop
     0007 iconst_4
     0008 iconst_0
-    0009 op_0xA7
-    0010 nop
-    0011 op_0x3C
-    0012 op_0x1A
+    0009 goto 69
+    0012 iload_0
     0013 ldc int(40000)
     0015 op_0xA3
     0016 nop
@@ -56,16 +54,14 @@ method        tax (I)I 0x0019
     0025 imul
     0026 bipush 100
     0028 idiv
-    0029 op_0xA7
-    0030 nop
-    0031 op_0x28
-    0032 op_0x1A
+    0029 goto 69
+    0032 iload_0
     0033 ldc int(80000)
     0035 op_0xA3
     0036 nop
     0037 op_0x14
     0038 sipush 3000
-    0041 op_0x1A
+    0041 iload_0
     0042 ldc int(40000)
     0044 isub
     0045 bipush 20
@@ -73,11 +69,9 @@ method        tax (I)I 0x0019
     0048 bipush 100
     0050 idiv
     0051 iadd
-    0052 op_0xA7
-    0053 nop
-    0054 sipush 4394
-    0057 op_0xF8
-    0058 op_0x1A
+    0052 goto 69
+    0055 sipush 11000
+    0058 iload_0
     0059 ldc int(80000)
     0061 isub
     0062 bipush 30

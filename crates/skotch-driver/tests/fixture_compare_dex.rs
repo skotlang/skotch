@@ -163,6 +163,16 @@ fn skotch_and_d8_both_emit_main_v_method() {
         if !skotch_norm.exists() || !d8_norm.exists() {
             continue;
         }
+        // Skip fixtures whose source doesn't contain `fun main()`.
+        let input_kt = workspace_root()
+            .join("tests/fixtures/inputs")
+            .join(name)
+            .join("input.kt");
+        if let Ok(src) = std::fs::read_to_string(&input_kt) {
+            if !src.contains("fun main()") {
+                continue;
+            }
+        }
         let skotch_text = std::fs::read_to_string(&skotch_norm).unwrap();
         let d8_text = std::fs::read_to_string(&d8_norm).unwrap();
         if !has_main_v_method(&skotch_text) {

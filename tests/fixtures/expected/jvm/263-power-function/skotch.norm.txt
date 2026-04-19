@@ -50,22 +50,16 @@ method        power (II)I 0x0009
     0012 nop
     0013 iconst_4
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 4
     0021 iload 4
-    0023 op_0x99
-    0024 nop
-    0025 op_0x09
+    0023 ifeq 32
     0026 iconst_1
     0027 istore 5
     0029 iload 5
     0031 op_0xAC
-    0032 op_0xA7
-    0033 nop
-    0034 iconst_0
+    0032 goto 35
     0035 iload 0
     0037 istore 6
     0039 iload 0

@@ -6,22 +6,16 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=6
     0000 ldc "world"
     0002 astore 1
-    0004 op_0xBB
-    0005 nop
-    0006 op_0x0D
-    0007 op_0x59
+    0004 new Class(Greeter)
+    0007 dup
     0008 aload 1
     0010 invokespecial Method(Greeter.<init>:(Ljava/lang/String;)V)
     0013 astore 2
     0015 aload 2
-    0017 op_0xC0
-    0018 nop
-    0019 op_0x0D
+    0017 checkcast Class(Greeter)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0D
+    0024 checkcast Class(Greeter)
     0027 astore 4
     0029 aload 4
     0031 invokevirtual Method(Greeter.greet:()Ljava/lang/String;)

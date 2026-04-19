@@ -1,55 +1,35 @@
 class_version major=61 minor=0
-this_class    Stack
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-field         items : I 0x0002
-method        <init> ()V 0x0001
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 return
-method        getItems ()I 0x0011
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 bipush -84
-method        pop ()V 0x0011
-  code        max_stack=3 max_locals=2
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 bipush 60
-    0005 op_0x2A
-    0006 op_0x1B
-    0007 iconst_m1
-    0008 iadd
-    0009 op_0xB5
-    0010 nop
-    0011 bipush -79
-method        push ()V 0x0011
-  code        max_stack=3 max_locals=2
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 bipush 60
-    0005 op_0x2A
-    0006 op_0x1B
-    0007 iconst_1
-    0008 iadd
-    0009 op_0xB5
-    0010 nop
-    0011 bipush -79
-method        setItems (I)V 0x0011
+method        main ()V 0x0019
   code        max_stack=2 max_locals=2
-    0000 op_0x2A
-    0001 op_0x1B
-    0002 op_0xB5
-    0003 nop
-    0004 bipush -79
-method        size ()I 0x0011
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 bipush -84
+    0000 new Class(Stack)
+    0003 dup
+    0004 invokespecial Method(Stack.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 invokevirtual Method(Stack.push:()V)
+    0012 aload_0
+    0013 invokevirtual Method(Stack.push:()V)
+    0016 aload_0
+    0017 invokevirtual Method(Stack.push:()V)
+    0020 aload_0
+    0021 invokevirtual Method(Stack.size:()I)
+    0024 istore_1
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload_1
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 aload_0
+    0033 invokevirtual Method(Stack.pop:()V)
+    0036 aload_0
+    0037 invokevirtual Method(Stack.size:()I)
+    0040 istore_1
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload_1
+    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0048 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

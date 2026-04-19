@@ -1,48 +1,23 @@
 class_version major=61 minor=0
-this_class    Service
+this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-field         name : Ljava/lang/String; 0x0001
-method        <init> ()V 0x0001
-  code        max_stack=1 max_locals=1
-    0000 op_0x2A
-    0001 invokespecial Method(java/lang/Object.<init>:()V)
-    0004 return
-method        getName ()Ljava/lang/String; 0x0011
+method        main ()V 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x2A
-    0001 op_0xB4
-    0002 nop
-    0003 sipush 22982
-    0006 nop
-    0007 iconst_1
-    0008 op_0xB0
-    0009 op_0x57
-    0010 ldc "name"
-    0012 invokestatic Method(kotlin/jvm/internal/Intrinsics.throwUninitializedPropertyAccessException:(Ljava/lang/String;)V)
-    0015 aconst_null
-    0016 op_0xB0
-    sub_attr  StackMapTable (6 bytes)
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        setName (Ljava/lang/String;)V 0x0011
-  code        max_stack=2 max_locals=2
-    0000 op_0x2B
-    0001 ldc "<set-?>"
-    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
-    0007 op_0x2B
-    0008 op_0xB5
-    0009 nop
-    0010 op_0x11
-    0011 return
-  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
-method        setup (Ljava/lang/String;)V 0x0011
-  code        max_stack=2 max_locals=2
-    0000 op_0x2B
-    0001 ldc "n"
-    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 op_0x2A
-    0007 op_0x2B
-    0008 invokevirtual Method(Service.setName:(Ljava/lang/String;)V)
-    0011 return
-  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+    0000 new Class(Service)
+    0003 dup
+    0004 invokespecial Method(Service.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 ldc "myService"
+    0011 invokevirtual Method(Service.setup:(Ljava/lang/String;)V)
+    0014 aload_0
+    0015 invokevirtual Method(Service.getName:()Ljava/lang/String;)
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 op_0x5F
+    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0025 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

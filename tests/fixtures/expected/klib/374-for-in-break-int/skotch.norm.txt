@@ -1,0 +1,723 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Int",
+        "Any",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        "Int",
+        "Any",
+        "Unit",
+        {
+          "Class": "java/util/List"
+        },
+        {
+          "Class": "java/util/List"
+        },
+        {
+          "Class": "java/util/List"
+        },
+        {
+          "Class": "java/util/Iterator"
+        },
+        "Bool",
+        "Any",
+        "Any",
+        "Int",
+        "Bool",
+        "Int",
+        "Any",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 5
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "NewObjectArray": 5
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 6,
+                    "index": 7,
+                    "value": 8
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 6,
+                    "index": 10,
+                    "value": 11
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 6,
+                    "index": 13,
+                    "value": 14
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 6,
+                    "index": 16,
+                    "value": 17
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Const": {
+                    "Int": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 6,
+                    "index": 19,
+                    "value": 20
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlin/collections/CollectionsKt",
+                        "method_name": "listOf",
+                        "descriptor": "([Ljava/lang/Object;)Ljava/util/List;"
+                      }
+                    },
+                    "args": [
+                      6
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Local": 22
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
+                "value": {
+                  "Local": 23
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 25,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/Iterable",
+                        "method_name": "iterator",
+                        "descriptor": "()Ljava/util/Iterator;"
+                      }
+                    },
+                    "args": [
+                      24
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 26,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Iterator",
+                        "method_name": "hasNext",
+                        "descriptor": "()Z"
+                      }
+                    },
+                    "args": [
+                      25
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 26,
+              "then_block": 2,
+              "else_block": 3
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 27,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Iterator",
+                        "method_name": "next",
+                        "descriptor": "()Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      25
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 28,
+                "value": {
+                  "Local": 27
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 29,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 30,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 28,
+                    "rhs": 29
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 30,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": "Return"
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 32,
+                "value": {
+                  "Local": 27
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 33,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      32
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [],
+  "strings": []
+}

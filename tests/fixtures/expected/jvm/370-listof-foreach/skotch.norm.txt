@@ -48,53 +48,30 @@ method        main ([Ljava/lang/String;)V 0x0009
     0072 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0075 astore 12
     0077 aload 12
-    0079 op_0xC0
-    0080 nop
-    0081 op_0x17
+    0079 checkcast Class(java/util/List)
     0082 astore 13
     0084 aload 13
-    0086 op_0xC0
-    0087 nop
-    0088 op_0x17
+    0086 checkcast Class(java/util/List)
     0089 astore 14
-    0091 op_0xBB
-    0092 nop
-    0093 aload 89
+    0091 new Class(InputKt$Lambda$0)
+    0094 dup
     0095 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0098 astore 15
     0100 aload 14
-    0102 op_0xB9
-    0103 nop
-    0104 op_0x23
-    0105 aconst_null
-    0106 nop
+    0102 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
     0107 astore 16
-    0109 op_0xA7
-    0110 nop
-    0111 iconst_0
+    0109 goto 112
     0112 aload 16
-    0114 op_0xB9
-    0115 nop
-    0116 op_0x29
-    0117 aconst_null
-    0118 nop
+    0114 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0119 istore 17
     0121 iload 17
-    0123 op_0x99
-    0124 nop
-    0125 op_0x16
+    0123 ifeq 145
     0126 aload 16
-    0128 op_0xB9
-    0129 nop
-    0130 op_0x2D
-    0131 aconst_null
-    0132 nop
+    0128 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0133 astore 18
     0135 aload 15
     0137 aload 18
     0139 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0142 op_0xA7
-    0143 op_0xFF
-    0144 op_0xE2
+    0142 goto 112
     0145 return
     sub_attr  StackMapTable (91 bytes)

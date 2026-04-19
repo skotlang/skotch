@@ -5,10 +5,10 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 bipush 42
-    0002 op_0x3B
+    0002 istore_0
     0003 iconst_1
-    0004 op_0x3C
-    0005 op_0x1A
+    0004 istore_1
+    0005 iload_0
     0006 op_0xBA
     0007 nop
     0008 ldc #0
@@ -16,7 +16,7 @@ method        main ()V 0x0019
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 op_0x5F
     0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0018 op_0x1B
+    0018 iload_1
     0019 op_0xBA
     0020 nop
     0021 op_0x23
@@ -25,8 +25,8 @@ method        main ()V 0x0019
     0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0027 op_0x5F
     0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0031 op_0x1A
-    0032 op_0x1B
+    0031 iload_0
+    0032 iload_1
     0033 op_0xBA
     0034 nop
     0035 op_0x28

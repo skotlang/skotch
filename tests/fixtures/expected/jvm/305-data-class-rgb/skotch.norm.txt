@@ -10,10 +10,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0008 istore 2
     0010 iconst_0
     0011 istore 3
-    0013 op_0xBB
-    0014 nop
-    0015 op_0x0B
-    0016 op_0x59
+    0013 new Class(RGB)
+    0016 dup
     0017 iload 1
     0019 iload 2
     0021 iload 3
@@ -28,10 +26,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0040 istore 6
     0042 iconst_0
     0043 istore 7
-    0045 op_0xBB
-    0046 nop
-    0047 op_0x0B
-    0048 op_0x59
+    0045 new Class(RGB)
+    0048 dup
     0049 iload 5
     0051 iload 6
     0053 iload 7

@@ -5,55 +5,48 @@ access_flags  0x0031
 method        classify (II)Ljava/lang/String; 0x0019
   code        max_stack=1 max_locals=2
     0000 nop
-    0001 op_0x1A
+    0001 iload_0
     0002 op_0x9E
     0003 nop
     0004 op_0x0C
-    0005 op_0x1B
+    0005 iload_1
     0006 op_0x9E
     0007 nop
     0008 iconst_5
     0009 ldc "Q1"
-    0011 op_0xA7
-    0012 nop
-    0013 op_0x2C
-    0014 op_0x1A
+    0011 goto 55
+    0014 iload_0
     0015 op_0x9C
     0016 nop
     0017 op_0x0C
-    0018 op_0x1B
+    0018 iload_1
     0019 op_0x9E
     0020 nop
     0021 iconst_5
     0022 ldc "Q2"
-    0024 op_0xA7
-    0025 nop
-    0026 op_0x1F
-    0027 op_0x1A
+    0024 goto 55
+    0027 iload_0
     0028 op_0x9C
     0029 nop
     0030 op_0x0C
-    0031 op_0x1B
+    0031 iload_1
     0032 op_0x9C
     0033 nop
     0034 iconst_5
     0035 ldc "Q3"
-    0037 op_0xA7
-    0038 nop
-    0039 ldc Method(InputKt.classify:(II)Ljava/lang/String;)
+    0037 goto 55
+    0040 iload_0
     0041 op_0x9E
     0042 nop
     0043 op_0x0C
-    0044 op_0x1B
+    0044 iload_1
     0045 op_0x9C
     0046 nop
     0047 iconst_5
     0048 ldc "Q4"
-    0050 op_0xA7
-    0051 nop
-    0052 iconst_2
+    0050 goto 55
     0053 ldc "axis"
-    0055 op_0xB0
+    0055 areturn
     sub_attr  StackMapTable (10 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

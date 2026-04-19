@@ -6,22 +6,16 @@ method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=3 max_locals=10
     0000 bipush 10
     0002 istore 1
-    0004 op_0xBB
-    0005 nop
-    0006 op_0x0B
-    0007 op_0x59
+    0004 new Class(Box)
+    0007 dup
     0008 iload 1
     0010 invokespecial Method(Box.<init>:(I)V)
     0013 astore 2
     0015 aload 2
-    0017 op_0xC0
-    0018 nop
-    0019 op_0x0B
+    0017 checkcast Class(Box)
     0020 astore 3
     0022 aload 3
-    0024 op_0xC0
-    0025 nop
-    0026 op_0x0B
+    0024 checkcast Class(Box)
     0027 astore 4
     0029 iconst_5
     0030 istore 5
@@ -29,9 +23,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0034 iload 5
     0036 invokevirtual Method(Box.add:(I)V)
     0039 aload 3
-    0041 op_0xC0
-    0042 nop
-    0043 op_0x0B
+    0041 checkcast Class(Box)
     0044 astore 6
     0046 iconst_3
     0047 istore 7
@@ -39,14 +31,10 @@ method        main ([Ljava/lang/String;)V 0x0009
     0051 iload 7
     0053 invokevirtual Method(Box.add:(I)V)
     0056 aload 3
-    0058 op_0xC0
-    0059 nop
-    0060 op_0x0B
+    0058 checkcast Class(Box)
     0061 astore 8
     0063 aload 8
-    0065 op_0xB4
-    0066 nop
-    0067 op_0x16
+    0065 getfield Field(Box.value:I)
     0068 istore 9
     0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0073 iload 9

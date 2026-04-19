@@ -4,58 +4,52 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        collatz (I)I 0x0019
   code        max_stack=2 max_locals=3
-    0000 op_0x1A
-    0001 op_0x3C
+    0000 iload_0
+    0001 istore_1
     0002 iconst_0
-    0003 op_0x3D
-    0004 op_0x1B
+    0003 istore_2
+    0004 iload_1
     0005 iconst_1
     0006 op_0x9F
     0007 nop
-    0008 op_0x1C
-    0009 op_0x1B
+    0008 iload_2
+    0009 iload_1
     0010 iconst_2
     0011 irem
-    0012 op_0x9A
-    0013 nop
-    0014 op_0x0A
-    0015 op_0x1B
+    0012 ifne 22
+    0015 iload_1
     0016 iconst_2
     0017 idiv
-    0018 op_0x3C
-    0019 op_0xA7
-    0020 nop
-    0021 op_0x09
-    0022 op_0x1B
+    0018 istore_1
+    0019 goto 28
+    0022 iload_1
     0023 iconst_3
     0024 imul
     0025 iconst_1
     0026 iadd
-    0027 op_0x3C
+    0027 istore_1
     0028 op_0x84
     0029 iconst_m1
     0030 aconst_null
-    0031 op_0xA7
-    0032 op_0xFF
-    0033 op_0xE5
-    0034 op_0x1C
+    0031 goto 4
+    0034 iload_2
     0035 op_0xAC
     sub_attr  StackMapTable (10 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_1
-    0001 op_0x3B
-    0002 op_0x1A
+    0001 istore_0
+    0002 iload_0
     0003 bipush 11
     0005 op_0xA2
     0006 nop
-    0007 op_0x1A
-    0008 op_0x1A
-    0009 op_0x1A
+    0007 iload_0
+    0008 iload_0
+    0009 iload_0
     0010 invokestatic Method(InputKt.collatz:(I)I)
     0013 op_0xBA
     0014 nop
-    0015 op_0x1A
+    0015 iload_0
     0016 nop
     0017 nop
     0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -64,9 +58,7 @@ method        main ()V 0x0019
     0025 op_0x84
     0026 nop
     0027 aconst_null
-    0028 op_0xA7
-    0029 op_0xFF
-    0030 op_0xE6
+    0028 goto 2
     0031 return
     sub_attr  StackMapTable (7 bytes)
 method        main ([Ljava/lang/String;)V 0x1009

@@ -1,0 +1,2 @@
+status = "supported"
+features = ["runBlocking", "async", "await", "launch", "delay", "suspend-fun", "string-template"]

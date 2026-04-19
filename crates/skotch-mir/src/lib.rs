@@ -73,6 +73,14 @@ pub enum Rvalue {
         lhs: LocalId,
         rhs: LocalId,
     },
+    /// Read a static field: `ClassName.FIELD`.
+    /// On JVM this emits a `getstatic` instruction. The descriptor is the
+    /// JVM field type descriptor (e.g. `"Lkotlinx/coroutines/GlobalScope;"`).
+    GetStaticField {
+        class_name: std::string::String,
+        field_name: std::string::String,
+        descriptor: std::string::String,
+    },
     /// Create a new instance of a class (uninitialized — followed by Constructor call).
     NewInstance(std::string::String),
     /// Read an instance field: `receiver.field_name`.
@@ -291,6 +299,255 @@ pub struct MirFunction {
     /// Exception handlers (try-catch) for this function.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exception_handlers: Vec<ExceptionHandler>,
+    /// True for `suspend fun` declarations. The MIR lowerer has
+    /// already applied the first half of the CPS transform: a
+    /// trailing `$completion: Continuation` parameter has been
+    /// injected and `return_ty` has been rewritten to `Ty::Any`
+    /// (mapping to `Ljava/lang/Object;` on JVM). The full state-
+    /// machine transform for multiple suspension points is still
+    /// future work — see milestones.yaml v0.9.0.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_suspend: bool,
+    /// Session 5: the Kotlin-source-level declared return type of a
+    /// suspend function, captured before Session 2 rewrites
+    /// `return_ty` to `Ty::Any`. Call sites need this to emit the
+    /// right `checkcast` on resume (e.g. `checkcast String` after a
+    /// `suspend fun greet(String): String` invoke). `None` for non-
+    /// suspend functions; `Some(Ty::Unit)` for suspend funs that
+    /// don't return a meaningful value (no checkcast required).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suspend_original_return_ty: Option<Ty>,
+    /// If present, this function's body is generated as a coroutine
+    /// state machine (Session 3 of the CPS transform). The JVM
+    /// backend bypasses the normal block-walking codegen and emits
+    /// the canonical dispatcher + tableswitch pattern kotlinc
+    /// produces for suspend functions. Only set when the function
+    /// has **exactly one** suspension point; zero-suspension bodies
+    /// keep the plain Session 2 shape and multi-suspension bodies
+    /// are rejected at lowering time until Session 4 lands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suspend_state_machine: Option<SuspendStateMachine>,
+}
+
+/// Metadata describing the shape of a coroutine state machine, either
+/// single- or multi-suspension-point. Carried on a [`MirFunction`] so
+/// the JVM backend can emit the canonical kotlinc-style bytecode
+/// without having to rediscover the structure.
+///
+/// ## Session 3 (single-suspension)
+///
+/// [`SuspendStateMachine::sites`] is empty. The `suspend_call_class` /
+/// `suspend_call_method` / `resume_return_text` fields describe the
+/// one callee and the literal-string tail. The backend emits the
+/// original hand-rolled shape.
+///
+/// ## Session 4 (multi-suspension)
+///
+/// [`SuspendStateMachine::sites`] is non-empty — one entry per suspend
+/// call in source order — and [`SuspendStateMachine::spill_layout`]
+/// records the synthetic `I$n` / `L$n` / etc fields the continuation
+/// class needs for locals live across any suspend. The backend
+/// splits the function body into segments on the call sites and
+/// emits the dispatcher + tableswitch + per-case body by walking the
+/// MIR between sites.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SuspendStateMachine {
+    /// JVM internal name of the synthetic `ContinuationImpl` subclass
+    /// the backend generates alongside this function, e.g.
+    /// `"InputKt$run$1"`.
+    pub continuation_class: String,
+    /// JVM internal name of the class that owns the outer (state-
+    /// machine-bearing) suspend function, e.g. `"InputKt"`. The
+    /// synthetic `invokeSuspend` method re-invokes this function
+    /// when the coroutine resumes, so the `invokeSuspend` body
+    /// needs the owning class's method-ref.
+    pub outer_class: String,
+    /// Source-level name of the outer suspend function (e.g.
+    /// `"run"`). Paired with [`SuspendStateMachine::outer_class`]
+    /// to drive the `invokestatic` inside `invokeSuspend`.
+    pub outer_method: String,
+    /// Types of the outer function's user parameters (everything
+    /// except the trailing `$completion`). Empty for zero-arg suspend
+    /// functions. The `invokeSuspend` method pushes dummy values of
+    /// these types before the Continuation when calling back into
+    /// the outer function.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outer_user_param_tys: Vec<Ty>,
+    /// JVM internal name of the class that owns the callee suspend
+    /// function (Session 3 single-callee shape). For same-file
+    /// suspends this is the wrapper class, e.g. `"InputKt"`.
+    /// Unused when [`SuspendStateMachine::sites`] is populated —
+    /// multi-suspend bodies record per-site callees there.
+    pub suspend_call_class: String,
+    /// Source-level name of the callee suspend function, e.g.
+    /// `"yield_"` (Session 3 single-callee shape). The descriptor is
+    /// always `(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;`.
+    pub suspend_call_method: String,
+    /// Pre-resolved constant the function returns once the
+    /// suspended callee resumes. For `MirConst::String` the MIR
+    /// lowerer resolves the pool index to the literal text so the
+    /// JVM backend can intern the string in its own constant pool
+    /// without having to thread the module reference through.
+    /// Only meaningful for the Session 3 single-suspension shape;
+    /// Session 4 bodies emit the real return expression.
+    pub resume_return_text: String,
+    /// Session 4: one entry per suspend call in the outer function,
+    /// in source order. Empty for the Session 3 single-suspension
+    /// shape (which uses the `suspend_call_*` + `resume_return_text`
+    /// fields instead).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SuspendCallSite>,
+    /// Session 4: spill slots the continuation class needs. Ordered
+    /// to match the order backends emit fields. Empty when no local
+    /// crosses a suspend boundary (including the Session 3 shape).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spill_layout: Vec<SpillSlot>,
+    /// Session 28: true when the outer function is an instance method.
+    /// The continuation's `invokeSuspend` must use `invokevirtual`
+    /// instead of `invokestatic`, and the receiver (`this`) is stored
+    /// as a field on the continuation class.
+    #[serde(default)]
+    pub is_instance_method: bool,
+}
+
+/// One suspend-call site in a multi-suspension-point state machine.
+/// Locations are MIR-level (`block_idx` + `stmt_idx`) so the JVM
+/// backend can walk the body linearly, emitting the segment up to
+/// each site and then the canonical spill / set-label / invoke /
+/// check-SUSPENDED sequence in its place.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SuspendCallSite {
+    /// Index of the block containing the suspend call.
+    pub block_idx: u32,
+    /// Index of the `Stmt::Assign` within that block that *is* the
+    /// suspend call (i.e. `Rvalue::Call { kind: Static(...), .. }`
+    /// whose callee is a suspend fun).
+    pub stmt_idx: u32,
+    /// JVM internal name of the class that owns the callee suspend
+    /// function. For same-file suspends this is the wrapper class.
+    pub callee_class: String,
+    /// Source-level name of the callee suspend function. The callee
+    /// descriptor is built from [`SuspendCallSite::arg_tys`] plus the
+    /// trailing `Continuation` and the erased `Object` return.
+    pub callee_method: String,
+    /// MIR locals holding the user-supplied arguments to this suspend
+    /// call, in source order (i.e. excluding the trailing
+    /// `$completion`). Empty for Session 3/4-era no-arg calls like
+    /// `yield_()`. Session 5: the JVM backend loads these onto the
+    /// stack before the continuation for the invoke.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<LocalId>,
+    /// Per-arg Kotlin/MIR types, paired positionally with
+    /// [`SuspendCallSite::args`]. Backends use these to build the
+    /// JVM method descriptor (and to decide whether to load a
+    /// primitive slot vs a reference slot).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arg_tys: Vec<Ty>,
+    /// Declared return type of the callee suspend fun, **before**
+    /// Session 2's `Object`-rewrite. After the invoke returns the
+    /// boxed result, the backend emits `checkcast` against this type
+    /// (for `Unit`/`Nothing` / non-reference slots no checkcast is
+    /// emitted). Defaults to `Unit` for backwards compat with the
+    /// Session 3/4 shapes (their callees all return `Unit`).
+    #[serde(default = "default_return_ty_unit")]
+    pub return_ty: Ty,
+    /// True if the suspend call dispatches through `invokeinterface`
+    /// (e.g. `Deferred.await()`) rather than `invokestatic`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_virtual: bool,
+    /// MIR local that receives the (post-checkcast) result of this
+    /// suspend call. For no-arg Unit-returning calls this local is
+    /// dead (we never load from it), matching the Session 3/4 shape.
+    /// For calls with a user-visible return value (Session 5+) the
+    /// backend stores the checkcast'd Object into this slot.
+    #[serde(default = "default_result_local_zero")]
+    pub result_local: LocalId,
+    /// Locals that are live across this suspend call — i.e. must be
+    /// spilled to continuation fields before the invoke and
+    /// restored from them on resume. Each entry pairs a MIR local id
+    /// with the index of its spill slot in [`SuspendStateMachine::spill_layout`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub live_spills: Vec<LiveSpill>,
+}
+
+fn default_return_ty_unit() -> Ty {
+    Ty::Unit
+}
+
+fn default_result_local_zero() -> LocalId {
+    LocalId(0)
+}
+
+/// A (local, spill-slot) pair recorded on a [`SuspendCallSite`].
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct LiveSpill {
+    /// MIR local being spilled.
+    pub local: LocalId,
+    /// Index into [`SuspendStateMachine::spill_layout`].
+    pub slot: u32,
+}
+
+/// A synthetic continuation-class field reserved for a local that
+/// lives across at least one suspend call. The `kind` decides the
+/// JVM type descriptor (`I`, `J`, `D`, `F`, or `Ljava/lang/Object;`)
+/// and the naming prefix (`I$`, `J$`, etc.).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpillSlot {
+    /// Kotlinc-style name, e.g. `"I$0"`, `"L$2"`, `"J$0"`. Backends
+    /// use this as-is for the field name.
+    pub name: String,
+    /// JVM type category of this slot.
+    pub kind: SpillKind,
+}
+
+/// Type category of a [`SpillSlot`]. Determines both the JVM
+/// descriptor and the kotlinc naming prefix.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpillKind {
+    /// `I$n` — `int`, `boolean`.
+    Int,
+    /// `J$n` — `long`.
+    Long,
+    /// `F$n` — `float`.
+    Float,
+    /// `D$n` — `double`.
+    Double,
+    /// `L$n` — any reference (`Object`, `String`, class types, nullables).
+    Ref,
+}
+
+impl SpillKind {
+    /// Field name prefix, e.g. `"I$"`, `"L$"`.
+    pub fn prefix(self) -> &'static str {
+        match self {
+            SpillKind::Int => "I$",
+            SpillKind::Long => "J$",
+            SpillKind::Float => "F$",
+            SpillKind::Double => "D$",
+            SpillKind::Ref => "L$",
+        }
+    }
+    /// JVM field descriptor, e.g. `"I"`, `"Ljava/lang/Object;"`.
+    pub fn descriptor(self) -> &'static str {
+        match self {
+            SpillKind::Int => "I",
+            SpillKind::Long => "J",
+            SpillKind::Float => "F",
+            SpillKind::Double => "D",
+            SpillKind::Ref => "Ljava/lang/Object;",
+        }
+    }
+    /// Classify a [`Ty`] into the category backends use for spill slots.
+    /// Matches kotlinc's behavior: `bool` widens to `int`, function
+    /// types and arrays become `Ref`.
+    pub fn for_ty(ty: &Ty) -> SpillKind {
+        match ty {
+            Ty::Bool | Ty::Int => SpillKind::Int,
+            Ty::Long => SpillKind::Long,
+            Ty::Double => SpillKind::Double,
+            _ => SpillKind::Ref,
+        }
+    }
 }
 
 /// An exception handler entry, mapping a range of try-body blocks to a
@@ -339,6 +596,30 @@ pub struct MirClass {
     /// Secondary constructors — additional `<init>` methods with different signatures.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary_constructors: Vec<MirFunction>,
+    /// Session 7: true for synthetic lambda classes whose body
+    /// contains a suspend call (or are declared `suspend {}`). When
+    /// set, the JVM backend emits the class as a subclass of
+    /// `kotlin/coroutines/jvm/internal/SuspendLambda` with the
+    /// canonical 5-method shape (ctor, invokeSuspend, create, typed
+    /// invoke, bridge invoke).
+    ///
+    /// ## invokeSuspend body
+    ///
+    /// The first method in [`MirClass::methods`] is the lambda's
+    /// `invoke` fn as built by the MIR lowerer. For suspend lambdas,
+    /// that fn's `suspend_state_machine` marker (Session 7 part 2)
+    /// tells the JVM backend how to emit the real CPS state machine
+    /// into `invokeSuspend(Object)Object`. Session 7 part 1 left the
+    /// body as an `IllegalStateException` stub; part 2 replaces it
+    /// with a kotlinc-shaped state machine for 0 or 1 suspension
+    /// points. Richer shapes (multi-suspension, capture-crossing
+    /// locals, non-literal tails) fall back to the stub and are
+    /// tracked for Session 7 part 3+.
+    ///
+    /// Non-suspend lambdas keep the Session 3/4/5 `$Lambda$N` shape
+    /// (Function1-only, direct invoke) byte-stable.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_suspend_lambda: bool,
 }
 
 /// A field in a MIR class.
@@ -362,6 +643,12 @@ pub struct MirModule {
     /// Names of enum classes (mapped to String type for parameter resolution).
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
     pub enum_names: rustc_hash::FxHashSet<String>,
+    /// Transient flag: when true, the NEXT lambda lowered should be
+    /// a SuspendLambda. Set by coroutine builder handlers (runBlocking,
+    /// launch, async) before their trailing lambda arg is lowered.
+    /// Cleared by the Expr::Lambda handler after use.
+    #[serde(skip)]
+    pub force_suspend_lambda: bool,
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,

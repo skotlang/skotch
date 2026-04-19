@@ -26,17 +26,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0036 nop
     0037 iconst_4
     0038 iconst_0
-    0039 op_0xA7
-    0040 nop
-    0041 iconst_1
+    0039 goto 43
     0042 iconst_1
     0043 istore 9
     0045 iconst_0
     0046 istore 10
     0048 iload 9
-    0050 op_0x99
-    0051 nop
-    0052 op_0x20
+    0050 ifeq 82
     0053 iload 4
     0055 istore 11
     0057 iload 6
@@ -47,16 +43,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0066 nop
     0067 iconst_4
     0068 iconst_0
-    0069 op_0xA7
-    0070 nop
-    0071 iconst_1
+    0069 goto 73
     0072 iconst_1
     0073 istore 13
     0075 iload 13
     0077 istore 10
-    0079 op_0xA7
-    0080 nop
-    0081 iconst_0
+    0079 goto 82
     0082 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0085 iload 10
     0087 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -70,20 +62,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0103 nop
     0104 iconst_4
     0105 iconst_0
-    0106 op_0xA7
-    0107 nop
-    0108 iconst_1
+    0106 goto 110
     0109 iconst_1
     0110 istore 16
     0112 iconst_1
     0113 istore 17
     0115 iload 16
-    0117 op_0x99
-    0118 nop
-    0119 iconst_3
-    0120 op_0xA7
-    0121 nop
-    0122 op_0x20
+    0117 ifeq 123
+    0120 goto 152
     0123 iload 6
     0125 istore 18
     0127 iload 4
@@ -94,16 +80,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0136 nop
     0137 iconst_4
     0138 iconst_0
-    0139 op_0xA7
-    0140 nop
-    0141 iconst_1
+    0139 goto 143
     0142 iconst_1
     0143 istore 20
     0145 iload 20
     0147 istore 17
-    0149 op_0xA7
-    0150 nop
-    0151 iconst_0
+    0149 goto 152
     0152 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0155 iload 17
     0157 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -117,9 +99,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0173 nop
     0174 iconst_4
     0175 iconst_0
-    0176 op_0xA7
-    0177 nop
-    0178 iconst_1
+    0176 goto 180
     0179 iconst_1
     0180 istore 23
     0182 iconst_1
@@ -131,9 +111,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0192 iconst_0
     0193 istore 26
     0195 iload 25
-    0197 op_0x99
-    0198 nop
-    0199 op_0x20
+    0197 ifeq 229
     0200 iload 6
     0202 istore 27
     0204 iload 2
@@ -144,16 +122,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0213 nop
     0214 iconst_4
     0215 iconst_0
-    0216 op_0xA7
-    0217 nop
-    0218 iconst_1
+    0216 goto 220
     0219 iconst_1
     0220 istore 29
     0222 iload 29
     0224 istore 26
-    0226 op_0xA7
-    0227 nop
-    0228 iconst_0
+    0226 goto 229
     0229 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0232 iload 26
     0234 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -167,20 +141,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0250 nop
     0251 iconst_4
     0252 iconst_0
-    0253 op_0xA7
-    0254 nop
-    0255 iconst_1
+    0253 goto 257
     0256 iconst_1
     0257 istore 32
     0259 iconst_0
     0260 istore 33
     0262 iload 32
-    0264 op_0x99
-    0265 nop
-    0266 op_0x48
-    0267 op_0xA7
-    0268 nop
-    0269 op_0x28
+    0264 ifeq 336
+    0267 goto 307
     0270 iload 6
     0272 istore 34
     0274 iconst_0
@@ -191,16 +159,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0282 nop
     0283 iconst_4
     0284 iconst_0
-    0285 op_0xA7
-    0286 nop
-    0287 iconst_1
+    0285 goto 289
     0288 iconst_1
     0289 istore 36
     0291 iload 36
     0293 istore 37
-    0295 op_0xA7
-    0296 nop
-    0297 iconst_0
+    0295 goto 298
     0298 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0301 iload 37
     0303 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -215,23 +179,15 @@ method        main ([Ljava/lang/String;)V 0x0009
     0320 nop
     0321 iconst_4
     0322 iconst_0
-    0323 op_0xA7
-    0324 nop
-    0325 iconst_1
+    0323 goto 327
     0326 iconst_1
     0327 istore 40
     0329 iload 40
     0331 istore 33
-    0333 op_0xA7
-    0334 nop
-    0335 iconst_0
+    0333 goto 336
     0336 iconst_0
     0337 istore 37
     0339 iload 33
-    0341 op_0x99
-    0342 op_0xFF
-    0343 op_0xD5
-    0344 op_0xA7
-    0345 op_0xFF
-    0346 op_0xB6
+    0341 ifeq 298
+    0344 goto 270
     sub_attr  StackMapTable (903 bytes)

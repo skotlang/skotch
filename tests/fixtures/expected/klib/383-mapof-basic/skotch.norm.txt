@@ -1,0 +1,713 @@
+--- manifest ---
+abi_version=0.1.0
+builtins_platform=NATIVE
+compiler=skotch
+compiler_version=0.8.3
+depends=stdlib
+native_targets=macos_arm64
+unique_name=inputkt
+
+--- mir.json ---
+{
+  "wrapper_class": "InputKt",
+  "functions": [
+    {
+      "id": 0,
+      "name": "main",
+      "params": [],
+      "locals": [
+        "Int",
+        "String",
+        "Any",
+        {
+          "Class": "kotlin/Pair"
+        },
+        "Int",
+        "String",
+        "Any",
+        {
+          "Class": "kotlin/Pair"
+        },
+        "Int",
+        "String",
+        "Any",
+        {
+          "Class": "kotlin/Pair"
+        },
+        "Int",
+        "Any",
+        "Int",
+        "Unit",
+        "Int",
+        "Unit",
+        "Int",
+        "Unit",
+        {
+          "Class": "java/util/Map"
+        },
+        {
+          "Class": "java/util/Map"
+        },
+        {
+          "Class": "java/util/Map"
+        },
+        "Unit",
+        {
+          "Class": "java/util/Map"
+        },
+        "Int",
+        "Any",
+        "Any",
+        "Unit",
+        {
+          "Class": "java/util/Map"
+        },
+        "Int",
+        "Unit"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 0,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "NewInstance": "kotlin/Pair"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "ConstructorJava": {
+                        "class_name": "kotlin/Pair",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)V"
+                      }
+                    },
+                    "args": [
+                      2,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "NewInstance": "kotlin/Pair"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "ConstructorJava": {
+                        "class_name": "kotlin/Pair",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)V"
+                      }
+                    },
+                    "args": [
+                      6,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      8
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "NewInstance": "kotlin/Pair"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "ConstructorJava": {
+                        "class_name": "kotlin/Pair",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)V"
+                      }
+                    },
+                    "args": [
+                      10,
+                      9
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "NewTypedObjectArray": {
+                    "size": 12,
+                    "element_class": "kotlin/Pair"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 13,
+                    "index": 14,
+                    "value": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 13,
+                    "index": 16,
+                    "value": 7
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "ObjectArrayStore": {
+                    "array": 13,
+                    "index": 18,
+                    "value": 11
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlin/collections/MapsKt",
+                        "method_name": "mapOf",
+                        "descriptor": "([Lkotlin/Pair;)Ljava/util/Map;"
+                      }
+                    },
+                    "args": [
+                      13
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "Local": 20
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "Local": 21
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      22
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
+                "value": {
+                  "Local": 21
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 25,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 26,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      25
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 27,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "get",
+                        "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      24,
+                      26
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 28,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      27
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 29,
+                "value": {
+                  "Local": 21
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 30,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "size",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      29
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 31,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      30
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Unit"
+    },
+    {
+      "id": 1,
+      "name": "delay",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 2,
+      "name": "yield",
+      "params": [
+        0
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Unit"
+    },
+    {
+      "id": 3,
+      "name": "withContext",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/coroutines/CoroutineContext"
+        },
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 4,
+      "name": "coroutineScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 5,
+      "name": "supervisorScope",
+      "params": [
+        0,
+        1
+      ],
+      "locals": [
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 6,
+      "name": "withTimeout",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": "Any"
+    },
+    {
+      "id": 7,
+      "name": "withTimeoutOrNull",
+      "params": [
+        0,
+        1,
+        2
+      ],
+      "locals": [
+        "Long",
+        {
+          "Class": "kotlin/jvm/functions/Function2"
+        },
+        {
+          "Class": "kotlin/coroutines/Continuation"
+        }
+      ],
+      "blocks": [
+        {
+          "stmts": [],
+          "terminator": "Return"
+        }
+      ],
+      "return_ty": "Any",
+      "is_abstract": true,
+      "is_suspend": true,
+      "suspend_original_return_ty": {
+        "Nullable": "Any"
+      }
+    }
+  ],
+  "classes": [],
+  "strings": [
+    "one",
+    "two",
+    "three"
+  ]
+}

@@ -10,23 +10,15 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0005 astore 2
     0007 aload 1
     0009 aload 2
-    0011 op_0xA6
-    0012 nop
-    0013 iconst_4
+    0011 if_acmpne 18
     0014 iconst_0
-    0015 op_0xA7
-    0016 nop
-    0017 iconst_1
+    0015 goto 19
     0018 iconst_1
     0019 istore 3
     0021 iload 3
-    0023 op_0x99
-    0024 nop
-    0025 op_0x25
+    0023 ifeq 60
     0026 aload 0
-    0028 op_0xC0
-    0029 nop
-    0030 op_0x0B
+    0028 checkcast Class(java/lang/String)
     0031 astore 4
     0033 ldc "Hello, "
     0035 astore 5
@@ -40,14 +32,12 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0052 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
     0055 astore 8
     0057 aload 8
-    0059 op_0xB0
-    0060 op_0xA7
-    0061 nop
-    0062 iconst_0
+    0059 areturn
+    0060 goto 63
     0063 ldc "Hello, stranger"
     0065 astore 9
     0067 aload 9
-    0069 op_0xB0
+    0069 areturn
     sub_attr  StackMapTable (69 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=5

@@ -1,0 +1,58 @@
+dex_version   035
+strings       22
+types         11
+methods       7
+classes       1
+
+--- strings ---
+  "I"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/Set;"
+  "Lkotlin/collections/SetsKt;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "setOf"
+  "size"
+  "valueOf"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/Set;
+  Lkotlin/collections/SetsKt;
+  V
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/util/Set;.size()I
+  Lkotlin/collections/SetsKt;.setOf([Ljava/lang/Object;)Ljava/util/Set;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=23 ins=0 outs=2 insns=57
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

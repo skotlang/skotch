@@ -2,5 +2,5 @@
 #cargo run -p xtask -- gen-fixtures --target klib
 #cargo fmt --all -- --check
 cargo fmt --all
-cargo clippy --workspace --all-targets -- -Dwarnings
+RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets
 cargo test --workspace

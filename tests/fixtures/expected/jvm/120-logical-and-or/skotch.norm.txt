@@ -18,17 +18,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0019 nop
     0020 iconst_4
     0021 iconst_0
-    0022 op_0xA7
-    0023 nop
-    0024 iconst_1
+    0022 goto 26
     0025 iconst_1
     0026 istore 5
     0028 iconst_0
     0029 istore 6
     0031 iload 5
-    0033 op_0x99
-    0034 nop
-    0035 op_0x20
+    0033 ifeq 65
     0036 iload 2
     0038 istore 7
     0040 bipush 10
@@ -39,16 +35,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0049 nop
     0050 iconst_4
     0051 iconst_0
-    0052 op_0xA7
-    0053 nop
-    0054 iconst_1
+    0052 goto 56
     0055 iconst_1
     0056 istore 9
     0058 iload 9
     0060 istore 6
-    0062 op_0xA7
-    0063 nop
-    0064 iconst_0
+    0062 goto 65
     0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0068 iload 6
     0070 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -62,20 +54,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0085 nop
     0086 iconst_4
     0087 iconst_0
-    0088 op_0xA7
-    0089 nop
-    0090 iconst_1
+    0088 goto 92
     0091 iconst_1
     0092 istore 12
     0094 iconst_1
     0095 istore 13
     0097 iload 12
-    0099 op_0x99
-    0100 nop
-    0101 iconst_3
-    0102 op_0xA7
-    0103 nop
-    0104 op_0x20
+    0099 ifeq 105
+    0102 goto 134
     0105 iload 2
     0107 istore 14
     0109 bipush -10
@@ -86,16 +72,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0118 nop
     0119 iconst_4
     0120 iconst_0
-    0121 op_0xA7
-    0122 nop
-    0123 iconst_1
+    0121 goto 125
     0124 iconst_1
     0125 istore 16
     0127 iload 16
     0129 istore 13
-    0131 op_0xA7
-    0132 nop
-    0133 iconst_0
+    0131 goto 134
     0134 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0137 iload 13
     0139 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -109,17 +91,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0154 nop
     0155 iconst_4
     0156 iconst_0
-    0157 op_0xA7
-    0158 nop
-    0159 iconst_1
+    0157 goto 161
     0160 iconst_1
     0161 istore 19
     0163 iconst_0
     0164 istore 20
     0166 iload 19
-    0168 op_0x99
-    0169 nop
-    0170 op_0x20
+    0168 ifeq 200
     0171 iload 2
     0173 istore 21
     0175 bipush -10
@@ -130,16 +108,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0184 nop
     0185 iconst_4
     0186 iconst_0
-    0187 op_0xA7
-    0188 nop
-    0189 iconst_1
+    0187 goto 191
     0190 iconst_1
     0191 istore 23
     0193 iload 23
     0195 istore 20
-    0197 op_0xA7
-    0198 nop
-    0199 iconst_0
+    0197 goto 200
     0200 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0203 iload 20
     0205 invokevirtual Method(java/io/PrintStream.println:(Z)V)
@@ -153,20 +127,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0220 nop
     0221 iconst_4
     0222 iconst_0
-    0223 op_0xA7
-    0224 nop
-    0225 iconst_1
+    0223 goto 227
     0226 iconst_1
     0227 istore 26
     0229 iconst_1
     0230 istore 27
     0232 iload 26
-    0234 op_0x99
-    0235 nop
-    0236 iconst_3
-    0237 op_0xA7
-    0238 nop
-    0239 op_0x20
+    0234 ifeq 240
+    0237 goto 269
     0240 iload 2
     0242 istore 28
     0244 bipush 10
@@ -177,16 +145,12 @@ method        main ([Ljava/lang/String;)V 0x0009
     0253 nop
     0254 iconst_4
     0255 iconst_0
-    0256 op_0xA7
-    0257 nop
-    0258 iconst_1
+    0256 goto 260
     0259 iconst_1
     0260 istore 30
     0262 iload 30
     0264 istore 27
-    0266 op_0xA7
-    0267 nop
-    0268 iconst_0
+    0266 goto 269
     0269 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0272 iload 27
     0274 invokevirtual Method(java/io/PrintStream.println:(Z)V)

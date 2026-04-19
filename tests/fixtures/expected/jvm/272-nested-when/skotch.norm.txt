@@ -6,9 +6,7 @@ method        dayType (I)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=25
     0000 iload 0
     0002 istore 1
-    0004 op_0xA7
-    0005 nop
-    0006 iconst_0
+    0004 goto 7
     0007 iconst_1
     0008 istore 2
     0010 iload 1
@@ -17,22 +15,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0015 nop
     0016 iconst_4
     0017 iconst_0
-    0018 op_0xA7
-    0019 nop
-    0020 iconst_1
+    0018 goto 22
     0021 iconst_1
     0022 istore 3
     0024 iload 3
-    0026 op_0x99
-    0027 nop
-    0028 op_0x0E
+    0026 ifeq 40
     0029 ldc "weekend"
     0031 astore 4
     0033 aload 4
     0035 astore 5
-    0037 op_0xA7
-    0038 nop
-    0039 op_0xD6
+    0037 goto 251
     0040 bipush 7
     0042 istore 6
     0044 iload 1
@@ -41,22 +33,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0049 nop
     0050 iconst_4
     0051 iconst_0
-    0052 op_0xA7
-    0053 nop
-    0054 iconst_1
+    0052 goto 56
     0055 iconst_1
     0056 istore 7
     0058 iload 7
-    0060 op_0x99
-    0061 nop
-    0062 op_0x0E
+    0060 ifeq 74
     0063 ldc "weekend"
     0065 astore 8
     0067 aload 8
     0069 astore 5
-    0071 op_0xA7
-    0072 nop
-    0073 op_0xB4
+    0071 goto 251
     0074 iconst_2
     0075 istore 9
     0077 iload 1
@@ -65,22 +51,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0082 nop
     0083 iconst_4
     0084 iconst_0
-    0085 op_0xA7
-    0086 nop
-    0087 iconst_1
+    0085 goto 89
     0088 iconst_1
     0089 istore 10
     0091 iload 10
-    0093 op_0x99
-    0094 nop
-    0095 op_0x0E
+    0093 ifeq 107
     0096 ldc "weekday"
     0098 astore 11
     0100 aload 11
     0102 astore 5
-    0104 op_0xA7
-    0105 nop
-    0106 op_0x93
+    0104 goto 251
     0107 iconst_3
     0108 istore 12
     0110 iload 1
@@ -89,22 +69,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0115 nop
     0116 iconst_4
     0117 iconst_0
-    0118 op_0xA7
-    0119 nop
-    0120 iconst_1
+    0118 goto 122
     0121 iconst_1
     0122 istore 13
     0124 iload 13
-    0126 op_0x99
-    0127 nop
-    0128 op_0x0E
+    0126 ifeq 140
     0129 ldc "weekday"
     0131 astore 14
     0133 aload 14
     0135 astore 5
-    0137 op_0xA7
-    0138 nop
-    0139 op_0x72
+    0137 goto 251
     0140 iconst_4
     0141 istore 15
     0143 iload 1
@@ -113,22 +87,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0148 nop
     0149 iconst_4
     0150 iconst_0
-    0151 op_0xA7
-    0152 nop
-    0153 iconst_1
+    0151 goto 155
     0154 iconst_1
     0155 istore 16
     0157 iload 16
-    0159 op_0x99
-    0160 nop
-    0161 op_0x0E
+    0159 ifeq 173
     0162 ldc "weekday"
     0164 astore 17
     0166 aload 17
     0168 astore 5
-    0170 op_0xA7
-    0171 nop
-    0172 op_0x51
+    0170 goto 251
     0173 iconst_5
     0174 istore 18
     0176 iload 1
@@ -137,22 +105,16 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0181 nop
     0182 iconst_4
     0183 iconst_0
-    0184 op_0xA7
-    0185 nop
-    0186 iconst_1
+    0184 goto 188
     0187 iconst_1
     0188 istore 19
     0190 iload 19
-    0192 op_0x99
-    0193 nop
-    0194 op_0x0E
+    0192 ifeq 206
     0195 ldc "weekday"
     0197 astore 20
     0199 aload 20
     0201 astore 5
-    0203 op_0xA7
-    0204 nop
-    0205 op_0x30
+    0203 goto 251
     0206 bipush 6
     0208 istore 21
     0210 iload 1
@@ -161,31 +123,23 @@ method        dayType (I)Ljava/lang/String; 0x0009
     0215 nop
     0216 iconst_4
     0217 iconst_0
-    0218 op_0xA7
-    0219 nop
-    0220 iconst_1
+    0218 goto 222
     0221 iconst_1
     0222 istore 22
     0224 iload 22
-    0226 op_0x99
-    0227 nop
-    0228 op_0x0E
+    0226 ifeq 240
     0229 ldc "weekday"
     0231 astore 23
     0233 aload 23
     0235 astore 5
-    0237 op_0xA7
-    0238 nop
-    0239 op_0x0E
+    0237 goto 251
     0240 ldc "invalid"
     0242 astore 24
     0244 aload 24
     0246 astore 5
-    0248 op_0xA7
-    0249 nop
-    0250 iconst_0
+    0248 goto 251
     0251 aload 5
-    0253 op_0xB0
+    0253 areturn
     sub_attr  StackMapTable (457 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=9

@@ -8,10 +8,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0002 astore 1
     0004 bipush 30
     0006 istore 2
-    0008 op_0xBB
-    0009 nop
-    0010 op_0x0D
-    0011 op_0x59
+    0008 new Class(Person)
+    0011 dup
     0012 aload 1
     0014 iload 2
     0016 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
@@ -23,10 +21,8 @@ method        main ([Ljava/lang/String;)V 0x0009
     0031 astore 4
     0033 bipush 25
     0035 istore 5
-    0037 op_0xBB
-    0038 nop
-    0039 op_0x0D
-    0040 op_0x59
+    0037 new Class(Person)
+    0040 dup
     0041 aload 4
     0043 iload 5
     0045 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)

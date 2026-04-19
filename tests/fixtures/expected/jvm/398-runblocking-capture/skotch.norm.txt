@@ -1,0 +1,34 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=10
+    0000 ldc "hello from coroutine"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 new Class(InputKt$Lambda$0)
+    0011 dup
+    0012 aconst_null
+    0013 astore 4
+    0015 aload 2
+    0017 aload 4
+    0019 invokespecial Method(InputKt$Lambda$0.<init>:(Ljava/lang/String;Lkotlin/coroutines/Continuation;)V)
+    0022 astore 3
+    0024 aconst_null
+    0025 astore 5
+    0027 aload 3
+    0029 checkcast Class(kotlin/jvm/functions/Function2)
+    0032 astore 6
+    0034 iconst_1
+    0035 istore 7
+    0037 aconst_null
+    0038 astore 8
+    0040 aload 5
+    0042 aload 6
+    0044 iload 7
+    0046 aload 8
+    0048 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0051 astore 9
+    0053 return

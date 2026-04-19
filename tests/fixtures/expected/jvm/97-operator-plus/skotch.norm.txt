@@ -8,45 +8,33 @@ method        main ([Ljava/lang/String;)V 0x0009
     0001 istore 1
     0003 iconst_2
     0004 istore 2
-    0006 op_0xBB
-    0007 nop
-    0008 op_0x0B
-    0009 op_0x59
+    0006 new Class(Vec2)
+    0009 dup
     0010 iload 1
     0012 iload 2
     0014 invokespecial Method(Vec2.<init>:(II)V)
     0017 astore 3
     0019 aload 3
-    0021 op_0xC0
-    0022 nop
-    0023 op_0x0B
+    0021 checkcast Class(Vec2)
     0024 astore 4
     0026 iconst_3
     0027 istore 5
     0029 iconst_4
     0030 istore 6
-    0032 op_0xBB
-    0033 nop
-    0034 op_0x0B
-    0035 op_0x59
+    0032 new Class(Vec2)
+    0035 dup
     0036 iload 5
     0038 iload 6
     0040 invokespecial Method(Vec2.<init>:(II)V)
     0043 astore 7
     0045 aload 7
-    0047 op_0xC0
-    0048 nop
-    0049 op_0x0B
+    0047 checkcast Class(Vec2)
     0050 astore 8
     0052 aload 4
-    0054 op_0xC0
-    0055 nop
-    0056 op_0x0B
+    0054 checkcast Class(Vec2)
     0057 astore 9
     0059 aload 8
-    0061 op_0xC0
-    0062 nop
-    0063 op_0x0B
+    0061 checkcast Class(Vec2)
     0064 astore 10
     0066 aload 9
     0068 aload 10

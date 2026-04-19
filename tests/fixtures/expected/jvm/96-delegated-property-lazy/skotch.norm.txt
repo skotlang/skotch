@@ -4,38 +4,28 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7
-    0000 op_0xBB
-    0001 nop
-    0002 op_0x0B
-    0003 op_0x59
+    0000 new Class(Config)
+    0003 dup
     0004 invokespecial Method(Config.<init>:()V)
     0007 astore 1
     0009 aload 1
-    0011 op_0xC0
-    0012 nop
-    0013 op_0x0B
+    0011 checkcast Class(Config)
     0014 astore 2
     0016 aload 2
-    0018 op_0xC0
-    0019 nop
-    0020 op_0x0B
+    0018 checkcast Class(Config)
     0021 astore 3
     0023 aload 3
-    0025 op_0xB4
-    0026 nop
-    0027 ldc_w #14852
+    0025 getfield Field(Config.greeting:Ljava/lang/String;)
+    0028 astore 4
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 aload 4
     0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0038 aload 2
-    0040 op_0xC0
-    0041 nop
-    0042 op_0x0B
+    0040 checkcast Class(Config)
     0043 astore 5
     0045 aload 5
-    0047 op_0xB4
-    0048 nop
-    0049 ldc_w #14854
+    0047 getfield Field(Config.greeting:Ljava/lang/String;)
+    0050 astore 6
     0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0055 aload 6
     0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)

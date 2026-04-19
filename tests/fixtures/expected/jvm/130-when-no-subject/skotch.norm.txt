@@ -6,9 +6,7 @@ method        classify (I)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=16
     0000 iconst_1
     0001 istore 1
-    0003 op_0xA7
-    0004 nop
-    0005 iconst_0
+    0003 goto 6
     0006 iload 0
     0008 istore 2
     0010 iconst_0
@@ -19,22 +17,16 @@ method        classify (I)Ljava/lang/String; 0x0009
     0018 nop
     0019 iconst_4
     0020 iconst_0
-    0021 op_0xA7
-    0022 nop
-    0023 iconst_1
+    0021 goto 25
     0024 iconst_1
     0025 istore 4
     0027 iload 4
-    0029 op_0x99
-    0030 nop
-    0031 op_0x0E
+    0029 ifeq 43
     0032 ldc "negative"
     0034 astore 5
     0036 aload 5
     0038 astore 6
-    0040 op_0xA7
-    0041 nop
-    0042 op_0x59
+    0040 goto 129
     0043 iload 0
     0045 istore 7
     0047 iconst_0
@@ -45,22 +37,16 @@ method        classify (I)Ljava/lang/String; 0x0009
     0055 nop
     0056 iconst_4
     0057 iconst_0
-    0058 op_0xA7
-    0059 nop
-    0060 iconst_1
+    0058 goto 62
     0061 iconst_1
     0062 istore 9
     0064 iload 9
-    0066 op_0x99
-    0067 nop
-    0068 op_0x0E
+    0066 ifeq 80
     0069 ldc "zero"
     0071 astore 10
     0073 aload 10
     0075 astore 6
-    0077 op_0xA7
-    0078 nop
-    0079 op_0x34
+    0077 goto 129
     0080 iload 0
     0082 istore 11
     0084 bipush 100
@@ -71,31 +57,23 @@ method        classify (I)Ljava/lang/String; 0x0009
     0093 nop
     0094 iconst_4
     0095 iconst_0
-    0096 op_0xA7
-    0097 nop
-    0098 iconst_1
+    0096 goto 100
     0099 iconst_1
     0100 istore 13
     0102 iload 13
-    0104 op_0x99
-    0105 nop
-    0106 op_0x0E
+    0104 ifeq 118
     0107 ldc "small"
     0109 astore 14
     0111 aload 14
     0113 astore 6
-    0115 op_0xA7
-    0116 nop
-    0117 op_0x0E
+    0115 goto 129
     0118 ldc "big"
     0120 astore 15
     0122 aload 15
     0124 astore 6
-    0126 op_0xA7
-    0127 nop
-    0128 iconst_0
+    0126 goto 129
     0129 aload 6
-    0131 op_0xB0
+    0131 areturn
     sub_attr  StackMapTable (174 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=9

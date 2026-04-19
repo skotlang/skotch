@@ -14,24 +14,18 @@ method        countMultiples (II)I 0x0009
     0012 istore 5
     0014 iload 4
     0016 istore 6
-    0018 op_0xA7
-    0019 nop
-    0020 iconst_0
+    0018 goto 21
     0021 iload 6
     0023 iload 5
     0025 op_0xA4
     0026 nop
     0027 iconst_4
     0028 iconst_0
-    0029 op_0xA7
-    0030 nop
-    0031 iconst_1
+    0029 goto 33
     0032 iconst_1
     0033 istore 7
     0035 iload 7
-    0037 op_0x99
-    0038 nop
-    0039 op_0x3C
+    0037 ifeq 97
     0040 iload 6
     0042 istore 8
     0044 iload 1
@@ -48,18 +42,12 @@ method        countMultiples (II)I 0x0009
     0063 nop
     0064 iconst_4
     0065 iconst_0
-    0066 op_0xA7
-    0067 nop
-    0068 iconst_1
+    0066 goto 70
     0069 iconst_1
     0070 istore 12
     0072 iload 12
-    0074 op_0x99
-    0075 nop
-    0076 op_0x33
-    0077 op_0xA7
-    0078 nop
-    0079 op_0x1B
+    0074 ifeq 125
+    0077 goto 104
     0080 iconst_1
     0081 istore 13
     0083 iload 6
@@ -68,9 +56,8 @@ method        countMultiples (II)I 0x0009
     0088 istore 14
     0090 iload 14
     0092 istore 6
-    0094 op_0xA7
-    0095 op_0xFF
-    0096 invokespecial #5379
+    0094 goto 21
+    0097 iload 3
     0099 istore 15
     0101 iload 15
     0103 op_0xAC
@@ -84,15 +71,9 @@ method        countMultiples (II)I 0x0009
     0116 istore 18
     0118 iload 18
     0120 istore 3
-    0122 op_0xA7
-    0123 nop
-    0124 iconst_3
-    0125 op_0xA7
-    0126 nop
-    0127 iconst_0
-    0128 op_0xA7
-    0129 op_0xFF
-    0130 op_0xD0
+    0122 goto 128
+    0125 goto 128
+    0128 goto 80
     sub_attr  StackMapTable (179 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=10

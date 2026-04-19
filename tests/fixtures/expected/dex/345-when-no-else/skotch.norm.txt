@@ -1,10 +1,11 @@
 dex_version   035
-strings       18
+strings       19
 types         9
-methods       4
+methods       6
 classes       1
 
 --- strings ---
+  "<init>"
   "LA;"
   "LB;"
   "LInputKt;"
@@ -36,6 +37,8 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
+  LA;.<init>()V
+  LB;.<init>()V
   LInputKt;.f(Ljava/lang/Object;)Ljava/lang/String;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
@@ -46,5 +49,5 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       f(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=9 ins=1 outs=0 insns=23
-  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=19
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=29
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

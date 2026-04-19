@@ -25,13 +25,29 @@ use rustc_hash::FxHashMap;
 use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_mir::{
-    BasicBlock, BinOp as MBinOp, CallKind, ExceptionHandler, FuncId, LocalId, MirClass, MirConst,
-    MirField, MirFunction, MirModule, Rvalue, Stmt as MStmt, Terminator,
+    BasicBlock, BinOp as MBinOp, CallKind, ExceptionHandler, FuncId, LiveSpill, LocalId, MirClass,
+    MirConst, MirField, MirFunction, MirModule, Rvalue, SpillKind, SpillSlot, Stmt as MStmt,
+    SuspendCallSite, SuspendStateMachine, Terminator,
 };
 use skotch_resolve::ResolvedFile;
 use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
+
+/// Convert a `Ty` to its JVM descriptor string fragment (for building
+/// method descriptors in the MIR lowerer).
+fn jvm_type_string_for_ty(ty: &Ty) -> String {
+    match ty {
+        Ty::Int => "I".to_string(),
+        Ty::Long => "J".to_string(),
+        Ty::Double => "D".to_string(),
+        Ty::Bool => "Z".to_string(),
+        Ty::String => "Ljava/lang/String;".to_string(),
+        Ty::Unit => "V".to_string(),
+        Ty::Class(name) => format!("L{name};"),
+        _ => "Ljava/lang/Object;".to_string(),
+    }
+}
 
 /// Resolve a type name to a `Ty`, checking built-in types first, then
 /// user-defined classes/enums in the module.
@@ -335,13 +351,21 @@ pub fn lower_file(
             let name_str = interner.resolve(f.name).to_string();
             // Use the typechecker's return type so recursive calls and
             // forward references get the correct type, not Ty::Unit.
-            let return_ty = typed
+            let declared_ret = typed
                 .functions
                 .get(fn_pass1_idx)
                 .map(|t| t.return_ty.clone())
                 .unwrap_or(Ty::Unit);
-            let required = f.params.iter().filter(|p| p.default.is_none()).count();
-            let param_defaults: Vec<Option<MirConst>> = f
+            // Session 2 of the coroutine transform: rewrite the
+            // return type of every `suspend fun` to `Any` (which
+            // lowers to `Ljava/lang/Object;` on JVM). The actual
+            // `$completion: Continuation` parameter is appended in
+            // `lower_function`; we only record the signature change
+            // here so call sites resolving through `name_to_func`
+            // see the post-transform return type.
+            let return_ty = if f.is_suspend { Ty::Any } else { declared_ret };
+            let mut required = f.params.iter().filter(|p| p.default.is_none()).count();
+            let mut param_defaults: Vec<Option<MirConst>> = f
                 .params
                 .iter()
                 .map(|p| {
@@ -350,12 +374,21 @@ pub fn lower_file(
                         .and_then(|d| lower_const_init(d, &mut module))
                 })
                 .collect();
-            let param_names: Vec<String> = f
+            let mut param_names: Vec<String> = f
                 .params
                 .iter()
                 .map(|p| interner.resolve(p.name).to_string())
                 .collect();
             let vararg_index = f.params.iter().position(|p| p.is_vararg);
+            // Session 2 of the coroutine transform: every `suspend
+            // fun` grows a trailing `$completion: Continuation`
+            // parameter. The call site knows to synthesize an
+            // argument for it from the target's `is_suspend` flag.
+            if f.is_suspend {
+                param_names.push("$completion".to_string());
+                param_defaults.push(None);
+                required += 1;
+            }
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -369,8 +402,263 @@ pub fn lower_file(
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index,
+                is_suspend: f.is_suspend,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             });
             fn_pass1_idx += 1;
+        }
+    }
+
+    // ── Session 10: pre-register external suspend function stubs ──────
+    //
+    // External suspend functions like `delay` (from kotlinx-coroutines)
+    // must be registered before any function bodies are lowered, so that
+    // `body_contains_suspend_call` can detect them during suspend-lambda
+    // analysis. These stubs are never emitted as JVM methods (they're
+    // marked `is_abstract`); the real implementations live in library JARs.
+    {
+        let delay_sym = interner.intern("delay");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&delay_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "delay".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Unit),
+                suspend_state_machine: None,
+            };
+            let p_ms = stub.new_local(Ty::Long);
+            stub.params.push(p_ms);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(delay_sym, fid);
+        }
+    }
+
+    // ── Session 27: pre-register additional suspend function stubs ──────
+    //
+    // `withContext`, `coroutineScope`, `supervisorScope`, `withTimeout`,
+    // `withTimeoutOrNull`, and `yield` are all suspend functions from
+    // kotlinx-coroutines that appear as direct calls in user code.
+    // Register stubs so `body_contains_suspend_call` can detect them
+    // inside trailing lambdas passed to coroutine builders.
+    //
+    // withContext(CoroutineContext, Function2, Continuation) → Object
+    // coroutineScope(Function2, Continuation) → Object
+    // supervisorScope(Function2, Continuation) → Object
+    // withTimeout(Long, Function2, Continuation) → Object
+    // withTimeoutOrNull(Long, Function2, Continuation) → Object
+    // yield(Continuation) → Object
+    {
+        // yield — suspend fun yield()
+        let yield_sym = interner.intern("yield");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&yield_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "yield".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Unit),
+                suspend_state_machine: None,
+            };
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(yield_sym, fid);
+        }
+
+        // withContext — suspend fun <T> withContext(context, block): T
+        let wc_sym = interner.intern("withContext");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&wc_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "withContext".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Any),
+                suspend_state_machine: None,
+            };
+            let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
+            stub.params.push(p_ctx);
+            let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+            stub.params.push(p_block);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(wc_sym, fid);
+        }
+
+        // coroutineScope — suspend fun <R> coroutineScope(block): R
+        let cs_sym = interner.intern("coroutineScope");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&cs_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "coroutineScope".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Any),
+                suspend_state_machine: None,
+            };
+            let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+            stub.params.push(p_block);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(cs_sym, fid);
+        }
+
+        // supervisorScope — suspend fun <R> supervisorScope(block): R
+        let ss_sym = interner.intern("supervisorScope");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&ss_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "supervisorScope".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Any),
+                suspend_state_machine: None,
+            };
+            let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+            stub.params.push(p_block);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(ss_sym, fid);
+        }
+
+        // withTimeout — suspend fun <T> withTimeout(timeMillis: Long, block): T
+        let wt_sym = interner.intern("withTimeout");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&wt_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "withTimeout".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Any),
+                suspend_state_machine: None,
+            };
+            let p_ms = stub.new_local(Ty::Long);
+            stub.params.push(p_ms);
+            let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+            stub.params.push(p_block);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(wt_sym, fid);
+        }
+
+        // withTimeoutOrNull — suspend fun <T> withTimeoutOrNull(timeMillis: Long, block): T?
+        let wton_sym = interner.intern("withTimeoutOrNull");
+        #[allow(clippy::map_entry)]
+        if !name_to_func.contains_key(&wton_sym) {
+            let mut stub = MirFunction {
+                id: FuncId(0),
+                name: "withTimeoutOrNull".to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Any,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: true,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: true,
+                suspend_original_return_ty: Some(Ty::Nullable(Box::new(Ty::Any))),
+                suspend_state_machine: None,
+            };
+            let p_ms = stub.new_local(Ty::Long);
+            stub.params.push(p_ms);
+            let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+            stub.params.push(p_block);
+            let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+            stub.params.push(p_cont);
+            let fid = module.add_function(stub);
+            name_to_func.insert(wton_sym, fid);
         }
     }
 
@@ -607,10 +895,8 @@ pub fn lower_file(
                     for stmt in &mut block.stmts {
                         let MStmt::Assign { value, .. } = stmt;
                         match value {
-                            Rvalue::NewInstance(ref mut n) => {
-                                if user_classes.contains(n.as_str()) {
-                                    *n = format!("{prefix}/{n}");
-                                }
+                            Rvalue::NewInstance(ref mut n) if user_classes.contains(n.as_str()) => {
+                                *n = format!("{prefix}/{n}");
                             }
                             Rvalue::GetField {
                                 ref mut class_name, ..
@@ -621,16 +907,14 @@ pub fn lower_file(
                             Rvalue::InstanceOf {
                                 ref mut type_descriptor,
                                 ..
-                            } => {
-                                if user_classes.contains(type_descriptor.as_str()) {
-                                    *type_descriptor = format!("{prefix}/{type_descriptor}");
-                                }
+                            } if user_classes.contains(type_descriptor.as_str()) => {
+                                *type_descriptor = format!("{prefix}/{type_descriptor}");
                             }
                             Rvalue::Call { ref mut kind, .. } => match kind {
-                                CallKind::Constructor(ref mut n) => {
-                                    if user_classes.contains(n.as_str()) {
-                                        *n = format!("{prefix}/{n}");
-                                    }
+                                CallKind::Constructor(ref mut n)
+                                    if user_classes.contains(n.as_str()) =>
+                                {
+                                    *n = format!("{prefix}/{n}");
                                 }
                                 CallKind::Virtual {
                                     ref mut class_name, ..
@@ -662,7 +946,182 @@ pub fn lower_file(
         }
     }
 
+    // ─── Session 3 coroutine transform: continuation classes ────────
+    //
+    // Every suspend function the MIR lowerer marked with a
+    // `SuspendStateMachine` needs a synthetic
+    // `{Wrapper}${fn}$1 extends ContinuationImpl` alongside it.
+    // We generate the class shape here so that the JVM backend
+    // can emit both the caller's state machine and the companion
+    // class in a single pass. The fields (`result: Object`,
+    // `label: int`), the one-arg `<init>(Continuation)` super
+    // call, and the `invokeSuspend(Object)` method that stashes
+    // `$result`, flips the `label` sign bit, and re-invokes the
+    // original `run(Continuation)` are all fixed shapes — the
+    // only per-function inputs are the wrapper class name and
+    // the suspend function's name.
+    let continuation_classes: Vec<MirClass> = module
+        .functions
+        .iter()
+        .filter_map(|f| {
+            f.suspend_state_machine
+                .as_ref()
+                .map(|sm| build_continuation_class(sm, &module.wrapper_class, &f.name))
+        })
+        .collect();
+    module.classes.extend(continuation_classes);
+
+    // Session 28: also generate continuation classes for suspend
+    // methods on user-defined classes. Skip SuspendLambda classes
+    // (they ARE their own continuation — no separate companion).
+    let class_cont_classes: Vec<MirClass> = module
+        .classes
+        .iter()
+        .filter(|cls| !cls.is_suspend_lambda)
+        .flat_map(|cls| {
+            cls.methods.iter().filter_map(|m| {
+                m.suspend_state_machine
+                    .as_ref()
+                    .map(|sm| build_continuation_class(sm, &cls.name, &m.name))
+            })
+        })
+        .collect();
+    module.classes.extend(class_cont_classes);
+
     module
+}
+
+/// Build the synthetic `ContinuationImpl` subclass for a single-
+/// suspension-point state machine.
+///
+/// Shape (for `run()` in the Session 3 fixture):
+///
+/// ```text
+/// final class InputKt$run$1 extends ContinuationImpl {
+///     Object result;
+///     int    label;
+///     <init>(Continuation completion) {
+///         super(completion);
+///     }
+///     public final Object invokeSuspend(Object $result) {
+///         this.result = $result;
+///         this.label |= 0x80000000;
+///         return InputKt.run((Continuation) this);
+///     }
+/// }
+/// ```
+fn build_continuation_class(
+    sm: &SuspendStateMachine,
+    _wrapper_class: &str,
+    _fn_name: &str,
+) -> MirClass {
+    // ── <init>(Continuation) { super(Continuation); return; } ──
+    let mut ctor = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        exception_handlers: Vec::new(),
+        vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+    };
+    let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
+    let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+    ctor.params.push(this_local);
+    ctor.params.push(completion_local);
+    let super_dest = ctor.new_local(Ty::Unit);
+    ctor.blocks[0].stmts.push(MStmt::Assign {
+        dest: super_dest,
+        value: Rvalue::Call {
+            kind: CallKind::Constructor(
+                "kotlin/coroutines/jvm/internal/ContinuationImpl".to_string(),
+            ),
+            args: vec![this_local, completion_local],
+        },
+    });
+
+    // ── invokeSuspend(Object $result): Object ──
+    let mut invoke = MirFunction {
+        id: FuncId(0),
+        name: "invokeSuspend".to_string(),
+        params: Vec::new(),
+        locals: Vec::new(),
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Any,
+        required_params: 0,
+        param_names: vec!["$result".to_string()],
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        exception_handlers: Vec::new(),
+        vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        // The `invokeSuspend` body is a fixed pattern the backend
+        // emits directly: there's no MIR-level equivalent for the
+        // `this.label |= 0x80000000` bitwise-OR step. We reuse the
+        // same marker the top-level `run` function carries so the
+        // JVM backend knows to substitute its canonical emitter.
+        suspend_state_machine: Some(sm.clone()),
+    };
+    let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
+    let result_param = invoke.new_local(Ty::Any);
+    invoke.params.push(invoke_this);
+    invoke.params.push(result_param);
+
+    // Session 4: every local that lives across a suspend call
+    // becomes a synthetic field on the continuation class. Fields
+    // are emitted in `spill_layout` order so the backend's
+    // getfield/putfield descriptors line up with what kotlinc
+    // produces (and so two skotch runs are bit-stable).
+    let mut fields: Vec<MirField> = Vec::new();
+    for slot in &sm.spill_layout {
+        fields.push(MirField {
+            name: slot.name.clone(),
+            ty: match slot.kind {
+                SpillKind::Int => Ty::Int,
+                SpillKind::Long => Ty::Long,
+                SpillKind::Float => Ty::Int, // unused in this session
+                SpillKind::Double => Ty::Double,
+                SpillKind::Ref => Ty::Any,
+            },
+        });
+    }
+    fields.push(MirField {
+        name: "result".to_string(),
+        ty: Ty::Any,
+    });
+    fields.push(MirField {
+        name: "label".to_string(),
+        ty: Ty::Int,
+    });
+
+    MirClass {
+        name: sm.continuation_class.clone(),
+        super_class: Some("kotlin/coroutines/jvm/internal/ContinuationImpl".to_string()),
+        is_open: false,
+        is_abstract: false,
+        is_interface: false,
+        interfaces: Vec::new(),
+        fields,
+        methods: vec![invoke],
+        constructor: ctor,
+        secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
+    }
 }
 
 /// Try to extract a compile-time-constant value from a top-level
@@ -743,6 +1202,88 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
     }
 }
 
+/// Detect whether a lambda body contains a call to a suspend function.
+/// Used to mark the lambda as a suspend lambda so future codegen can
+/// generate a `SuspendLambda`-extending class.
+///
+/// SESSION 6 SCOPE: currently this is detection-only. The flag flows
+/// through MIR but full codegen is Session 7+.
+fn body_contains_suspend_call(
+    body: &skotch_syntax::Block,
+    module: &MirModule,
+    interner: &Interner,
+    name_to_func: &FxHashMap<Symbol, FuncId>,
+) -> bool {
+    fn scan_expr(
+        e: &Expr,
+        module: &MirModule,
+        interner: &Interner,
+        name_to_func: &FxHashMap<Symbol, FuncId>,
+    ) -> bool {
+        match e {
+            Expr::Call { callee, args, .. } => {
+                // Check if callee is a known suspend function
+                if let Expr::Ident(name, _) = callee.as_ref() {
+                    if let Some(&fid) = name_to_func.get(name) {
+                        if let Some(f) = module.functions.get(fid.0 as usize) {
+                            if f.is_suspend {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                scan_expr(callee, module, interner, name_to_func)
+                    || args
+                        .iter()
+                        .any(|a| scan_expr(&a.expr, module, interner, name_to_func))
+            }
+            Expr::Binary { lhs, rhs, .. } => {
+                scan_expr(lhs, module, interner, name_to_func)
+                    || scan_expr(rhs, module, interner, name_to_func)
+            }
+            Expr::If {
+                cond,
+                then_block,
+                else_block,
+                ..
+            } => {
+                scan_expr(cond, module, interner, name_to_func)
+                    || scan_block(then_block, module, interner, name_to_func)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|b| scan_block(b, module, interner, name_to_func))
+            }
+            Expr::Paren(inner, _) => scan_expr(inner, module, interner, name_to_func),
+            _ => false,
+        }
+    }
+    fn scan_block(
+        b: &skotch_syntax::Block,
+        module: &MirModule,
+        interner: &Interner,
+        name_to_func: &FxHashMap<Symbol, FuncId>,
+    ) -> bool {
+        for stmt in &b.stmts {
+            match stmt {
+                Stmt::Expr(e) if scan_expr(e, module, interner, name_to_func) => {
+                    return true;
+                }
+                Stmt::Val(v) if scan_expr(&v.init, module, interner, name_to_func) => {
+                    return true;
+                }
+                Stmt::Return { value: Some(e), .. }
+                    if scan_expr(e, module, interner, name_to_func) =>
+                {
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+    scan_block(body, module, interner, name_to_func)
+}
+
 /// Collect free variables in a lambda body: names that are referenced
 /// but not defined as lambda parameters or known top-level functions.
 fn collect_free_vars(
@@ -801,13 +1342,11 @@ fn collect_free_in_expr(
     seen: &mut rustc_hash::FxHashSet<Symbol>,
 ) {
     match e {
-        Expr::Ident(name, _) => {
-            if !param_names.contains(name) && !seen.contains(name) {
-                if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
-                    let ty = fb.mf.locals[local_id.0 as usize].clone();
-                    free.push((*name, *local_id, ty));
-                    seen.insert(*name);
-                }
+        Expr::Ident(name, _) if !param_names.contains(name) && !seen.contains(name) => {
+            if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
+                let ty = fb.mf.locals[local_id.0 as usize].clone();
+                free.push((*name, *local_id, ty));
+                seen.insert(*name);
             }
         }
         Expr::Binary { lhs, rhs, .. } => {
@@ -850,15 +1389,15 @@ fn collect_free_in_expr(
                     skotch_syntax::TemplatePart::Expr(inner) => {
                         collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
                     }
-                    skotch_syntax::TemplatePart::IdentRef(sym, _) => {
-                        if !param_names.contains(sym) && !seen.contains(sym) {
-                            if let Some((_, local_id)) =
-                                outer_scope.iter().rev().find(|(s, _)| s == sym)
-                            {
-                                let ty = fb.mf.locals[local_id.0 as usize].clone();
-                                free.push((*sym, *local_id, ty));
-                                seen.insert(*sym);
-                            }
+                    skotch_syntax::TemplatePart::IdentRef(sym, _)
+                        if !param_names.contains(sym) && !seen.contains(sym) =>
+                    {
+                        if let Some((_, local_id)) =
+                            outer_scope.iter().rev().find(|(s, _)| s == sym)
+                        {
+                            let ty = fb.mf.locals[local_id.0 as usize].clone();
+                            free.push((*sym, *local_id, ty));
+                            seen.insert(*sym);
                         }
                     }
                     _ => {}
@@ -939,6 +1478,12 @@ struct FnBuilder {
     cur_block: u32,
     /// Symbols declared as `var` (mutable) in this function scope.
     var_syms: rustc_hash::FxHashSet<Symbol>,
+    /// Session 9: MIR locals that correspond to suspend-typed function
+    /// parameters (e.g. `block: suspend () -> String`). When such a
+    /// local is invoked as a callable, the MIR lowerer must append the
+    /// enclosing function's `$completion` continuation as the trailing
+    /// argument and skip the normal Int-unbox on the Object result.
+    suspend_callable_locals: rustc_hash::FxHashSet<u32>,
 }
 
 impl FnBuilder {
@@ -959,11 +1504,15 @@ impl FnBuilder {
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
+            is_suspend: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
         };
         FnBuilder {
             mf,
             cur_block: 0,
             var_syms: rustc_hash::FxHashSet::default(),
+            suspend_callable_locals: rustc_hash::FxHashSet::default(),
         }
     }
 
@@ -1004,6 +1553,586 @@ impl FnBuilder {
     }
 }
 
+/// Outcome of [`extract_suspend_state_machine`] — the three cases
+/// the Sessions 3+4 lowering passes branch on.
+enum SuspendSitesResult {
+    /// No inner suspend calls; the Session 2 signature rewrite is
+    /// all we need.
+    Zero,
+    /// At least one inner suspend call; we emit the state-machine
+    /// shape with the supplied marker. Session 3 (single-
+    /// suspension, string-literal tail) and Session 4 (N
+    /// suspensions, real expression tail) both surface here — the
+    /// marker's `sites` vector distinguishes them for the backend.
+    Found(SuspendStateMachine),
+    /// The function has suspend calls, but the body shape is
+    /// outside the current scope. Reserved for future use.
+    #[allow(dead_code)]
+    Unsupported(String),
+}
+
+/// Scan a freshly-lowered suspend function for calls to other
+/// suspend functions and, if they're present, build a
+/// [`SuspendStateMachine`] marker describing the coroutine
+/// dispatcher the JVM backend should emit.
+///
+/// Two shapes are recognized:
+///
+/// - **Session 3.** A single suspend call with no arguments beyond
+///   the synthesized `$completion`, followed by a literal-string
+///   return terminator. Produces the historic marker shape
+///   (`sites` empty, `resume_return_text` populated).
+/// - **Session 4.** Any number of suspend calls with no args beyond
+///   `$completion`, in a straight-line single-block body. Produces
+///   a marker with populated `sites` and `spill_layout` and lets
+///   the JVM backend walk the real MIR for the resume tail.
+///
+/// Anything richer (suspend calls with user args, branches across
+/// suspend sites) becomes [`SuspendSitesResult::Unsupported`] so the
+/// caller can emit a precise diagnostic. Sessions 5+ will lift
+/// these restrictions.
+fn extract_suspend_state_machine(
+    mf: &MirFunction,
+    module: &MirModule,
+    wrapper_class: &str,
+    fn_name: &str,
+) -> SuspendSitesResult {
+    extract_suspend_state_machine_with_cont(
+        mf,
+        module,
+        wrapper_class,
+        fn_name,
+        format!("{wrapper_class}${fn_name}$1"),
+    )
+}
+
+/// Variant of [`extract_suspend_state_machine`] that lets the caller
+/// override the continuation class name. Session 7 part 2 uses this
+/// for suspend lambdas: the lambda class IS the continuation (it
+/// extends `SuspendLambda`), so there is no separate `InputKt$fn$1`
+/// companion — the state machine stored on the lambda's invoke
+/// method points at the lambda class itself.
+fn extract_suspend_state_machine_with_cont(
+    mf: &MirFunction,
+    module: &MirModule,
+    wrapper_class: &str,
+    fn_name: &str,
+    continuation_class: String,
+) -> SuspendSitesResult {
+    // Walk every block collecting (block_idx, stmt_idx, callee FuncId, argc)
+    // for each suspend-fn static call. The MIR lowerer routes these
+    // through `invokestatic` with the trailing `$completion`
+    // already appended, so they're easy to recognize structurally.
+    // Suspend call sites come in two flavors:
+    // 1. Static calls to known suspend functions (CallKind::Static)
+    // 2. Virtual/interface calls to suspend methods (VirtualJava)
+    //    — e.g., Deferred.await(), Function1.invoke() on suspend types
+    //
+    // We track both with a sentinel FuncId(u32::MAX) for virtual calls
+    // since they don't have a real FuncId in our module.
+    let virtual_suspend_fid = FuncId(u32::MAX);
+    let mut sites_raw: Vec<(u32, u32, FuncId, usize)> = Vec::new();
+    for (bi, block) in mf.blocks.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            let MStmt::Assign { value, .. } = stmt;
+            match value {
+                Rvalue::Call {
+                    kind: CallKind::Static(fid),
+                    args,
+                } => {
+                    let target = &module.functions[fid.0 as usize];
+                    if target.is_suspend {
+                        sites_raw.push((bi as u32, si as u32, *fid, args.len()));
+                    }
+                }
+                Rvalue::Call {
+                    kind:
+                        CallKind::VirtualJava {
+                            class_name,
+                            method_name,
+                            descriptor,
+                        },
+                    args,
+                } => {
+                    // Known suspend interface/virtual methods.
+                    // Any VirtualJava call whose descriptor ends with
+                    // `Continuation;)Ljava/lang/Object;` is a suspend
+                    // method call (user-defined or library).
+                    let is_suspend_virtual = (class_name == "kotlinx/coroutines/Deferred"
+                        && method_name == "await")
+                        || (class_name == "kotlinx/coroutines/Job" && method_name == "join")
+                        || (class_name.starts_with("kotlin/jvm/functions/Function")
+                            && method_name == "invoke"
+                            && descriptor.contains("Continuation"))
+                        || (descriptor
+                            .contains("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"));
+                    if is_suspend_virtual {
+                        sites_raw.push((bi as u32, si as u32, virtual_suspend_fid, args.len()));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if sites_raw.is_empty() {
+        return SuspendSitesResult::Zero;
+    }
+
+    // Compute the outer function's user param types (everything
+    // except the last param which is the $completion Continuation).
+    let outer_user_param_tys: Vec<Ty> = if mf.params.len() > 1 {
+        mf.params[..mf.params.len() - 1]
+            .iter()
+            .map(|pid| mf.locals[pid.0 as usize].clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Single-suspension path: if the body also has a string-literal
+    // return tail we keep the Session 3 shape byte-for-byte (the
+    // committed 391 fixture depends on it). This only applies when
+    // the sole suspend call has just the implicit `$completion` — a
+    // user-arg call can't be expressed in the pre-Session-5 marker
+    // (there is no way to thread arg values into the legacy emitter).
+    if sites_raw.len() == 1 && sites_raw[0].3 == 1 {
+        if let Some(resume_return_text) = extract_trailing_string(mf, module) {
+            let (_, _, fid, _) = sites_raw[0];
+            let target = &module.functions[fid.0 as usize];
+            return SuspendSitesResult::Found(SuspendStateMachine {
+                continuation_class,
+                outer_class: wrapper_class.to_string(),
+                outer_method: fn_name.to_string(),
+                outer_user_param_tys: outer_user_param_tys.clone(),
+                suspend_call_class: wrapper_class.to_string(),
+                suspend_call_method: target.name.clone(),
+                resume_return_text,
+                sites: Vec::new(),
+                spill_layout: Vec::new(),
+                is_instance_method: false,
+            });
+        }
+    }
+
+    // Session 29: multi-block state machines are now supported.
+    // Build per-site callee info and the conservative spill layout.
+    let (sites, spill_layout) = build_sites_and_spills(mf, module, &sites_raw);
+
+    SuspendSitesResult::Found(SuspendStateMachine {
+        continuation_class,
+        outer_class: wrapper_class.to_string(),
+        outer_method: fn_name.to_string(),
+        outer_user_param_tys,
+        // Session 3 compatibility fields stay populated (with the
+        // FIRST callee) purely so MIR consumers that peek at them
+        // don't see empty strings; the backend ignores them in the
+        // Session 4 path.
+        suspend_call_class: wrapper_class.to_string(),
+        suspend_call_method: {
+            let (_, _, fid, _) = sites_raw[0];
+            if fid.0 == u32::MAX {
+                // Virtual suspend call — name is in the SuspendCallSite
+                String::new()
+            } else {
+                module.functions[fid.0 as usize].name.clone()
+            }
+        },
+        resume_return_text: String::new(),
+        sites,
+        spill_layout,
+        is_instance_method: false,
+    })
+}
+
+/// Given the raw suspend-call sites (block, stmt, callee, argc), in
+/// source order, compute:
+///
+/// 1. the per-site callee info the backend needs to emit
+///    `invokestatic`,
+/// 2. the set of MIR locals live across each suspend call (over-
+///    conservative — every local assigned earlier in the block and
+///    referenced later is included), and
+/// 3. the continuation-class spill layout (`I$0`, `L$0`, …) those
+///    locals map to.
+///
+/// This is the straight-line-body specialization of a standard
+/// liveness analysis: for each call site we just scan prior stmts
+/// for writes and later stmts (+ the terminator) for reads. That
+/// over-spills dead locals, but is always correct — a more precise
+/// analysis is a Session 4+ follow-up.
+fn build_sites_and_spills(
+    mf: &MirFunction,
+    module: &MirModule,
+    sites_raw: &[(u32, u32, FuncId, usize)],
+) -> (Vec<SuspendCallSite>, Vec<SpillSlot>) {
+    // Per-kind running counters for slot name suffixes (I$0, I$1, …).
+    let mut kind_counters: [u32; 5] = [0; 5];
+    fn kind_idx(k: SpillKind) -> usize {
+        match k {
+            SpillKind::Int => 0,
+            SpillKind::Long => 1,
+            SpillKind::Float => 2,
+            SpillKind::Double => 3,
+            SpillKind::Ref => 4,
+        }
+    }
+
+    // Maps MIR local -> index in spill_layout, so repeated uses of
+    // the same local across multiple suspend sites share one field.
+    let mut local_to_slot: FxHashMap<u32, u32> = FxHashMap::default();
+    let mut spill_layout: Vec<SpillSlot> = Vec::new();
+
+    // Session 29: multi-block support. If all sites are in the same
+    // block, use the original single-block analysis. Otherwise use
+    // a conservative inter-block analysis.
+    // Session 31: single-block only when ALL sites are in the SAME block
+    // AND no other blocks have executable statements. Empty blocks with
+    // just Goto/Return terminators are fine (common in lambda bodies).
+    let is_single_block = {
+        let first = sites_raw[0].0;
+        let all_same = sites_raw.iter().all(|(b, _, _, _)| *b == first);
+        let site_blocks: rustc_hash::FxHashSet<u32> =
+            sites_raw.iter().map(|(b, _, _, _)| *b).collect();
+        let has_code_blocks = mf
+            .blocks
+            .iter()
+            .enumerate()
+            .any(|(i, b)| !site_blocks.contains(&(i as u32)) && !b.stmts.is_empty());
+        all_same && !has_code_blocks
+    };
+
+    let mut sites_out: Vec<SuspendCallSite> = Vec::with_capacity(sites_raw.len());
+    for (bi, si, fid, _) in sites_raw {
+        let block = &mf.blocks[*bi as usize];
+
+        // Collect locals WRITTEN before this site.
+        // Session 23: include function parameters (they're live from
+        // function entry). Exclude the last param ($completion).
+        let mut written: Vec<LocalId> = Vec::new();
+        let n_params = mf.params.len();
+        for &pid in mf.params.iter().take(n_params.saturating_sub(1)) {
+            written.push(pid);
+        }
+        if is_single_block {
+            // Original path: only scan within the single block.
+            for (idx, stmt) in block.stmts.iter().enumerate() {
+                if (idx as u32) >= *si {
+                    break;
+                }
+                let MStmt::Assign { dest, .. } = stmt;
+                written.push(*dest);
+            }
+        } else {
+            // Multi-block: include locals from block 0 (entry — always
+            // dominates all other blocks) + the site's own block
+            // before the suspend call. Don't include other NON-entry
+            // blocks — locals from other branches may not be
+            // initialized on this execution path.
+            if *bi != 0 {
+                for stmt in &mf.blocks[0].stmts {
+                    let MStmt::Assign { dest, .. } = stmt;
+                    written.push(*dest);
+                }
+            }
+            for (idx, stmt) in block.stmts.iter().enumerate() {
+                if (idx as u32) >= *si {
+                    break;
+                }
+                let MStmt::Assign { dest, .. } = stmt;
+                written.push(*dest);
+            }
+        }
+
+        // Collect locals READ after this site.
+        let mut read: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+        if is_single_block {
+            for (idx, stmt) in block.stmts.iter().enumerate() {
+                if (idx as u32) <= *si {
+                    continue;
+                }
+                collect_reads(stmt, &mut read);
+            }
+            collect_terminator_reads(&block.terminator, &mut read);
+        } else {
+            // Multi-block: only scan reads AFTER the suspend site in
+            // the same block + terminator. Only these stmts run in the
+            // resume path for this specific branch.
+            for (idx, stmt) in block.stmts.iter().enumerate() {
+                if (idx as u32) <= *si {
+                    continue;
+                }
+                collect_reads(stmt, &mut read);
+            }
+            collect_terminator_reads(&block.terminator, &mut read);
+        }
+
+        // Skip locals that are the suspend-call's own dest.
+        let own_dest = {
+            let MStmt::Assign { dest, .. } = &block.stmts[*si as usize];
+            *dest
+        };
+
+        // Session 28: for instance suspend methods, `this` (first param)
+        // must always be spilled so `invokeSuspend` can use it as the
+        // invokevirtual receiver. Force it into the read set.
+        if !mf.params.is_empty() {
+            let first_param = mf.params[0];
+            let first_ty = &mf.locals[first_param.0 as usize];
+            if matches!(first_ty, Ty::Class(_)) && mf.is_suspend {
+                read.insert(first_param.0);
+            }
+        }
+
+        let mut live_spills: Vec<LiveSpill> = Vec::new();
+        for w in written {
+            if w == own_dest {
+                continue;
+            }
+            if !read.contains(&w.0) {
+                continue;
+            }
+            let ty = &mf.locals[w.0 as usize];
+            // Don't try to spill `Unit` — it's not a real value on
+            // JVM. (Shouldn't arise in our scope, but guard.)
+            if matches!(ty, Ty::Unit) {
+                continue;
+            }
+            let kind = SpillKind::for_ty(ty);
+            let slot_idx = *local_to_slot.entry(w.0).or_insert_with(|| {
+                let n = kind_counters[kind_idx(kind)];
+                kind_counters[kind_idx(kind)] = n + 1;
+                let name = format!("{}{}", kind.prefix(), n);
+                let idx = spill_layout.len() as u32;
+                spill_layout.push(SpillSlot { name, kind });
+                idx
+            });
+            live_spills.push(LiveSpill {
+                local: w,
+                slot: slot_idx,
+            });
+        }
+        // Sort by slot index so the emitted spill/restore order is
+        // stable across runs.
+        live_spills.sort_by_key(|ls| ls.slot);
+
+        // Session 5: extract the user-argument locals (everything
+        // except the trailing `$completion`) plus their types, and
+        // surface the callee's declared return type so the JVM
+        // backend can emit a post-invoke `checkcast`. Older Session
+        // 3/4 call shapes have no user args and a `Unit`-typed
+        // callee, which keeps `args`/`arg_tys` empty and the legacy
+        // emit path byte-stable.
+        let stmt = &block.stmts[*si as usize];
+        let MStmt::Assign {
+            dest: call_dest,
+            value: call_value,
+        } = stmt;
+        let Rvalue::Call {
+            args: call_args, ..
+        } = call_value
+        else {
+            unreachable!("suspend-call site is always a Call rvalue");
+        };
+        // The last arg is the implicit $completion the MIR lowerer
+        // appends; everything before it is a user argument.
+        let user_arg_count = call_args.len().saturating_sub(1);
+        let args: Vec<LocalId> = call_args[..user_arg_count].to_vec();
+        // Session 9: use the target function's declared parameter
+        // types (not the call-site argument types) so that the
+        // callee descriptor uses the correct interface types. For
+        // example, when passing an `InputKt$Lambda$0` to a param
+        // typed as `Function1`, the descriptor must say `Function1`.
+        // Session 18: handle both Static and VirtualJava suspend calls.
+        // Virtual calls use a sentinel FuncId(u32::MAX).
+        let is_virtual = fid.0 == u32::MAX;
+        let (arg_tys, return_ty, callee_class, callee_method_name): (Vec<Ty>, Ty, String, String) =
+            if is_virtual {
+                // Extract info from the VirtualJava call rvalue directly
+                let stmt = &block.stmts[*si as usize];
+                let MStmt::Assign { value, .. } = stmt;
+                match value {
+                    Rvalue::Call {
+                        kind:
+                            CallKind::VirtualJava {
+                                class_name,
+                                method_name,
+                                ..
+                            },
+                        ..
+                    } => {
+                        // For await(), there are no user args — just receiver + continuation
+                        // The receiver is the first arg, continuation is last
+                        let at: Vec<Ty> = args
+                            .iter()
+                            .map(|a| mf.locals[a.0 as usize].clone())
+                            .collect();
+                        (at, Ty::Any, class_name.clone(), method_name.clone())
+                    }
+                    _ => unreachable!("virtual suspend site must be VirtualJava"),
+                }
+            } else {
+                let target = &module.functions[fid.0 as usize];
+                let at: Vec<Ty> = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| {
+                        target
+                            .params
+                            .get(i)
+                            .and_then(|p| target.locals.get(p.0 as usize))
+                            .cloned()
+                            .unwrap_or_else(|| mf.locals[a.0 as usize].clone())
+                    })
+                    .collect();
+                let rt = target
+                    .suspend_original_return_ty
+                    .clone()
+                    .unwrap_or(Ty::Unit);
+                let cc = match target.name.as_str() {
+                    "delay" => "kotlinx/coroutines/DelayKt".to_string(),
+                    "yield" => "kotlinx/coroutines/YieldKt".to_string(),
+                    "withContext" => "kotlinx/coroutines/BuildersKt".to_string(),
+                    "coroutineScope" => "kotlinx/coroutines/CoroutineScopeKt".to_string(),
+                    "supervisorScope" => "kotlinx/coroutines/SupervisorKt".to_string(),
+                    "withTimeout" | "withTimeoutOrNull" => {
+                        "kotlinx/coroutines/TimeoutKt".to_string()
+                    }
+                    _ => module.wrapper_class.clone(),
+                };
+                (at, rt, cc, target.name.clone())
+            };
+
+        sites_out.push(SuspendCallSite {
+            block_idx: *bi,
+            stmt_idx: *si,
+            callee_class,
+            callee_method: callee_method_name,
+            args,
+            arg_tys,
+            return_ty,
+            is_virtual,
+            result_local: *call_dest,
+            live_spills,
+        });
+    }
+
+    (sites_out, spill_layout)
+}
+
+/// Collect every `LocalId` read (as a source operand) by an
+/// `MStmt::Assign`. Writes to `dest` are intentionally excluded.
+fn collect_reads(stmt: &MStmt, out: &mut rustc_hash::FxHashSet<u32>) {
+    let MStmt::Assign { value, .. } = stmt;
+    collect_rvalue_reads(value, out);
+}
+
+fn collect_rvalue_reads(v: &Rvalue, out: &mut rustc_hash::FxHashSet<u32>) {
+    match v {
+        Rvalue::Const(_) | Rvalue::NewInstance(_) | Rvalue::GetStaticField { .. } => {}
+        Rvalue::Local(l) => {
+            out.insert(l.0);
+        }
+        Rvalue::BinOp { lhs, rhs, .. } => {
+            out.insert(lhs.0);
+            out.insert(rhs.0);
+        }
+        Rvalue::GetField { receiver, .. } => {
+            out.insert(receiver.0);
+        }
+        Rvalue::PutField {
+            receiver, value, ..
+        } => {
+            out.insert(receiver.0);
+            out.insert(value.0);
+        }
+        Rvalue::Call { args, .. } => {
+            for a in args {
+                out.insert(a.0);
+            }
+        }
+        Rvalue::InstanceOf { obj, .. } => {
+            out.insert(obj.0);
+        }
+        Rvalue::NewIntArray(l) | Rvalue::ArrayLength(l) | Rvalue::NewObjectArray(l) => {
+            out.insert(l.0);
+        }
+        Rvalue::NewTypedObjectArray { size, .. } => {
+            out.insert(size.0);
+        }
+        Rvalue::ArrayLoad { array, index } => {
+            out.insert(array.0);
+            out.insert(index.0);
+        }
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        }
+        | Rvalue::ObjectArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            out.insert(array.0);
+            out.insert(index.0);
+            out.insert(value.0);
+        }
+        Rvalue::CheckCast { obj, .. } => {
+            out.insert(obj.0);
+        }
+    }
+}
+
+fn collect_terminator_reads(t: &Terminator, out: &mut rustc_hash::FxHashSet<u32>) {
+    match t {
+        Terminator::Return | Terminator::Goto(_) => {}
+        Terminator::ReturnValue(l) => {
+            out.insert(l.0);
+        }
+        Terminator::Branch { cond, .. } => {
+            out.insert(cond.0);
+        }
+    }
+}
+
+/// Walk the function's last block and, if its terminator is
+/// `ReturnValue(local)` where `local` was assigned a
+/// `Rvalue::Const(MirConst::String(...))`, resolve the string
+/// id back to its text via the module's string pool. Used by
+/// Session 3 to recognize the "return \"done\"" post-suspend
+/// tail pattern and thread the literal through to the JVM
+/// backend's constant pool.
+fn extract_trailing_string(mf: &MirFunction, module: &MirModule) -> Option<String> {
+    let last = mf.blocks.last()?;
+    let Terminator::ReturnValue(local) = &last.terminator else {
+        return None;
+    };
+    // Scan the last block's stmts for the assignment to this local.
+    // The Session 2 path wraps the return in a `mir_autobox` call
+    // followed by a `Call` to `Integer.valueOf` etc., so the value
+    // we care about might be several assignments back. Walk
+    // backwards and stop at the first `Const(String(sid))` we see
+    // referencing the terminator's local, either directly or via
+    // a single `Rvalue::Local(...)` alias.
+    let mut tracked = *local;
+    for stmt in last.stmts.iter().rev() {
+        let MStmt::Assign { dest, value } = stmt;
+        if *dest != tracked {
+            continue;
+        }
+        match value {
+            Rvalue::Const(MirConst::String(sid)) => {
+                return Some(module.lookup_string(*sid).to_string());
+            }
+            Rvalue::Local(src) => {
+                tracked = *src;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
 #[allow(clippy::too_many_arguments)]
 fn lower_function(
     f: &FunDecl,
@@ -1016,7 +2145,7 @@ fn lower_function(
     diags: &mut Diagnostics,
 ) {
     let name = interner.resolve(f.name).to_string();
-    let return_ty = typed
+    let declared_ret = typed
         .map(|t| t.return_ty.clone())
         .or_else(|| {
             f.return_ty.as_ref().map(|tr| {
@@ -1025,7 +2154,26 @@ fn lower_function(
             })
         })
         .unwrap_or(Ty::Unit);
+    // Session 2 of the coroutine transform: a `suspend fun`'s
+    // JVM return type becomes `Object` (we use `Ty::Any`). The
+    // original declared return type is still needed below so we
+    // can box primitive `return` expressions before the
+    // `areturn`. See milestones.yaml v0.9.0.
+    let return_ty = if f.is_suspend {
+        Ty::Any
+    } else {
+        declared_ret.clone()
+    };
     let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
+    fb.mf.is_suspend = f.is_suspend;
+    // Session 5 of the coroutine transform: remember the source-
+    // level declared return type of every suspend fun before the
+    // Session 2 rewrite promotes it to `Object`. Callers that invoke
+    // this suspend fun need it to emit the correct `checkcast` on
+    // resume. Non-suspend funs leave this as `None`.
+    if f.is_suspend {
+        fb.mf.suspend_original_return_ty = Some(declared_ret.clone());
+    }
 
     // Allocate parameter locals first so they get LocalId 0..N.
     let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
@@ -1054,8 +2202,23 @@ fn lower_function(
                 .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module))
         };
         // Function-typed parameters → kotlin/jvm/functions/FunctionN interface.
-        let ty = if let Ty::Function { ref params, .. } = ty {
-            let arity = params.len();
+        // Session 9: suspend function types bump arity by +1 for the
+        // implicit Continuation parameter — `suspend () -> T` maps to
+        // `Function1<Continuation, Object>`, not `Function0`.
+        let is_suspend_callable = matches!(
+            ty,
+            Ty::Function {
+                is_suspend: true,
+                ..
+            }
+        );
+        let ty = if let Ty::Function {
+            ref params,
+            is_suspend: fn_suspend,
+            ..
+        } = ty
+        {
+            let arity = params.len() + if fn_suspend { 1 } else { 0 };
             let iface = stdlib_function_interface(arity);
             Ty::Class(iface)
         } else {
@@ -1064,7 +2227,24 @@ fn lower_function(
         // Override enum class types to String (enums are string-based).
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
+        // Session 9: record suspend-typed callable parameters so that
+        // when they're invoked the MIR lowerer threads the continuation.
+        if is_suspend_callable {
+            fb.suspend_callable_locals.insert(id.0);
+        }
         scope.push((p.name, id));
+    }
+
+    // Session 2 of the coroutine transform: a `suspend fun`'s
+    // last parameter is an implicit `$completion: Continuation`.
+    // We append it AFTER the explicit user parameters so the
+    // source-visible parameter positions are unchanged.
+    if f.is_suspend {
+        let cont_ty = Ty::Class("kotlin/coroutines/Continuation".to_string());
+        let cont_id = fb.new_local(cont_ty);
+        fb.mf.params.push(cont_id);
+        let cont_sym = interner.intern("$completion");
+        scope.push((cont_sym, cont_id));
     }
 
     let mut ok = true;
@@ -1087,17 +2267,100 @@ fn lower_function(
     // The current block's terminator stays `Return` (set by the
     // FnBuilder constructor and never overwritten for the last block).
 
+    // Session 2 of the coroutine transform: rewrite every
+    // return in this suspend function so that the returned value
+    // is a reference (the method descriptor now promises
+    // `Object`). `ReturnValue` terminators get autoboxed; bare
+    // `Return` terminators (suspend fun with a `Unit` declared
+    // return type) become `return null`, which is a valid
+    // `Object`. Emitting `kotlin.Unit.INSTANCE` instead is the
+    // semantically correct thing and will land together with the
+    // full CPS state-machine in Session 3.
+    if f.is_suspend {
+        for bi in 0..fb.mf.blocks.len() {
+            match fb.mf.blocks[bi].terminator.clone() {
+                Terminator::ReturnValue(local) => {
+                    let ty = fb.mf.locals[local.0 as usize].clone();
+                    let prev_block = fb.cur_block;
+                    fb.cur_block = bi as u32;
+                    let boxed = mir_autobox(&mut fb, local, &ty);
+                    fb.cur_block = prev_block;
+                    fb.mf.blocks[bi].terminator = Terminator::ReturnValue(boxed);
+                }
+                Terminator::Return => {
+                    let prev_block = fb.cur_block;
+                    fb.cur_block = bi as u32;
+                    let null_local = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: null_local,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    fb.cur_block = prev_block;
+                    fb.mf.blocks[bi].terminator = Terminator::ReturnValue(null_local);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Sessions 3+4 of the coroutine transform: if this suspend
+    // function contains any suspension points, attach a
+    // [`SuspendStateMachine`] marker so the JVM backend emits the
+    // canonical dispatcher + tableswitch pattern. Zero suspension
+    // points falls through to the Session 2 shape. The extractor
+    // rejects shapes outside the current scope (suspend calls with
+    // user args, branches across suspend sites) as hard errors
+    // rather than silently miscompiling.
+    if f.is_suspend && ok {
+        let sm = extract_suspend_state_machine(&fb.mf, module, &module.wrapper_class, &name);
+        match sm {
+            SuspendSitesResult::Zero => {}
+            SuspendSitesResult::Found(state_machine) => {
+                fb.mf.suspend_state_machine = Some(state_machine);
+            }
+            SuspendSitesResult::Unsupported(reason) => {
+                diags.push(Diagnostic::error(
+                    f.span,
+                    format!(
+                        "suspend function `{name}` has an unsupported shape: {reason}; the skotch \
+                         CPS transform currently supports straight-line bodies with suspend calls \
+                         that take only the implicit `$completion`"
+                    ),
+                ));
+                ok = false;
+            }
+        }
+    }
+
+    // Session 10: when a non-suspend function returns Unit but the body
+    // ends with `ReturnValue(local)` whose type is non-Unit (e.g.
+    // `fun main() = runBlocking { ... }` where runBlocking returns Object),
+    // drop the value and emit plain `Return`. The JVM backend would
+    // otherwise emit `areturn` from a `void` method, failing verification.
+    if !f.is_suspend && declared_ret == Ty::Unit {
+        for block in &mut fb.mf.blocks {
+            if let Terminator::ReturnValue(local) = &block.terminator {
+                let ty = &fb.mf.locals[local.0 as usize];
+                if !matches!(ty, Ty::Unit) {
+                    block.terminator = Terminator::Return;
+                }
+            }
+        }
+    }
+
     if ok {
         // Preserve param metadata from Pass 1.
         let saved_defaults = module.functions[fn_idx].param_defaults.clone();
         let saved_required = module.functions[fn_idx].required_params;
         let saved_names = module.functions[fn_idx].param_names.clone();
         let saved_vararg = module.functions[fn_idx].vararg_index;
+        let saved_suspend = module.functions[fn_idx].is_suspend;
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
         module.functions[fn_idx].param_names = saved_names;
         module.functions[fn_idx].vararg_index = saved_vararg;
+        module.functions[fn_idx].is_suspend = saved_suspend;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -1115,6 +2378,9 @@ fn lower_function(
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
+            is_suspend: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
         };
     }
 }
@@ -1767,6 +3033,9 @@ fn lower_stmt(
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -1834,7 +3103,21 @@ fn lower_stmt(
                         loop_ctx,
                     );
                 }
-                fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
+                // Session 30: if the try body ends with an explicit
+                // `return`, the current block already has a ReturnValue
+                // terminator. Don't overwrite it with Goto(after_block)
+                // — the block returns directly. Only add the Goto if
+                // the block has the default Return terminator.
+                {
+                    let cur = fb.cur_block as usize;
+                    let cur_term = &fb.mf.blocks[cur].terminator;
+                    if !matches!(cur_term, Terminator::ReturnValue(_)) {
+                        fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
+                    } else {
+                        // Block already returns. Just switch to catch_block.
+                        fb.cur_block = catch_block;
+                    }
+                }
 
                 // The catch handler block receives the exception on the
                 // JVM operand stack. We allocate a local to store it.
@@ -1865,7 +3148,16 @@ fn lower_stmt(
                         );
                     }
                 }
-                fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
+                // Same check for catch body: don't overwrite explicit return.
+                {
+                    let cur = fb.cur_block as usize;
+                    let cur_term = &fb.mf.blocks[cur].terminator;
+                    if !matches!(cur_term, Terminator::ReturnValue(_)) {
+                        fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
+                    } else {
+                        fb.cur_block = after_block;
+                    }
+                }
 
                 // Record exception handler.
                 let jvm_catch_type = catch_type.map(|sym| {
@@ -3674,6 +4966,146 @@ fn lower_expr(
                     return Some(dest);
                 }
 
+                // ── Session 12: `deferred.await()` ─────────────────
+                //
+                // `Deferred.await()` is a suspend function on the
+                // `kotlinx/coroutines/Deferred` interface. At the JVM
+                // level it becomes:
+                //   aload <deferred>
+                //   aload <continuation>
+                //   invokeinterface Deferred.await(Continuation)Object
+                //
+                // This is a suspension point — it may return
+                // COROUTINE_SUSPENDED. For this session we emit it as
+                // a VirtualJava call; the JVM backend recognizes
+                // `Deferred` as an interface and emits `invokeinterface`.
+                if method_name_str == "await"
+                    && args.is_empty()
+                    && matches!(&recv_ty, Ty::Class(cn) if cn == "kotlinx/coroutines/Deferred")
+                {
+                    // The continuation is the enclosing suspend fn's
+                    // $completion or, for suspend lambdas, `this`.
+                    let cont_local = if fb.mf.is_suspend {
+                        *fb.mf
+                            .params
+                            .last()
+                            .expect("suspend fn must have $completion")
+                    } else {
+                        let c =
+                            fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: c,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        c
+                    };
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlinx/coroutines/Deferred".to_string(),
+                                method_name: "await".to_string(),
+                                descriptor: "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                                    .to_string(),
+                            },
+                            args: vec![recv_local, cont_local],
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // ── Session 27: `job.join()` ────────────────────────
+                //
+                // `Job.join()` is a suspend function on the
+                // `kotlinx/coroutines/Job` interface. At JVM level:
+                //   aload <job>
+                //   aload <continuation>
+                //   invokeinterface Job.join(Continuation)V
+                //
+                // It returns Unit (void), but on JVM it's Object because
+                // the CPS transform erases the return type.
+                if method_name_str == "join"
+                    && args.is_empty()
+                    && matches!(&recv_ty, Ty::Class(cn) if cn == "kotlinx/coroutines/Job")
+                {
+                    let cont_local = if fb.mf.is_suspend {
+                        *fb.mf
+                            .params
+                            .last()
+                            .expect("suspend fn must have $completion")
+                    } else {
+                        let c =
+                            fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: c,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        c
+                    };
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlinx/coroutines/Job".to_string(),
+                                method_name: "join".to_string(),
+                                descriptor: "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                                    .to_string(),
+                            },
+                            args: vec![recv_local, cont_local],
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // ── Session 27: `job.cancel()` ──────────────────────
+                //
+                // `Job.cancel()` is a non-suspend function on Job.
+                // It cancels the job (non-blocking).
+                if method_name_str == "cancel"
+                    && args.is_empty()
+                    && matches!(&recv_ty, Ty::Class(cn) if cn == "kotlinx/coroutines/Job"
+                        || cn == "kotlinx/coroutines/Deferred")
+                {
+                    let dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlinx/coroutines/Job".to_string(),
+                                method_name: "cancel".to_string(),
+                                descriptor: "()V".to_string(),
+                            },
+                            args: vec![recv_local],
+                        },
+                    });
+                    return Some(dest);
+                }
+
+                // ── Session 27: `job.isActive` property ─────────────
+                //
+                // `Job.isActive` is a property (getter: isActive()Z).
+                if method_name_str == "isActive"
+                    && args.is_empty()
+                    && matches!(&recv_ty, Ty::Class(cn) if cn == "kotlinx/coroutines/Job"
+                        || cn == "kotlinx/coroutines/Deferred")
+                {
+                    let dest = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlinx/coroutines/Job".to_string(),
+                                method_name: "isActive".to_string(),
+                                descriptor: "()Z".to_string(),
+                            },
+                            args: vec![recv_local],
+                        },
+                    });
+                    return Some(dest);
+                }
+
                 // Resolve methods dynamically from JDK class files.
                 let jvm_class_for_ty = match &recv_ty {
                     Ty::String => Some("java/lang/String"),
@@ -3783,6 +5215,7 @@ fn lower_expr(
                     // Look up method in class, walking superclass + interfaces.
                     let mut return_ty = Ty::Unit;
                     let mut found_on_interface = false;
+                    let mut found_is_suspend = false;
                     let mut iface_name = String::new();
                     let mut search = Some(class_name.clone());
                     'outer: while let Some(ref cname) = search {
@@ -3790,6 +5223,7 @@ fn lower_expr(
                             if let Some(m) = cls.methods.iter().find(|m| m.name == method_name_str)
                             {
                                 return_ty = m.return_ty.clone();
+                                found_is_suspend = m.is_suspend;
                                 break;
                             }
                             // Search implemented interfaces.
@@ -3800,6 +5234,7 @@ fn lower_expr(
                                         icls.methods.iter().find(|m| m.name == method_name_str)
                                     {
                                         return_ty = m.return_ty.clone();
+                                        found_is_suspend = m.is_suspend;
                                         found_on_interface = true;
                                         iface_name = iname.clone();
                                         break 'outer;
@@ -3811,7 +5246,49 @@ fn lower_expr(
                             break;
                         }
                     }
-                    if found_on_interface {
+
+                    // Session 28: suspend instance method calls. Append
+                    // the $completion continuation and emit as VirtualJava
+                    // so the state machine extractor detects it as a
+                    // suspension point.
+                    if found_is_suspend {
+                        let cont_local = if fb.mf.is_suspend {
+                            *fb.mf
+                                .params
+                                .last()
+                                .expect("suspend fn must have $completion")
+                        } else {
+                            let c = fb
+                                .new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: c,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            c
+                        };
+                        all_args.push(cont_local);
+                        // Build VirtualJava descriptor: (user_params..., Continuation)Object
+                        let mut desc = String::from("(");
+                        // Skip receiver (first arg) in descriptor
+                        for &a in all_args.iter().skip(1) {
+                            let ty = &fb.mf.locals[a.0 as usize];
+                            desc.push_str(&jvm_type_string_for_ty(ty));
+                        }
+                        desc.push_str(")Ljava/lang/Object;");
+                        let target_class = if found_on_interface {
+                            iface_name
+                        } else {
+                            class_name.clone()
+                        };
+                        (
+                            CallKind::VirtualJava {
+                                class_name: target_class,
+                                method_name: method_name_str,
+                                descriptor: desc,
+                            },
+                            Ty::Any,
+                        )
+                    } else if found_on_interface {
                         (
                             CallKind::Virtual {
                                 class_name: iface_name,
@@ -4038,6 +5515,7 @@ fn lower_expr(
                         params: lparams,
                         body: lbody,
                         span: lspan,
+                        ..
                     } = &args[0].expr
                     {
                         // Construct an ObjectExpr AST node and lower it.
@@ -4052,6 +5530,7 @@ fn lower_expr(
                             is_open: false,
                             is_override: true,
                             is_abstract: false,
+                            is_suspend: false,
                             span: *lspan,
                         };
                         // If the SAM method returns non-Unit, set return type.
@@ -4220,6 +5699,20 @@ fn lower_expr(
                 }
             }
 
+            // If the callee is a coroutine builder, set a flag so
+            // trailing lambda args are created as SuspendLambda.
+            let is_coroutine_builder = callee_str == "runBlocking"
+                || callee_str == "launch"
+                || callee_str == "async"
+                || callee_str == "withContext"
+                || callee_str == "coroutineScope"
+                || callee_str == "supervisorScope"
+                || callee_str == "withTimeout"
+                || callee_str == "withTimeoutOrNull";
+            if is_coroutine_builder {
+                module.force_suspend_lambda = true;
+            }
+
             // Lower arguments. If any are named, we'll reorder after.
             let has_named = args.iter().any(|a| a.name.is_some());
             let mut named_pairs: Vec<(Option<Symbol>, LocalId)> = Vec::new();
@@ -4237,6 +5730,9 @@ fn lower_expr(
                 )?;
                 named_pairs.push((a.name, id));
             }
+            // Clear the force flag in case it wasn't consumed
+            // (e.g. the lambda was a capture, not a literal).
+            module.force_suspend_lambda = false;
 
             // Reorder named arguments to match parameter order.
             let mut arg_locals: Vec<LocalId> = if has_named {
@@ -4347,6 +5843,741 @@ fn lower_expr(
 
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
+
+            // ── Session 10: `runBlocking { }` ──────────────────────────
+            //
+            // `fun main() = runBlocking { delay(10); println("done") }`
+            //
+            // kotlinc compiles this as:
+            //   aconst_null                       // CoroutineContext arg (null → default)
+            //   new Lambda; dup; aconst_null
+            //   invokespecial Lambda.<init>(Continuation)V
+            //   checkcast Function2
+            //   iconst_1                          // default-mask (bit 0 = context defaulted)
+            //   aconst_null                       // unused handler
+            //   invokestatic BuildersKt.runBlocking$default(
+            //       CoroutineContext, Function2, int, Object)Object
+            //   pop                               // result is Unit
+            //
+            // The trailing lambda has already been lowered as a suspend lambda
+            // class with arity 2 (CoroutineScope + Continuation → Function2).
+            // The `arg_locals` at this point contain the lambda instance.
+            if callee_str == "runBlocking" && arg_locals.len() == 1 {
+                let lambda_local = arg_locals[0];
+
+                // The trailing lambda for runBlocking has type
+                // `suspend CoroutineScope.() -> T`, which is
+                // `Function2<CoroutineScope, Continuation<T>, Object>`.
+                // The MIR lowerer created it as a suspend lambda with
+                // arity 1 (Function1). We need to bump it to arity 2
+                // (Function2) so that `runBlocking$default` can call it.
+                //
+                // Find the lambda class by type and patch its interfaces.
+                let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                if let Ty::Class(ref lambda_class_name) = lambda_ty {
+                    if let Some(cls) = module
+                        .classes
+                        .iter_mut()
+                        .find(|c| &c.name == lambda_class_name)
+                    {
+                        // Replace any FunctionN → Function2 in interfaces.
+                        for iface in cls.interfaces.iter_mut() {
+                            if iface.starts_with("kotlin/jvm/functions/Function") {
+                                *iface = "kotlin/jvm/functions/Function2".to_string();
+                            }
+                        }
+                    }
+                }
+
+                // Push null for CoroutineContext (defaulted).
+                let null_ctx =
+                    fb.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_ctx,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+
+                // Cast lambda to Function2.
+                let func2_local =
+                    fb.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: func2_local,
+                    value: Rvalue::CheckCast {
+                        obj: lambda_local,
+                        target_class: "kotlin/jvm/functions/Function2".to_string(),
+                    },
+                });
+
+                // Push iconst_1 (default mask: bit 0 → context is defaulted).
+                let mask_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: mask_local,
+                    value: Rvalue::Const(MirConst::Int(1)),
+                });
+
+                // Push null for the unused handler arg.
+                let null_handler = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_handler,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+
+                // Call BuildersKt.runBlocking$default(
+                //     CoroutineContext, Function2, int, Object)Object
+                let result = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "kotlinx/coroutines/BuildersKt".to_string(),
+                            method_name: "runBlocking$default".to_string(),
+                            descriptor: "(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;".to_string(),
+                        },
+                        args: vec![null_ctx, func2_local, mask_local, null_handler],
+                    },
+                });
+                return Some(result);
+            }
+
+            // ── Session 12: `launch { }` and `async { }` builders ────
+            //
+            // `launch { body }` and `async { body }` are coroutine
+            // builders from kotlinx-coroutines. For simplicity we use
+            // `GlobalScope.launch$default` / `GlobalScope.async$default`
+            // rather than threading the CoroutineScope from
+            // `runBlocking`'s lambda receiver. This means these launches
+            // are NOT structured (GlobalScope never cancels), but it
+            // produces correct runtime behavior for basic patterns.
+            //
+            // kotlinc reference call site:
+            //   getstatic GlobalScope.INSTANCE:GlobalScope
+            //   aconst_null                // CoroutineContext (default)
+            //   aconst_null                // CoroutineStart  (default)
+            //   new Lambda; dup; aconst_null; invokespecial <init>
+            //   checkcast Function2
+            //   iconst_3                   // default mask (bits 0+1)
+            //   aconst_null                // unused handler
+            //   invokestatic BuildersKt.launch$default(
+            //       CoroutineScope, CoroutineContext, CoroutineStart,
+            //       Function2, int, Object)Job
+            //
+            // `async` is identical but returns `Deferred` instead of `Job`.
+            if (callee_str == "launch" || callee_str == "async") && arg_locals.len() == 1 {
+                let lambda_local = arg_locals[0];
+
+                // The trailing lambda for launch/async has type
+                // `suspend CoroutineScope.() -> T`, i.e.
+                // `Function2<CoroutineScope, Continuation<T>, Object>`.
+                // Patch any FunctionN → Function2 and mark as suspend lambda
+                // so the JVM backend emits the SuspendLambda shell.
+                //
+                // IMPORTANT: lambda_local is in the CURRENT FnBuilder (fb).
+                // When inside a suspend lambda's invoke body, fb is the
+                // invoke FnBuilder, not the top-level one. The local's type
+                // is the inner lambda's class name.
+                let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                if let Ty::Class(ref lambda_class_name) = lambda_ty {
+                    if let Some(cls) = module
+                        .classes
+                        .iter_mut()
+                        .find(|c| &c.name == lambda_class_name)
+                    {
+                        for iface in cls.interfaces.iter_mut() {
+                            if iface.starts_with("kotlin/jvm/functions/Function") {
+                                *iface = "kotlin/jvm/functions/Function2".to_string();
+                            }
+                        }
+                        // Force SuspendLambda even if body has no suspend calls
+                        // (the lambda is being passed to a coroutine builder).
+                        if !cls.is_suspend_lambda {
+                            cls.is_suspend_lambda = true;
+                            cls.super_class =
+                                Some("kotlin/coroutines/jvm/internal/SuspendLambda".to_string());
+                        }
+                    }
+                }
+
+                // Session 31: structured concurrency — use the enclosing
+                // CoroutineScope from this.p$0 if available (set by the
+                // SuspendLambda shell's create method). Fall back to
+                // GlobalScope for non-lambda contexts.
+                let this_sym = interner.intern("this");
+                let scope_local = if let Some((_, this_local)) =
+                    scope.iter().rev().find(|(s, _)| *s == this_sym)
+                {
+                    let this_ty = &fb.mf.locals[this_local.0 as usize];
+                    // All suspend lambda classes get a p$0 field (added
+                    // at finalization). Check if this class IS a suspend
+                    // lambda by looking for the field OR by class name
+                    // pattern (the field may not exist yet on the placeholder).
+                    let has_scope_field = if let Ty::Class(cls_name) = this_ty {
+                        module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == cls_name)
+                            .map(|c| {
+                                c.fields.iter().any(|f| f.name == "p$0") || c.is_suspend_lambda
+                            })
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    };
+                    if has_scope_field {
+                        let cls_name = if let Ty::Class(n) = this_ty {
+                            n.clone()
+                        } else {
+                            unreachable!()
+                        };
+                        // Load the scope from this.p$0 and cast to CoroutineScope.
+                        let raw_scope = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: raw_scope,
+                            value: Rvalue::GetField {
+                                receiver: *this_local,
+                                class_name: cls_name,
+                                field_name: "p$0".to_string(),
+                            },
+                        });
+                        let cast_scope = fb
+                            .new_local(Ty::Class("kotlinx/coroutines/CoroutineScope".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: cast_scope,
+                            value: Rvalue::CheckCast {
+                                obj: raw_scope,
+                                target_class: "kotlinx/coroutines/CoroutineScope".to_string(),
+                            },
+                        });
+                        cast_scope
+                    } else {
+                        // No p$0 field — use GlobalScope.
+                        let gs =
+                            fb.new_local(Ty::Class("kotlinx/coroutines/GlobalScope".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: gs,
+                            value: Rvalue::GetStaticField {
+                                class_name: "kotlinx/coroutines/GlobalScope".to_string(),
+                                field_name: "INSTANCE".to_string(),
+                                descriptor: "Lkotlinx/coroutines/GlobalScope;".to_string(),
+                            },
+                        });
+                        gs
+                    }
+                } else {
+                    let gs = fb.new_local(Ty::Class("kotlinx/coroutines/GlobalScope".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: gs,
+                        value: Rvalue::GetStaticField {
+                            class_name: "kotlinx/coroutines/GlobalScope".to_string(),
+                            field_name: "INSTANCE".to_string(),
+                            descriptor: "Lkotlinx/coroutines/GlobalScope;".to_string(),
+                        },
+                    });
+                    gs
+                };
+
+                // null CoroutineContext (defaulted)
+                let null_ctx =
+                    fb.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_ctx,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+
+                // null CoroutineStart (defaulted)
+                let null_start =
+                    fb.new_local(Ty::Class("kotlinx/coroutines/CoroutineStart".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_start,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+
+                // Cast lambda to Function2
+                let func2_local =
+                    fb.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: func2_local,
+                    value: Rvalue::CheckCast {
+                        obj: lambda_local,
+                        target_class: "kotlin/jvm/functions/Function2".to_string(),
+                    },
+                });
+
+                // iconst_3 (default mask: bits 0+1 = context + start defaulted)
+                let mask_local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: mask_local,
+                    value: Rvalue::Const(MirConst::Int(3)),
+                });
+
+                // null handler arg
+                let null_handler = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_handler,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+
+                if callee_str == "launch" {
+                    // Call BuildersKt.launch$default(
+                    //     CoroutineScope, CoroutineContext, CoroutineStart,
+                    //     Function2, int, Object)Job
+                    let result = fb.new_local(Ty::Class("kotlinx/coroutines/Job".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlinx/coroutines/BuildersKt".to_string(),
+                                method_name: "launch$default".to_string(),
+                                descriptor: "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Job;".to_string(),
+                            },
+                            args: vec![scope_local, null_ctx, null_start, func2_local, mask_local, null_handler],
+                        },
+                    });
+                    return Some(result);
+                } else {
+                    // async: same args, returns Deferred
+                    let result = fb.new_local(Ty::Class("kotlinx/coroutines/Deferred".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlinx/coroutines/BuildersKt".to_string(),
+                                method_name: "async$default".to_string(),
+                                descriptor: "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Deferred;".to_string(),
+                            },
+                            args: vec![scope_local, null_ctx, null_start, func2_local, mask_local, null_handler],
+                        },
+                    });
+                    return Some(result);
+                }
+            }
+
+            // ── Session 27: `withContext(Dispatchers.X) { body }` ───
+            //
+            // `withContext` is an inline suspend function from
+            // kotlinx-coroutines:
+            //   kotlinx/coroutines/WithContextKt.withContext(
+            //       CoroutineContext, Function2, Continuation)Object
+            //
+            // It takes a CoroutineContext as its first argument and a
+            // suspend lambda block as its second. The lambda is a
+            // `suspend CoroutineScope.() -> T` (Function2).
+            //
+            // Usage: withContext(Dispatchers.IO) { ... }
+            //        withContext(Dispatchers.Default) { ... }
+            if callee_str == "withContext" && arg_locals.len() == 2 {
+                let ctx_local = arg_locals[0];
+                let lambda_local = arg_locals[1];
+
+                // Patch lambda to Function2 + SuspendLambda
+                let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                if let Ty::Class(ref lambda_class_name) = lambda_ty {
+                    if let Some(cls) = module
+                        .classes
+                        .iter_mut()
+                        .find(|c| &c.name == lambda_class_name)
+                    {
+                        for iface in cls.interfaces.iter_mut() {
+                            if iface.starts_with("kotlin/jvm/functions/Function") {
+                                *iface = "kotlin/jvm/functions/Function2".to_string();
+                            }
+                        }
+                        if !cls.is_suspend_lambda {
+                            cls.is_suspend_lambda = true;
+                            cls.super_class =
+                                Some("kotlin/coroutines/jvm/internal/SuspendLambda".to_string());
+                        }
+                    }
+                }
+
+                // Cast lambda to Function2
+                let func2_local =
+                    fb.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: func2_local,
+                    value: Rvalue::CheckCast {
+                        obj: lambda_local,
+                        target_class: "kotlin/jvm/functions/Function2".to_string(),
+                    },
+                });
+
+                // withContext is a suspend function — emit as Static(stub)
+                // so the state machine extractor detects it as a
+                // suspension point and threads the continuation properly.
+                let wc_sym = interner.intern("withContext");
+                let wc_fid = *name_to_func
+                    .get(&wc_sym)
+                    .expect("withContext stub must be pre-registered");
+
+                let cont_local = if fb.mf.is_suspend {
+                    *fb.mf
+                        .params
+                        .last()
+                        .expect("suspend fn must have $completion")
+                } else {
+                    let c = fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    c
+                };
+
+                let result = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(wc_fid),
+                        args: vec![ctx_local, func2_local, cont_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // ── Session 27: `coroutineScope { body }` ──────────────
+            //
+            // `coroutineScope` is an inline suspend function:
+            //   kotlinx/coroutines/CoroutineScopeKt.coroutineScope(
+            //       Function2, Continuation)Object
+            //
+            // The lambda is `suspend CoroutineScope.() -> R` (Function2).
+            // `supervisorScope` has the same signature but lives in
+            // SupervisorKt.
+            if (callee_str == "coroutineScope" || callee_str == "supervisorScope")
+                && arg_locals.len() == 1
+            {
+                let lambda_local = arg_locals[0];
+
+                // Patch lambda to Function2 + SuspendLambda
+                let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                if let Ty::Class(ref lambda_class_name) = lambda_ty {
+                    if let Some(cls) = module
+                        .classes
+                        .iter_mut()
+                        .find(|c| &c.name == lambda_class_name)
+                    {
+                        for iface in cls.interfaces.iter_mut() {
+                            if iface.starts_with("kotlin/jvm/functions/Function") {
+                                *iface = "kotlin/jvm/functions/Function2".to_string();
+                            }
+                        }
+                        if !cls.is_suspend_lambda {
+                            cls.is_suspend_lambda = true;
+                            cls.super_class =
+                                Some("kotlin/coroutines/jvm/internal/SuspendLambda".to_string());
+                        }
+                    }
+                }
+
+                // Cast lambda to Function2
+                let func2_local =
+                    fb.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: func2_local,
+                    value: Rvalue::CheckCast {
+                        obj: lambda_local,
+                        target_class: "kotlin/jvm/functions/Function2".to_string(),
+                    },
+                });
+
+                // coroutineScope/supervisorScope are suspend functions —
+                // emit as Static(stub) for state machine detection.
+                let stub_sym = interner.intern(callee_str);
+                let stub_fid = *name_to_func
+                    .get(&stub_sym)
+                    .expect("coroutineScope/supervisorScope stub must be pre-registered");
+
+                let cont_local = if fb.mf.is_suspend {
+                    *fb.mf
+                        .params
+                        .last()
+                        .expect("suspend fn must have $completion")
+                } else {
+                    let c = fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    c
+                };
+
+                let result = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(stub_fid),
+                        args: vec![func2_local, cont_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // ── Session 27: `withTimeout(ms) { body }` ────────────
+            //
+            // `withTimeout` and `withTimeoutOrNull` are suspend functions:
+            //   kotlinx/coroutines/TimeoutKt.withTimeout(J, Function2, Continuation)Object
+            //   kotlinx/coroutines/TimeoutKt.withTimeoutOrNull(J, Function2, Continuation)Object
+            //
+            // First arg is Long (millis), second is suspend lambda.
+            if (callee_str == "withTimeout" || callee_str == "withTimeoutOrNull")
+                && arg_locals.len() == 2
+            {
+                let ms_arg = arg_locals[0];
+                let lambda_local = arg_locals[1];
+
+                // Promote Int to Long if needed (same pattern as delay)
+                let ms_local = {
+                    let arg_ty = fb.mf.locals[ms_arg.0 as usize].clone();
+                    if arg_ty == Ty::Int {
+                        let mut promoted = false;
+                        for stmt in fb.mf.blocks[fb.cur_block as usize].stmts.iter_mut().rev() {
+                            let MStmt::Assign { dest, value } = stmt;
+                            if *dest == ms_arg {
+                                if let Rvalue::Const(MirConst::Int(v)) = value {
+                                    let v_long = *v as i64;
+                                    *value = Rvalue::Const(MirConst::Long(v_long));
+                                    fb.mf.locals[ms_arg.0 as usize] = Ty::Long;
+                                    promoted = true;
+                                }
+                                break;
+                            }
+                        }
+                        if promoted {
+                            ms_arg
+                        } else {
+                            let long_local = fb.new_local(Ty::Long);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: long_local,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "$i2l$".to_string(),
+                                        method_name: "$i2l$".to_string(),
+                                        descriptor: "(I)J".to_string(),
+                                    },
+                                    args: vec![ms_arg],
+                                },
+                            });
+                            long_local
+                        }
+                    } else {
+                        ms_arg
+                    }
+                };
+
+                // Patch lambda to Function2 + SuspendLambda
+                let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                if let Ty::Class(ref lambda_class_name) = lambda_ty {
+                    if let Some(cls) = module
+                        .classes
+                        .iter_mut()
+                        .find(|c| &c.name == lambda_class_name)
+                    {
+                        for iface in cls.interfaces.iter_mut() {
+                            if iface.starts_with("kotlin/jvm/functions/Function") {
+                                *iface = "kotlin/jvm/functions/Function2".to_string();
+                            }
+                        }
+                        if !cls.is_suspend_lambda {
+                            cls.is_suspend_lambda = true;
+                            cls.super_class =
+                                Some("kotlin/coroutines/jvm/internal/SuspendLambda".to_string());
+                        }
+                    }
+                }
+
+                // Cast lambda to Function2
+                let func2_local =
+                    fb.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: func2_local,
+                    value: Rvalue::CheckCast {
+                        obj: lambda_local,
+                        target_class: "kotlin/jvm/functions/Function2".to_string(),
+                    },
+                });
+
+                // Continuation
+                let cont_local = if fb.mf.is_suspend {
+                    *fb.mf
+                        .params
+                        .last()
+                        .expect("suspend fn must have $completion")
+                } else {
+                    let c = fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    c
+                };
+
+                // withTimeout/withTimeoutOrNull are suspend functions —
+                // emit as Static(stub) for state machine detection.
+                let stub_sym = interner.intern(callee_str);
+                let stub_fid = *name_to_func
+                    .get(&stub_sym)
+                    .expect("withTimeout stub must be pre-registered");
+
+                let result = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(stub_fid),
+                        args: vec![ms_local, func2_local, cont_local],
+                    },
+                });
+                return Some(result);
+            }
+
+            // ── Session 27: `yield()` inside suspend context ───────
+            //
+            // `yield` is a suspend function from kotlinx-coroutines:
+            //   kotlinx/coroutines/YieldKt.yield(Continuation)Object
+            //
+            // It yields the current coroutine's thread to allow other
+            // coroutines to run (cooperative multitasking).
+            if callee_str == "yield" && arg_locals.is_empty() {
+                let yield_sym = interner.intern("yield");
+                let yield_fid = *name_to_func
+                    .get(&yield_sym)
+                    .expect("yield stub must be pre-registered");
+
+                let cont_local = if fb.mf.is_suspend {
+                    *fb.mf
+                        .params
+                        .last()
+                        .expect("suspend fn must have $completion")
+                } else {
+                    let c = fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    c
+                };
+
+                let dest = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(yield_fid),
+                        args: vec![cont_local],
+                    },
+                });
+                return Some(dest);
+            }
+
+            // ── Session 10: `delay(ms)` inside suspend context ──────
+            //
+            // `delay` is a kotlinx-coroutines suspend function:
+            //   kotlinx/coroutines/DelayKt.delay(J, Continuation)Object
+            //
+            // The Int literal argument is promoted to Long. The
+            // Continuation arg is the enclosing suspend function's
+            // `$completion` (for named funs) or `this` (for suspend
+            // lambdas, where the lambda IS the continuation).
+            //
+            // This call is a SUSPENSION POINT — it must be recognized
+            // by the state machine extractor. We emit it as a
+            // StaticJava call but also register a synthetic function
+            // in the module so the extractor can match it.
+            if callee_str == "delay" {
+                // Promote Int arg to Long if needed. `delay` takes a
+                // `Long` parameter, but Kotlin auto-promotes `Int`
+                // literals. We scan backwards through the block for the
+                // assignment that produced the arg local, and if it's a
+                // `Const(Int(v))` we replace it in-place with
+                // `Const(Long(v))` and retype the local. For non-literal
+                // ints we emit a fresh Long local via `i2l`.
+                let ms_local = if !arg_locals.is_empty() {
+                    let arg = arg_locals[0];
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    if arg_ty == Ty::Int {
+                        // Try to find the Const(Int) assignment to this local
+                        // and promote it to Long in place.
+                        let mut promoted = false;
+                        for stmt in fb.mf.blocks[fb.cur_block as usize].stmts.iter_mut().rev() {
+                            let MStmt::Assign { dest, value } = stmt;
+                            if *dest == arg {
+                                if let Rvalue::Const(MirConst::Int(v)) = value {
+                                    let v_long = *v as i64;
+                                    *value = Rvalue::Const(MirConst::Long(v_long));
+                                    fb.mf.locals[arg.0 as usize] = Ty::Long;
+                                    promoted = true;
+                                }
+                                break;
+                            }
+                        }
+                        if promoted {
+                            arg
+                        } else {
+                            // General case: emit i2l conversion via StaticJava stub.
+                            // The JVM backend handles this by emitting the `i2l` opcode.
+                            let long_local = fb.new_local(Ty::Long);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: long_local,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "$i2l$".to_string(),
+                                        method_name: "$i2l$".to_string(),
+                                        descriptor: "(I)J".to_string(),
+                                    },
+                                    args: vec![arg],
+                                },
+                            });
+                            long_local
+                        }
+                    } else {
+                        arg
+                    }
+                } else {
+                    // delay() with no args — shouldn't happen, but
+                    // default to 0L.
+                    let zero_long = fb.new_local(Ty::Long);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: zero_long,
+                        value: Rvalue::Const(MirConst::Long(0)),
+                    });
+                    zero_long
+                };
+
+                // The `delay` stub was pre-registered in `lower_file`'s
+                // Pass 1 so that `body_contains_suspend_call` can
+                // detect it during suspend-lambda analysis. Look it up.
+                let delay_sym = interner.intern("delay");
+                let delay_fid = *name_to_func
+                    .get(&delay_sym)
+                    .expect("delay stub must be pre-registered");
+
+                // Now emit the call as a Static call to the delay stub.
+                // The state machine extractor will pick up that it's a
+                // suspend call because delay_fid.is_suspend == true.
+                //
+                // Append the continuation (last param of enclosing fn if
+                // suspend, else null).
+                let cont_local = if fb.mf.is_suspend {
+                    *fb.mf
+                        .params
+                        .last()
+                        .expect("suspend fn must have $completion")
+                } else {
+                    let c = fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    c
+                };
+
+                let dest = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::Static(delay_fid),
+                        args: vec![ms_local, cont_local],
+                    },
+                });
+                return Some(dest);
+            }
 
             // `listOf(...)` — call the real Kotlin stdlib
             // `kotlin/collections/CollectionsKt.listOf([Ljava/lang/Object;)Ljava/util/List;`.
@@ -4933,6 +7164,48 @@ fn lower_expr(
                     let use_interface_dispatch =
                         is_function_interface || matches!(local_ty, Ty::Any | Ty::Function { .. });
                     if use_interface_dispatch {
+                        // ── Session 9: suspend callable parameter ────
+                        // When the local is a suspend-typed function
+                        // parameter inside a suspend function, the
+                        // invocation becomes:
+                        //   block.invoke($completion)
+                        // via invokeinterface Function1.invoke(Object)Object.
+                        // The $completion is the enclosing function's last
+                        // param. The result is Object (no unboxing).
+                        let is_suspend_call = fb.suspend_callable_locals.contains(&local_id.0);
+                        if is_suspend_call && fb.mf.is_suspend {
+                            // Load block + continuation → invokeinterface
+                            let cont_local = *fb
+                                .mf
+                                .params
+                                .last()
+                                .expect("suspend fn must have $completion");
+                            // Widen continuation to Ty::Any for the erased
+                            // invoke(Object)Object descriptor.
+                            let cont_widened = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: cont_widened,
+                                value: Rvalue::Local(cont_local),
+                            });
+                            let iface_name = if let Ty::Class(ref cn) = local_ty {
+                                cn.clone()
+                            } else {
+                                stdlib_function_interface(1)
+                            };
+                            let raw_result = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: raw_result,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: iface_name,
+                                        method_name: "invoke".to_string(),
+                                    },
+                                    args: vec![*local_id, cont_widened],
+                                },
+                            });
+                            return Some(raw_result);
+                        }
+
                         // Autobox each argument: primitive → wrapper Object.
                         let mut boxed_args: Vec<LocalId> = vec![*local_id];
                         for &arg in &arg_locals {
@@ -5335,6 +7608,36 @@ fn lower_expr(
                 }
             }
 
+            // Session 2 of the coroutine transform: when calling a
+            // `suspend fun`, append the caller's own `$completion`
+            // if the caller is itself suspend, otherwise pass
+            // `null`. A real Kotlin compiler would reject the
+            // non-suspend case at typeck time ("suspend function
+            // can only be called from another suspend function");
+            // we accept it for now so non-coroutine tests that
+            // mention suspend functions still compile. The `null`
+            // path will NPE at runtime if invoked.
+            if let CallKind::Static(fid) = &kind {
+                if module.functions[fid.0 as usize].is_suspend {
+                    let cont_local = if fb.mf.is_suspend {
+                        // Our last param is the incoming $completion.
+                        *fb.mf
+                            .params
+                            .last()
+                            .expect("suspend fn must have $completion")
+                    } else {
+                        let c =
+                            fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: c,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        c
+                    };
+                    arg_locals.push(cont_local);
+                }
+            }
+
             let dest = fb.new_local(dest_ty);
             fb.push_stmt(MStmt::Assign {
                 dest,
@@ -5690,18 +7993,80 @@ fn lower_expr(
                     body_blks[i],
                 );
 
-                // Lower body in body_blks[i]
-                if let Some(val) = lower_expr(
-                    &branch.body,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    loop_ctx,
-                ) {
+                // Lower body in body_blks[i].
+                // Session 30: when branch bodies that are `{ stmts }` parse
+                // as Expr::Lambda with no params. Inline them as blocks
+                // rather than creating lambda classes — they're Kotlin block
+                // expressions, not closures.
+                let body_val = if let Expr::Lambda { params, body, .. } = &branch.body {
+                    if params.is_empty() {
+                        // Inline the block: lower each stmt, return last expr's val.
+                        let mut last = None;
+                        for s in &body.stmts {
+                            match s {
+                                skotch_syntax::Stmt::Expr(e)
+                                | skotch_syntax::Stmt::Return { value: Some(e), .. } => {
+                                    last = lower_expr(
+                                        e,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    );
+                                    // If it's a return, set the terminator.
+                                    if matches!(s, skotch_syntax::Stmt::Return { .. }) {
+                                        if let Some(local) = last {
+                                            fb.set_terminator(Terminator::ReturnValue(local));
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    lower_stmt(
+                                        s,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    );
+                                }
+                            }
+                        }
+                        last
+                    } else {
+                        lower_expr(
+                            &branch.body,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )
+                    }
+                } else {
+                    lower_expr(
+                        &branch.body,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )
+                };
+                if let Some(val) = body_val {
                     if i == 0 {
                         let ty = fb.mf.locals[val.0 as usize].clone();
                         fb.mf.locals[result.0 as usize] = ty;
@@ -5712,35 +8077,106 @@ fn lower_expr(
                     });
                 }
 
-                // Goto merge, switch to next comparison block
+                // Goto merge, switch to next comparison block.
+                // Session 30: don't overwrite explicit `return` terminators.
                 let next = if i + 1 < branches.len() {
                     cmp_blks[i + 1]
                 } else {
                     else_blk
                 };
-                fb.terminate_and_switch(Terminator::Goto(merge_blk), next);
+                {
+                    let cur = fb.cur_block as usize;
+                    if !matches!(fb.mf.blocks[cur].terminator, Terminator::ReturnValue(_)) {
+                        fb.terminate_and_switch(Terminator::Goto(merge_blk), next);
+                    } else {
+                        fb.cur_block = next;
+                    }
+                }
             }
 
             // Else body
             if let Some(eb) = else_body {
-                // We're in else_blk
-                if let Some(val) = lower_expr(
-                    eb,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    loop_ctx,
-                ) {
+                // We're in else_blk. Same Lambda-as-block inlining.
+                let else_val = if let Expr::Lambda { params, body, .. } = eb.as_ref() {
+                    if params.is_empty() {
+                        let mut last = None;
+                        for s in &body.stmts {
+                            match s {
+                                skotch_syntax::Stmt::Expr(e)
+                                | skotch_syntax::Stmt::Return { value: Some(e), .. } => {
+                                    last = lower_expr(
+                                        e,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    );
+                                    if matches!(s, skotch_syntax::Stmt::Return { .. }) {
+                                        if let Some(local) = last {
+                                            fb.set_terminator(Terminator::ReturnValue(local));
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    lower_stmt(
+                                        s,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    );
+                                }
+                            }
+                        }
+                        last
+                    } else {
+                        lower_expr(
+                            eb,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )
+                    }
+                } else {
+                    lower_expr(
+                        eb,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )
+                };
+                if let Some(val) = else_val {
                     fb.push_stmt(MStmt::Assign {
                         dest: result,
                         value: Rvalue::Local(val),
                     });
                 }
-                fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+                {
+                    let cur = fb.cur_block as usize;
+                    if !matches!(fb.mf.blocks[cur].terminator, Terminator::ReturnValue(_)) {
+                        fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+                    } else {
+                        fb.cur_block = merge_blk;
+                    }
+                }
             } else {
                 // No else body — assign a default to the result local so the
                 // JVM verifier doesn't see an uninitialized local on the
@@ -5757,6 +8193,20 @@ fn lower_expr(
                     value: Rvalue::Const(default_val),
                 });
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+            }
+
+            // Session 30: if the merge block is unreachable (all branches
+            // returned explicitly) and the method returns non-void, the
+            // merge block needs a valid return. Only fix non-void methods;
+            // void methods' bare `Return` is correct.
+            {
+                let merge = merge_blk as usize;
+                let result_ty = &fb.mf.locals[result.0 as usize];
+                if matches!(fb.mf.blocks[merge].terminator, Terminator::Return)
+                    && !matches!(result_ty, Ty::Unit)
+                {
+                    fb.mf.blocks[merge].terminator = Terminator::ReturnValue(result);
+                }
             }
 
             Some(result)
@@ -5854,6 +8304,45 @@ fn lower_expr(
             // that enums are real MirClass instances.)
             if false {
                 // removed: compound-name hack
+            }
+
+            // Session 27: Dispatchers.IO / .Default / .Main / .Unconfined
+            //
+            // `Dispatchers` is a Kotlin object. Each dispatcher property
+            // is exposed as a static getter method on the JVM:
+            //   Dispatchers.IO → invokestatic Dispatchers.getIO()
+            //   Dispatchers.Default → invokestatic Dispatchers.getDefault()
+            //   Dispatchers.Unconfined → invokestatic Dispatchers.getUnconfined()
+            //   Dispatchers.Main → invokestatic Dispatchers.getMain()
+            if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                let recv_str = interner.resolve(*recv_sym);
+                let field_str = interner.resolve(*name);
+                if recv_str == "Dispatchers" {
+                    let getter = match field_str {
+                        "IO" => Some("getIO"),
+                        "Default" => Some("getDefault"),
+                        "Unconfined" => Some("getUnconfined"),
+                        "Main" => Some("getMain"),
+                        _ => None,
+                    };
+                    if let Some(getter_name) = getter {
+                        let dest = fb
+                            .new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: "kotlinx/coroutines/Dispatchers".to_string(),
+                                    method_name: getter_name.to_string(),
+                                    descriptor: "()Lkotlinx/coroutines/CoroutineDispatcher;"
+                                        .to_string(),
+                                },
+                                args: vec![],
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
             }
 
             // Check if this is an enum/object constant access (Color.RED).
@@ -6726,7 +9215,32 @@ fn lower_expr(
             }
         }
 
-        Expr::Lambda { params, body, .. } => {
+        Expr::Lambda {
+            params,
+            body,
+            is_suspend: ast_is_suspend,
+            ..
+        } => {
+            // ── Suspend lambda detection ────────────────────────────
+            // A lambda is a suspend lambda if either:
+            //   1. The AST flagged it (future: `suspend {}` syntax or
+            //      inferred from function-type-parameter context)
+            //   2. The body contains a call to a suspend function
+            // SESSION 6 SCOPE: detection flows through to MIR so future
+            // sessions can generate SuspendLambda-extending classes.
+            // Currently lambdas with suspend bodies still compile as
+            // regular $Lambda$N classes — this means calling them from
+            // real coroutine builders won't work at runtime. Full
+            // SuspendLambda codegen is tracked as Session 7+.
+            // Check the force flag FIRST, then AST flag, then body scan.
+            let forced = module.force_suspend_lambda;
+            if forced {
+                module.force_suspend_lambda = false; // consume the flag
+            }
+            let is_suspend_lambda = forced
+                || *ast_is_suspend
+                || body_contains_suspend_call(body, module, interner, name_to_func);
+
             // ── Capture analysis ────────────────────────────────────
             let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
             let free_vars: Vec<(Symbol, LocalId, Ty)> =
@@ -6769,6 +9283,9 @@ fn lower_expr(
                     is_abstract: false,
                     exception_handlers: Vec::new(),
                     vararg_index: None,
+                    is_suspend: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -6805,6 +9322,7 @@ fn lower_expr(
                     methods: Vec::new(),
                     constructor: ref_init,
                     secondary_constructors: Vec::new(),
+                    is_suspend_lambda: false,
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -6874,8 +9392,12 @@ fn lower_expr(
                     is_abstract: false,
                     exception_handlers: Vec::new(),
                     vararg_index: None,
+                    is_suspend: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
                 },
                 secondary_constructors: Vec::new(),
+                is_suspend_lambda,
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -6886,6 +9408,10 @@ fn lower_expr(
                 invoke_fb.mf.params.push(this_local);
 
                 let mut invoke_scope: Vec<(Symbol, LocalId)> = Vec::new();
+                // Bind `this` in scope so nested launch/async can find
+                // the lambda's p$0 field for CoroutineScope threading.
+                let this_sym = interner.intern("this");
+                invoke_scope.push((this_sym, this_local));
                 // Load captured fields into locals.
                 for (sym, _, ty) in &free_vars {
                     let is_ref_boxed = ref_class_names.contains_key(sym);
@@ -6927,6 +9453,15 @@ fn lower_expr(
                         invoke_scope.push((*sym, local));
                     }
                 }
+                // Session 28: for SuspendLambda, the CoroutineScope
+                // receiver is accessible at runtime but doesn't need
+                // to be a MIR param (the SuspendLambda shell handles
+                // the invoke→create→invokeSuspend delegation). We just
+                // add a scope marker so nested launch/async can find it.
+                // The actual CoroutineScope local comes from the scope
+                // chain — `this` (the lambda) implements Function2 and
+                // receives the scope as arg1 at runtime.
+
                 // Lambda parameters — use Ty::Any for the method param
                 // so the invoke descriptor matches FunctionN.invoke(Object...).
                 // Then immediately unbox/cast to the annotated type in
@@ -7088,6 +9623,83 @@ fn lower_expr(
                 invoke_fn.return_ty = Ty::Unit;
             }
 
+            // ── Session 7 part 2: attach state machine for suspend lambdas ──
+            //
+            // The invoke body we just built contains every inner suspend
+            // call in its MIR. Run the same extractor the named-suspend-
+            // fun path uses, but override the continuation class to be
+            // the lambda class itself — kotlinc emits the state machine
+            // directly on the SuspendLambda subclass (it IS the
+            // continuation) rather than generating a separate
+            // `InputKt$fn$1` companion. The JVM backend reads this
+            // marker from the invoke method to generate the real
+            // `invokeSuspend(Object)Object` body, replacing the
+            // Session 7 part 1 `IllegalStateException` stub.
+            //
+            // Scope (Session 7 part 2): we only support 0 or 1
+            // suspension points. Multi-suspension, captures that span
+            // suspend boundaries, and local-variable spilling inside
+            // suspend lambdas are tracked as follow-ups.
+            // Extra MIR fields to attach to the lambda class for its
+            // state-machine spill slots (I$0, I$1, L$0, …). Mirrors the
+            // list `build_continuation_class` adds to the named-function
+            // continuation class, but placed directly on the lambda
+            // (which IS the continuation).
+            let mut lambda_extra_fields: Vec<MirField> = Vec::new();
+            if is_suspend_lambda {
+                let lambda_sm = extract_suspend_state_machine_with_cont(
+                    &invoke_fn,
+                    module,
+                    &module.wrapper_class,
+                    &lambda_class_name,
+                    lambda_class_name.clone(),
+                );
+                match lambda_sm {
+                    SuspendSitesResult::Zero => {
+                        // No suspend calls in the body; invokeSuspend
+                        // degenerates to `throwOnFailure($result); <body
+                        // value>; areturn`. The backend currently
+                        // requires a state machine, so we don't emit
+                        // one — the backend falls back to a tail
+                        // emitter for zero-site suspend lambdas.
+                    }
+                    SuspendSitesResult::Found(sm) => {
+                        // Session 8: materialize one field per spill
+                        // slot directly on the lambda class. The JVM
+                        // backend's multi-suspend emitter addresses
+                        // these via `getfield/putfield <lambda>.I$n:I`,
+                        // using `aload_0` as the receiver (since the
+                        // lambda IS the continuation, unlike named
+                        // suspend funs which stash the continuation
+                        // in a local slot).
+                        for slot in &sm.spill_layout {
+                            lambda_extra_fields.push(MirField {
+                                name: slot.name.clone(),
+                                ty: match slot.kind {
+                                    SpillKind::Int => Ty::Int,
+                                    SpillKind::Long => Ty::Long,
+                                    SpillKind::Float => Ty::Int, // unused in this session
+                                    SpillKind::Double => Ty::Double,
+                                    SpillKind::Ref => Ty::Any,
+                                },
+                            });
+                        }
+                        invoke_fn.is_suspend = true;
+                        invoke_fn.suspend_state_machine = Some(sm);
+                    }
+                    SuspendSitesResult::Unsupported(reason) => {
+                        diags.push(Diagnostic::error(
+                            body.span,
+                            format!(
+                                "suspend lambda has an unsupported shape: {reason}; the skotch \
+                                 CPS transform currently supports straight-line bodies with \
+                                 suspend calls that take only the implicit `$completion`"
+                            ),
+                        ));
+                    }
+                }
+            }
+
             // ── Constructor (takes captured values) ─────────────────
             let mut init_fn = MirFunction {
                 id: FuncId(0),
@@ -7105,6 +9717,9 @@ fn lower_expr(
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -7137,21 +9752,129 @@ fn lower_expr(
 
             // Make the lambda class implement kotlin/jvm/functions/FunctionN
             // so it can be passed to Kotlin stdlib HOFs and user-defined HOFs.
-            let lambda_arity = params.len();
+            //
+            // Suspend lambdas follow kotlinc's convention of bumping the
+            // Function arity by 1: the implicit trailing `Continuation`
+            // parameter of the CPS-rewritten lambda counts against the
+            // `FunctionN` interface. So `{ yield_() }` (0 user params,
+            // 1 suspend call) implements `Function1<Continuation, Object>`
+            // rather than `Function0<Object>`.
+            let lambda_arity = params.len() + if is_suspend_lambda { 1 } else { 0 };
             let iface_name = stdlib_function_interface(lambda_arity);
+
+            // SESSION 7: suspend lambdas extend SuspendLambda instead of
+            // Object. Their `<init>(Continuation)V`, `invokeSuspend`,
+            // `create`, `invoke(Continuation)`, and erased
+            // `invoke(Object)` bridge methods are synthesized by the
+            // JVM backend directly from the `is_suspend_lambda` marker —
+            // see `crates/skotch-backend-jvm/src/class_writer.rs::
+            // emit_suspend_lambda_shell` for the bytecode recipe.
+            //
+            // The MIR constructor we just built is replaced with a
+            // `(Continuation)V` stub below (the real super-ctor wiring
+            // lives inline in `emit_suspend_lambda_shell`). The
+            // `invoke_fn` is KEPT — as of Session 7 part 2 above we
+            // populated its `suspend_state_machine` marker so the
+            // backend can emit the real CPS state-machine body on
+            // `invokeSuspend`. Session 7 part 1 previously discarded
+            // `invoke_fn` and emitted an `IllegalStateException` stub.
+            //
+            // Non-suspend lambdas keep the Session 3/4/5 `$Lambda$N`
+            // shape (Function1-only, direct invoke) byte-stable.
+            let (super_class, interfaces, final_init_fn) = if is_suspend_lambda {
+                // Session 11: suspend lambda constructor takes capture
+                // args BEFORE the Continuation param, matching kotlinc's
+                // `<init>(capture1, ..., captureN, Continuation)V`.
+                // Each capture is stored into its corresponding field on
+                // `this` before the super-ctor call (the JVM backend's
+                // `emit_suspend_lambda_shell` handles the actual super-
+                // ctor delegation; the MIR params here drive the
+                // descriptor and call-site argument count).
+                let mut susp_init = MirFunction {
+                    id: FuncId(0),
+                    name: "<init>".to_string(),
+                    params: Vec::new(),
+                    locals: Vec::new(),
+                    blocks: vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    }],
+                    return_ty: Ty::Unit,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                    exception_handlers: Vec::new(),
+                    vararg_index: None,
+                    is_suspend: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
+                };
+                let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
+                susp_init.params.push(susp_this);
+                // Capture params — one per free variable.
+                for (sym, _, ty) in &free_vars {
+                    let field_ty = if let Some(ref_name) = ref_class_names.get(sym) {
+                        Ty::Class(ref_name.clone())
+                    } else {
+                        ty.clone()
+                    };
+                    let cap_param = susp_init.new_local(field_ty);
+                    susp_init.params.push(cap_param);
+                    susp_init.blocks[0].stmts.push(MStmt::Assign {
+                        dest: susp_this,
+                        value: Rvalue::PutField {
+                            receiver: susp_this,
+                            class_name: lambda_class_name.clone(),
+                            field_name: interner.resolve(*sym).to_string(),
+                            value: cap_param,
+                        },
+                    });
+                }
+                let susp_completion =
+                    susp_init.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                susp_init.params.push(susp_completion);
+                (
+                    Some("kotlin/coroutines/jvm/internal/SuspendLambda".to_string()),
+                    vec![iface_name],
+                    susp_init,
+                )
+            } else {
+                (None, vec![iface_name], init_fn)
+            };
+
+            // Session 8: suspend lambdas with multi-suspension bodies
+            // spill live locals to synthetic fields on themselves (the
+            // lambda IS the continuation). The list we built above is
+            // appended AFTER the real captures so field ordering is
+            // stable wrt `capture_fields` for zero-/one-suspension
+            // fixtures that never populated `lambda_extra_fields`.
+            let mut final_fields = capture_fields;
+            final_fields.extend(lambda_extra_fields);
+
+            // Session 31: add p$0 field for CoroutineScope receiver on
+            // ALL suspend lambdas. The interface might be Function1 at
+            // this point (patched to Function2 later by the builder handler).
+            if is_suspend_lambda {
+                final_fields.push(MirField {
+                    name: "p$0".to_string(),
+                    ty: Ty::Any,
+                });
+            }
 
             // Replace the pre-registered stub with the real class.
             module.classes[lambda_idx] = MirClass {
                 name: lambda_class_name.clone(),
-                super_class: None,
+                super_class,
                 is_open: false,
                 is_abstract: false,
                 is_interface: false,
-                interfaces: vec![iface_name],
-                fields: capture_fields,
+                interfaces,
+                fields: final_fields,
                 methods: vec![invoke_fn],
-                constructor: init_fn,
+                constructor: final_init_fn,
                 secondary_constructors: Vec::new(),
+                is_suspend_lambda,
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -7163,22 +9886,51 @@ fn lower_expr(
             // Pass captured values as constructor args.
             // For ref-boxed captures, pass the $Ref instance (which is now
             // the outer scope binding after we replaced it above).
-            let ctor_args: Vec<LocalId> = free_vars
-                .iter()
-                .map(|(sym, orig_lid, _)| {
-                    if ref_class_names.contains_key(sym) {
-                        // The outer scope now points to the $Ref instance.
-                        scope
-                            .iter()
-                            .rev()
-                            .find(|(s, _)| s == sym)
-                            .map(|(_, lid)| *lid)
-                            .unwrap_or(*orig_lid)
-                    } else {
-                        *orig_lid
-                    }
-                })
-                .collect();
+            let ctor_args: Vec<LocalId> = if is_suspend_lambda {
+                // Session 11: suspend lambda's constructor is
+                // `(capture1, ..., captureN, Continuation)V`. Pass
+                // captured locals first, then null Continuation.
+                let mut args: Vec<LocalId> = free_vars
+                    .iter()
+                    .map(|(sym, orig_lid, _)| {
+                        if ref_class_names.contains_key(sym) {
+                            scope
+                                .iter()
+                                .rev()
+                                .find(|(s, _)| s == sym)
+                                .map(|(_, lid)| *lid)
+                                .unwrap_or(*orig_lid)
+                        } else {
+                            *orig_lid
+                        }
+                    })
+                    .collect();
+                let null_cont =
+                    fb.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_cont,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                args.push(null_cont);
+                args
+            } else {
+                free_vars
+                    .iter()
+                    .map(|(sym, orig_lid, _)| {
+                        if ref_class_names.contains_key(sym) {
+                            // The outer scope now points to the $Ref instance.
+                            scope
+                                .iter()
+                                .rev()
+                                .find(|(s, _)| s == sym)
+                                .map(|(_, lid)| *lid)
+                                .unwrap_or(*orig_lid)
+                        } else {
+                            *orig_lid
+                        }
+                    })
+                    .collect()
+            };
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::Call {
@@ -7277,6 +10029,9 @@ fn lower_expr(
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -7304,6 +10059,7 @@ fn lower_expr(
                 methods: mir_methods,
                 constructor: init_fn,
                 secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
             });
 
             // Instantiate.
@@ -7688,6 +10444,9 @@ fn lower_enum(
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -7745,6 +10504,9 @@ fn lower_enum(
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -7770,6 +10532,7 @@ fn lower_enum(
         methods: vec![ts_fn],
         constructor: init_fn,
         secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -8021,6 +10784,9 @@ fn lower_object(
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -8147,6 +10913,9 @@ fn lower_class(
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -8458,6 +11227,9 @@ fn lower_class(
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             }
         })
         .collect();
@@ -8478,13 +11250,14 @@ fn lower_class(
         methods: stub_methods,
         constructor: init_fn.clone(),
         secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
     });
 
     // Lower methods.
     let mut mir_methods = Vec::new();
     for method in &c.methods {
         let method_name = interner.resolve(method.name).to_string();
-        let return_ty = method
+        let declared_ret = method
             .return_ty
             .as_ref()
             .map(|tr| {
@@ -8493,8 +11266,21 @@ fn lower_class(
             })
             .unwrap_or(Ty::Unit);
 
+        // Session 28: suspend instance methods get the same CPS
+        // transform as top-level suspend functions — return type
+        // rewritten to Object, $completion param appended.
+        let return_ty = if method.is_suspend {
+            Ty::Any
+        } else {
+            declared_ret.clone()
+        };
+
         let fn_idx = module.functions.len() + mir_methods.len();
         let mut fb = FnBuilder::new(fn_idx, method_name.clone(), return_ty);
+        fb.mf.is_suspend = method.is_suspend;
+        if method.is_suspend {
+            fb.mf.suspend_original_return_ty = Some(declared_ret.clone());
+        }
 
         // Add implicit `this` parameter.
         let this_local = fb.new_local(Ty::Class(class_name.clone()));
@@ -8508,6 +11294,13 @@ fn lower_class(
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
             scope.push((p.name, id));
+        }
+
+        // Session 28: suspend methods get a trailing $completion param.
+        if method.is_suspend {
+            let cont_ty = Ty::Class("kotlin/coroutines/Continuation".to_string());
+            let cont_id = fb.new_local(cont_ty);
+            fb.mf.params.push(cont_id);
         }
 
         // Load fields into locals so they're accessible by name in the method body.
@@ -8586,13 +11379,79 @@ fn lower_class(
             });
         }
 
+        // Session 28: suspend methods — autobox primitive returns and
+        // convert bare Return → return null (same as top-level suspend fns).
+        if method.is_suspend {
+            for block in &mut fb.mf.blocks {
+                if let Terminator::ReturnValue(local) = &block.terminator {
+                    let local_ty = fb.mf.locals[local.0 as usize].clone();
+                    if matches!(local_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool) {
+                        // Autobox: insert valueOf call before return.
+                        let boxed = fb.mf.locals.len() as u32;
+                        fb.mf.locals.push(Ty::Any);
+                        let (box_class, box_desc) = match local_ty {
+                            Ty::Int => ("java/lang/Integer", "(I)Ljava/lang/Integer;"),
+                            Ty::Long => ("java/lang/Long", "(J)Ljava/lang/Long;"),
+                            Ty::Double => ("java/lang/Double", "(D)Ljava/lang/Double;"),
+                            Ty::Bool => ("java/lang/Boolean", "(Z)Ljava/lang/Boolean;"),
+                            _ => unreachable!(),
+                        };
+                        let old_local = *local;
+                        block.stmts.push(MStmt::Assign {
+                            dest: LocalId(boxed),
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: box_class.to_string(),
+                                    method_name: "valueOf".to_string(),
+                                    descriptor: box_desc.to_string(),
+                                },
+                                args: vec![old_local],
+                            },
+                        });
+                        block.terminator = Terminator::ReturnValue(LocalId(boxed));
+                    }
+                }
+                if matches!(block.terminator, Terminator::Return) {
+                    // return → return null (suspend Unit fns return Object)
+                    let null_local = fb.mf.locals.len() as u32;
+                    fb.mf.locals.push(Ty::Any);
+                    block.stmts.push(MStmt::Assign {
+                        dest: LocalId(null_local),
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    block.terminator = Terminator::ReturnValue(LocalId(null_local));
+                }
+            }
+        }
+
+        // Session 28: extract state machine for suspend methods.
+        if method.is_suspend {
+            let sm_result =
+                extract_suspend_state_machine(&fb.mf, module, &class_name, &method_name);
+            match sm_result {
+                SuspendSitesResult::Zero => {}
+                SuspendSitesResult::Found(mut state_machine) => {
+                    state_machine.is_instance_method = true;
+                    fb.mf.suspend_state_machine = Some(state_machine);
+                }
+                SuspendSitesResult::Unsupported(reason) => {
+                    diags.push(Diagnostic::error(
+                        method.span,
+                        format!(
+                            "suspend method `{class_name}.{method_name}` has an unsupported shape: {reason}"
+                        ),
+                    ));
+                }
+            }
+        }
+
         let mut finished = fb.finish();
         finished.is_abstract = method.is_abstract;
         // Infer return type from body if not explicitly annotated.
         // Expression-body methods (= expr) set ReturnValue as the
         // terminator, and the returned local's type is the actual
         // return type.
-        if finished.return_ty == Ty::Unit {
+        if !method.is_suspend && finished.return_ty == Ty::Unit {
             if let Some(last_block) = finished.blocks.last() {
                 if let Terminator::ReturnValue(ret_local) = &last_block.terminator {
                     let inferred = finished.locals[ret_local.0 as usize].clone();
@@ -9193,6 +12052,9 @@ fn lower_class(
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
+            is_suspend: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -9415,6 +12277,7 @@ fn lower_class(
         methods: mir_methods,
         constructor: init_fn,
         secondary_constructors: mir_secondary_ctors,
+        is_suspend_lambda: false,
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -9478,6 +12341,9 @@ fn lower_interface(
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -9504,6 +12370,9 @@ fn lower_interface(
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
+        is_suspend: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -9517,6 +12386,7 @@ fn lower_interface(
         methods: stub_methods,
         constructor: dummy_init.clone(),
         secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
     });
 
     // Lower method bodies for default methods (non-abstract).
@@ -9547,6 +12417,9 @@ fn lower_interface(
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
+                is_suspend: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);
@@ -9615,8 +12488,9 @@ mod tests {
     fn lower_println_string() {
         let (m, d) = lower(r#"fun main() { println("hi") }"#);
         assert!(d.is_empty(), "{:?}", d);
-        assert_eq!(m.functions.len(), 1);
-        let f = &m.functions[0];
+        let real_fns: Vec<_> = m.functions.iter().filter(|f| !f.is_abstract).collect();
+        assert_eq!(real_fns.len(), 1);
+        let f = real_fns[0];
         // String pool should contain "hi".
         assert_eq!(m.strings, vec!["hi".to_string()]);
         // Body: load const string, call println, return.
@@ -9690,8 +12564,9 @@ mod tests {
         "#;
         let (m, d) = lower(src);
         assert!(d.is_empty(), "{:?}", d);
-        assert_eq!(m.functions.len(), 2);
-        let main_block = &m.functions[1].blocks[0];
+        let real_fns: Vec<_> = m.functions.iter().filter(|f| !f.is_abstract).collect();
+        assert_eq!(real_fns.len(), 2);
+        let main_block = &real_fns[1].blocks[0];
         assert!(main_block.stmts.iter().any(|s| matches!(
             s,
             MStmt::Assign {
@@ -9712,11 +12587,12 @@ mod tests {
         // constants in skotch's lowering.
         let (m, d) = lower(r#"val GREETING = "hi"; fun main() { println(GREETING) }"#);
         assert!(d.is_empty(), "{:?}", d);
-        assert_eq!(m.functions.len(), 1, "no synthetic <clinit> generated");
+        let real_fns: Vec<_> = m.functions.iter().filter(|f| !f.is_abstract).collect();
+        assert_eq!(real_fns.len(), 1, "no synthetic <clinit> generated");
         // The string pool has "hi" once (deduped between the val
         // initializer and any other use).
         assert_eq!(m.strings, vec!["hi".to_string()]);
-        let main = &m.functions[0];
+        let main = real_fns[0];
         // The body must contain a Const(String) load for "hi" — that
         // came from the inlined global.
         assert!(main.blocks[0].stmts.iter().any(|s| matches!(

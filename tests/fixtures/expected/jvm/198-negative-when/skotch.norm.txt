@@ -10,9 +10,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0006 istore 2
     0008 iload 2
     0010 istore 3
-    0012 op_0xA7
-    0013 nop
-    0014 iconst_0
+    0012 goto 15
     0015 bipush -5
     0017 istore 4
     0019 iload 3
@@ -21,22 +19,16 @@ method        main ([Ljava/lang/String;)V 0x0009
     0024 nop
     0025 iconst_4
     0026 iconst_0
-    0027 op_0xA7
-    0028 nop
-    0029 iconst_1
+    0027 goto 31
     0030 iconst_1
     0031 istore 5
     0033 iload 5
-    0035 op_0x99
-    0036 nop
-    0037 op_0x0E
+    0035 ifeq 49
     0038 ldc "minus five"
     0040 astore 6
     0042 aload 6
     0044 astore 7
-    0046 op_0xA7
-    0047 nop
-    0048 op_0x50
+    0046 goto 126
     0049 iconst_0
     0050 istore 8
     0052 iload 3
@@ -45,22 +37,16 @@ method        main ([Ljava/lang/String;)V 0x0009
     0057 nop
     0058 iconst_4
     0059 iconst_0
-    0060 op_0xA7
-    0061 nop
-    0062 iconst_1
+    0060 goto 64
     0063 iconst_1
     0064 istore 9
     0066 iload 9
-    0068 op_0x99
-    0069 nop
-    0070 op_0x0E
+    0068 ifeq 82
     0071 ldc "zero"
     0073 astore 10
     0075 aload 10
     0077 astore 7
-    0079 op_0xA7
-    0080 nop
-    0081 op_0x2F
+    0079 goto 126
     0082 iconst_5
     0083 istore 11
     0085 iload 3
@@ -69,29 +55,21 @@ method        main ([Ljava/lang/String;)V 0x0009
     0090 nop
     0091 iconst_4
     0092 iconst_0
-    0093 op_0xA7
-    0094 nop
-    0095 iconst_1
+    0093 goto 97
     0096 iconst_1
     0097 istore 12
     0099 iload 12
-    0101 op_0x99
-    0102 nop
-    0103 op_0x0E
+    0101 ifeq 115
     0104 ldc "five"
     0106 astore 13
     0108 aload 13
     0110 astore 7
-    0112 op_0xA7
-    0113 nop
-    0114 op_0x0E
+    0112 goto 126
     0115 ldc "other"
     0117 astore 14
     0119 aload 14
     0121 astore 7
-    0123 op_0xA7
-    0124 nop
-    0125 iconst_0
+    0123 goto 126
     0126 aload 7
     0128 astore 15
     0130 aload 15
