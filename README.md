@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 379 language-feature fixtures validated across 5 targets.
+> implemented. 380 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -296,7 +296,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Import declarations](https://kotlinlang.org/spec/packages-and-imports.html) | §9.2 | `import java.lang.Math`, implicit `java.lang.*` |
 | [Variable declarations](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val` (immutable), `var` (mutable), type annotations |
 | [Integer literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | Decimal, hex (`0xFF`), binary (`0b1010`), underscores (`1_000`), `L` suffix |
-| [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, escape sequences (`'\n'`, `'\t'`, `'\\'`) |
+| [Character literals](https://kotlinlang.org/spec/expressions.html#character-literals) | §7.1.5 | `'A'`, `'\n'`, `'\t'`, `'\\'` — full `Ty::Char` type, `println('K')` prints `K`, `s[i]` returns `Char` |
 | [Boolean literals](https://kotlinlang.org/spec/expressions.html#boolean-literals) | §7.1.3 | `true`, `false` |
 | [String literals](https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions) | §7.1.4 | Regular, raw (`"""`), templates (`$x`, `${expr}`) |
 | [Long literals](https://kotlinlang.org/spec/expressions.html#integer-literals) | §7.1.1 | `100L`, `0xFFL` — full 64-bit arithmetic (`+`, `-`, `*`, `/`, `%`), negation, values exceeding Int range |

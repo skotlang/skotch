@@ -3451,6 +3451,16 @@ fn lower_expr(
             });
             Some(dest)
         }
+        Expr::CharLit(v, _) => {
+            // Char literal: store as Ty::Char with the code point value.
+            // On JVM this is a 16-bit unsigned value stored in an int local.
+            let dest = fb.new_local(Ty::Char);
+            fb.push_stmt(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Int(*v as i32)),
+            });
+            Some(dest)
+        }
         Expr::LongLit(v, _) => {
             let dest = fb.new_local(Ty::Long);
             fb.push_stmt(MStmt::Assign {
@@ -4390,6 +4400,75 @@ fn lower_expr(
 
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
+
+                // ── data class copy() with default-fill ──────────
+                // `p.copy(y = 3)` fills unspecified params from receiver fields.
+                if method_name_str == "copy" {
+                    if let Ty::Class(ref class_name) = recv_ty {
+                        // Clone fields to release the borrow on `module`.
+                        let copy_fields: Option<Vec<_>> = module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == class_name)
+                            .filter(|cls| {
+                                cls.methods.iter().any(|m| m.name == "copy")
+                                    && !cls.fields.is_empty()
+                            })
+                            .map(|cls| {
+                                cls.fields
+                                    .iter()
+                                    .map(|f| (f.name.clone(), f.ty.clone()))
+                                    .collect()
+                            });
+                        if let Some(fields_info) = copy_fields {
+                            let mut copy_args = vec![recv_local]; // this
+                            for (fname, fty) in &fields_info {
+                                // Check if there's a named arg for this field.
+                                let named_arg_expr = args
+                                    .iter()
+                                    .find(|a| a.name.is_some_and(|n| interner.resolve(n) == fname));
+                                let val = if let Some(a) = named_arg_expr {
+                                    lower_expr(
+                                        &a.expr,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    )?
+                                } else {
+                                    // Load default from receiver.
+                                    let fv = fb.new_local(fty.clone());
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: fv,
+                                        value: Rvalue::GetField {
+                                            receiver: recv_local,
+                                            class_name: class_name.clone(),
+                                            field_name: fname.clone(),
+                                        },
+                                    });
+                                    fv
+                                };
+                                copy_args.push(val);
+                            }
+                            let dest = fb.new_local(Ty::Class(class_name.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: class_name.clone(),
+                                        method_name: "copy".to_string(),
+                                    },
+                                    args: copy_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                }
 
                 // ── Infix `to`: `a to b` → `Pair(a, b)` ─────────
                 if method_name_str == "to" && args.len() == 1 {
@@ -8351,7 +8430,7 @@ fn lower_expr(
                 // implicit fall-through path.
                 let result_ty = &fb.mf.locals[result.0 as usize];
                 let default_val = match result_ty {
-                    Ty::Int | Ty::Bool => MirConst::Int(0),
+                    Ty::Int | Ty::Char | Ty::Bool => MirConst::Int(0),
                     Ty::Long => MirConst::Long(0),
                     Ty::Double => MirConst::Double(0.0),
                     _ => MirConst::Null,
@@ -8455,8 +8534,7 @@ fn lower_expr(
                 }
                 Ty::String => {
                     // String[index] → invokevirtual String.charAt(I)C
-                    // Kotlin Char is represented as Int in our type system.
-                    let dest = fb.new_local(Ty::Int);
+                    let dest = fb.new_local(Ty::Char);
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::Call {
@@ -12196,29 +12274,23 @@ fn lower_class(
         mir_methods.push(hc_fb.finish());
     }
 
-    // Synthesize copy(): ClassName for data classes (no-argument version).
-    // Creates a new instance with all current field values.
+    // Synthesize copy(field1, field2, ...): ClassName for data classes.
+    // Takes all fields as parameters — at the call site, unspecified
+    // params are filled from the receiver's current field values.
     if c.is_data && !fields.is_empty() {
         let cp_idx = module.functions.len() + mir_methods.len();
         let mut cp_fb = FnBuilder::new(cp_idx, "copy".to_string(), Ty::Class(class_name.clone()));
         let cp_this = cp_fb.new_local(Ty::Class(class_name.clone()));
         cp_fb.mf.params.push(cp_this);
 
-        // Load all field values from this BEFORE creating the new instance.
-        // On the JVM, NewInstance emits `new+dup` leaving uninitialized refs on
-        // the operand stack, so all GetField operations must come first.
-        let mut field_vals = Vec::new();
+        // Add a parameter for each field — these are the values to use
+        // in the new instance. The call site fills in defaults from
+        // the receiver for any omitted named arguments.
+        let mut param_locals = Vec::new();
         for field in &fields {
-            let fv = cp_fb.new_local(field.ty.clone());
-            cp_fb.push_stmt(MStmt::Assign {
-                dest: fv,
-                value: Rvalue::GetField {
-                    receiver: cp_this,
-                    class_name: class_name.clone(),
-                    field_name: field.name.clone(),
-                },
-            });
-            field_vals.push(fv);
+            let p = cp_fb.new_local(field.ty.clone());
+            cp_fb.mf.params.push(p);
+            param_locals.push(p);
         }
 
         // new ClassName
@@ -12228,14 +12300,12 @@ fn lower_class(
             value: Rvalue::NewInstance(class_name.clone()),
         });
 
-        // Call constructor with pre-loaded field values.
-        // Do NOT include new_inst in args — the JVM backend's NewInstance
-        // handler already left [ref, ref] on the operand stack.
+        // Call constructor with the parameter values.
         cp_fb.push_stmt(MStmt::Assign {
             dest: new_inst,
             value: Rvalue::Call {
                 kind: CallKind::Constructor(class_name.clone()),
-                args: field_vals,
+                args: param_locals,
             },
         });
 

@@ -393,6 +393,7 @@ impl<'a> Resolver<'a> {
     ) {
         match expr {
             Expr::IntLit(_, _)
+            | Expr::CharLit(_, _)
             | Expr::LongLit(_, _)
             | Expr::DoubleLit(_, _)
             | Expr::BoolLit(_, _)
@@ -531,6 +532,7 @@ impl<'a> Resolver<'a> {
     fn resolve_expr_in_top(&mut self, expr: &Expr, refs: &mut Vec<ResolvedRef>) {
         match expr {
             Expr::IntLit(_, _)
+            | Expr::CharLit(_, _)
             | Expr::LongLit(_, _)
             | Expr::DoubleLit(_, _)
             | Expr::BoolLit(_, _)

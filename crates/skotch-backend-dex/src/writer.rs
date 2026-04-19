@@ -574,6 +574,7 @@ fn ty_descriptor(ty: &skotch_types::Ty) -> &'static str {
     match ty {
         Ty::Unit => "V",
         Ty::Bool => "Z",
+        Ty::Char => "C",
         Ty::Int => "I",
         Ty::Long => "J",
         Ty::Double => "D",

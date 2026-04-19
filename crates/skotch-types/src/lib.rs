@@ -17,6 +17,8 @@ pub enum Ty {
     Unit,
     /// `Boolean`.
     Bool,
+    /// `Char` — 16-bit unsigned (UTF-16 code unit). JVM type `C`.
+    Char,
     /// `Int` — 32-bit signed.
     Int,
     /// `Long` — 64-bit signed. Not produced in PR #1; reserved.
@@ -98,6 +100,7 @@ impl Ty {
         match self {
             Ty::Unit => "Unit",
             Ty::Bool => "Boolean",
+            Ty::Char => "Char",
             Ty::Int => "Int",
             Ty::Long => "Long",
             Ty::Double => "Double",
@@ -119,6 +122,7 @@ pub fn ty_from_name(name: &str) -> Option<Ty> {
     Some(match name {
         "Unit" => Ty::Unit,
         "Boolean" => Ty::Bool,
+        "Char" => Ty::Char,
         "Int" => Ty::Int,
         "Long" => Ty::Long,
         "Double" => Ty::Double,
