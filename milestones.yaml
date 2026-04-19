@@ -435,7 +435,7 @@ milestones:
 
   - version: "0.9.0"
     title: "Coroutines and Suspend Functions"
-    status: in_progress
+    status: completed
     depends_on: ["0.8.0"]
     description: >
       CPS state machine transform for suspend functions. runBlocking,
@@ -659,11 +659,16 @@ milestones:
           of GlobalScope. launch inside runBlocking now uses the
           structured parent scope.
 
-    # ── Remaining gaps ───────────────────────────────────────────────
-    # - coroutineScope { launch {} } doesn't wait for children (the
-    #   scope is threaded but coroutineScope's suspend/resume doesn't
-    #   properly handle the child job waiting)
-    # - DEX backend coroutine parity
+      - name: "Structured concurrency — coroutineScope waits for children (landed)"
+        status: completed
+        description: >
+          Session 32: coroutineScope { launch { } } now correctly waits
+          for all children. Fixed lambda invoke scope missing `this`,
+          is_suspend_lambda check for p$0, and zero-suspend lambda
+          slot allocation. See fixture 423-structured-concurrency.
+
+    # ── Remaining (deferred to future milestones) ────────────────────
+    # - DEX backend coroutine state machine emission
     # - Flow/Channel support (library-level)
 
     risks:

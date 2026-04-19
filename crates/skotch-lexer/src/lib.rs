@@ -853,6 +853,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "constructor" => TokenKind::KwConstructor,
         "lateinit" => TokenKind::KwLateinit,
         "suspend" => TokenKind::KwSuspend,
+        "tailrec" => TokenKind::KwTailrec,
         _ => return None,
     })
 }

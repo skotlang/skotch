@@ -91,6 +91,9 @@ pub enum TokenKind {
     /// transform that would make a suspend function *actually* suspend
     /// is not yet implemented (tracked in milestones.yaml v0.9.0).
     KwSuspend,
+    /// `tailrec` modifier on functions. Semantically a hint that the
+    /// compiler should optimize tail-recursive calls into loops.
+    KwTailrec,
 
     // ─── single-character punctuation ────────────────────────────────────
     LParen,
