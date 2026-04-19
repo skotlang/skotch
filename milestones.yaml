@@ -717,10 +717,13 @@ milestones:
           Color.values() returns Array<Color>. Color.valueOf("RED")
           returns the matching entry. Color.entries returns List<Color>.
 
-      - name: "Enum with methods and properties"
+      - name: "Enum with properties (landed)"
+        completed: true
         description: >
-          enum class Planet(val mass: Double) { EARTH(5.97) { override fun display() = "Earth" } }.
-          Enum entries can override methods.
+          enum class Planet(val mass: Double) { EARTH(5.97), MARS(0.64) }.
+          Enum entries with constructor parameters. Access via
+          Planet.EARTH.mass. Override methods on entries deferred.
+          See fixture 427-enum-with-properties.
 
       - name: "Sealed interfaces (landed)"
         completed: true
@@ -792,10 +795,13 @@ milestones:
           class instances with `var` properties. Custom property setters
           (`set(value) { ... }`) are deferred.
 
-      - name: "Extension properties"
+      - name: "Extension properties (landed)"
+        completed: true
         description: >
-          val String.lastChar: Char get() = this[length - 1].
-          Parser and MIR lowering for extension property access.
+          val String.shout: String get() = this + "!". Parser desugars to
+          extension function. MIR lowerer dispatches field access on known
+          extension functions. Works in top-level decls and statements.
+          See fixture 74-extension-property.
 
       - name: "Infix call syntax (landed)"
         completed: true

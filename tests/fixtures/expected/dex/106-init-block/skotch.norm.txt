@@ -1,0 +1,46 @@
+dex_version   035
+strings       16
+types         8
+methods       4
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LInputKt;"
+  "LValidated;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "value"
+
+--- types ---
+  I
+  LInputKt;
+  LValidated;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LValidated;.<init>(I)V
+  Ljava/io/PrintStream;.println(I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=6 ins=0 outs=2 insns=17
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

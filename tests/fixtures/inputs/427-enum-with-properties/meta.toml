@@ -1,0 +1,2 @@
+status = "supported"
+features = ["enum", "enum-properties", "constructor-params"]

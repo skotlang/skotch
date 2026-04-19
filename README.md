@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 148 language-feature fixtures validated (~20–25% of the Kotlin spec).
+> implemented. 377 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-295+ test fixtures.
+377 active test fixtures (409 total, 32 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -286,6 +286,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Named arguments](https://kotlinlang.org/spec/expressions.html#named-and-default-arguments) | §7.2.2 | `f(height = 3, width = 4)` — arguments reordered to match parameter positions |
 | [Expression body functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `fun f() = expr` shorthand |
 | [Extension functions](https://kotlinlang.org/spec/declarations.html#extension-function-declaration) | §4.1.3 | `fun Int.isEven()`, `this` receiver, method chaining |
+| [Extension properties](https://kotlinlang.org/spec/declarations.html#extension-property-declaration) | §4.2.3 | `val String.shout get() = this + "!"` — desugars to extension function |
 | [Local functions](https://kotlinlang.org/spec/declarations.html#local-function-declaration) | §4.1.4 | `fun` inside blocks, recursive calls |
 | [Data classes](https://kotlinlang.org/spec/declarations.html#data-class-declaration) | §4.5.6 | `data class Point(val x: Int, val y: Int)` — synthesized `toString()` producing `"Point(x=1, y=2)"` |
 | [Class declarations](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | Primary constructor with `val`/`var`, field access, instance methods, `init` blocks, `invokevirtual` dispatch |
@@ -390,6 +391,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | tailrec keyword | [§4.5.6](https://kotlinlang.org/spec/declarations.html#tail-recursive-functions) | Easy | Parser support; optimization deferred |
 | Range expressions | [§7.2.6](https://kotlinlang.org/spec/expressions.html#range-expression) | Medium | `val r = 1..10` creates IntRange via rangeTo |
 | Infix operators | [§7.2.5](https://kotlinlang.org/spec/expressions.html#infix-function-call) | Easy | `to`, `shl`, `shr`, `and`, `or`, `xor`, `contains`, `zip` |
+| Sealed interfaces | [§4.5.4](https://kotlinlang.org/spec/declarations.html#sealed-classes-and-interfaces) | Easy | `sealed interface Result` with subclass hierarchy |
+| Enum properties | [§4.5.3](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | Easy | `enum class Color(val rgb: Int) { RED(0xFF0000) }` |
 | Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
 
 ## Running the tests
@@ -410,10 +413,8 @@ expectations and verify them end-to-end (compile → run → compare stdout).
 There are no hardcoded fixture lists — if a fixture is marked supported, it's
 tested.
 
-- **JVM e2e**: 129 fixtures compiled and run under `java` (gated on JDK)
-- **DEX e2e**: 94 fixtures compile to valid DEX verified by `dexdump`;
-  35 fixtures hit DEX backend register overflow (known gap, tracked as
-  compile failures but not test failures)
+- **JVM e2e**: 368 fixtures compiled and run under `java` (gated on JDK)
+- **DEX e2e**: 345 fixtures compile to valid DEX verified by `dexdump`
 - **Golden comparison**: JVM and DEX goldens are checked for byte-exact
   match against committed files
 

@@ -8406,10 +8406,27 @@ fn lower_expr(
                     });
                     Some(dest)
                 }
+                Ty::String => {
+                    // String[index] → invokevirtual String.charAt(I)C
+                    // Kotlin Char is represented as Int in our type system.
+                    let dest = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/String".to_string(),
+                                method_name: "charAt".to_string(),
+                                descriptor: "(I)C".to_string(),
+                            },
+                            args: vec![arr, idx],
+                        },
+                    });
+                    Some(dest)
+                }
                 _ => {
                     diags.push(Diagnostic::error(
                         receiver.span(),
-                        "index operator is only supported on IntArray, List, and Map",
+                        "index operator is only supported on String, IntArray, List, and Map",
                     ));
                     None
                 }
@@ -8466,12 +8483,13 @@ fn lower_expr(
                 }
             }
 
-            // Check if this is an enum/object constant access (Color.RED).
-            // If the field name is a known zero-arg function, call it.
+            // Check if this is an enum/object constant access (Color.RED)
+            // or an extension property access (receiver.extProp).
             if let Some(&fid) = name_to_func.get(name) {
                 let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
                 let params_len = module.functions[fid.0 as usize].params.len();
                 if params_len == 0 {
+                    // Zero-arg function (enum constant or companion method).
                     let dest = fb.new_local(ret_ty);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -8481,6 +8499,30 @@ fn lower_expr(
                         },
                     });
                     return Some(dest);
+                }
+                if params_len == 1 {
+                    // Extension property: lower receiver, call with it.
+                    if let Some(recv_local) = lower_expr(
+                        receiver,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    ) {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Static(fid),
+                                args: vec![recv_local],
+                            },
+                        });
+                        return Some(dest);
+                    }
                 }
             }
 

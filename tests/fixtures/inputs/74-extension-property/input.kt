@@ -1,6 +1,6 @@
-val String.lastChar: Char
-    get() = this[this.length - 1]
+val String.shout: String
+    get() = this + "!"
 
 fun main() {
-    println("Kotlin".lastChar)
+    println("hello".shout)
 }

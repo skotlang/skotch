@@ -271,8 +271,16 @@ impl<'a> Parser<'a> {
                     decls.push(Decl::Fun(f));
                 }
                 TokenKind::KwVal | TokenKind::KwVar => {
-                    let v = self.parse_val_decl();
-                    decls.push(Decl::Val(v));
+                    // Check for extension property: `val Type.name: ...`.
+                    // Look ahead: if we see `val IDENT DOT IDENT`, it's an
+                    // extension property. Desugar to an extension function.
+                    if self.peek_kind_at(2) == TokenKind::Dot {
+                        let f = self.parse_extension_property();
+                        decls.push(Decl::Fun(f));
+                    } else {
+                        let v = self.parse_val_decl();
+                        decls.push(Decl::Val(v));
+                    }
                 }
                 TokenKind::KwClass => {
                     if is_enum {
@@ -1549,6 +1557,114 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse `val Type.name: RetType get() = expr` as an extension function.
+    /// Desugars `val String.lastChar: Char get() = this[length-1]` into
+    /// `fun String.lastChar(): Char = this[length-1]` (a getter function).
+    fn parse_extension_property(&mut self) -> FunDecl {
+        let kw_span = self.peek_span();
+        self.bump(); // consume val/var
+        self.skip_trivia();
+
+        // Parse receiver type
+        let recv_idx = self.pos;
+        let recv_span = self.peek_span();
+        self.expect(TokenKind::Ident, "receiver type name");
+        let recv_name = self.intern_ident_at(recv_idx);
+        self.expect(TokenKind::Dot, "'.' in extension property");
+        self.skip_trivia();
+
+        // Parse property name
+        let prop_idx = self.pos;
+        let prop_span = self.peek_span();
+        self.expect(TokenKind::Ident, "property name");
+        let prop_name = self.intern_ident_at(prop_idx);
+        self.skip_trivia();
+
+        // Parse optional return type
+        let return_ty = if self.eat(TokenKind::Colon) {
+            self.skip_trivia();
+            Some(self.parse_type_ref())
+        } else {
+            None
+        };
+        self.skip_trivia();
+
+        // Parse getter body: `get() = expr` or `get() { stmts }` or just `= expr`
+        let body = if self.peek_kind() == TokenKind::Ident {
+            // Might be `get() = expr`
+            let idx = self.pos;
+            let text = self.payload(idx).and_then(|p| {
+                if let TokenPayload::Ident(s) = p {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            });
+            if text.as_deref() == Some("get") {
+                self.bump(); // consume `get`
+                self.skip_trivia();
+                if self.eat(TokenKind::LParen) {
+                    self.eat(TokenKind::RParen);
+                }
+                self.skip_trivia();
+            }
+            if self.eat(TokenKind::Eq) {
+                self.skip_trivia();
+                let expr = self.parse_expr();
+                let s = expr.span();
+                Block {
+                    stmts: vec![Stmt::Return {
+                        value: Some(expr),
+                        label: None,
+                        span: s,
+                    }],
+                    span: s,
+                }
+            } else {
+                self.parse_block()
+            }
+        } else if self.eat(TokenKind::Eq) {
+            self.skip_trivia();
+            let expr = self.parse_expr();
+            let s = expr.span();
+            Block {
+                stmts: vec![Stmt::Return {
+                    value: Some(expr),
+                    label: None,
+                    span: s,
+                }],
+                span: s,
+            }
+        } else {
+            self.parse_block()
+        };
+
+        let span = kw_span.merge(prop_span);
+        let receiver_type = TypeRef {
+            name: recv_name,
+            nullable: false,
+            func_params: None,
+            type_args: Vec::new(),
+            is_suspend: false,
+            span: recv_span,
+        };
+
+        FunDecl {
+            name: prop_name,
+            name_span: prop_span,
+            params: Vec::new(),
+            type_params: Vec::new(),
+            return_ty,
+            body,
+            span,
+            is_suspend: false,
+            is_open: false,
+            is_abstract: false,
+            is_override: false,
+            receiver_ty: Some(receiver_type),
+        }
+    }
+
     fn parse_val_decl(&mut self) -> ValDecl {
         self.skip_trivia();
         let is_var = self.peek_kind() == TokenKind::KwVar;
@@ -1692,6 +1808,11 @@ impl<'a> Parser<'a> {
                 let next = self.peek_kind_skip_trivia_at(self.pos + 1);
                 if self.peek_kind() == TokenKind::KwVal && next == TokenKind::LParen {
                     self.parse_destructure()
+                } else if self.peek_kind_at(2) == TokenKind::Dot {
+                    // Extension property: `val Type.name: RetType get() = expr`
+                    // Desugar to a function declaration statement.
+                    let f = self.parse_extension_property();
+                    Stmt::LocalFun(f)
                 } else {
                     Stmt::Val(self.parse_val_decl())
                 }

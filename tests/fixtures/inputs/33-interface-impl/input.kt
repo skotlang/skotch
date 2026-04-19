@@ -1,10 +1,12 @@
-// TODO: interface declarations + implementations.
 interface Greeter {
-    fun greet()
+    fun greet(): String
 }
 
 class Hello : Greeter {
-    override fun greet() {
-        println("hi")
-    }
+    override fun greet(): String = "Hello!"
+}
+
+fun main() {
+    val g = Hello()
+    println(g.greet())
 }

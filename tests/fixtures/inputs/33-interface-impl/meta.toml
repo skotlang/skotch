@@ -1,3 +1,4 @@
 name = "33-interface-impl"
-status = "stub"
-reason = "Interfaces need invokeinterface and Implements emission."
+status = "active"
+features = ["interface", "override", "class"]
+expected_output = "Hello!\n"

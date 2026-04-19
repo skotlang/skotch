@@ -1,6 +1,6 @@
 class Validated(val value: Int) {
     init {
-        require(value > 0) { "must be positive" }
+        require(value > 0)
     }
 }
 
