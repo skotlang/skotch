@@ -1003,10 +1003,14 @@ milestones:
         description: "internal members visible within module, hidden outside."
 
 # ============================================================================
-# BUILD SYSTEM AND ANDROID TOOLING (v0.20–v0.40)
+# BUILD SYSTEM, BSP, AND ANDROID TOOLING (v0.20–v0.40)
 # ============================================================================
 # These milestones are ONLY attempted after the language is 100%.
-# They are build system / packaging concerns, not language features.
+# They are build system / packaging / protocol concerns, not language
+# features. The BSP milestone (v0.25) bridges the gap between the
+# build system and IDE tooling — an IDE can drive skotch compilation,
+# testing, and running entirely through BSP, while using the existing
+# LSP server for language intelligence.
 # ============================================================================
 
   - version: "0.20.0"
@@ -1035,10 +1039,137 @@ milestones:
       - name: "BOM support"
         description: "platform(\"compose-bom:2026.03.00\") constrains versions."
 
+# ============================================================================
+# v0.25.0 — Build Server Protocol (BSP)
+# ============================================================================
+# BSP (https://build-server-protocol.github.io/docs/specification) lets
+# IDEs drive compilation, testing, and execution through a standardised
+# JSON-RPC protocol — the build-tool counterpart to LSP. Skotch's BSP
+# server wraps the existing skotch-build pipeline, presenting the
+# project as Gradle-compatible build targets that any BSP client
+# (IntelliJ, VS Code with Metals, etc.) can consume.
+#
+# ARCHITECTURE:
+#   ┌─────────┐       JSON-RPC        ┌──────────────┐
+#   │  IDE    │◄─────── LSP ─────────►│ skotch lsp   │ language intelligence
+#   │         │                        └──────────────┘
+#   │         │       JSON-RPC        ┌──────────────┐
+#   │         │◄─────── BSP ─────────►│ skotch bsp   │ build / test / run
+#   └─────────┘                        └──────┬───────┘
+#                                              │
+#                                      ┌───────▼──────┐
+#                                      │ skotch-build │ pipeline
+#                                      │ skotch-tape  │ deps
+#                                      └──────────────┘
+#
+# The LSP and BSP servers share the same project model (build.gradle.kts
+# parse, source discovery, dependency graph) so diagnostics from a BSP
+# compile flow directly into the LSP diagnostic stream.
+#
+# PITFALLS:
+#   - BSP uses the same JSON-RPC 2.0 framing as LSP but with different
+#     method names and types — do NOT reuse tower-lsp directly; use a
+#     lightweight JSON-RPC transport layer.
+#   - BuildTarget URIs must be stable across sessions (usually
+#     "file://path/to/module?id=main" or similar).
+#   - Incremental compilation state must survive across BSP sessions
+#     (the build cache from skotch-build/src/cache.rs).
+#   - The IDE may call BSP compile and LSP diagnostics concurrently;
+#     the shared project model needs interior mutability (DashMap).
+# ============================================================================
+
+  - version: "0.25.0"
+    title: "Build Server Protocol (BSP)"
+    status: planned
+    depends_on: ["0.20.0"]
+    description: >
+      A BSP 2.2 server (skotch-bsp crate) that lets IDEs drive Kotlin/
+      Android builds through the standardised Build Server Protocol.
+      Wraps skotch-build for compilation, test execution, and APK
+      assembly. Shares project model with the LSP server so that build
+      diagnostics appear in the editor seamlessly.
+
+    features:
+      - name: "BSP server lifecycle"
+        description: >
+          `skotch bsp` subcommand starts a stdio JSON-RPC server.
+          Implements build/initialize, build/initialized, build/shutdown,
+          build/exit. Advertises server capabilities (compile, test, run)
+          and the Kotlin language ID.
+
+      - name: "Build target discovery"
+        description: >
+          workspace/buildTargets returns the project's build targets
+          derived from build.gradle.kts (main source set, test source
+          set, Android variants). Each BuildTarget has a stable URI,
+          languageIds=["kotlin"], and capability flags.
+
+      - name: "Source and dependency queries"
+        description: >
+          buildTarget/sources, buildTarget/dependencySources,
+          buildTarget/dependencyModules, buildTarget/resources,
+          buildTarget/outputPaths. Maps skotch-build's source discovery
+          and skotch-tape's resolved dependency graph to BSP responses.
+
+      - name: "Compilation (buildTarget/compile)"
+        description: >
+          Drives the skotch-build pipeline for the requested targets.
+          Publishes build/taskStart, build/taskProgress, build/taskFinish
+          notifications for progress tracking. Compilation diagnostics
+          are forwarded via build/publishDiagnostics using the same
+          diagnostic format as LSP (shared Diagnostic type from
+          skotch-diagnostics). Incremental compilation via the
+          skotch-build cache.
+
+      - name: "Test execution (buildTarget/test)"
+        description: >
+          Runs JUnit/KotlinTest suites discovered in test source sets.
+          Reports per-test pass/fail via build/taskFinish with
+          TestReport data. Streams stdout/stderr via run/printStdout
+          and run/printStderr.
+
+      - name: "Run execution (buildTarget/run)"
+        description: >
+          Launches the main class (JVM) or installs + launches the
+          debug APK (Android). Streams process output. Supports
+          run/readStdin for interactive programs.
+
+      - name: "Clean and reload"
+        description: >
+          buildTarget/cleanCache clears the skotch-build cache.
+          workspace/reload re-parses build.gradle.kts and refreshes
+          the dependency graph.
+
+      - name: "BSP ↔ LSP diagnostic bridge"
+        description: >
+          When a BSP compile produces diagnostics, they are
+          automatically forwarded to the co-located LSP server (if
+          running) so the editor shows build errors inline without a
+          separate LSP re-analysis pass. Both servers share the same
+          project model via a shared ProjectState struct backed by
+          DashMap, avoiding duplicate work.
+
+      - name: "BSP connection file (.bsp/skotch.json)"
+        description: >
+          On `skotch init` or first `skotch build`, generate
+          .bsp/skotch.json with the connection details so that
+          BSP-aware IDEs auto-discover the server:
+          { "name": "skotch", "argv": ["skotch", "bsp"],
+            "version": "0.25.0", "bspVersion": "2.2.0",
+            "languages": ["kotlin"] }
+
+    risks:
+      - description: "JSON-RPC transport layer needs to handle concurrent requests"
+        mitigation: "Use tokio + serde_json; same async runtime as the LSP server"
+      - description: "Shared project state between BSP and LSP must be thread-safe"
+        mitigation: "Use DashMap and Arc<ProjectState> shared between both servers"
+      - description: "BSP compile may take seconds; must not block LSP responses"
+        mitigation: "Run compilation in a spawned tokio task; LSP continues serving"
+
   - version: "0.30.0"
     title: "Android Resource Pipeline and APK Assembly"
     status: planned
-    depends_on: ["0.20.0"]
+    depends_on: ["0.25.0"]
     description: >
       aapt2 replacement, R class, resources.arsc, debug APK assembly.
 
@@ -1088,3 +1219,4 @@ milestones:
       - "Build < 60s per sample (clean)"
       - "100% of Kotlin language spec is supported"
       - "All features work on JVM, DEX, LLVM, REPL, .kts, and LSP"
+      - "BSP server drives compilation from IntelliJ/VS Code with diagnostics forwarded to LSP"
