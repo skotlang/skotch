@@ -1,3 +1,3 @@
 name = "30-coroutine-builder"
-status = "stub"
+status = "supported"
 reason = "Needs kotlinx.coroutines + import resolution."

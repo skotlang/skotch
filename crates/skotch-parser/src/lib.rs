@@ -2144,7 +2144,7 @@ impl<'a> Parser<'a> {
             };
             let is_infix = matches!(
                 text.as_str(),
-                "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr"
+                "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr" | "contains" | "zip"
             );
             if is_infix && self.peek_kind_at(1) != TokenKind::LParen {
                 let kw_span = self.peek_span();
