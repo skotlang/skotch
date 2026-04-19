@@ -1,4 +1,4 @@
 name   = "63-data-class-copy"
-status = "stub"
+status = "active"
 features = ["data-class", "copy", "named-arguments"]
-reason = "Requires data class copy() with named arguments."
+expected_output = "Color(r=255, g=128, b=128)\n"

@@ -756,6 +756,7 @@ impl<'a> TypeChecker<'a> {
     fn synth_expr(&mut self, e: &Expr, scope: &mut Vec<(Symbol, Ty)>) -> Ty {
         match e {
             Expr::IntLit(_, _) => Ty::Int,
+            Expr::CharLit(_, _) => Ty::Char,
             Expr::LongLit(_, _) => Ty::Long,
             Expr::DoubleLit(_, _) => Ty::Double,
             Expr::BoolLit(_, _) => Ty::Bool,

@@ -1,0 +1,52 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=5 max_locals=15
+    0000 sipush 255
+    0003 istore 1
+    0005 iconst_0
+    0006 istore 2
+    0008 iconst_0
+    0009 istore 3
+    0011 new Class(Color)
+    0014 dup
+    0015 iload 1
+    0017 iload 2
+    0019 iload 3
+    0021 invokespecial Method(Color.<init>:(III)V)
+    0024 astore 4
+    0026 aload 4
+    0028 checkcast Class(Color)
+    0031 astore 5
+    0033 aload 5
+    0035 checkcast Class(Color)
+    0038 astore 6
+    0040 sipush 128
+    0043 istore 7
+    0045 sipush 128
+    0048 istore 8
+    0050 aload 6
+    0052 getfield Field(Color.r:I)
+    0055 istore 9
+    0057 sipush 128
+    0060 istore 10
+    0062 sipush 128
+    0065 istore 11
+    0067 aload 6
+    0069 iload 9
+    0071 iload 10
+    0073 iload 11
+    0075 invokevirtual Method(Color.copy:(III)LColor;)
+    0078 astore 12
+    0080 aload 12
+    0082 checkcast Class(Color)
+    0085 astore 13
+    0087 aload 13
+    0089 checkcast Class(Color)
+    0092 astore 14
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 aload 14
+    0099 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0102 return

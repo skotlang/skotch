@@ -61,12 +61,12 @@ project:
     producing debug APKs that install and launch on an Android emulator.
     No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
   codebase_stats:
-    rust_lines: 48500          # approximate, grows with each feature
+    rust_lines: 48360
     crates: 36
-    active_fixtures: 379
-    stub_fixtures: 30
-    jvm_e2e_fixtures: 370
-    dex_e2e_fixtures: 347
+    active_fixtures: 381
+    stub_fixtures: 28
+    jvm_e2e_fixtures: 372
+    dex_e2e_fixtures: 349
 
 # ============================================================================
 # COMPLETED MILESTONES (v0.1.0 – v0.5.0)
@@ -863,12 +863,16 @@ milestones:
       the most common gaps blocking real Kotlin code.
 
     features:
-      - name: "Ty::Char and println(Char)"
+      - name: "Ty::Char and println(Char) (landed)"
+        completed: true
         description: >
-          Add Char to the type system. charAt()/string indexing returns
-          Char. println(Char) emits println(C)V instead of println(I)V.
-          Char literals ('K') produce Ty::Char. Char.code and
-          Char.toInt() for numeric conversion.
+          Added Ty::Char to the type system. Lexer emits CharLit tokens,
+          parser produces Expr::CharLit, MIR lowerer creates Ty::Char locals.
+          All 4 backends updated (JVM: 'C' descriptor, iload/istore;
+          DEX: 'C' descriptor; LLVM: i32 with %c printf; klib: auto).
+          println(Char) uses (C)V to print the character, not the code point.
+          String indexing returns Ty::Char. Character.valueOf for autoboxing.
+          See fixture 199-char-literal.
 
       - name: "Type inference for lambda parameters"
         description: >
@@ -882,11 +886,14 @@ milestones:
           Custom setter bodies. Invoked by assignment to the property.
           Deferred from v0.11.
 
-      - name: "Data class copy() with default-fill"
+      - name: "Data class copy() with default-fill (landed)"
+        completed: true
         description: >
           Point(1,2).copy(y=3) calls copy(1, 3) — fills unspecified
-          params from the receiver's fields. Requires the copy() method
-          to accept all params and the call site to supply defaults.
+          params from the receiver's fields via GetField. copy() method
+          now takes all fields as params. Call site intercepts copy()
+          on data classes and builds args with named-arg matching.
+          See fixture 63-data-class-copy.
 
       - name: "Data class equals/hashCode/copy"
         completed: true

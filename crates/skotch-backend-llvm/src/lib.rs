@@ -861,7 +861,7 @@ impl<'a> BlockWalker<'a> {
             let arg_ty = &self.func.locals[arg.0 as usize];
             let ssa = self.ssa_of(arg);
             let arg_text = match arg_ty {
-                Ty::Int | Ty::Bool => format!("i32 {ssa}"),
+                Ty::Int | Ty::Char | Ty::Bool => format!("i32 {ssa}"),
                 _ => format!("ptr {ssa}"),
             };
             runtime.push(arg_text);
@@ -980,6 +980,7 @@ fn build_concat_format(
         } else {
             let arg_ty = &func.locals[arg.0 as usize];
             match arg_ty {
+                Ty::Char => format.push_str("%c"),
                 Ty::Int | Ty::Bool => format.push_str("%d"),
                 Ty::Long => format.push_str("%lld"),
                 _ => format.push_str("%s"),
@@ -1002,6 +1003,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "void",
         Ty::Bool => "i32", // bools are 0/1 ints; icmp produces i1 but we zext
+        Ty::Char => "i32", // Kotlin Char is a 16-bit value stored as i32
         Ty::Int => "i32",
         Ty::Long => "i64",
         Ty::Double => "double",

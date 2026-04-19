@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=31
+  code        max_stack=4 max_locals=33
     0000 iconst_1
     0001 istore 1
     0003 iconst_2
@@ -97,29 +97,37 @@ method        main ([Ljava/lang/String;)V 0x0009
     0192 checkcast Class(Point)
     0195 astore 24
     0197 aload 24
-    0199 invokevirtual Method(Point.copy:()LPoint;)
-    0202 astore 25
-    0204 aload 25
-    0206 checkcast Class(Point)
-    0209 astore 26
-    0211 aload 26
-    0213 checkcast Class(Point)
-    0216 astore 27
-    0218 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0221 aload 27
-    0223 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0226 aload 26
-    0228 checkcast Class(Point)
-    0231 astore 28
-    0233 aload 4
-    0235 checkcast Class(Point)
-    0238 astore 29
-    0240 aload 28
-    0242 aload 29
-    0244 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
-    0247 istore 30
-    0249 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0252 iload 30
-    0254 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0257 return
+    0199 getfield Field(Point.x:I)
+    0202 istore 25
+    0204 aload 24
+    0206 getfield Field(Point.y:I)
+    0209 istore 26
+    0211 aload 24
+    0213 iload 25
+    0215 iload 26
+    0217 invokevirtual Method(Point.copy:(II)LPoint;)
+    0220 astore 27
+    0222 aload 27
+    0224 checkcast Class(Point)
+    0227 astore 28
+    0229 aload 28
+    0231 checkcast Class(Point)
+    0234 astore 29
+    0236 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0239 aload 29
+    0241 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0244 aload 28
+    0246 checkcast Class(Point)
+    0249 astore 30
+    0251 aload 4
+    0253 checkcast Class(Point)
+    0256 astore 31
+    0258 aload 30
+    0260 aload 31
+    0262 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0265 istore 32
+    0267 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0270 iload 32
+    0272 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0275 return
     sub_attr  StackMapTable (115 bytes)

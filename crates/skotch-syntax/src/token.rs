@@ -14,6 +14,8 @@ pub enum TokenKind {
     // ─── identifiers and literals ────────────────────────────────────────
     Ident,
     IntLit,
+    /// A character literal: `'a'`, `'\n'`. Payload is `Int(code_point)`.
+    CharLit,
     /// A `Long` literal with `L` suffix: `100L`, `0xFFL`.
     LongLit,
     /// A floating-point literal: `3.14`, `2.5e10`, `1.0f`.

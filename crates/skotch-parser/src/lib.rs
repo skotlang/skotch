@@ -2734,6 +2734,14 @@ impl<'a> Parser<'a> {
                 self.bump();
                 Expr::IntLit(v, span)
             }
+            TokenKind::CharLit => {
+                let v = match self.payload(self.pos) {
+                    Some(TokenPayload::Int(v)) => *v,
+                    _ => 0,
+                };
+                self.bump();
+                Expr::CharLit(v, span)
+            }
             TokenKind::LongLit => {
                 let v = match self.payload(self.pos) {
                     Some(TokenPayload::Int(v)) => *v,

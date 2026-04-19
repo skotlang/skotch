@@ -182,7 +182,7 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        // Char literals: 'X' or '\n' etc. Treated as Int for now.
+        // Char literals: 'X' or '\n' etc. Emitted as CharLit with the code point.
         if b == b'\'' {
             self.pos += 1; // skip opening quote
             let ch_val = if self.pos < self.bytes.len() && self.bytes[self.pos] == b'\\' {
@@ -230,7 +230,7 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
             }
             self.emit(
-                TokenKind::IntLit,
+                TokenKind::CharLit,
                 start,
                 self.pos,
                 Some(TokenPayload::Int(ch_val as i64)),
