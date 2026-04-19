@@ -19,29 +19,23 @@
 #
 # ── Dependency graph ─────────────────────────────────────────────────────
 #
-#   v0.1–v0.5 (Foundation through Collections) — COMPLETED
+#   v0.1–v0.9   (Foundation through Coroutines) — COMPLETED
 #       ↓
-#   v0.6  (Higher-order functions)     ← THE critical unlock
+#   v0.10 (Classes: nested/inner, enums, sealed)       — nearly done (1 feature left)
 #       ↓
-#   v0.7  (Null safety + type system)
+#   v0.11 (Advanced functions + expressions)            — nearly done (1 feature left)
 #       ↓
-#   v0.8  (Full collections + stdlib)
+#   v0.12 (Type system: inference, bounds, Char type)
 #       ↓
-#   v0.9  (Coroutines)                 ← hardest milestone
+#   v0.13 (Multi-file, packages, imports)               ← HARD GATE for everything below
 #       ↓
-#   v0.10 (Nested/inner classes, enums, sealed)
+#   v0.14 (Annotations and Java interop)                ← needed for Android APIs
 #       ↓
-#   v0.11 (Advanced functions + expressions)
+#   v0.15 (Stdlib completeness + inline functions)
 #       ↓
-#   v0.12 (Full type system)
+#   v0.20 (Build system + dependency resolution)
 #       ↓
-#   v0.13 (Kotlin stdlib completeness)
-#       ↓
-#   v0.14 (DEX backend parity)
-#       ↓
-#   v0.15 (Multi-file + packages + modules)
-#       ↓
-#   v0.20 (Build system + dependencies)
+#   v0.25 (Build Server Protocol)
 #       ↓
 #   v0.30 (Android resources + APK)
 #       ↓
@@ -49,18 +43,30 @@
 #       ↓
 #   v1.0  (Compose Samples integration)
 #
+#   Cross-cutting policy (NOT a separate milestone):
+#     DEX parity — every feature landing on JVM must also pass DEX.
+#     Currently 345/368 JVM fixtures also pass DEX. Gaps are fixed
+#     incrementally, not in a big-bang milestone.
+#
 # ============================================================================
 
 project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.5.0"
+  current_version: "0.9.0"       # v0.1-v0.9 completed, v0.10-v0.11 in progress
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
     producing debug APKs that install and launch on an Android emulator.
     No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
+  codebase_stats:
+    rust_lines: 48092
+    crates: 36
+    active_fixtures: 377
+    stub_fixtures: 32
+    jvm_e2e_fixtures: 368
+    dex_e2e_fixtures: 345
 
 # ============================================================================
 # COMPLETED MILESTONES (v0.1.0 – v0.5.0)
@@ -693,7 +699,7 @@ milestones:
 
   - version: "0.10.0"
     title: "Nested Classes, Full Enums, Sealed Completeness"
-    status: planned
+    status: in_progress    # 4/5 features done — only inner classes remain
     depends_on: ["0.9.0"]
     description: >
       Inner/nested classes, enum values()/valueOf()/entries, sealed
@@ -753,7 +759,7 @@ milestones:
 
   - version: "0.11.0"
     title: "Advanced Functions and Expressions"
-    status: planned
+    status: in_progress    # 8/9 features done — only when-smart-casts remains
     depends_on: ["0.10.0"]
     description: >
       try-as-expression, multi-statement try bodies, labeled returns,
@@ -825,33 +831,64 @@ milestones:
         mitigation: "Implement non-local returns for inline lambdas only"
 
 # ============================================================================
-# v0.12.0 — Full Type System
+# v0.12.0 — Type System Hardening
 # ============================================================================
-# These are the remaining type system features needed for real Kotlin code.
+# The type system works for basic cases but lacks inference, proper Char
+# type, property setters, and data class copy() with defaults. These are
+# the most frequently encountered gaps when compiling real Kotlin code.
 #
 # PITFALLS:
-#   - Type inference: Kotlin has bidirectional type inference that is
-#     MUCH more sophisticated than what we have. Full Hindley-Milner
-#     style inference with constraints is needed for complex code.
-#   - Bound checking: T : Comparable<T> should reject non-Comparable types
-#   - Declaration-site variance interacts with type projection
-#   - Intersection types from smart casts
-#   - SAM type inference: when multiple overloads exist
+#   - Type inference: Kotlin uses bidirectional inference with constraints.
+#     Full Hindley-Milner is overkill initially — start with "propagate
+#     known types backward into lambda params".
+#   - Char type: currently stored as Int, which means println('K') prints
+#     75 instead of K. Need Ty::Char and println(C)V dispatch.
+#   - data class copy() needs default-fill: copy(y=3) should pass
+#     this.x for the x param, not omit it.
+#   - Property setters are deferred from v0.11 — needed for mutable
+#     state in real apps.
 # ============================================================================
 
   - version: "0.12.0"
-    title: "Full Type System"
+    title: "Type System Hardening"
     status: planned
     depends_on: ["0.11.0"]
     description: >
-      Type inference engine, bound enforcement, multi-reified, full
-      smart casts, data class equals/hashCode/copy, value classes.
+      Type inference for lambda parameters, Char type, property setters,
+      data class copy() with defaults, upper bound enforcement. These are
+      the most common gaps blocking real Kotlin code.
 
     features:
+      - name: "Ty::Char and println(Char)"
+        description: >
+          Add Char to the type system. charAt()/string indexing returns
+          Char. println(Char) emits println(C)V instead of println(I)V.
+          Char literals ('K') produce Ty::Char. Char.code and
+          Char.toInt() for numeric conversion.
+
       - name: "Type inference for lambda parameters"
         description: >
           listOf(1,2,3).map { it * 2 } — infer `it` type as Int from
-          context (List<Int>.map expects (Int)->R).
+          context (List<Int>.map expects (Int)->R). Bidirectional:
+          propagate the expected function type backward into the lambda.
+
+      - name: "Property setters"
+        description: >
+          var field: Int = 0; set(value) { field = value + 1 }.
+          Custom setter bodies. Invoked by assignment to the property.
+          Deferred from v0.11.
+
+      - name: "Data class copy() with default-fill"
+        description: >
+          Point(1,2).copy(y=3) calls copy(1, 3) — fills unspecified
+          params from the receiver's fields. Requires the copy() method
+          to accept all params and the call site to supply defaults.
+
+      - name: "Data class equals/hashCode/copy"
+        completed: true
+        description: >
+          Auto-synthesize equals(), hashCode(), copy() with default params.
+          componentN() already implemented.
 
       - name: "Upper bound enforcement"
         description: >
@@ -863,14 +900,210 @@ milestones:
           inline fun <reified A, reified B> check(x: Any) — full function
           body inlining with multiple type substitutions.
 
-      - name: "Data class equals/hashCode/copy"
+    risks:
+      - description: "Full type inference is the second-hardest feature after coroutines"
+        mitigation: "Require explicit types where inference fails; add inference iteratively"
+
+# ============================================================================
+# v0.13.0 — Multi-File Compilation, Packages, and Imports
+# ============================================================================
+# THIS IS THE HARDEST REMAINING GATE. Every real Kotlin project uses
+# multiple files, package declarations, and import statements. Without
+# this, the build system (v0.20) and everything downstream is impossible.
+#
+# The build pipeline (skotch-build) already supports multi-file discovery
+# and parallel compilation via salsa/rayon. What's missing is the
+# front-end: resolving names across files, handling `package` and
+# `import` statements, and linking compiled units together.
+#
+# IMPLEMENTATION STRATEGY:
+#   Phase 1: `import` statements — resolve fully-qualified names from
+#            the classpath (kotlin-stdlib.jar, dependency JARs)
+#   Phase 2: `package` declarations — emit classes with FQ names
+#            (com/example/MyClass instead of MyClass)
+#   Phase 3: Cross-file resolution — two-pass: first pass collects all
+#            declarations, second pass resolves references
+#   Phase 4: Multi-module — compile module A first, then module B sees
+#            A's output on its classpath
+#
+# PITFALLS:
+#   - Circular references between files in the same package
+#   - Package-private vs internal vs public visibility
+#   - Star imports (import com.example.*) vs specific imports
+#   - Import aliases (import com.example.Foo as Bar)
+#   - Classpath ordering affects which class wins on conflict
+#   - Name shadowing: local > import > package
+# ============================================================================
+
+  - version: "0.13.0"
+    title: "Multi-File Compilation, Packages, and Imports"
+    status: planned
+    depends_on: ["0.12.0"]
+    description: >
+      Import statements, package declarations, multi-file compilation
+      with cross-file name resolution. The critical gate for everything
+      downstream — real projects are never single-file.
+
+    features:
+      - name: "Import statements"
+        description: >
+          import kotlin.math.sqrt, import java.util.*, import as aliases.
+          Resolve FQ names from kotlin-stdlib.jar and dependency JARs
+          via .class file parsing (already implemented in skotch-classinfo).
+
+      - name: "Package declarations"
+        description: >
+          package com.example.app — emitted class has FQ name
+          com/example/app/MainKt. Package matches directory structure.
+
+      - name: "Multi-file compilation (same package)"
+        description: >
+          Compile multiple .kt files. Two-pass: first pass collects all
+          top-level declarations (classes, functions, vals); second pass
+          resolves cross-file references. Uses existing salsa-based
+          parallel pipeline in skotch-build.
+
+      - name: "Multi-module compilation"
+        description: >
+          Compile module A, then module B that depends on A. Module A's
+          output directory or JAR is on B's classpath. Module boundaries
+          enforce `internal` visibility.
+
+      - name: "Kotlin metadata emission"
+        description: >
+          @Metadata annotation on generated classes with protobuf payload.
+          Required for kotlinc-compiled code to interop with skotch output.
+
+      - name: "Internal visibility enforcement"
+        description: "internal members visible within module, hidden outside."
+
+    risks:
+      - description: "Circular references between files in the same package"
+        mitigation: "Two-pass: collect all declarations first, then resolve"
+      - description: "This blocks the entire build system pipeline"
+        mitigation: "Prioritize — start this before v0.12 is fully complete"
+
+# ============================================================================
+# v0.14.0 — Annotations and Java Interop
+# ============================================================================
+# Android code is ~50% Kotlin calling Java APIs. Compose is 100%
+# annotation-driven (@Composable, @Preview, @OptIn). Without real
+# annotation processing and full Java type resolution, Android apps
+# cannot compile.
+#
+# PITFALLS:
+#   - Annotation targets: @get:JvmStatic, @field:JvmField, @file:JvmName
+#   - Annotation retention: SOURCE, BINARY, RUNTIME
+#   - Java generic types from classfiles (Signature attribute parsing)
+#   - Java static methods vs Kotlin companion methods
+#   - Java checked exceptions vs Kotlin unchecked
+#   - Platform types (T! from Java) — nullable-agnostic
+# ============================================================================
+
+  - version: "0.14.0"
+    title: "Annotations and Java Interop"
+    status: planned
+    depends_on: ["0.13.0"]
+    description: >
+      Annotation retention and runtime emission, @JvmStatic/@JvmField/
+      @JvmOverloads, full Java type mapping from classfiles, platform
+      types. Required for Android API usage and Compose.
+
+    features:
+      - name: "Annotation retention and emission"
+        description: >
+          Annotations with RUNTIME retention emitted to .class files.
+          @Target, @Retention meta-annotations parsed. Custom annotation
+          classes. Annotation arguments (strings, classes, arrays, enums).
+
+      - name: "@JvmStatic / @JvmField / @JvmOverloads"
+        description: >
+          @JvmStatic on companion methods → real static method.
+          @JvmField on properties → public field (no getter/setter).
+          @JvmOverloads → overloads for each default parameter combo.
+
+      - name: "Java type resolution from classfiles"
+        description: >
+          Parse Signature attribute from .class files for generic Java
+          types. Map Java types to Kotlin types (String!, List<String>!,
+          platform types). Handle Java arrays, wildcards, raw types.
+
+      - name: "Platform types (T!)"
+        description: >
+          Types from Java are platform types — assignable to both T and T?.
+          No null-safety enforcement at Java boundaries. Matches kotlinc.
+
+      - name: "Java static method calls"
+        description: >
+          System.currentTimeMillis(), Integer.parseInt(), Files.readString().
+          Static Java methods called via invokestatic with FQ class name
+          resolved from import or classpath.
+
+      - name: "Annotation classes"
+        description: >
+          annotation class MyAnnotation(val message: String). Compiled to
+          an interface extending java.lang.annotation.Annotation. Used for
+          custom annotations in framework code.
+
+    risks:
+      - description: "Java generic signatures are complex (wildcards, raw types, type variables)"
+        mitigation: "Start with erased types; add signature parsing incrementally"
+      - description: "Platform types interact subtly with smart casts and null checking"
+        mitigation: "Treat T! as T for now; add platform type tracking later"
+
+# ============================================================================
+# v0.15.0 — Stdlib Completeness and Inline Functions
+# ============================================================================
+# kotlin-stdlib.jar loading already works since v0.8. What's missing is
+# support for inline functions (which is how most stdlib HOFs are
+# declared) and the long tail of stdlib APIs (IO, math, regex, etc.).
+#
+# NOTE: This milestone is mostly incremental work — there is no big-bang
+# moment. It can be worked on in parallel with v0.13-v0.14.
+#
+# PITFALLS:
+#   - Kotlin stdlib inline functions have @InlineOnly annotation — they
+#     don't exist in the .class file, so you can't call them via
+#     invokestatic. Must inline the body from the .kotlin_module metadata.
+#   - reified type parameters in inline functions
+#   - contracts (callsInPlace, returns, implies) — needed for smart casts
+#     across lambda boundaries (e.g., requireNotNull)
+# ============================================================================
+
+  - version: "0.15.0"
+    title: "Stdlib Completeness and Inline Functions"
+    status: planned
+    depends_on: ["0.14.0"]
+    description: >
+      Inline function body inlining (required for stdlib HOFs), remaining
+      stdlib coverage (IO, math, regex, sequences), value classes.
+
+    features:
+      - name: "kotlin-stdlib.jar loading"
         completed: true
         description: >
-          Auto-synthesize equals(), hashCode(), copy() with default params.
-          componentN() already implemented.
-        acceptance_criteria:
-          - "Point(1,2) == Point(1,2) is true"
-          - "Point(1,2).copy(y=3) == Point(1,3)"
+          Already working since v0.8. stdlib JAR auto-located, classfiles
+          parsed, method descriptors resolved, calls emitted.
+
+      - name: "Inline function body inlining"
+        description: >
+          For stdlib @InlineOnly functions (require, check, buildList,
+          run, let, also, apply, with), inline the function body at the
+          call site. Parse .kotlin_module metadata for inline bodies.
+
+      - name: "Standard IO (readLine, readln)"
+        description: "readLine(), readln(), println with format strings."
+
+      - name: "Math functions"
+        description: "abs, max, min, sqrt, pow, roundToInt, etc."
+
+      - name: "Regex support"
+        description: "Regex class, matchResult, find, replace, split."
+
+      - name: "Sequences and Flow (basic)"
+        description: >
+          sequence { yield(1); yield(2) } and basic Flow<T> builder.
+          Flow is library-level on top of coroutines.
 
       - name: "Value classes (@JvmInline)"
         description: >
@@ -883,142 +1116,30 @@ milestones:
           of all checked types.
 
     risks:
-      - description: "Full type inference is the second-hardest feature after coroutines"
-        mitigation: "Require explicit types where inference fails; add inference iteratively"
-
-# ============================================================================
-# v0.13.0 — Kotlin Stdlib Completeness
-# ============================================================================
-# Real Kotlin code uses hundreds of stdlib functions. We need either
-# intrinsic implementations or the ability to load kotlin-stdlib.jar.
-#
-# IMPLEMENTATION STRATEGY:
-# Loading kotlin-stdlib.jar and calling real implementations is the
-# only scalable approach. This requires:
-#   1. Classfile parsing of stdlib classes
-#   2. Resolving method descriptors from parsed classfiles
-#   3. Emitting invokestatic/invokevirtual to stdlib methods
-#   4. Including kotlin-stdlib.jar in the runtime classpath
-#
-# PITFALLS:
-#   - Kotlin stdlib uses inline functions heavily — these won't work
-#     unless we support inline function body inlining
-#   - Many stdlib functions use reified type parameters
-#   - Kotlin stdlib depends on kotlin-stdlib-common (multiplatform)
-#   - Version compatibility: stdlib version must match language version
-# ============================================================================
-
-  - version: "0.13.0"
-    title: "Kotlin Stdlib Completeness"
-    status: planned
-    depends_on: ["0.12.0"]
-    description: >
-      Load kotlin-stdlib.jar for full stdlib access. Intrinsic fallback
-      for inline/reified functions. 95% stdlib coverage.
-
-    features:
-      - name: "kotlin-stdlib.jar loading"
-        description: >
-          Parse kotlin-stdlib.jar classfiles. Resolve method signatures.
-          Emit calls to real stdlib implementations.
-
-      - name: "Inline function body inlining"
-        description: >
-          For stdlib inline functions (require, check, buildList, etc.),
-          inline the function body at the call site.
-
-      - name: "Standard IO (readLine, readln)"
-        description: "readLine(), readln(), println with format strings."
-
-      - name: "Math functions"
-        description: "abs, max, min, sqrt, pow, roundToInt, etc."
-
-      - name: "Regex support"
-        description: "Regex class, matchResult, find, replace, split."
-
-# ============================================================================
-# v0.14.0 — DEX Backend Parity
-# ============================================================================
-# The DEX backend currently handles basic functions but lags behind
-# JVM for classes, inheritance, lambdas, etc. This milestone brings
-# DEX to full parity with JVM.
-#
-# PITFALLS:
-#   - DEX register model vs JVM stack model — completely different codegen
-#   - DEX has 64K method reference limit per dex file
-#   - DEX encoded_catch_handler format differs from JVM exception tables
-#   - DEX needs multi-dex splitting for large apps
-# ============================================================================
-
-  - version: "0.14.0"
-    title: "DEX Backend Parity"
-    status: planned
-    depends_on: ["0.13.0"]
-    description: >
-      Full DEX backend: classes, inheritance, lambdas, generics,
-      exception tables, multi-dex. Every JVM fixture must also pass DEX.
-
-    features:
-      - name: "DEX class emission"
-        description: "User classes, interfaces, inheritance, virtual dispatch."
-
-      - name: "DEX exception tables"
-        description: "try-catch in DEX using encoded_catch_handler."
-
-      - name: "DEX lambda support"
-        description: "$Lambda$N classes, closure capture, invoke dispatch."
-
-      - name: "Multi-DEX splitting"
-        description: ">64K methods → classes.dex + classes2.dex."
-
-# ============================================================================
-# v0.15.0 — Multi-File, Packages, and Modules
-# ============================================================================
-# Real projects have multiple files, packages, and modules.
-#
-# PITFALLS:
-#   - Cross-file name resolution: class in file A used in file B
-#   - Package-private visibility
-#   - Module boundaries and internal visibility
-#   - Classpath ordering affects resolution
-# ============================================================================
-
-  - version: "0.15.0"
-    title: "Multi-File, Packages, and Modules"
-    status: planned
-    depends_on: ["0.14.0"]
-    description: >
-      Multi-file compilation, package-aware resolution, multi-module
-      builds, Kotlin metadata emission for cross-module interop.
-
-    features:
-      - name: "Multi-file compilation"
-        description: >
-          Compile multiple .kt files in the same package. Cross-file
-          references resolved via two-pass compilation.
-
-      - name: "Multi-module compilation"
-        description: >
-          Compile module A, then module B that depends on A. Module A's
-          classes available when compiling B.
-
-      - name: "Kotlin metadata emission"
-        description: >
-          @Metadata annotation on generated classes with protobuf payload.
-          Required for kotlinc-compiled code to interop with skotch output.
-
-      - name: "Internal visibility enforcement"
-        description: "internal members visible within module, hidden outside."
+      - description: "Inline function metadata parsing is under-documented"
+        mitigation: "Study kotlinc's InlineCodegen and .kotlin_module format"
 
 # ============================================================================
 # BUILD SYSTEM, BSP, AND ANDROID TOOLING (v0.20–v0.40)
 # ============================================================================
-# These milestones are ONLY attempted after the language is 100%.
-# They are build system / packaging / protocol concerns, not language
-# features. The BSP milestone (v0.25) bridges the gap between the
-# build system and IDE tooling — an IDE can drive skotch compilation,
-# testing, and running entirely through BSP, while using the existing
-# LSP server for language intelligence.
+# These milestones build on the language being sufficiently complete
+# (v0.13+ multi-file is the hard prerequisite). They are build system /
+# packaging / protocol concerns, not language features.
+#
+# EXISTING INFRASTRUCTURE (already built):
+#   - skotch-buildscript: token-walker for build.gradle.kts — extracts
+#     plugins, dependencies, android config, but does NOT evaluate
+#     Kotlin script. This is by design: Gradle DSL is receiver-lambda
+#     blocks that would require a full Kotlin evaluator. The walker
+#     extracts the values skotch needs.
+#   - skotch-tape: Maven dependency resolver with POM parsing, transitive
+#     deps, XDG cache, @file:Repository/@file:DependsOn for .kts scripts.
+#   - skotch-build: salsa-based incremental pipeline with parallel
+#     compilation (rayon), source discovery, module merging.
+#   - skotch-buildscript/version_catalog.rs: libs.versions.toml parser.
+#   - skotch-apk: debug APK assembly (ZIP + manifest + DEX).
+#   - skotch-axml: binary XML (AXML) generation for AndroidManifest.
+#   - skotch-sign: APK v2/v3 signing.
 # ============================================================================
 
   - version: "0.20.0"
@@ -1026,26 +1147,45 @@ milestones:
     status: planned
     depends_on: ["0.15.0"]
     description: >
-      Full Gradle DSL parsing, Maven/Google dependency resolution,
-      version catalogs, AAR handling, BOM support.
+      Complete the build pipeline: AAR handling, BOM version constraints,
+      Google Maven/Maven Central resolution for Android dependencies,
+      multi-module project support. Core infrastructure already exists.
 
     features:
       - name: "Maven dependency resolution"
         completed: true
-        description: "Already implemented in skotch-tape crate."
+        description: "skotch-tape crate. POM parsing, transitive deps, caching."
       - name: "Version catalog (libs.versions.toml)"
         completed: true
-        description: "Already implemented."
-      - name: "Gradle plugin stubs"
+        description: "Already implemented in skotch-buildscript."
+      - name: "Gradle build.gradle.kts token walker"
         completed: true
-        description: "Already implemented."
+        description: >
+          Token walker (NOT a Kotlin evaluator) extracts plugins {},
+          dependencies {}, android {} config. Silently skips unrecognised
+          DSL. Sufficient for skotch's needs.
       - name: "Package-aware class naming"
         completed: true
         description: "Already implemented."
       - name: "AAR handling"
-        description: "Extract classes.jar + res/ from .aar. Scan for type resolution."
+        description: >
+          Extract classes.jar + res/ from .aar files. Add classes.jar to
+          compilation classpath. Forward res/ to the resource pipeline.
+          Needed for all AndroidX/Material3 dependencies.
       - name: "BOM support"
-        description: "platform(\"compose-bom:2026.03.00\") constrains versions."
+        description: >
+          platform("compose-bom:2026.03.00") constrains dependency
+          versions. Parse BOM POM and apply version constraints before
+          resolving transitive dependencies.
+      - name: "Google Maven repository"
+        description: >
+          Resolve from dl.google.com/dl/android/maven2/ in addition to
+          Maven Central. Required for all AndroidX artifacts.
+      - name: "settings.gradle.kts multi-module"
+        description: >
+          Parse include(":app", ":lib") from settings.gradle.kts.
+          Build modules in dependency order. Already have settings
+          parser in skotch-buildscript.
 
 # ============================================================================
 # v0.25.0 — Build Server Protocol (BSP)
@@ -1177,40 +1317,90 @@ milestones:
   - version: "0.30.0"
     title: "Android Resource Pipeline and APK Assembly"
     status: planned
-    depends_on: ["0.25.0"]
+    depends_on: ["0.20.0"]
     description: >
-      aapt2 replacement, R class, resources.arsc, debug APK assembly.
+      aapt2-equivalent resource compilation, R class generation,
+      resources.arsc, and full debug APK assembly. Existing infrastructure:
+      skotch-axml (binary XML), skotch-apk (ZIP assembly), skotch-sign
+      (v2/v3 signing). New crate needed: skotch-resource.
 
     features:
       - name: "Resource compilation (aapt2 equivalent)"
-        description: "XML → binary, resources.arsc generation."
+        description: >
+          XML layout/drawable/values → binary XML. resources.arsc table
+          generation with type/config/entry tables. New skotch-resource crate.
       - name: "R class generation"
-        description: "R.string.app_name, R.drawable.ic_launcher → integer constants."
+        description: >
+          R.string.app_name, R.drawable.ic_launcher, R.layout.activity_main
+          → integer constants. Generated as a real .class file that's
+          included in the compilation classpath.
+      - name: "AndroidManifest binary encoding"
+        completed: true
+        description: >
+          skotch-axml already handles binary XML for AndroidManifest.xml.
       - name: "Debug APK assembly"
-        description: "AndroidManifest + classes.dex + resources.arsc + res/ + lib/."
+        description: >
+          AndroidManifest + classes.dex + resources.arsc + res/ + lib/.
+          skotch-apk already handles ZIP assembly. Need to integrate
+          resource compilation output.
       - name: "APK alignment and v2 signing"
-        description: "zipalign + v2/v3 signing scheme for Android 7+."
+        completed: true
+        description: >
+          skotch-sign already implements zipalign + v2/v3 signing for
+          Android 7+.
+
+    risks:
+      - description: "Resource table format (resources.arsc) is complex binary"
+        mitigation: "Study aapt2 source and Android's ResourceTypes.h"
 
   - version: "0.40.0"
     title: "Compose Compiler Plugin"
     status: planned
     depends_on: ["0.30.0"]
     description: >
-      @Composable transform, state tracking, remember, recomposition.
+      @Composable transform (similar in complexity to the CPS coroutine
+      transform), state tracking, remember intrinsic, recomposition
+      scheduling. New crate: skotch-compose (MIR-to-MIR pass).
 
     features:
       - name: "@Composable function transform"
-        description: "Composer + $changed parameters, startRestartGroup/endRestartGroup."
+        description: >
+          Inject Composer + $changed bitmask parameters. Emit
+          startRestartGroup/endRestartGroup calls. Track group keys
+          for positional memoization. Similar to CPS transform but
+          operates on the Composer API instead of Continuation.
       - name: "remember intrinsic"
-        description: "remember { value } → slot table read/write via Composer.cache()."
+        description: >
+          remember { value } → Composer.cache(invalid, { value }).
+          Slot table read/write for memoized values across recompositions.
       - name: "State tracking (mutableStateOf)"
-        description: "State reads recorded by Composer; changes trigger recomposition."
+        description: >
+          mutableStateOf(0) creates a State<Int>. Reads are recorded by
+          the Composer during composition. Writes trigger recomposition
+          of affected scopes.
       - name: "Stability inference"
-        description: "$stable flags for skipping unchanged composables."
+        description: >
+          $stable flags on classes. Immutable classes (all val props,
+          no custom equals) are stable. Stable composable params allow
+          skipping recomposition when unchanged.
+      - name: "CompositionLocal support"
+        description: >
+          CompositionLocalProvider(LocalTheme provides DarkTheme) { }.
+          Thread-local-like ambient values through the composition tree.
+
+    risks:
+      - description: "Compose transform is as complex as the coroutine CPS transform (~2000 lines)"
+        mitigation: "Reuse patterns from the coroutine transform; both are MIR-to-MIR passes"
+      - description: "Compose runtime API evolves rapidly"
+        mitigation: "Target a specific Compose BOM version; pin the API surface"
 
 # ============================================================================
 # v1.0.0 — Compose Samples Integration
 # ============================================================================
+# The finish line: build every Official Jetpack Compose Sample using only
+# `skotch build`. This exercises the entire stack: language, type system,
+# multi-file compilation, dependency resolution, resource compilation,
+# DEX emission, Compose transform, and APK assembly.
 
   - version: "1.0.0"
     title: "Compose Samples Integration"
@@ -1218,13 +1408,24 @@ milestones:
     depends_on: ["0.40.0"]
     description: >
       End-to-end validation: build every Compose Sample with skotch alone.
+      This is not a feature milestone — it's a validation milestone that
+      exercises every layer of the stack.
 
     release_criteria:
       - "skotch build succeeds for: Jetchat, JetNews, Jetsnack, Jetcaster, Reply, JetLagged"
-      - "Each debug APK installs on Android emulator"
-      - "Each app launches to main screen"
-      - "No external tools invoked"
-      - "Build < 60s per sample (clean)"
-      - "100% of Kotlin language spec is supported"
+      - "Each debug APK installs on Android emulator (API 33+)"
+      - "Each app launches to main screen without crashes"
+      - "No external tools invoked (no kotlinc, aapt2, d8, AGP, Gradle)"
+      - "Build < 60s per sample (clean build)"
       - "All features work on JVM, DEX, LLVM, REPL, .kts, and LSP"
       - "BSP server drives compilation from IntelliJ/VS Code with diagnostics forwarded to LSP"
+
+    # ── What's NOT in v1.0 (deferred to v2.0+) ──
+    # - R8/ProGuard code shrinking and optimization
+    # - Release signing with real keystores
+    # - App Bundles (.aab) for Play Store distribution
+    # - Kotlin/Native compilation for iOS targets
+    # - Kotlin Multiplatform (expect/actual)
+    # - Gradle task execution (only DSL parsing)
+    # - KSP (Kotlin Symbol Processing) for code generation
+    # - kapt (annotation processing via javac stubs)
