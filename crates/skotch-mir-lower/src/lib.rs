@@ -6006,12 +6006,18 @@ fn lower_expr(
                     scope.iter().rev().find(|(s, _)| *s == this_sym)
                 {
                     let this_ty = &fb.mf.locals[this_local.0 as usize];
+                    // All suspend lambda classes get a p$0 field (added
+                    // at finalization). Check if this class IS a suspend
+                    // lambda by looking for the field OR by class name
+                    // pattern (the field may not exist yet on the placeholder).
                     let has_scope_field = if let Ty::Class(cls_name) = this_ty {
                         module
                             .classes
                             .iter()
                             .find(|c| &c.name == cls_name)
-                            .map(|c| c.fields.iter().any(|f| f.name == "p$0"))
+                            .map(|c| {
+                                c.fields.iter().any(|f| f.name == "p$0") || c.is_suspend_lambda
+                            })
                             .unwrap_or(false)
                     } else {
                         false
@@ -9402,6 +9408,10 @@ fn lower_expr(
                 invoke_fb.mf.params.push(this_local);
 
                 let mut invoke_scope: Vec<(Symbol, LocalId)> = Vec::new();
+                // Bind `this` in scope so nested launch/async can find
+                // the lambda's p$0 field for CoroutineScope threading.
+                let this_sym = interner.intern("this");
+                invoke_scope.push((this_sym, this_local));
                 // Load captured fields into locals.
                 for (sym, _, ty) in &free_vars {
                     let is_ref_boxed = ref_class_names.contains_key(sym);

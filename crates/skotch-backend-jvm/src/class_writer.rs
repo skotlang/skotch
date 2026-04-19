@@ -5380,6 +5380,10 @@ fn emit_lambda_multi_suspend_body(
     let result_slot: u8 = 1;
     let suspended_slot: u8 = 2;
     let mut local_slot: FxHashMap<u32, u8> = FxHashMap::default();
+    // Pre-map this (param[0]) to slot 0 so GetField this.p$0 works.
+    if let Some(p) = invoke_mir.params.first() {
+        local_slot.insert(p.0, 0);
+    }
     let mut next_slot: u8 = 3;
 
     // 1. Spill-layout-ordered pass: each distinct MIR local appearing
@@ -6617,6 +6621,10 @@ fn emit_lambda_zero_suspend_body(
         // Body is statements (println, etc.) with no literal return.
         // Emit the MIR segment then push Unit.INSTANCE.
         let mut local_slot: FxHashMap<u32, u8> = FxHashMap::default();
+        // Pre-map this (param[0]) to slot 0.
+        if let Some(p) = mf.params.first() {
+            local_slot.insert(p.0, 0);
+        }
         let mut next_slot: u8 = 3; // 0=this, 1=$result, 2=spare
                                    // Pre-assign slots for all MIR locals
         for (i, _ty) in mf.locals.iter().enumerate() {
