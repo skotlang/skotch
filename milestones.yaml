@@ -722,10 +722,12 @@ milestones:
           enum class Planet(val mass: Double) { EARTH(5.97) { override fun display() = "Earth" } }.
           Enum entries can override methods.
 
-      - name: "Sealed interfaces"
+      - name: "Sealed interfaces (landed)"
+        completed: true
         description: >
-          sealed interface Result. Subclasses must be in same module.
-          Exhaustive when checking for sealed interfaces.
+          sealed interface Result. Parses and compiles correctly. Classes
+          can implement sealed interfaces. Exhaustive when-checking
+          deferred. See fixture 425-sealed-interface.
 
     risks:
       - description: "Inner class outer reference adds complexity to closures"
