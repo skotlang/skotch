@@ -355,6 +355,13 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// `receiver.field = value` — field/property assignment.
+    FieldAssign {
+        receiver: Expr,
+        field: Symbol,
+        value: Expr,
+        span: Span,
+    },
     /// `val (a, b, c) = expr` — destructuring declaration.
     /// Desugars to `val a = expr.component1()`, `val b = expr.component2()`, etc.
     Destructure {

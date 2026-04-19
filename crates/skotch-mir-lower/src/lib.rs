@@ -2659,6 +2659,57 @@ fn lower_stmt(
             }
             true
         }
+        Stmt::FieldAssign {
+            receiver,
+            field,
+            value,
+            ..
+        } => {
+            let Some(recv_local) = lower_expr(
+                receiver,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) else {
+                return false;
+            };
+            let Some(val_local) = lower_expr(
+                value,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) else {
+                return false;
+            };
+            let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
+            let class_name = if let Ty::Class(cn) = &recv_ty {
+                cn.clone()
+            } else {
+                "java/lang/Object".to_string()
+            };
+            let field_name = interner.resolve(*field).to_string();
+            let dummy = fb.new_local(Ty::Unit);
+            fb.push_stmt(MStmt::Assign {
+                dest: dummy,
+                value: Rvalue::PutField {
+                    receiver: recv_local,
+                    class_name,
+                    field_name,
+                    value: val_local,
+                },
+            });
+            true
+        }
         Stmt::For {
             var_name,
             start: range_start,

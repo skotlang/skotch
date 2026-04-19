@@ -337,6 +337,12 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(fn_idx, index, scope, rf);
                 self.resolve_expr(fn_idx, value, scope, rf);
             }
+            Stmt::FieldAssign {
+                receiver, value, ..
+            } => {
+                self.resolve_expr(fn_idx, receiver, scope, rf);
+                self.resolve_expr(fn_idx, value, scope, rf);
+            }
             Stmt::Destructure { names, init, .. } => {
                 self.resolve_expr(fn_idx, init, scope, rf);
                 for name in names {

@@ -639,6 +639,12 @@ impl<'a> TypeChecker<'a> {
                     self.synth_expr(index, scope);
                     self.synth_expr(value, scope);
                 }
+                Stmt::FieldAssign {
+                    receiver, value, ..
+                } => {
+                    self.synth_expr(receiver, scope);
+                    self.synth_expr(value, scope);
+                }
                 Stmt::Break(_) | Stmt::Continue(_) => {}
                 Stmt::TryStmt {
                     body,

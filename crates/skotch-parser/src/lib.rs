@@ -247,6 +247,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwEnum
                     | TokenKind::KwOperator
                     | TokenKind::KwSuspend
+                    | TokenKind::KwTailrec
             ) {
                 match self.peek_kind() {
                     TokenKind::KwData => is_data = true,
@@ -553,6 +554,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwOperator
                         | TokenKind::KwLateinit
                         | TokenKind::KwSuspend
+                        | TokenKind::KwTailrec
                 ) {
                     match self.peek_kind() {
                         TokenKind::KwOverride => mem_override = true,
@@ -790,6 +792,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
                         | TokenKind::KwSuspend
+                        | TokenKind::KwTailrec
                 ) {
                     if self.peek_kind() == TokenKind::KwSuspend {
                         obj_suspend = true;
@@ -965,6 +968,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwInternal
                         | TokenKind::KwOperator
                         | TokenKind::KwSuspend
+                        | TokenKind::KwTailrec
                 ) {
                     if self.peek_kind() == TokenKind::KwSuspend {
                         iface_suspend = true;
@@ -1617,6 +1621,7 @@ impl<'a> Parser<'a> {
                 | Stmt::TryStmt { span, .. }
                 | Stmt::ThrowStmt { span, .. }
                 | Stmt::IndexAssign { span, .. }
+                | Stmt::FieldAssign { span, .. }
                 | Stmt::Destructure { span, .. } => *span,
                 Stmt::LocalFun(f) => f.span,
                 Stmt::Break(s) | Stmt::Continue(s) => *s,
@@ -1808,6 +1813,40 @@ impl<'a> Parser<'a> {
                             receiver: *receiver,
                             index: *index,
                             value: rhs,
+                            span,
+                        };
+                    }
+                    // receiver.field = value → FieldAssign
+                    if let Expr::Field {
+                        receiver,
+                        name,
+                        span: field_span,
+                    } = expr
+                    {
+                        let start = field_span;
+                        self.bump(); // consume `=`
+                        self.skip_trivia();
+                        let rhs = self.parse_expr();
+                        let value = if let Some(op) = compound_op {
+                            let span = start.merge(rhs.span());
+                            Expr::Binary {
+                                op,
+                                lhs: Box::new(Expr::Field {
+                                    receiver: receiver.clone(),
+                                    name,
+                                    span: start,
+                                }),
+                                rhs: Box::new(rhs),
+                                span,
+                            }
+                        } else {
+                            rhs
+                        };
+                        let span = start.merge(value.span());
+                        return Stmt::FieldAssign {
+                            receiver: *receiver,
+                            field: name,
+                            value,
                             span,
                         };
                     }
@@ -2834,6 +2873,7 @@ impl<'a> Parser<'a> {
                         | TokenKind::KwProtected
                         | TokenKind::KwInternal
                         | TokenKind::KwSuspend
+                        | TokenKind::KwTailrec
                 ) {
                     if self.peek_kind() == TokenKind::KwOverride {
                         is_override = true;
