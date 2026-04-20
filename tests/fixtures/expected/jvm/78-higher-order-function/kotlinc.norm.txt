@@ -1,0 +1,60 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "f"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0016 checkcast Class(java/lang/Number)
+    0019 invokevirtual Method(java/lang/Number.intValue:()I)
+    0022 op_0xAC
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0xBA
+    0001 nop
+    0002 op_0x39
+    0003 nop
+    0004 nop
+    0005 iconst_5
+    0006 invokestatic Method(InputKt.apply:(Lkotlin/jvm/functions/Function1;I)I)
+    0009 istore_0
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload_0
+    0014 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0017 op_0xBA
+    0018 nop
+    0019 astore_1
+    0020 nop
+    0021 nop
+    0022 iconst_3
+    0023 invokestatic Method(InputKt.apply:(Lkotlin/jvm/functions/Function1;I)I)
+    0026 istore_0
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_0
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 iconst_2
+    0002 imul
+    0003 op_0xAC
+method        main$lambda$1 (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 bipush 10
+    0003 iadd
+    0004 op_0xAC
+class_attr    BootstrapMethods (22 bytes)

@@ -1,0 +1,3 @@
+name = "430-type-conversion"
+features = ["toDouble", "toLong", "toInt", "type-conversion"]
+expected_output = "42.0\n42\n3\n"

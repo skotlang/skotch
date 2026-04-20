@@ -5427,6 +5427,50 @@ fn lower_expr(
                         (jvm_class_for_ty, jvm_method_name)
                     };
 
+                // Primitive type conversion methods: toInt(), toDouble(), toLong(), toChar()
+                if args.is_empty() {
+                    let conversion: Option<(Ty, &str)> = match (method_name_str.as_str(), &recv_ty)
+                    {
+                        ("toDouble", Ty::Int) => Some((Ty::Double, "i2d")),
+                        ("toDouble", Ty::Long) => Some((Ty::Double, "l2d")),
+                        ("toLong", Ty::Int) => Some((Ty::Long, "i2l")),
+                        ("toLong", Ty::Double) => Some((Ty::Long, "d2l")),
+                        ("toInt", Ty::Double) => Some((Ty::Int, "d2i")),
+                        ("toInt", Ty::Long) => Some((Ty::Int, "l2i")),
+                        ("toInt", Ty::Char) => Some((Ty::Int, "nop")),
+                        ("toChar", Ty::Int) => Some((Ty::Char, "i2c")),
+                        ("toFloat", Ty::Int) => Some((Ty::Double, "i2d")),
+                        ("toFloat", Ty::Double) => Some((Ty::Double, "nop")),
+                        _ => None,
+                    };
+                    if let Some((ret_ty, opcode_name)) = conversion {
+                        let dest = fb.new_local(ret_ty);
+                        if opcode_name == "nop" {
+                            // Identity conversion — just copy.
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Local(recv_local),
+                            });
+                        } else {
+                            // JVM type conversion opcode — emitted as a
+                            // special StaticJava call that the backend
+                            // recognizes.
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: "$convert".to_string(),
+                                        method_name: opcode_name.to_string(),
+                                        descriptor: "()V".to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                        }
+                        return Some(dest);
+                    }
+                }
+
                 if let Some(jvm_class) = effective_class {
                     let is_primitive_ty =
                         matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);

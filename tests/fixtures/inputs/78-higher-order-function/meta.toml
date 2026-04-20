@@ -1,4 +1,4 @@
 name   = "78-higher-order-function"
-status = "stub"
-features = ["higher-order", "generic", "extension-function", "lambda", "it"]
-reason = "Requires generic extension + higher-order function + implicit `it` parameter."
+status = "active"
+features = ["higher-order", "function-typed-param", "lambda"]
+expected_output = "10\n13\n"

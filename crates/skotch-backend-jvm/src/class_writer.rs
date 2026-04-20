@@ -4339,6 +4339,17 @@ fn emit_mir_segment(
                     method_name,
                     descriptor,
                 } => {
+                    if class_name == "$convert" {
+                        emit_load_mir_local(code, func, local_slot, args[0]);
+                        let opcode: u8 = match method_name.as_str() {
+                            "i2d" => 0x87, "i2l" => 0x85, "i2c" => 0x92,
+                            "l2i" => 0x88, "l2d" => 0x8A,
+                            "d2i" => 0x8E, "d2l" => 0x8F,
+                            _ => 0x00,
+                        };
+                        if opcode != 0x00 { code.push(opcode); }
+                        emit_store_mir_local(code, func, local_slot, *dest);
+                    } else {
                     for a in args {
                         emit_load_mir_local(code, func, local_slot, *a);
                     }
@@ -4346,6 +4357,7 @@ fn emit_mir_segment(
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mr).unwrap();
                     emit_store_mir_local(code, func, local_slot, *dest);
+                    }
                 }
                 // Session 9: Constructor calls appear in suspend
                 // function segments when a lambda is instantiated
@@ -7628,7 +7640,31 @@ fn walk_block(
                     descriptor,
                 } => {
                     // readLine() intrinsic: emit Scanner(System.in).nextLine()
-                    if class_name == "$readLine" {
+                    // Type conversion opcodes: i2d, i2l, d2i, l2i, etc.
+                    if class_name == "$convert" {
+                        load_local(code, stack, max_stack, slots, args[0], &func.locals);
+                        let opcode: u8 = match method_name.as_str() {
+                            "i2d" => 0x87,
+                            "i2l" => 0x85,
+                            "i2c" => 0x92,
+                            "l2i" => 0x88,
+                            "l2d" => 0x8A,
+                            "d2i" => 0x8E,
+                            "d2l" => 0x8F,
+                            _ => 0x00, // nop
+                        };
+                        if opcode != 0x00 {
+                            code.push(opcode);
+                        }
+                        // Stack effect: wide→narrow = -1, narrow→wide = +1, same = 0
+                        let effect = match method_name.as_str() {
+                            "i2d" | "i2l" => 1,          // int(1) → double/long(2)
+                            "d2i" | "d2l" | "l2i" => -1, // double/long(2) → int(1)
+                            _ => 0,
+                        };
+                        bump(stack, max_stack, effect);
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    } else if class_name == "$readLine" {
                         // new Scanner(System.in)
                         let scanner_ci = cp.class("java/util/Scanner");
                         code.push(0xBB); // new

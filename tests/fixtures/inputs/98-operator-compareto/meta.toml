@@ -1,4 +1,4 @@
 name   = "98-operator-compareto"
-status = "stub"
-features = ["operator", "Comparable", "compareTo", "double"]
-reason = "Requires Comparable implementation and comparison operator desugaring."
+status = "active"
+features = ["operator", "compareTo", "class-method"]
+expected_output = "true\ntrue\n"

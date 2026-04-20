@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 401 language-feature fixtures validated across 5 targets.
+> implemented. 404 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-401 active test fixtures (411 total, 10 stubs for upcoming features).
+404 active test fixtures (412 total, 8 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -360,6 +360,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |
 | [`in` operator](https://kotlinlang.org/spec/expressions.html#containment-checking-expressions) | §7.6.3 | `5 in 1..10` → `IntRange.contains(5)`, `!in` for negation |
 | [Infix functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `infix fun` keyword parsed; dot-call form (`a.op(b)`) works |
+| [Type conversions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-double.html) | §3.1 | `42.toDouble()`, `3.14.toInt()`, `42.toLong()`, `42.toChar()` — JVM `i2d`/`d2i`/`i2l`/`l2i` |
 | [IntArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/) | stdlib | `IntArray(n)`, `arr[i]`, `arr[i] = v`, `arr.size` — JVM `newarray`/`iaload`/`iastore`/`arraylength` |
 | [Destructuring](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | §8.1 | `val (a, b) = point` → `component1()`/`component2()` calls; data class componentN auto-generated |
 | [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg numbers: Int)` — args packed into IntArray at call site; for-in over IntArray |
