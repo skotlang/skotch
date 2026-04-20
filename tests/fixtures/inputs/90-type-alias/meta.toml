@@ -1,4 +1,4 @@
 name   = "90-type-alias"
-status = "stub"
-features = ["typealias", "generic", "lambda", "filter", "stdlib"]
-reason = "Requires typealias resolution (erased to underlying type at use site)."
+status = "active"
+features = ["typealias", "string-template"]
+expected_output = "Hello, Alice (age 30)\n"

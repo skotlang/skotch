@@ -1,4 +1,4 @@
 name   = "70-inheritance-open"
-status = "stub"
-features = ["open-class", "inheritance", "override", "polymorphism", "list"]
-reason = "Requires open class, override dispatch, and polymorphic invokevirtual."
+status = "active"
+features = ["open-class", "inheritance", "override", "polymorphism"]
+expected_output = "Woof!\nMeow!\n"

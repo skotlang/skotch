@@ -1,18 +1,18 @@
-open class Animal(val name: String) {
+open class Animal {
     open fun speak(): String = "..."
 }
 
-class Dog(name: String) : Animal(name) {
+class Dog : Animal() {
     override fun speak(): String = "Woof!"
 }
 
-class Cat(name: String) : Animal(name) {
+class Cat : Animal() {
     override fun speak(): String = "Meow!"
 }
 
 fun main() {
-    val animals: List<Animal> = listOf(Dog("Rex"), Cat("Whiskers"))
-    for (a in animals) {
-        println("${a.name} says ${a.speak()}")
-    }
+    val d = Dog()
+    val c = Cat()
+    println(d.speak())
+    println(c.speak())
 }

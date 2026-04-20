@@ -1,10 +1,11 @@
-enum class Planet(val mass: Double, val radius: Double) {
-    EARTH(5.976e24, 6.37814e6),
-    MARS(6.421e23, 3.3972e6);
-
-    fun surfaceGravity(): Double = 6.674e-11 * mass / (radius * radius)
+enum class Color(val hex: String) {
+    RED("#FF0000"),
+    GREEN("#00FF00"),
+    BLUE("#0000FF")
 }
 
 fun main() {
-    println(Planet.EARTH.surfaceGravity())
+    println(Color.RED.name)
+    println(Color.RED.hex)
+    println(Color.BLUE.hex)
 }

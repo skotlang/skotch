@@ -1,0 +1,57 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;I)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=11
+    0000 ldc "Hello, "
+    0002 astore 2
+    0004 aload 0
+    0006 astore 3
+    0008 aload 2
+    0010 aload 3
+    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0015 astore 4
+    0017 ldc " (age "
+    0019 astore 5
+    0021 aload 4
+    0023 aload 5
+    0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 astore 6
+    0030 iload 1
+    0032 istore 7
+    0034 aload 6
+    0036 iload 7
+    0038 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0041 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0044 astore 8
+    0046 ldc ")"
+    0048 astore 9
+    0050 aload 8
+    0052 aload 9
+    0054 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0057 astore 10
+    0059 aload 10
+    0061 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=8
+    0000 ldc "Alice"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 bipush 30
+    0010 istore 3
+    0012 iload 3
+    0014 istore 4
+    0016 aload 2
+    0018 astore 5
+    0020 iload 4
+    0022 istore 6
+    0024 aload 5
+    0026 iload 6
+    0028 invokestatic Method(InputKt.greet:(Ljava/lang/String;I)Ljava/lang/String;)
+    0031 astore 7
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload 7
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0041 return

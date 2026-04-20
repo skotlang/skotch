@@ -1,11 +1,10 @@
-typealias StringList = List<String>
-typealias Predicate<T> = (T) -> Boolean
+typealias Name = String
+typealias Age = Int
 
-fun filter(list: StringList, pred: Predicate<String>): StringList {
-    return list.filter(pred)
-}
+fun greet(n: Name, a: Age): String = "Hello, $n (age $a)"
 
 fun main() {
-    val result = filter(listOf("apple", "banana", "avocado")) { it.startsWith("a") }
-    println(result)
+    val name: Name = "Alice"
+    val age: Age = 30
+    println(greet(name, age))
 }
