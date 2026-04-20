@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=29
+  code        max_stack=5 max_locals=29
     0000 ldc "42"
     0002 astore 1
     0004 aload 1

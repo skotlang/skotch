@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        area (D)D 0x0009
-  code        max_stack=4 max_locals=12
+  code        max_stack=5 max_locals=12
     0000 op_0x18
     0001 nop
     0002 op_0x39
@@ -35,7 +35,7 @@ method        area (D)D 0x0009
     0028 op_0x0A
     0029 op_0xAF
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=9
+  code        max_stack=5 max_locals=9
     0000 op_0x14
     0001 nop
     0002 op_0x0E

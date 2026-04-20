@@ -1471,6 +1471,19 @@ fn emit_user_method(
         }
     }
 
+    // Safety: if the function uses any wide types (Double/Long) and the
+    // tracked max_stack is low, bump it. Wide types take 2 stack slots
+    // and the tracking in walk_block may undercount when they appear in
+    // string template concatenation (StringBuilder.append) alongside
+    // other stack-resident values like PrintStream and StringBuilder.
+    let has_wide = func
+        .locals
+        .iter()
+        .any(|ty| matches!(ty, Ty::Long | Ty::Double));
+    if has_wide && max_stack < 5 {
+        max_stack = 5;
+    }
+
     // Build the Code attribute.
     let mut code_attr = Vec::<u8>::new();
     code_attr
@@ -2038,6 +2051,15 @@ fn emit_method(
                 stack_map_entries.extend(std::iter::repeat_n(1u8, ct.stack_count as usize));
             }
         }
+    }
+
+    // Safety: wide types need extra stack depth for string templates.
+    let has_wide = func
+        .locals
+        .iter()
+        .any(|ty| matches!(ty, Ty::Long | Ty::Double));
+    if has_wide && max_stack < 5 {
+        max_stack = 5;
     }
 
     // Build the Code attribute.

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=5
+  code        max_stack=5 max_locals=5
     0000 op_0x14
     0001 nop
     0002 op_0x0A
