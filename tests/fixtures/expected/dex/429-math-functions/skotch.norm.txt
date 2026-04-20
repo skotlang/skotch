@@ -1,12 +1,15 @@
 dex_version   035
-strings       17
-types         8
-methods       6
+strings       24
+types         9
+methods       10
 classes       1
 
 --- strings ---
+  "D"
+  "DD"
   "I"
   "II"
+  "III"
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Math;"
@@ -17,13 +20,18 @@ classes       1
   "VL"
   "[Ljava/lang/String;"
   "abs"
+  "ceil"
+  "floor"
   "input.kt"
   "main"
+  "max"
+  "min"
   "out"
   "println"
-  "sign"
+  "sqrt"
 
 --- types ---
+  D
   I
   LInputKt;
   Ljava/io/PrintStream;
@@ -34,18 +42,20 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt;.abs(I)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
-  LInputKt;.sign(I)I
   Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
   Ljava/lang/Math;.abs(I)I
+  Ljava/lang/Math;.ceil(D)D
+  Ljava/lang/Math;.floor(D)D
+  Ljava/lang/Math;.max(II)I
+  Ljava/lang/Math;.min(II)I
+  Ljava/lang/Math;.sqrt(D)D
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       abs(I)I flags=0x0019 regs=9 ins=1 outs=0 insns=16
-  method       main()V flags=0x0019 regs=11 ins=0 outs=2 insns=54
+  method       main()V flags=0x0019 regs=15 ins=0 outs=2 insns=79
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       sign(I)I flags=0x0019 regs=12 ins=1 outs=0 insns=24

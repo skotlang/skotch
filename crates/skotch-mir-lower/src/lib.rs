@@ -7465,9 +7465,32 @@ fn lower_expr(
             }
 
             // Handle stdlib top-level functions as StaticJava calls.
-            let stdlib_call = match (callee_str, args.len()) {
+            // Math functions map to java.lang.Math static methods.
+            let stdlib_call = match (callee_str, arg_locals.len()) {
                 ("maxOf", 2) => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
                 ("minOf", 2) => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                // kotlin.math functions
+                ("abs", 1) => {
+                    let arg_ty = &fb.mf.locals[arg_locals[0].0 as usize];
+                    match arg_ty {
+                        Ty::Double => Some(("java/lang/Math", "abs", "(D)D", Ty::Double)),
+                        Ty::Long => Some(("java/lang/Math", "abs", "(J)J", Ty::Long)),
+                        _ => Some(("java/lang/Math", "abs", "(I)I", Ty::Int)),
+                    }
+                }
+                ("sqrt", 1) => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double)),
+                ("ceil", 1) => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double)),
+                ("floor", 1) => Some(("java/lang/Math", "floor", "(D)D", Ty::Double)),
+                ("round", 1) => Some(("java/lang/Math", "round", "(D)J", Ty::Long)),
+                ("pow", 2) => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double)),
+                ("sin", 1) => Some(("java/lang/Math", "sin", "(D)D", Ty::Double)),
+                ("cos", 1) => Some(("java/lang/Math", "cos", "(D)D", Ty::Double)),
+                ("tan", 1) => Some(("java/lang/Math", "tan", "(D)D", Ty::Double)),
+                ("log", 1) => Some(("java/lang/Math", "log", "(D)D", Ty::Double)),
+                ("log10", 1) => Some(("java/lang/Math", "log10", "(D)D", Ty::Double)),
+                ("exp", 1) => Some(("java/lang/Math", "exp", "(D)D", Ty::Double)),
+                // readLine() → reads a line from stdin
+                ("readLine", 0) | ("readln", 0) => None, // handled separately below
                 _ => None,
             };
             if let Some((class, method, desc, ret_ty)) = stdlib_call {
@@ -7484,6 +7507,29 @@ fn lower_expr(
                     },
                 });
                 return Some(dest);
+            }
+
+            // readLine() / readln() — read a line from stdin.
+            // Emits: new java.util.Scanner(System.in).nextLine()
+            // The JVM backend handles the GetStaticField for System.in
+            // as a special case in the Scanner constructor.
+            if (callee_str == "readLine" || callee_str == "readln") && arg_locals.is_empty() {
+                // We emit this as a StaticJava call to a pseudo-method
+                // that the JVM backend recognizes and emits as the
+                // Scanner(System.in).nextLine() pattern.
+                let result = fb.new_local(Ty::String);
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$readLine".to_string(),
+                            method_name: "readLine".to_string(),
+                            descriptor: "()Ljava/lang/String;".to_string(),
+                        },
+                        args: vec![],
+                    },
+                });
+                return Some(result);
             }
 
             // Check if callee is a local variable (lambda or callable object).

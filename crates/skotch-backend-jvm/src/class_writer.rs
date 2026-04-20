@@ -7607,38 +7607,67 @@ fn walk_block(
                     method_name,
                     descriptor,
                 } => {
-                    // Load arguments.
-                    for a in args {
-                        load_local(code, stack, max_stack, slots, *a, &func.locals);
-                    }
-                    let mref = cp.methodref(class_name, method_name, descriptor);
-                    code.push(0xB8); // invokestatic
-                    code.write_u16::<BigEndian>(mref).unwrap();
-                    // Stack effect: consumed args (accounting for wide types),
-                    // pushed return value (if non-void).
-                    let args_slots: i32 = args
-                        .iter()
-                        .map(|a| {
-                            if matches!(func.locals[a.0 as usize], Ty::Long | Ty::Double) {
-                                2
-                            } else {
-                                1
-                            }
-                        })
-                        .sum();
-                    let ret_is_void = descriptor.ends_with(")V");
-                    let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
-                    let ret_slots = if ret_is_void {
-                        0
-                    } else if ret_is_wide {
-                        2
-                    } else {
-                        1
-                    };
-                    bump(stack, max_stack, -args_slots + ret_slots);
-                    if !ret_is_void {
+                    // readLine() intrinsic: emit Scanner(System.in).nextLine()
+                    if class_name == "$readLine" {
+                        // new Scanner(System.in)
+                        let scanner_ci = cp.class("java/util/Scanner");
+                        code.push(0xBB); // new
+                        code.write_u16::<BigEndian>(scanner_ci).unwrap();
+                        code.push(0x59); // dup
+                        bump(stack, max_stack, 2);
+                        // getstatic System.in
+                        let sysout_fr =
+                            cp.fieldref("java/lang/System", "in", "Ljava/io/InputStream;");
+                        code.push(0xB2); // getstatic
+                        code.write_u16::<BigEndian>(sysout_fr).unwrap();
+                        bump(stack, max_stack, 1);
+                        // invokespecial Scanner.<init>(InputStream)
+                        let init_mr =
+                            cp.methodref("java/util/Scanner", "<init>", "(Ljava/io/InputStream;)V");
+                        code.push(0xB7); // invokespecial
+                        code.write_u16::<BigEndian>(init_mr).unwrap();
+                        bump(stack, max_stack, -2); // consumed dup+InputStream
+                                                    // invokevirtual Scanner.nextLine()
+                        let next_mr =
+                            cp.methodref("java/util/Scanner", "nextLine", "()Ljava/lang/String;");
+                        code.push(0xB6); // invokevirtual
+                        code.write_u16::<BigEndian>(next_mr).unwrap();
+                        // net: consumed Scanner, pushed String
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
-                    }
+                    } else {
+                        // Load arguments.
+                        for a in args {
+                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        }
+                        let mref = cp.methodref(class_name, method_name, descriptor);
+                        code.push(0xB8); // invokestatic
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                        // Stack effect: consumed args (accounting for wide types),
+                        // pushed return value (if non-void).
+                        let args_slots: i32 = args
+                            .iter()
+                            .map(|a| {
+                                if matches!(func.locals[a.0 as usize], Ty::Long | Ty::Double) {
+                                    2
+                                } else {
+                                    1
+                                }
+                            })
+                            .sum();
+                        let ret_is_void = descriptor.ends_with(")V");
+                        let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
+                        let ret_slots = if ret_is_void {
+                            0
+                        } else if ret_is_wide {
+                            2
+                        } else {
+                            1
+                        };
+                        bump(stack, max_stack, -args_slots + ret_slots);
+                        if !ret_is_void {
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        }
+                    } // close else (non-readLine StaticJava)
                 }
                 CallKind::VirtualJava {
                     class_name,

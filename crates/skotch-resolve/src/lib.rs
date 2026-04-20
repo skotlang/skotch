@@ -136,6 +136,33 @@ pub fn resolve_file(
         "linkedMapOf",
         "sortedMapOf",
         "sortedSetOf",
+        // kotlin.math functions
+        "abs",
+        "sqrt",
+        "ceil",
+        "floor",
+        "round",
+        "pow",
+        "sin",
+        "cos",
+        "tan",
+        "log",
+        "log10",
+        "exp",
+        // IO functions
+        "readLine",
+        "readln",
+        // Exception constructors
+        "IllegalStateException",
+        "IllegalArgumentException",
+        "RuntimeException",
+        "NullPointerException",
+        "UnsupportedOperationException",
+        "IndexOutOfBoundsException",
+        "NoSuchElementException",
+        "Exception",
+        "AssertionError",
+        "NotImplementedError",
     ] {
         let sym = r.interner.intern(name);
         r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId

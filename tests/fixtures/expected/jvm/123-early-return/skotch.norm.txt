@@ -40,7 +40,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 bipush -42
     0002 istore 1
     0004 iload 1
-    0006 invokestatic Method(InputKt.abs:(I)I)
+    0006 invokestatic Method(java/lang/Math.abs:(I)I)
     0009 istore 2
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 iload 2
@@ -48,7 +48,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0019 bipush 7
     0021 istore 3
     0023 iload 3
-    0025 invokestatic Method(InputKt.abs:(I)I)
+    0025 invokestatic Method(java/lang/Math.abs:(I)I)
     0028 istore 4
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 iload 4

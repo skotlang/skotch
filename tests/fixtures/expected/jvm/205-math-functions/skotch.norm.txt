@@ -43,14 +43,14 @@ method        gcd (II)I 0x0009
     0000 iload 0
     0002 istore 2
     0004 iload 2
-    0006 invokestatic Method(InputKt.abs:(I)I)
+    0006 invokestatic Method(java/lang/Math.abs:(I)I)
     0009 istore 3
     0011 iload 3
     0013 istore 4
     0015 iload 1
     0017 istore 5
     0019 iload 5
-    0021 invokestatic Method(InputKt.abs:(I)I)
+    0021 invokestatic Method(java/lang/Math.abs:(I)I)
     0024 istore 6
     0026 iload 6
     0028 istore 7
@@ -123,7 +123,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 bipush -42
     0002 istore 1
     0004 iload 1
-    0006 invokestatic Method(InputKt.abs:(I)I)
+    0006 invokestatic Method(java/lang/Math.abs:(I)I)
     0009 istore 2
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 iload 2

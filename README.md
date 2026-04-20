@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 387 language-feature fixtures validated across 5 targets.
+> implemented. 388 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-387 active test fixtures (410 total, 23 stubs for upcoming features).
+388 active test fixtures (411 total, 23 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -354,6 +354,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Try-catch](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | Full JVM exception tables, catch variable binding, `e.message` access |
 | [Throw](https://kotlinlang.org/spec/expressions.html#throw-expressions) | §7.4.6 | `throw IllegalStateException("msg")` — `athrow` opcode, exception constructors, `Nothing` return |
 | [Annotations](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | §4.8 | `@Suppress`, `@Deprecated`, `@field:JvmField` — parsed and accepted (no codegen effect yet) |
+| [kotlin.math](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.math/) | stdlib | `abs`, `sqrt`, `ceil`, `floor`, `round`, `pow`, `sin`, `cos`, `tan`, `log`, `exp` → `java.lang.Math` |
+| [readLine/readln](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/read-line.html) | stdlib | `readLine()` reads from stdin via `Scanner(System.in).nextLine()` |
 | [listOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/list-of.html) | stdlib | `listOf(1, 2, 3)` → `ArrayList`; `.forEach { }` iterator intrinsic |
 | [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |
 | [Infix functions](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1 | `infix fun` keyword parsed; dot-call form (`a.op(b)`) works |

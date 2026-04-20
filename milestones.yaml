@@ -1108,11 +1108,20 @@ milestones:
           run, let, also, apply, with), inline the function body at the
           call site. Parse .kotlin_module metadata for inline bodies.
 
-      - name: "Standard IO (readLine, readln)"
-        description: "readLine(), readln(), println with format strings."
+      - name: "Standard IO (readLine, readln) (landed)"
+        completed: true
+        description: >
+          readLine() and readln() read a line from stdin. Compiles to
+          new Scanner(System.in).nextLine() on JVM. Registered in
+          resolver and REPL completions.
 
-      - name: "Math functions"
-        description: "abs, max, min, sqrt, pow, roundToInt, etc."
+      - name: "Math functions (landed)"
+        completed: true
+        description: >
+          abs, sqrt, ceil, floor, round, pow, sin, cos, tan, log, log10,
+          exp — all mapped to java.lang.Math static methods. Type-aware
+          abs() dispatches to (I)I, (J)J, or (D)D based on argument type.
+          maxOf/minOf already working. See fixture 429-math-functions.
 
       - name: "Regex support"
         description: "Regex class, matchResult, find, replace, split."
