@@ -1,0 +1,51 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=6
+    0000 ldc "secret123"
+    0002 astore 1
+    0004 new Class(Password)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Password.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(Password)
+    0020 astore 3
+    0022 aload 3
+    0024 checkcast Class(Password)
+    0027 astore 4
+    0029 aload 4
+    0031 invokestatic Method(InputKt.validate:(LPassword;)Z)
+    0034 istore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 iload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0044 return
+method        validate (LPassword;)Z 0x0009
+  code        max_stack=2 max_locals=6
+    0000 aload 0
+    0002 checkcast Class(Password)
+    0005 astore 1
+    0007 aload 1
+    0009 getfield Field(Password.value:Ljava/lang/String;)
+    0012 astore 2
+    0014 aload 2
+    0016 invokevirtual Method(java/lang/String.length:()I)
+    0019 istore 3
+    0021 bipush 8
+    0023 istore 4
+    0025 iload 3
+    0027 iload 4
+    0029 op_0xA2
+    0030 nop
+    0031 iconst_4
+    0032 iconst_0
+    0033 goto 37
+    0036 iconst_1
+    0037 istore 5
+    0039 iload 5
+    0041 op_0xAC
+    sub_attr  StackMapTable (39 bytes)

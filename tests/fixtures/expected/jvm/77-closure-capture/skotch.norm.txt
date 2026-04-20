@@ -1,0 +1,29 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=8
+    0000 ldc "World"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 new Class(InputKt$Lambda$0)
+    0011 dup
+    0012 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0015 astore 3
+    0017 aload 3
+    0019 checkcast Class(InputKt$Lambda$0)
+    0022 astore 4
+    0024 aload 2
+    0026 astore 5
+    0028 aload 5
+    0030 astore 6
+    0032 aload 4
+    0034 aload 6
+    0036 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0039 astore 7
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 aload 7
+    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0049 return

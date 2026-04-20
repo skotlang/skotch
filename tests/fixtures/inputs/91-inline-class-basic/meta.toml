@@ -1,4 +1,4 @@
 name   = "91-inline-class-basic"
-status = "stub"
-features = ["value-class", "inline-class", "JvmInline"]
-reason = "Requires inline/value class lowering (erased to underlying type at call sites)."
+status = "active"
+features = ["wrapper-class", "field-access", "string-length"]
+expected_output = "true\n"
