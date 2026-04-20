@@ -202,6 +202,8 @@ pub struct ClassDecl {
     pub secondary_constructors: Vec<SecondaryConstructor>,
     /// Nested (static inner) classes: `class Outer { class Nested { } }`.
     pub nested_classes: Vec<ClassDecl>,
+    /// `inner class` flag — inner classes hold a reference to the outer instance.
+    pub is_inner: bool,
     pub span: Span,
 }
 

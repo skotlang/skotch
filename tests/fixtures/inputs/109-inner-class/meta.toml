@@ -1,4 +1,4 @@
 name   = "109-inner-class"
-status = "stub"
-features = ["inner-class", "outer-reference", "this"]
-reason = "Requires inner class with implicit outer-this reference."
+status = "active"
+features = ["inner-class", "outer-reference", "this$0"]
+expected_output = "15\n"

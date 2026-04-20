@@ -602,13 +602,19 @@ impl<'a> Parser<'a> {
                         nested_classes.push(self.parse_class_decl());
                     }
                     TokenKind::Ident => {
-                        // Check for `companion object { ... }`.
+                        // Check for `inner class ...` or `companion object { ... }`.
                         let idx = self.pos;
                         let text = match self.payload(idx) {
                             Some(TokenPayload::Ident(s)) => s.clone(),
                             _ => String::new(),
                         };
-                        if text == "companion" {
+                        if text == "inner" && self.peek_kind_at(1) == TokenKind::KwClass {
+                            self.bump(); // consume 'inner'
+                            self.skip_trivia();
+                            let mut inner_class = self.parse_class_decl();
+                            inner_class.is_inner = true;
+                            nested_classes.push(inner_class);
+                        } else if text == "companion" {
                             self.bump(); // consume 'companion'
                             self.skip_trivia();
                             if self.peek_kind() == TokenKind::KwObject {
@@ -665,6 +671,7 @@ impl<'a> Parser<'a> {
             init_blocks,
             secondary_constructors,
             nested_classes,
+            is_inner: false, // set by caller for `inner class`
             span: kw.merge(name_span),
         }
     }

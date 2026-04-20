@@ -1,3 +1,4 @@
 name = "26-sealed-class"
-status = "stub"
-reason = "Sealed hierarchies need PermittedSubclasses + class lowering."
+status = "active"
+features = ["sealed-class", "inheritance", "is-check"]
+expected_output = "true\n"

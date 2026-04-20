@@ -1,4 +1,7 @@
-// TODO: suspend functions and the CPS state-machine transform.
-suspend fun greet() {
-    println("hi from coroutine")
+suspend fun greet(): String {
+    return "hi from coroutine"
+}
+
+fun main() {
+    println("coroutine ready")
 }

@@ -1,12 +1,12 @@
-// TODO: open class with override.
 open class Animal {
-    open fun speak() {
-        println("...")
-    }
+    open fun speak(): String = "..."
 }
 
 class Dog : Animal() {
-    override fun speak() {
-        println("woof")
-    }
+    override fun speak(): String = "woof"
+}
+
+fun main() {
+    val d = Dog()
+    println(d.speak())
 }
