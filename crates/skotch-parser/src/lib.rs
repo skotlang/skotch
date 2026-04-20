@@ -1376,8 +1376,20 @@ impl<'a> Parser<'a> {
                 .push(Diagnostic::error(name_span, "expected parameter name"));
             self.interner.intern("")
         };
-        self.expect(TokenKind::Colon, ":");
-        let ty = self.parse_type_ref();
+        // Type annotation is optional for lambda params: `{ x, y -> ... }`
+        let ty = if self.eat(TokenKind::Colon) {
+            self.parse_type_ref()
+        } else {
+            // Infer as Any for untyped lambda params.
+            TypeRef {
+                name: self.interner.intern("Any"),
+                nullable: false,
+                func_params: None,
+                type_args: Vec::new(),
+                is_suspend: false,
+                span: name_span,
+            }
+        };
         // Check for default value: `param: Type = expr`
         self.skip_trivia();
         let default = if self.eat(TokenKind::Eq) {

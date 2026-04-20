@@ -1,9 +1,6 @@
-fun <T> List<T>.myForEach(action: (T) -> Unit) {
-    for (item in this) {
-        action(item)
-    }
-}
+fun apply(f: (Int) -> Int, x: Int): Int = f(x)
 
 fun main() {
-    listOf("a", "b", "c").myForEach { println(it) }
+    println(apply({ n: Int -> n * 2 }, 5))
+    println(apply({ n: Int -> n + 10 }, 3))
 }

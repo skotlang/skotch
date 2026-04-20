@@ -1,12 +1,9 @@
-class MyClass {
+class Config {
     companion object {
-        fun create(): MyClass = MyClass()
-        const val TAG = "MyClass"
+        fun defaultName(): String = "skotch"
     }
 }
 
 fun main() {
-    val obj = MyClass.create()
-    println(MyClass.TAG)
-    println(obj)
+    println(Config.defaultName())
 }

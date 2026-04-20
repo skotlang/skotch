@@ -1,4 +1,4 @@
 name   = "69-companion-object"
-status = "stub"
-features = ["companion-object", "const-val", "static-method"]
-reason = "Requires companion object with static Companion inner class."
+status = "active"
+features = ["companion-object", "static-method"]
+expected_output = "skotch\n"

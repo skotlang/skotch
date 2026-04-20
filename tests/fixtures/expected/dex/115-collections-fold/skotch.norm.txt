@@ -1,0 +1,65 @@
+dex_version   035
+strings       26
+types         14
+methods       7
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LI"
+  "LInputKt$Lambda$0;"
+  "LInputKt;"
+  "LL"
+  "LLLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/functions/Function2;"
+  "V"
+  "VL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "fold"
+  "input.kt"
+  "listOf"
+  "main"
+  "out"
+  "println"
+  "valueOf"
+
+--- types ---
+  I
+  LInputKt$Lambda$0;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/functions/Function2;
+  V
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$Lambda$0;.<init>()V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/collections/CollectionsKt;.fold(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=25 ins=0 outs=3 insns=61
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
