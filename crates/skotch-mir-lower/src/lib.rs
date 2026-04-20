@@ -1200,6 +1200,21 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
             });
             boxed
         }
+        Ty::Char => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Character".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(C)Ljava/lang/Character;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
         _ => val,
     }
 }
@@ -3197,11 +3212,12 @@ fn lower_stmt(
                 {
                     let cur = fb.cur_block as usize;
                     let cur_term = &fb.mf.blocks[cur].terminator;
-                    if !matches!(cur_term, Terminator::ReturnValue(_)) {
-                        fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
-                    } else {
-                        // Block already returns. Just switch to catch_block.
+                    if matches!(cur_term, Terminator::ReturnValue(_) | Terminator::Throw(_)) {
+                        // Block already returns or throws. Don't overwrite
+                        // with Goto — just switch to catch_block.
                         fb.cur_block = catch_block;
+                    } else {
+                        fb.terminate_and_switch(Terminator::Goto(after_block), catch_block);
                     }
                 }
 

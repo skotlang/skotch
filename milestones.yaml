@@ -187,10 +187,12 @@ milestones:
           erased types (all params Ty::Any, return Ty::Any). Lambda body
           unboxes params to annotated types. Return values autoboxed.
 
-      - name: "Function reference syntax"
+      - name: "Function reference syntax (NOT YET IMPLEMENTED)"
         description: >
           ::functionName creates a FunctionN reference to a named function.
-          val f: (Int) -> Int = ::double. Not yet implemented.
+          val f: (Int) -> Int = ::double. DEFERRED — requires parser support
+          for :: prefix operator and lambda-wrapping codegen. Workaround:
+          use lambda { x -> f(x) } instead.
         acceptance_criteria:
           - "val f = ::println; f(42) prints 42"
 
@@ -482,7 +484,7 @@ milestones:
 
     features:
       - name: "`suspend` keyword parsing (landed)"
-        status: completed
+        completed: true
         description: >
           Lexer emits TokenKind::KwSuspend. Parser accepts `suspend`
           wherever other function modifiers are allowed and sets
@@ -494,7 +496,7 @@ milestones:
           - "FunDecl.is_suspend is true on suspend functions, false otherwise"
 
       - name: "Suspend function CPS signature transform (landed)"
-        status: completed
+        completed: true
         description: >
           Every `suspend fun` is lowered with a trailing
           `$completion: Continuation` parameter and its return type
@@ -507,7 +509,7 @@ milestones:
           - "MirFunction.is_suspend is threaded from HIR through MIR"
 
       - name: "Suspend function CPS state machine — single suspension point (landed)"
-        status: completed
+        completed: true
         description: >
           Session 3 of the coroutine transform. When a `suspend fun`
           has **exactly one** inner suspend call and its post-call
@@ -535,7 +537,7 @@ milestones:
           - "Two-suspension-point bodies are rejected with a clear error naming Session 4"
 
       - name: "Suspend function CPS state machine — multi-suspension + local spilling (landed)"
-        status: completed
+        completed: true
         description: >
           Sessions 4-26 of the coroutine transform. Generalizes Session 3
           to N suspension points with local variables saved/restored
@@ -545,13 +547,13 @@ milestones:
           handling. See fixtures 392-410.
 
       - name: "runBlocking builder (landed)"
-        status: completed
+        completed: true
         description: >
           runBlocking { } creates a coroutine scope and blocks the current
           thread until all child coroutines complete. See fixtures 397-398.
 
       - name: "launch and async/await (landed)"
-        status: completed
+        completed: true
         description: >
           launch { } starts a fire-and-forget coroutine (returns Job).
           async { } starts a coroutine that returns Deferred<T>.
@@ -559,46 +561,46 @@ milestones:
           See fixtures 399-405.
 
       - name: "delay function (landed)"
-        status: completed
+        completed: true
         description: >
           delay(millis) suspends the coroutine for the given duration
           without blocking the thread. Int-to-Long auto-promotion.
           See fixtures 397, 403, 408.
 
       - name: "CoroutineScope and structured concurrency (landed)"
-        status: completed
+        completed: true
         description: >
           coroutineScope { } creates a child scope. Parent waits for
           all children. See fixture 411-coroutine-scope.
 
       - name: "withContext and Dispatchers (landed)"
-        status: completed
+        completed: true
         description: >
           withContext(Dispatchers.Default) { } switches coroutine context.
           Dispatchers.IO, .Default, .Unconfined, .Main supported via
           static getter dispatch. See fixture 413-with-context.
 
       - name: "Job.join() and Job.cancel() (landed)"
-        status: completed
+        completed: true
         description: >
           job.join() suspends until the job completes. job.cancel()
           cancels the job. See fixture 412-job-join.
 
       - name: "withTimeout and withTimeoutOrNull (landed)"
-        status: completed
+        completed: true
         description: >
           withTimeout(millis) { } and withTimeoutOrNull(millis) { }
           run a block with a time limit. See fixture 414-with-timeout.
 
       - name: "yield() cooperative multitasking (landed)"
-        status: completed
+        completed: true
         description: >
           yield() suspends the current coroutine, allowing other
           coroutines on the same dispatcher to run.
           See fixture 415-yield-coroutine.
 
       - name: "Suspend methods on classes (landed)"
-        status: completed
+        completed: true
         description: >
           Class methods marked `suspend` get the full CPS transform:
           signature rewrite, state machine extraction, continuation class.
@@ -607,7 +609,7 @@ milestones:
           See fixture 416-class-suspend-method.
 
       - name: "Multi-block state machine — suspend across branches (landed)"
-        status: completed
+        completed: true
         description: >
           Session 29: suspend calls in if/when branches fully working.
           Case 0 of the tableswitch emits all blocks with inline suspend
@@ -618,14 +620,14 @@ milestones:
           subsequent MIR Local copies. See fixture 417-suspend-if-branch.
 
       - name: "Lambda multi-block + Goto terminator (landed)"
-        status: completed
+        completed: true
         description: >
           Session 30: emit_lambda_multi_suspend_body handles if/when/
           try-catch with suspend calls in lambda bodies. Goto chains
           followed in resume cases. See fixtures 418, 419.
 
       - name: "Try-catch with return inside suspend functions (landed)"
-        status: completed
+        completed: true
         description: >
           Session 30b: `return` inside try/catch/when blocks now correctly
           preserves the ReturnValue terminator instead of being overwritten
@@ -633,7 +635,7 @@ milestones:
           actual return block. See fixture 420-suspend-try-catch-return.
 
       - name: "When-with-suspend fully working (landed)"
-        status: completed
+        completed: true
         description: >
           Sessions 30-31: when branch bodies inlined as block expressions
           (no spurious lambda classes). CmpEq/CmpNe comparison ops added
@@ -641,7 +643,7 @@ milestones:
           StackMapTable precision. See fixture 421-suspend-when-branch.
 
       - name: "While/for loop with suspend (runtime correct)"
-        status: completed
+        completed: true
         description: >
           Session 31: while loops with suspend calls produce correct
           runtime results (3,2,1). Loop back-edges handled by the resume
@@ -650,14 +652,14 @@ milestones:
           refinement (passes with -Xverify:none). See fixture 422.
 
       - name: "Virtual suspend call receiver checkcast (landed)"
-        status: completed
+        completed: true
         description: >
           Session 31: class suspend method calls from lambda bodies now
           emit checkcast for the receiver before invokevirtual, fixing
           VerifyError for Object-typed receiver locals.
 
       - name: "CoroutineScope receiver threading (landed)"
-        status: completed
+        completed: true
         description: >
           Session 31: suspend lambda classes store the CoroutineScope
           from create(Object, Continuation) into a p$0 field. The
@@ -666,7 +668,7 @@ milestones:
           structured parent scope.
 
       - name: "Structured concurrency — coroutineScope waits for children (landed)"
-        status: completed
+        completed: true
         description: >
           Session 32: coroutineScope { launch { } } now correctly waits
           for all children. Fixed lambda invoke scope missing `this`,
