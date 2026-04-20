@@ -1,13 +1,12 @@
 abstract class Shape {
-    abstract fun area(): Double
-    fun describe(): String = "Shape with area ${area()}"
+    abstract fun name(): String
 }
 
-class Square(val side: Double) : Shape() {
-    override fun area(): Double = side * side
+class Circle : Shape() {
+    override fun name(): String = "circle"
 }
 
 fun main() {
-    val s = Square(5.0)
-    println(s.describe())
+    val s: Shape = Circle()
+    println(s.name())
 }
