@@ -1,4 +1,4 @@
 name   = "82-vararg-spread"
-status = "stub"
-features = ["vararg", "spread-operator", "arrayOf"]
-reason = "Requires spread operator (*) lowering for passing arrays to vararg."
+status = "active"
+features = ["vararg", "spread-operator", "intArrayOf"]
+expected_output = "60\n"

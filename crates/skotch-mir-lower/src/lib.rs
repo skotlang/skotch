@@ -6140,36 +6140,43 @@ fn lower_expr(
                 if let Some(va_idx) = vi {
                     if arg_locals.len() >= va_idx {
                         let vararg_args: Vec<LocalId> = arg_locals.drain(va_idx..).collect();
-                        let count = vararg_args.len();
-                        // newarray int[count]
-                        let count_local = fb.new_local(Ty::Int);
-                        fb.push_stmt(MStmt::Assign {
-                            dest: count_local,
-                            value: Rvalue::Const(MirConst::Int(count as i32)),
-                        });
-                        let arr = fb.new_local(Ty::IntArray);
-                        fb.push_stmt(MStmt::Assign {
-                            dest: arr,
-                            value: Rvalue::NewIntArray(count_local),
-                        });
-                        // Store each element.
-                        for (i, elem) in vararg_args.iter().enumerate() {
-                            let idx_local = fb.new_local(Ty::Int);
+                        // Spread optimization: if there's exactly one arg and
+                        // it's already an IntArray, pass it directly (no repack).
+                        // This handles `sum(*intArrayOf(1,2,3))` and `sum(*arr)`.
+                        let is_spread = vararg_args.len() == 1
+                            && matches!(fb.mf.locals[vararg_args[0].0 as usize], Ty::IntArray);
+                        if is_spread {
+                            arg_locals.push(vararg_args[0]);
+                        } else {
+                            let count = vararg_args.len();
+                            let count_local = fb.new_local(Ty::Int);
                             fb.push_stmt(MStmt::Assign {
-                                dest: idx_local,
-                                value: Rvalue::Const(MirConst::Int(i as i32)),
+                                dest: count_local,
+                                value: Rvalue::Const(MirConst::Int(count as i32)),
                             });
-                            let store_dest = fb.new_local(Ty::Unit);
+                            let arr = fb.new_local(Ty::IntArray);
                             fb.push_stmt(MStmt::Assign {
-                                dest: store_dest,
-                                value: Rvalue::ArrayStore {
-                                    array: arr,
-                                    index: idx_local,
-                                    value: *elem,
-                                },
+                                dest: arr,
+                                value: Rvalue::NewIntArray(count_local),
                             });
+                            for (i, elem) in vararg_args.iter().enumerate() {
+                                let idx_local = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: idx_local,
+                                    value: Rvalue::Const(MirConst::Int(i as i32)),
+                                });
+                                let store_dest = fb.new_local(Ty::Unit);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: store_dest,
+                                    value: Rvalue::ArrayStore {
+                                        array: arr,
+                                        index: idx_local,
+                                        value: *elem,
+                                    },
+                                });
+                            }
+                            arg_locals.push(arr);
                         }
-                        arg_locals.push(arr);
                     }
                 }
             }
@@ -7379,6 +7386,41 @@ fn lower_expr(
                     value: Rvalue::NewIntArray(size_local),
                 });
                 return Some(dest);
+            }
+
+            // `intArrayOf(1, 2, 3)` — create IntArray with given values.
+            // Emits: newarray int[n] + iastore for each element.
+            if callee_str == "intArrayOf" && !arg_locals.is_empty() {
+                // Create size constant
+                let n = arg_locals.len() as i32;
+                let size = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: size,
+                    value: Rvalue::Const(MirConst::Int(n)),
+                });
+                let arr = fb.new_local(Ty::IntArray);
+                fb.push_stmt(MStmt::Assign {
+                    dest: arr,
+                    value: Rvalue::NewIntArray(size),
+                });
+                // Store each element
+                for (i, &val) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    let dummy = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: dummy,
+                        value: Rvalue::ArrayStore {
+                            array: arr,
+                            index: idx,
+                            value: val,
+                        },
+                    });
+                }
+                return Some(arr);
             }
 
             // `repeat(n) { body }` — execute lambda n times.

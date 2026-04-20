@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 404 language-feature fixtures validated across 5 targets.
+> implemented. 405 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-404 active test fixtures (412 total, 8 stubs for upcoming features).
+405 active test fixtures (412 total, 7 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -363,7 +363,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Type conversions](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/to-double.html) | §3.1 | `42.toDouble()`, `3.14.toInt()`, `42.toLong()`, `42.toChar()` — JVM `i2d`/`d2i`/`i2l`/`l2i` |
 | [IntArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/) | stdlib | `IntArray(n)`, `arr[i]`, `arr[i] = v`, `arr.size` — JVM `newarray`/`iaload`/`iastore`/`arraylength` |
 | [Destructuring](https://kotlinlang.org/spec/statements.html#destructuring-declarations) | §8.1 | `val (a, b) = point` → `component1()`/`component2()` calls; data class componentN auto-generated |
-| [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg numbers: Int)` — args packed into IntArray at call site; for-in over IntArray |
+| [Varargs](https://kotlinlang.org/spec/declarations.html#function-declaration) | §4.1.2 | `fun sum(vararg xs: Int)`, `*` spread operator, `intArrayOf()` — args packed into IntArray |
 | [Lateinit var](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `lateinit var name: String` — declared without init, field defaults to null |
 | [Secondary constructors](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5.2 | `constructor(x: Int) : this(x, 0)` — multiple `<init>` methods, delegation chain |
 | [Property delegation](https://kotlinlang.org/spec/declarations.html#delegated-property-declaration) | §4.2 | `val x by lazy { expr }` — desugared to eager init in constructor |

@@ -2724,6 +2724,13 @@ impl<'a> Parser<'a> {
                                     expr: value,
                                 });
                             } else {
+                                // Handle `*array` spread operator — on JVM,
+                                // vararg params are arrays, so `*` is a no-op.
+                                // Just consume the `*` and parse the expression.
+                                if self.peek_kind() == TokenKind::Star {
+                                    self.bump(); // consume `*`
+                                    self.skip_trivia();
+                                }
                                 let value = self.parse_expr();
                                 args.push(CallArg {
                                     name: None,
