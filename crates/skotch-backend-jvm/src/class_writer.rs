@@ -1113,6 +1113,17 @@ fn emit_user_method(
 
         // Emit terminator.
         match &block.terminator {
+            Terminator::Throw(exc) => {
+                load_local(
+                    code.as_mut(),
+                    &mut stack,
+                    &mut max_stack,
+                    &mut slots,
+                    *exc,
+                    &func.locals,
+                );
+                code.push(0xBF); // athrow
+            }
             Terminator::Return => code.push(0xB1), // return (void)
             Terminator::ReturnValue(local) => {
                 load_local(
@@ -1637,6 +1648,17 @@ fn emit_method(
         );
 
         match &block.terminator {
+            Terminator::Throw(exc) => {
+                load_local(
+                    code.as_mut(),
+                    &mut stack,
+                    &mut max_stack,
+                    &mut slots,
+                    *exc,
+                    &func.locals,
+                );
+                code.push(0xBF); // athrow
+            }
             Terminator::Return => code.push(0xB1), // return (void)
             Terminator::ReturnValue(local) => {
                 load_local(
@@ -3374,6 +3396,10 @@ fn emit_multi_suspend_state_machine_method(
                                 code.push(0x01);
                                 code.push(0xB0);
                             }
+                            Terminator::Throw(exc) => {
+                                emit_load_mir_local(&mut code, func, &local_slot, *exc);
+                                code.push(0xBF); // athrow
+                            }
                         }
                     }
                 }
@@ -3620,6 +3646,10 @@ fn emit_multi_suspend_state_machine_method(
                                 Terminator::Return => {
                                     code.push(0x01);
                                     code.push(0xB0);
+                                }
+                                Terminator::Throw(exc) => {
+                                    emit_load_mir_local(&mut code, func, &local_slot, *exc);
+                                    code.push(0xBF); // athrow
                                 }
                             }
                         }
@@ -6119,6 +6149,10 @@ fn emit_lambda_multi_suspend_body(
                                 code.write_u16::<BigEndian>(fr_unit).unwrap();
                                 code.push(0xB0);
                             }
+                            Terminator::Throw(exc) => {
+                                emit_load_mir_local(&mut code, invoke_mir, &local_slot, *exc);
+                                code.push(0xBF); // athrow
+                            }
                         }
                     }
                 }
@@ -6345,6 +6379,10 @@ fn emit_lambda_multi_suspend_body(
                                     code.push(0xB2);
                                     code.write_u16::<BigEndian>(fr_u).unwrap();
                                     code.push(0xB0);
+                                }
+                                Terminator::Throw(exc) => {
+                                    emit_load_mir_local(&mut code, invoke_mir, &local_slot, *exc);
+                                    code.push(0xBF); // athrow
                                 }
                             }
                         }
@@ -7479,13 +7517,15 @@ fn walk_block(
                     let mref = cp.methodref(class_name, &target.name, &descriptor);
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mref).unwrap();
-                    if target.return_ty != Ty::Unit {
+                    if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
                         // Non-void: consumed args, pushed return value.
                         bump(stack, max_stack, -(args.len() as i32) + 1);
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     } else {
                         bump(stack, max_stack, -(args.len() as i32));
+                        // Nothing-returning functions never return (they throw).
+                        // Don't store the result — it doesn't exist.
                     }
-                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
                 }
                 CallKind::PrintlnConcat => {
                     // Build a `StringBuilder`, append each part with

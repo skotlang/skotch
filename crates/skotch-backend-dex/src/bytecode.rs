@@ -239,6 +239,10 @@ pub fn lower_function(
                     is_goto: true,
                 });
             }
+            Terminator::Throw(exc) => {
+                let reg = slot.get(&exc.0).copied().unwrap_or(0);
+                code.push(opcode_aa(0x27, reg as u8)); // throw vAA
+            }
         }
     }
 

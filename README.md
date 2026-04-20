@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 380 language-feature fixtures validated across 5 targets.
+> implemented. 382 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-379 active test fixtures (409 total, 30 stubs for upcoming features).
+382 active test fixtures (409 total, 27 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -350,7 +350,8 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Type aliases](https://kotlinlang.org/spec/declarations.html#type-alias) | §4.7 | `typealias Name = Type` — parsed and resolved |
 | [Property getters](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val x: Int get() = expr` — custom getters compiled as synthetic methods |
 | [Operator overloading](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | §7.5 | `operator fun plus`, `operator fun invoke` — `a + b` desugars to `a.plus(b)`, `obj(x)` to `obj.invoke(x)` |
-| [Try-catch](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | Full JVM exception tables; `catch (e: ArithmeticException) { }` |
+| [Try-catch](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | Full JVM exception tables, catch variable binding, `e.message` access |
+| [Throw](https://kotlinlang.org/spec/expressions.html#throw-expressions) | §7.4.6 | `throw IllegalStateException("msg")` — `athrow` opcode, exception constructors, `Nothing` return |
 | [Annotations](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | §4.8 | `@Suppress`, `@Deprecated`, `@field:JvmField` — parsed and accepted (no codegen effect yet) |
 | [listOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/list-of.html) | stdlib | `listOf(1, 2, 3)` → `ArrayList`; `.forEach { }` iterator intrinsic |
 | [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |

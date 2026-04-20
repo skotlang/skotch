@@ -261,6 +261,8 @@ pub enum Terminator {
     },
     /// Unconditional jump to another block.
     Goto(u32),
+    /// Throw an exception. The local must be a reference-typed exception object.
+    Throw(LocalId),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

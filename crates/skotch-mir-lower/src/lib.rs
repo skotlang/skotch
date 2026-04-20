@@ -2094,6 +2094,9 @@ fn collect_terminator_reads(t: &Terminator, out: &mut rustc_hash::FxHashSet<u32>
         Terminator::Branch { cond, .. } => {
             out.insert(cond.0);
         }
+        Terminator::Throw(exc) => {
+            out.insert(exc.0);
+        }
     }
 }
 
@@ -3173,9 +3176,33 @@ fn lower_stmt(
                 }
 
                 // The catch handler block receives the exception on the
-                // JVM operand stack. We allocate a local to store it.
+                // JVM operand stack. We allocate a local to store it,
+                // typed as the declared catch type for smart-cast dispatch.
                 if let Some(param_sym) = catch_param {
-                    let exc_local = fb.new_local(Ty::Any);
+                    let exc_ty = catch_type
+                        .as_ref()
+                        .map(|ct| {
+                            let name = interner.resolve(*ct);
+                            match name {
+                                "IllegalStateException" => {
+                                    Ty::Class("java/lang/IllegalStateException".into())
+                                }
+                                "IllegalArgumentException" => {
+                                    Ty::Class("java/lang/IllegalArgumentException".into())
+                                }
+                                "RuntimeException" => {
+                                    Ty::Class("java/lang/RuntimeException".into())
+                                }
+                                "Exception" => Ty::Class("java/lang/Exception".into()),
+                                "Throwable" => Ty::Class("java/lang/Throwable".into()),
+                                "NullPointerException" => {
+                                    Ty::Class("java/lang/NullPointerException".into())
+                                }
+                                other => Ty::Class(other.to_string()),
+                            }
+                        })
+                        .unwrap_or(Ty::Any);
+                    let exc_local = fb.new_local(exc_ty);
                     scope.push((*param_sym, exc_local));
                     // Placeholder assignment — the JVM backend will emit
                     // astore at handler entry instead of aconst_null.
@@ -3309,8 +3336,21 @@ fn lower_stmt(
             }
             true
         }
-        Stmt::ThrowStmt { .. } => {
-            // throw is not yet compiled to athrow — skip but don't fail.
+        Stmt::ThrowStmt { expr, .. } => {
+            // Lower the exception expression and terminate with Throw.
+            if let Some(exc_local) = lower_expr(
+                expr,
+                fb,
+                scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                loop_ctx,
+            ) {
+                fb.set_terminator(Terminator::Throw(exc_local));
+            }
             true
         }
         Stmt::Destructure { names, init, .. } => {
@@ -7126,6 +7166,45 @@ fn lower_expr(
                 return Some(dest);
             }
 
+            // Exception constructors: `IllegalStateException("msg")` etc.
+            // Maps Kotlin exception class names to JVM internal names.
+            let exception_class = match callee_str {
+                "IllegalStateException" => Some("java/lang/IllegalStateException"),
+                "IllegalArgumentException" => Some("java/lang/IllegalArgumentException"),
+                "RuntimeException" => Some("java/lang/RuntimeException"),
+                "NullPointerException" => Some("java/lang/NullPointerException"),
+                "UnsupportedOperationException" => Some("java/lang/UnsupportedOperationException"),
+                "IndexOutOfBoundsException" => Some("java/lang/IndexOutOfBoundsException"),
+                "NoSuchElementException" => Some("java/util/NoSuchElementException"),
+                "Exception" => Some("java/lang/Exception"),
+                "Error" | "AssertionError" => Some("java/lang/AssertionError"),
+                "NotImplementedError" => Some("kotlin/NotImplementedError"),
+                _ => None,
+            };
+            if let Some(jvm_class) = exception_class {
+                let descriptor = if arg_locals.len() == 1 {
+                    "(Ljava/lang/String;)V" // Exception(message)
+                } else {
+                    "()V" // Exception()
+                };
+                let dest = fb.new_local(Ty::Class(jvm_class.to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance(jvm_class.to_string()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::ConstructorJava {
+                            class_name: jvm_class.to_string(),
+                            descriptor: descriptor.to_string(),
+                        },
+                        args: arg_locals.clone(),
+                    },
+                });
+                return Some(dest);
+            }
+
             // `require(condition)` — throw IllegalArgumentException if false.
             if callee_str == "require" && arg_locals.len() == 1 {
                 // Simplistic: just ignore the check (no-op). The value
@@ -8821,6 +8900,27 @@ fn lower_expr(
                             return Some(dest);
                         }
                     }
+                    // Exception .message → Throwable.getMessage()
+                    // Handles all JVM exception types (they all inherit from Throwable).
+                    if field_name == "message"
+                        && (declaring_class.contains("Exception")
+                            || declaring_class.contains("Error")
+                            || declaring_class.contains("Throwable"))
+                    {
+                        let dest = fb.new_local(Ty::String);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/lang/Throwable".to_string(),
+                                    method_name: "getMessage".to_string(),
+                                    descriptor: "()Ljava/lang/String;".to_string(),
+                                },
+                                args: vec![recv_local],
+                            },
+                        });
+                        return Some(dest);
+                    }
                     let dest = fb.new_local(field_ty);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -8935,10 +9035,9 @@ fn lower_expr(
             Some(result)
         }
         Expr::Throw { expr: thrown, .. } => {
-            // For now, throw is lowered as println("Exception: ...") + return.
-            // Real throw would need athrow opcode support.
-            // We emit a simple diagnostic for now.
-            let _ = (
+            // Lower the exception expression and terminate with Throw.
+            // The result type is Nothing (throw never returns).
+            let exc_local = lower_expr(
                 thrown,
                 fb,
                 scope,
@@ -8946,12 +9045,14 @@ fn lower_expr(
                 name_to_func,
                 name_to_global,
                 interner,
-            );
-            diags.push(Diagnostic::error(
-                thrown.span(),
-                "throw expressions are not yet fully compiled (exception tables needed)",
-            ));
-            None
+                diags,
+                loop_ctx,
+            )?;
+            fb.set_terminator(Terminator::Throw(exc_local));
+            // Return a Nothing-typed local so the expression has a value
+            // (though it's unreachable).
+            let dest = fb.new_local(Ty::Nothing);
+            Some(dest)
         }
         Expr::Try {
             body,

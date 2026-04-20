@@ -522,6 +522,9 @@ impl<'a> BlockWalker<'a> {
                 let label = block_label(*target);
                 writeln!(self.out, "  br label %{label}").unwrap();
             }
+            Terminator::Throw(_) => {
+                writeln!(self.out, "  unreachable").unwrap();
+            }
         }
     }
 

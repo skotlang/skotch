@@ -327,6 +327,7 @@ impl<'a> Resolver<'a> {
             Stmt::Break(_) | Stmt::Continue(_) => {}
             Stmt::TryStmt {
                 body,
+                catch_param,
                 catch_body,
                 finally_body,
                 ..
@@ -335,9 +336,18 @@ impl<'a> Resolver<'a> {
                     self.resolve_stmt(fn_idx, s, scope, rf);
                 }
                 if let Some(cb) = catch_body {
+                    // Push the catch parameter (e.g. `e` in `catch (e: Ex)`)
+                    // into scope so it's resolvable in the catch body.
+                    let saved = scope.len();
+                    if let Some(param_sym) = catch_param {
+                        // Use a dummy local index — the MIR lowerer creates
+                        // the real local from the catch_param Symbol.
+                        scope.push((*param_sym, DefId::Local(fn_idx, 9999)));
+                    }
                     for s in &cb.stmts {
                         self.resolve_stmt(fn_idx, s, scope, rf);
                     }
+                    scope.truncate(saved);
                 }
                 if let Some(fb) = finally_body {
                     for s in &fb.stmts {

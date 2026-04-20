@@ -61,7 +61,7 @@ project:
     producing debug APKs that install and launch on an Android emulator.
     No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
   codebase_stats:
-    rust_lines: 48360
+    rust_lines: 48600
     crates: 36
     active_fixtures: 381
     stub_fixtures: 28
