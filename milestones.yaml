@@ -1123,8 +1123,12 @@ milestones:
           abs() dispatches to (I)I, (J)J, or (D)D based on argument type.
           maxOf/minOf already working. See fixture 429-math-functions.
 
-      - name: "Regex support"
-        description: "Regex class, matchResult, find, replace, split."
+      - name: "Regex support (partial, landed)"
+        completed: true
+        description: >
+          Regex("pattern") compiles to Pattern.compile(). String.matches()
+          dispatches to java.lang.String.matches(). Full Regex class
+          (find, replace, split) deferred. See fixture 431-regex-matches.
 
       - name: "Sequences and Flow (basic)"
         description: >

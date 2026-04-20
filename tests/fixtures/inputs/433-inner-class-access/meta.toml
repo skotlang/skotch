@@ -1,0 +1,3 @@
+name = "433-inner-class-access"
+features = ["inner-class", "outer-field-access", "this$0"]
+expected_output = "11\n"

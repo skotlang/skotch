@@ -1,0 +1,45 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        fail (Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=3
+    0000 aload 0
+    0002 astore 1
+    0004 new Class(java/lang/IllegalStateException)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 athrow
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=6
+    0000 goto 3
+    0003 ldc "test error"
+    0005 astore 1
+    0007 aload 1
+    0009 invokestatic Method(InputKt.fail:(Ljava/lang/String;)V)
+    0012 goto 64
+    0015 astore 2
+    0017 ldc "caught: "
+    0019 astore 3
+    0021 aload 2
+    0023 checkcast Class(java/lang/IllegalStateException)
+    0026 astore 4
+    0028 aload 4
+    0030 invokevirtual Method(java/lang/Throwable.getMessage:()Ljava/lang/String;)
+    0033 astore 5
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 new Class(java/lang/StringBuilder)
+    0041 dup
+    0042 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0045 aload 3
+    0047 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0050 aload 5
+    0052 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0055 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0061 goto 64
+    0064 return
+    sub_attr  StackMapTable (35 bytes)

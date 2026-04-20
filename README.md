@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 408 language-feature fixtures validated across 5 targets.
+> implemented. 411 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-408 active test fixtures (412 total, 4 stubs for upcoming features).
+411 active test fixtures (415 total, 4 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -356,6 +356,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Annotations](https://kotlinlang.org/spec/declarations.html#annotation-declaration) | §4.8 | `@Suppress`, `@Deprecated`, `@field:JvmField` — parsed and accepted (no codegen effect yet) |
 | [kotlin.math](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.math/) | stdlib | `abs`, `sqrt`, `ceil`, `floor`, `round`, `pow`, `sin`, `cos`, `tan`, `log`, `exp` → `java.lang.Math` |
 | [readLine/readln](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.io/read-line.html) | stdlib | `readLine()` reads from stdin via `Scanner(System.in).nextLine()` |
+| [Regex](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.text/-regex/) | stdlib | `Regex("pattern")` → `Pattern.compile()`, `String.matches()` for pattern matching |
 | [listOf](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/list-of.html) | stdlib | `listOf(1, 2, 3)` → `ArrayList`; `.forEach { }` iterator intrinsic |
 | [For-in collections](https://kotlinlang.org/spec/statements.html#for-loop-statements) | §8.2 | `for (x in list)` → `iterator()/hasNext()/next()` desugaring |
 | [`in` operator](https://kotlinlang.org/spec/expressions.html#containment-checking-expressions) | §7.6.3 | `5 in 1..10` → `IntRange.contains(5)`, `!in` for negation |

@@ -136,6 +136,8 @@ pub fn resolve_file(
         "linkedMapOf",
         "sortedMapOf",
         "sortedSetOf",
+        // Regex constructor
+        "Regex",
         // kotlin.math functions
         "abs",
         "sqrt",

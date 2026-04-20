@@ -5191,6 +5191,12 @@ fn lower_expr(
                             "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
                             Ty::String,
                         )),
+                        (Ty::String, "matches", 1) => Some((
+                            "java/lang/String",
+                            "matches",
+                            "(Ljava/lang/String;)Z",
+                            Ty::Bool,
+                        )),
                         (Ty::String, "contains", 1) => Some((
                             "java/lang/String",
                             "contains",
@@ -7344,6 +7350,23 @@ fn lower_expr(
                         kind: CallKind::ConstructorJava {
                             class_name: jvm_class.to_string(),
                             descriptor: descriptor.to_string(),
+                        },
+                        args: arg_locals.clone(),
+                    },
+                });
+                return Some(dest);
+            }
+
+            // `Regex(pattern)` → Pattern.compile(pattern)
+            if callee_str == "Regex" && arg_locals.len() == 1 {
+                let dest = fb.new_local(Ty::Class("java/util/regex/Pattern".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "java/util/regex/Pattern".to_string(),
+                            method_name: "compile".to_string(),
+                            descriptor: "(Ljava/lang/String;)Ljava/util/regex/Pattern;".to_string(),
                         },
                         args: arg_locals.clone(),
                     },
