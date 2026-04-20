@@ -1,0 +1,76 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=17
+    0000 bipush 10
+    0002 istore 1
+    0004 new Class(Box)
+    0007 dup
+    0008 iload 1
+    0010 invokespecial Method(Box.<init>:(I)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(Box)
+    0020 astore 3
+    0022 iconst_3
+    0023 istore 4
+    0025 new Class(Box)
+    0028 dup
+    0029 iload 4
+    0031 invokespecial Method(Box.<init>:(I)V)
+    0034 astore 5
+    0036 aload 5
+    0038 checkcast Class(Box)
+    0041 astore 6
+    0043 aload 3
+    0045 checkcast Class(Box)
+    0048 astore 7
+    0050 aload 6
+    0052 checkcast Class(Box)
+    0055 astore 8
+    0057 aload 7
+    0059 aload 8
+    0061 invokevirtual Method(Box.compareTo:(LBox;)I)
+    0064 istore 9
+    0066 iconst_0
+    0067 istore 10
+    0069 iload 9
+    0071 iload 10
+    0073 op_0xA3
+    0074 nop
+    0075 iconst_4
+    0076 iconst_0
+    0077 goto 81
+    0080 iconst_1
+    0081 istore 11
+    0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0086 iload 11
+    0088 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0091 aload 6
+    0093 checkcast Class(Box)
+    0096 astore 12
+    0098 aload 3
+    0100 checkcast Class(Box)
+    0103 astore 13
+    0105 aload 12
+    0107 aload 13
+    0109 invokevirtual Method(Box.compareTo:(LBox;)I)
+    0112 istore 14
+    0114 iconst_0
+    0115 istore 15
+    0117 iload 14
+    0119 iload 15
+    0121 op_0xA1
+    0122 nop
+    0123 iconst_4
+    0124 iconst_0
+    0125 goto 129
+    0128 iconst_1
+    0129 istore 16
+    0131 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0134 iload 16
+    0136 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0139 return
+    sub_attr  StackMapTable (150 bytes)

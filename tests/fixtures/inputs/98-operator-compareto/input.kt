@@ -1,11 +1,10 @@
-class Temperature(val degrees: Double) : Comparable<Temperature> {
-    override fun compareTo(other: Temperature): Int = degrees.compareTo(other.degrees)
-    override fun toString(): String = "${degrees}°"
+class Box(val size: Int) {
+    operator fun compareTo(other: Box): Int = size - other.size
 }
 
 fun main() {
-    val hot = Temperature(100.0)
-    val cold = Temperature(0.0)
-    println(hot > cold)
-    println(cold < hot)
+    val big = Box(10)
+    val small = Box(3)
+    println(big.compareTo(small) > 0)
+    println(small.compareTo(big) < 0)
 }
