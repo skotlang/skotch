@@ -1,4 +1,4 @@
 name   = "51-when-sealed-subject"
-status = "stub"
-features = ["when", "sealed-class", "smart-cast", "is-check", "double"]
-reason = "Requires sealed class hierarchy + when + is-check smart casts."
+status = "active"
+features = ["when", "sealed-class", "smart-cast", "is-check"]
+expected_output = "circle: big\nsquare\n"

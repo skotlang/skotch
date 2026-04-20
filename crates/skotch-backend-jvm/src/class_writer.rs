@@ -4240,7 +4240,7 @@ fn emit_mir_segment(
                     // String.valueOf for non-string operands.
                     let lhs_ty = &func.locals[lhs.0 as usize];
                     emit_load_mir_local(code, func, local_slot, *lhs);
-                    if matches!(lhs_ty, Ty::Any) {
+                    if matches!(lhs_ty, Ty::Any | Ty::Class(_)) {
                         let m = cp.methodref(
                             "java/lang/String",
                             "valueOf",
@@ -7104,8 +7104,9 @@ fn walk_block(
                             code.write_u16::<BigEndian>(valueof).unwrap();
                             bump(stack, max_stack, -1); // double→String: -2 for double, +1 for string
                         }
-                        Ty::Any => {
-                            // Erased type — use String.valueOf(Object) to convert.
+                        _ => {
+                            // Any, Class, or other reference type:
+                            // use String.valueOf(Object) to get a string.
                             load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                             let valueof = cp.methodref(
                                 "java/lang/String",
@@ -7114,9 +7115,6 @@ fn walk_block(
                             );
                             code.push(0xB8); // invokestatic
                             code.write_u16::<BigEndian>(valueof).unwrap();
-                        }
-                        _ => {
-                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                         }
                     }
                     let concat = cp.methodref(

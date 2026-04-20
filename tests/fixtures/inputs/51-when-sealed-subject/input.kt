@@ -1,13 +1,13 @@
 sealed class Shape
-class Circle(val radius: Double) : Shape()
-class Rectangle(val w: Double, val h: Double) : Shape()
+class Circle(val name: String) : Shape()
+class Square(val side: Int) : Shape()
 
-fun area(s: Shape): Double = when (s) {
-    is Circle -> 3.14159 * s.radius * s.radius
-    is Rectangle -> s.w * s.h
+fun describe(s: Shape): String = when (s) {
+    is Circle -> "circle: ${s.name}"
+    is Square -> "square"
 }
 
 fun main() {
-    println(area(Circle(1.0)))
-    println(area(Rectangle(3.0, 4.0)))
+    println(describe(Circle("big")))
+    println(describe(Square(5)))
 }

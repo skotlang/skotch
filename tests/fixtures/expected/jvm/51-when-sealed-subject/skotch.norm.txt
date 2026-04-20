@@ -1,0 +1,87 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        describe (LShape;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=14
+    0000 aload 0
+    0002 checkcast Class(Shape)
+    0005 astore 1
+    0007 goto 10
+    0010 aload 0
+    0012 checkcast Class(Shape)
+    0015 astore 2
+    0017 aload 2
+    0019 instanceof Class(Circle)
+    0022 istore 3
+    0024 iload 3
+    0026 ifeq 70
+    0029 aload 0
+    0031 checkcast Class(Circle)
+    0034 astore 4
+    0036 ldc "circle: "
+    0038 astore 5
+    0040 aload 4
+    0042 checkcast Class(Circle)
+    0045 astore 6
+    0047 aload 6
+    0049 getfield Field(Circle.name:Ljava/lang/String;)
+    0052 astore 7
+    0054 aload 5
+    0056 aload 7
+    0058 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0061 astore 8
+    0063 aload 8
+    0065 astore 9
+    0067 goto 113
+    0070 aload 0
+    0072 checkcast Class(Shape)
+    0075 astore 10
+    0077 aload 10
+    0079 instanceof Class(Square)
+    0082 istore 11
+    0084 iload 11
+    0086 ifeq 107
+    0089 aload 0
+    0091 checkcast Class(Square)
+    0094 astore 12
+    0096 ldc "square"
+    0098 astore 13
+    0100 aload 13
+    0102 astore 9
+    0104 goto 113
+    0107 aconst_null
+    0108 astore 9
+    0110 goto 113
+    0113 aload 9
+    0115 areturn
+    sub_attr  StackMapTable (84 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=7
+    0000 ldc "big"
+    0002 astore 1
+    0004 new Class(Circle)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Circle.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
+    0020 astore 3
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 3
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 iconst_5
+    0031 istore 4
+    0033 new Class(Square)
+    0036 dup
+    0037 iload 4
+    0039 invokespecial Method(Square.<init>:(I)V)
+    0042 astore 5
+    0044 aload 5
+    0046 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
+    0049 astore 6
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 aload 6
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0059 return
