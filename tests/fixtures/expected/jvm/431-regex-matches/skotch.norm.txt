@@ -1,0 +1,35 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        isDigits (Ljava/lang/String;)Z 0x0009
+  code        max_stack=2 max_locals=4
+    0000 aload 0
+    0002 astore 1
+    0004 ldc "^[0-9]+$"
+    0006 astore 2
+    0008 aload 1
+    0010 aload 2
+    0012 invokevirtual Method(java/lang/String.matches:(Ljava/lang/String;)Z)
+    0015 istore 3
+    0017 iload 3
+    0019 op_0xAC
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 ldc "12345"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.isDigits:(Ljava/lang/String;)Z)
+    0009 istore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 iload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0019 ldc "hello"
+    0021 astore 3
+    0023 aload 3
+    0025 invokestatic Method(InputKt.isDigits:(Ljava/lang/String;)Z)
+    0028 istore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0038 return

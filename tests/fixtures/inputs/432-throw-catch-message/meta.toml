@@ -1,0 +1,3 @@
+name = "432-throw-catch-message"
+features = ["throw", "catch", "exception", "Nothing", "e.message"]
+expected_output = "caught: test error\n"
