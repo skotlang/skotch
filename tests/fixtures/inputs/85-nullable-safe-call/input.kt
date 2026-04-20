@@ -1,6 +1,6 @@
-fun firstChar(s: String?): Char? = s?.get(0)
+fun len(s: String?): String = s?.uppercase() ?: "null"
 
 fun main() {
-    println(firstChar("hello"))
-    println(firstChar(null))
+    println(len("hello"))
+    println(len(null))
 }

@@ -1,0 +1,75 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        len (Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=12
+    0000 aload 0
+    0002 astore 1
+    0004 aconst_null
+    0005 astore 2
+    0007 aload 1
+    0009 aload 2
+    0011 if_acmpne 18
+    0014 iconst_0
+    0015 goto 19
+    0018 iconst_1
+    0019 istore 3
+    0021 iload 3
+    0023 ifeq 51
+    0026 aload 1
+    0028 checkcast Class(java/lang/String)
+    0031 astore 4
+    0033 aload 4
+    0035 astore 5
+    0037 aload 5
+    0039 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0042 astore 6
+    0044 aload 6
+    0046 astore 7
+    0048 goto 57
+    0051 aconst_null
+    0052 astore 7
+    0054 goto 57
+    0057 aconst_null
+    0058 astore 8
+    0060 aload 7
+    0062 aload 8
+    0064 if_acmpne 71
+    0067 iconst_0
+    0068 goto 72
+    0071 iconst_1
+    0072 istore 9
+    0074 iload 9
+    0076 ifeq 86
+    0079 aload 7
+    0081 astore 10
+    0083 goto 97
+    0086 ldc "null"
+    0088 astore 11
+    0090 aload 11
+    0092 astore 10
+    0094 goto 97
+    0097 aload 10
+    0099 checkcast Class(java/lang/String)
+    0102 areturn
+    sub_attr  StackMapTable (185 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 ldc "hello"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.len:(Ljava/lang/String;)Ljava/lang/String;)
+    0009 astore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0019 aconst_null
+    0020 astore 3
+    0022 aload 3
+    0024 invokestatic Method(InputKt.len:(Ljava/lang/String;)Ljava/lang/String;)
+    0027 astore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0037 return

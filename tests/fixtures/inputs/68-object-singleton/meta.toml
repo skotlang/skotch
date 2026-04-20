@@ -1,4 +1,4 @@
 name   = "68-object-singleton"
-status = "stub"
-features = ["object", "singleton", "mutableList", "stdlib"]
-reason = "Requires object declaration with INSTANCE field + static accessor bridge."
+status = "active"
+features = ["object", "singleton", "method-dispatch"]
+expected_output = "Hello from singleton!\n42\n"

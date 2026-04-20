@@ -1,11 +1,9 @@
-object Registry {
-    private val items = mutableListOf<String>()
-    fun add(item: String) { items.add(item) }
-    fun all(): List<String> = items
+object Config {
+    fun greeting(): String = "Hello from singleton!"
+    fun version(): Int = 42
 }
 
 fun main() {
-    Registry.add("first")
-    Registry.add("second")
-    println(Registry.all())
+    println(Config.greeting())
+    println(Config.version())
 }

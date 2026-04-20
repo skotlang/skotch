@@ -1,11 +1,5 @@
-fun makeCounter(): () -> Int {
-    var count = 0
-    return { count++ }
-}
-
 fun main() {
-    val counter = makeCounter()
-    println(counter())
-    println(counter())
-    println(counter())
+    val greeting = "World"
+    val greet = { name: String -> "Hello, $name!" }
+    println(greet(greeting))
 }

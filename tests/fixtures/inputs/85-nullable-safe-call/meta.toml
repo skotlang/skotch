@@ -1,4 +1,4 @@
 name   = "85-nullable-safe-call"
-status = "stub"
-features = ["nullable", "safe-call", "char", "null"]
-reason = "Requires nullable type + safe-call (?.) lowering to null-check branch."
+status = "active"
+features = ["nullable", "safe-call", "elvis", "uppercase"]
+expected_output = "HELLO\nnull\n"

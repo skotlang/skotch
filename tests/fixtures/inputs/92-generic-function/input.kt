@@ -1,9 +1,9 @@
-fun <T> singletonList(item: T): List<T> = listOf(item)
+fun <T> identity(x: T): T = x
 
-fun <T : Comparable<T>> maxOf(a: T, b: T): T = if (a > b) a else b
+fun <T> pair(a: T, b: T): String = "$a and $b"
 
 fun main() {
-    println(singletonList(42))
-    println(maxOf(3, 7))
-    println(maxOf("apple", "banana"))
+    println(identity(42))
+    println(identity("hello"))
+    println(pair(1, 2))
 }
