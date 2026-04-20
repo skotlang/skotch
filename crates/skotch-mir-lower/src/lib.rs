@@ -2703,16 +2703,42 @@ fn lower_stmt(
                 "java/lang/Object".to_string()
             };
             let field_name = interner.resolve(*field).to_string();
-            let dummy = fb.new_local(Ty::Unit);
-            fb.push_stmt(MStmt::Assign {
-                dest: dummy,
-                value: Rvalue::PutField {
-                    receiver: recv_local,
-                    class_name,
-                    field_name,
-                    value: val_local,
-                },
-            });
+            // Check for a custom setter method on the class.
+            let setter_name = format!("set{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
+            let has_setter = if let Ty::Class(ref cn) = recv_ty {
+                module
+                    .classes
+                    .iter()
+                    .find(|c| &c.name == cn)
+                    .is_some_and(|cls| cls.methods.iter().any(|m| m.name == setter_name))
+            } else {
+                false
+            };
+            if has_setter {
+                // Invoke the setter method instead of direct field write.
+                let dummy = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: dummy,
+                    value: Rvalue::Call {
+                        kind: CallKind::Virtual {
+                            class_name,
+                            method_name: setter_name,
+                        },
+                        args: vec![recv_local, val_local],
+                    },
+                });
+            } else {
+                let dummy = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: dummy,
+                    value: Rvalue::PutField {
+                        receiver: recv_local,
+                        class_name,
+                        field_name,
+                        value: val_local,
+                    },
+                });
+            }
             true
         }
         Stmt::For {
@@ -11896,6 +11922,91 @@ fn lower_class(
                     None,
                 );
             }
+            mir_methods.push(fb.finish());
+        }
+    }
+
+    // Lower property setters as synthetic methods.
+    // `var x: Int = 0; set(value) { field = value + 1 }`
+    // → synthetic method `setX(value: Int): Unit`
+    for prop in &c.properties {
+        if let Some((setter_param, ref setter_body)) = prop.setter {
+            let prop_name = interner.resolve(prop.name).to_string();
+            let setter_name = format!("set{}{}", &prop_name[..1].to_uppercase(), &prop_name[1..]);
+            let param_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Any);
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, setter_name, Ty::Unit);
+            let this_local = fb.new_local(Ty::Class(class_name.clone()));
+            fb.mf.params.push(this_local);
+            let value_local = fb.new_local(param_ty);
+            fb.mf.params.push(value_local);
+            let this_sym = interner.intern("this");
+            let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+            // Load fields into scope so the setter body can reference them.
+            for field in &fields {
+                let field_sym = interner.intern(&field.name);
+                let field_local = fb.new_local(field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: field_local,
+                    value: Rvalue::GetField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                    },
+                });
+                scope.push((field_sym, field_local));
+            }
+            // Add setter parameter to scope.
+            scope.push((setter_param, value_local));
+            // `field` inside a setter refers to the backing field.
+            // We use a copy-in/copy-out pattern: read the field into a
+            // local, expose it as `field` in scope, lower the body (which
+            // may assign to `field`), then write the local back.
+            let field_sym = interner.intern("field");
+            let backing_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Any);
+            let backing_local = fb.new_local(backing_ty);
+            fb.push_stmt(MStmt::Assign {
+                dest: backing_local,
+                value: Rvalue::GetField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: prop_name.clone(),
+                },
+            });
+            scope.push((field_sym, backing_local));
+            for s in &setter_body.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            // Write the `field` local back to the backing field.
+            let dummy = fb.new_local(Ty::Unit);
+            fb.push_stmt(MStmt::Assign {
+                dest: dummy,
+                value: Rvalue::PutField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: prop_name.clone(),
+                    value: backing_local,
+                },
+            });
+            fb.set_terminator(Terminator::Return);
             mir_methods.push(fb.finish());
         }
     }

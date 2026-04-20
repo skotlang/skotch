@@ -880,11 +880,14 @@ milestones:
           context (List<Int>.map expects (Int)->R). Bidirectional:
           propagate the expected function type backward into the lambda.
 
-      - name: "Property setters"
+      - name: "Property setters (landed)"
+        completed: true
         description: >
-          var field: Int = 0; set(value) { field = value + 1 }.
-          Custom setter bodies. Invoked by assignment to the property.
-          Deferred from v0.11.
+          var count: Int = 0; set(value) { if (value >= 0) field = value }.
+          Custom setter bodies with `field` backing-field keyword. Setter
+          synthesized as setX(value) method. FieldAssign checks for setter
+          and dispatches via invokevirtual. Copy-in/copy-out for `field`.
+          See fixture 428-property-setter.
 
       - name: "Data class copy() with default-fill (landed)"
         completed: true

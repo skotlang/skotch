@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 382 language-feature fixtures validated across 5 targets.
+> implemented. 383 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-382 active test fixtures (409 total, 27 stubs for upcoming features).
+383 active test fixtures (410 total, 27 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -348,7 +348,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Generics](https://kotlinlang.org/spec/declarations.html#type-parameters) | §4.6 | Generic functions/classes, upper bounds, variance (`in`/`out`), star projection, type erasure |
 | [Reified type params](https://kotlinlang.org/spec/declarations.html#type-parameters) | §4.6 | `inline fun <reified T>` with `is T` check inlined at call site |
 | [Type aliases](https://kotlinlang.org/spec/declarations.html#type-alias) | §4.7 | `typealias Name = Type` — parsed and resolved |
-| [Property getters](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | `val x: Int get() = expr` — custom getters compiled as synthetic methods |
+| [Property getters/setters](https://kotlinlang.org/spec/declarations.html#property-declaration) | §4.2 | Getters: `val x: Int get() = expr`; Setters: `set(v) { field = v }` with `field` backing keyword |
 | [Operator overloading](https://kotlinlang.org/spec/expressions.html#overloadable-operators) | §7.5 | `operator fun plus`, `operator fun invoke` — `a + b` desugars to `a.plus(b)`, `obj(x)` to `obj.invoke(x)` |
 | [Try-catch](https://kotlinlang.org/spec/expressions.html#try-expression) | §7.4.5 | Full JVM exception tables, catch variable binding, `e.message` access |
 | [Throw](https://kotlinlang.org/spec/expressions.html#throw-expressions) | §7.4.6 | `throw IllegalStateException("msg")` — `athrow` opcode, exception constructors, `Nothing` return |
