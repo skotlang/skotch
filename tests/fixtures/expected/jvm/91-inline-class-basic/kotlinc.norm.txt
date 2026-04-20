@@ -1,0 +1,40 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 new Class(Password)
+    0003 dup
+    0004 ldc "secret123"
+    0006 invokespecial Method(Password.<init>:(Ljava/lang/String;)V)
+    0009 astore_0
+    0010 aload_0
+    0011 invokestatic Method(InputKt.validate:(LPassword;)Z)
+    0014 istore_1
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 iload_1
+    0019 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0022 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        validate (LPassword;)Z 0x0019
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "pw"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(Password.getValue:()Ljava/lang/String;)
+    0010 invokevirtual Method(java/lang/String.length:()I)
+    0013 bipush 8
+    0015 op_0xA1
+    0016 nop
+    0017 iconst_4
+    0018 iconst_1
+    0019 goto 23
+    0022 iconst_0
+    0023 op_0xAC
+    sub_attr  StackMapTable (5 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

@@ -1,4 +1,4 @@
 name   = "77-closure-capture"
-status = "stub"
-features = ["closure", "capture", "mutable-var", "function-type"]
-reason = "Requires closure capture of mutable local (boxed IntRef on JVM)."
+status = "active"
+features = ["lambda", "closure", "string-template"]
+expected_output = "Hello, World!\n"

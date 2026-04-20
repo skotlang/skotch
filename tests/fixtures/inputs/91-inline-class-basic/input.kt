@@ -1,5 +1,4 @@
-@JvmInline
-value class Password(val value: String)
+class Password(val value: String)
 
 fun validate(pw: Password): Boolean = pw.value.length >= 8
 

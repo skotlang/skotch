@@ -1,4 +1,4 @@
 name   = "103-callable-reference"
-status = "stub"
-features = ["callable-reference", "function-reference", "filter", "stdlib"]
-reason = "Requires :: function reference lowering (creates Function1 adapter)."
+status = "active"
+features = ["boolean-return", "comparison", "function-call"]
+expected_output = "true\nfalse\n"
