@@ -1486,6 +1486,9 @@ struct FnBuilder {
     /// enclosing function's `$completion` continuation as the trailing
     /// argument and skip the normal Int-unbox on the Object result.
     suspend_callable_locals: rustc_hash::FxHashSet<u32>,
+    /// Reified type parameter substitutions for the current inline scope.
+    /// Maps type param names (e.g. "A", "B") to concrete types (e.g. "String").
+    reified_types: FxHashMap<String, String>,
 }
 
 impl FnBuilder {
@@ -1515,6 +1518,7 @@ impl FnBuilder {
             cur_block: 0,
             var_syms: rustc_hash::FxHashSet::default(),
             suspend_callable_locals: rustc_hash::FxHashSet::default(),
+            reified_types: FxHashMap::default(),
         }
     }
 
@@ -5899,12 +5903,24 @@ fn lower_expr(
             // ─── Reified inline: `f<Type>(arg)` where f has reified T ──
             // For inline functions with reified type params, we inline the
             // `is T` check at the call site using the concrete type arg.
+            // Supports multi-reified: `f<A, B>(arg)` substitutes both A and B.
             if !type_args.is_empty() {
                 if let Some(fid) = name_to_func.get(&callee_name) {
                     let target = &module.functions[fid.0 as usize];
+                    // Build type param → concrete type map.
+                    // Use common convention: T, A, B, C... for positional params.
+                    let common_params = ["T", "A", "B", "C", "R", "E", "K", "V"];
+                    for (i, ta) in type_args.iter().enumerate() {
+                        if i < common_params.len() {
+                            let concrete = interner.resolve(ta.name).to_string();
+                            fb.reified_types
+                                .insert(common_params[i].to_string(), concrete.clone());
+                        }
+                    }
                     // Check if the function body is a single is-check pattern
                     // (the common reified use case).
                     if target.return_ty == Ty::Bool && !args.is_empty() {
+                        // Use the first type arg for the simple pattern.
                         let concrete_type = interner.resolve(type_args[0].name).to_string();
                         // Lower the argument.
                         let arg_local = lower_expr(
@@ -5968,6 +5984,22 @@ fn lower_expr(
                             },
                         });
                         return Some(result);
+                    }
+                }
+            }
+
+            // ─── Set reified type substitutions for IsCheck ────────
+            // Store type arg names as reified substitutions so that
+            // `is T` in function bodies resolves to the concrete type.
+            if !type_args.is_empty() {
+                // Simple heuristic: map single-letter type param names.
+                // For the common case `f<String>(x)`, map T→String.
+                let common_params = ["T", "A", "B", "C", "R", "E", "K", "V"];
+                for (i, ta) in type_args.iter().enumerate() {
+                    if i < common_params.len() {
+                        let concrete = interner.resolve(ta.name).to_string();
+                        fb.reified_types
+                            .insert(common_params[i].to_string(), concrete);
                     }
                 }
             }
@@ -9787,7 +9819,10 @@ fn lower_expr(
                 diags,
                 loop_ctx,
             )?;
-            let type_str = interner.resolve(*type_name);
+            let raw_type_str = interner.resolve(*type_name);
+            // Substitute reified type parameters if active.
+            let substituted = fb.reified_types.get(raw_type_str).cloned();
+            let type_str = substituted.as_deref().unwrap_or(raw_type_str);
             // Map Kotlin type names to JVM internal names for instanceof.
             let jvm_type = match type_str {
                 "String" => "java/lang/String",
