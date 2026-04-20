@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 383 language-feature fixtures validated across 5 targets.
+> implemented. 387 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-383 active test fixtures (410 total, 27 stubs for upcoming features).
+387 active test fixtures (410 total, 23 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -338,6 +338,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | [Interfaces](https://kotlinlang.org/spec/declarations.html#interface-declaration) | §4.5.3 | Declaration, implementation, abstract + default methods, `invokeinterface` |
 | [Abstract classes](https://kotlinlang.org/spec/declarations.html#abstract-classes) | §4.5.1 | `abstract class` with `abstract fun`, template method pattern |
 | [Sealed classes](https://kotlinlang.org/spec/declarations.html#sealed-class-declaration) | §4.5.5 | Sealed hierarchies, exhaustive `when` + `is` patterns, smart cast narrowing |
+| [Inner classes](https://kotlinlang.org/spec/declarations.html#class-declaration) | §4.5 | `inner class Inner` with `this$0` outer reference, outer field access |
 | [Enum classes](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | §4.5.7 | Real MirClass with constructor params, `.name`, `when` matching |
 | [Smart casts](https://kotlinlang.org/spec/type-system.html#smart-casts) | §3.6 | `is`/`!is` type checks, `when` branch narrowing with checkcast + unbox, `if` narrowing, null-check narrowing |
 | [Lambda expressions](https://kotlinlang.org/spec/expressions.html#lambda-literals) | §7.2.10 | Closure capture (val + var with Ref boxing), trailing lambda, `it`, nested lambdas |

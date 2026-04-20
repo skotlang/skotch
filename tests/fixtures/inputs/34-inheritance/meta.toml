@@ -1,3 +1,4 @@
 name = "34-inheritance"
-status = "stub"
-reason = "Class inheritance and method override emission."
+status = "active"
+features = ["inheritance", "open-class", "override"]
+expected_output = "woof\n"

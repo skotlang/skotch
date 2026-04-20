@@ -30,7 +30,7 @@ use skotch_mir::{
     SuspendCallSite, SuspendStateMachine, Terminator,
 };
 use skotch_resolve::ResolvedFile;
-use skotch_syntax::{BinOp, Decl, Expr, FunDecl, KtFile, Stmt, ValDecl};
+use skotch_syntax::{BinOp, ConstructorParam, Decl, Expr, FunDecl, KtFile, Stmt, TypeRef, ValDecl};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
@@ -4307,6 +4307,55 @@ fn lower_expr(
                             },
                         });
                         return Some(dest);
+                    }
+                }
+
+                // Inner class construction: `outer.Inner(args)` where `outer`
+                // is an instance variable. Resolve as `new Outer$Inner(outer, args)`.
+                {
+                    let method_str = interner.resolve(method_name).to_string();
+                    // Check if receiver is a local variable with a class type.
+                    if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                        if let Some((_, recv_local)) =
+                            scope.iter().rev().find(|(s, _)| s == recv_sym)
+                        {
+                            let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
+                            if let Ty::Class(ref outer_class) = recv_ty {
+                                let inner_class_name = format!("{}${}", outer_class, method_str);
+                                let is_inner =
+                                    module.classes.iter().any(|c| c.name == inner_class_name);
+                                if is_inner {
+                                    let mut arg_locals = vec![*recv_local]; // outer ref
+                                    for a in args {
+                                        let id = lower_expr(
+                                            &a.expr,
+                                            fb,
+                                            scope,
+                                            module,
+                                            name_to_func,
+                                            name_to_global,
+                                            interner,
+                                            diags,
+                                            loop_ctx,
+                                        )?;
+                                        arg_locals.push(id);
+                                    }
+                                    let dest = fb.new_local(Ty::Class(inner_class_name.clone()));
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest,
+                                        value: Rvalue::NewInstance(inner_class_name.clone()),
+                                    });
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest,
+                                        value: Rvalue::Call {
+                                            kind: CallKind::Constructor(inner_class_name),
+                                            args: arg_locals,
+                                        },
+                                    });
+                                    return Some(dest);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -11766,6 +11815,48 @@ fn lower_class(
             }
         }
 
+        // Inner class: load outer class fields via this.this$0.<field>.
+        if let Some(this0_field) = fields.iter().find(|f| f.name == "this$0") {
+            if let Ty::Class(ref outer_cn) = this0_field.ty {
+                let outer_ref = fb.new_local(this0_field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: outer_ref,
+                    value: Rvalue::GetField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: "this$0".to_string(),
+                    },
+                });
+                let outer_fields: Vec<_> = module
+                    .classes
+                    .iter()
+                    .find(|c| &c.name == outer_cn)
+                    .map(|c| {
+                        c.fields
+                            .iter()
+                            .map(|f| (f.name.clone(), f.ty.clone()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for (fname, fty) in &outer_fields {
+                    if fields.iter().any(|f| f.name == *fname) && *fname != "this$0" {
+                        continue;
+                    }
+                    let fsym = interner.intern(fname);
+                    let fl = fb.new_local(fty.clone());
+                    fb.push_stmt(MStmt::Assign {
+                        dest: fl,
+                        value: Rvalue::GetField {
+                            receiver: outer_ref,
+                            class_name: outer_cn.clone(),
+                            field_name: fname.clone(),
+                        },
+                    });
+                    scope.push((fsym, fl));
+                }
+            }
+        }
+
         for s in &method.body.stmts {
             lower_stmt(
                 s,
@@ -12779,11 +12870,31 @@ fn lower_class(
     for nested in &c.nested_classes {
         let nested_name = interner.resolve(nested.name).to_string();
         let mangled = format!("{}${}", outer_name, nested_name);
-        // Create a synthetic ClassDecl with the mangled name so
-        // lower_class produces a MirClass named "Outer$Nested".
         let mangled_sym = interner.intern(&mangled);
         let mut synthetic = nested.clone();
         synthetic.name = mangled_sym;
+
+        if nested.is_inner {
+            // Inner class: add `this$0` field of outer class type as the
+            // first constructor parameter, so `outer.Inner(args)` passes
+            // the outer reference implicitly.
+            let outer_param = ConstructorParam {
+                is_val: true,
+                is_var: false,
+                name: interner.intern("this$0"),
+                ty: TypeRef {
+                    name: interner.intern(&outer_name),
+                    nullable: false,
+                    func_params: None,
+                    type_args: Vec::new(),
+                    is_suspend: false,
+                    span: nested.span,
+                },
+                span: nested.span,
+            };
+            synthetic.constructor_params.insert(0, outer_param);
+        }
+
         lower_class(
             &synthetic,
             name_to_func,

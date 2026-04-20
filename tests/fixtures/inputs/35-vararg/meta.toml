@@ -1,3 +1,4 @@
 name = "35-vararg"
-status = "stub"
-reason = "vararg lowers to an array parameter; needs `for ... in` loops too."
+status = "active"
+features = ["vararg", "for-in", "intarray"]
+expected_output = "6\n"

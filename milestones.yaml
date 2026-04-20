@@ -699,7 +699,7 @@ milestones:
 
   - version: "0.10.0"
     title: "Nested Classes, Full Enums, Sealed Completeness"
-    status: in_progress    # 4/5 features done — only inner classes remain
+    status: completed      # all 5 features done
     depends_on: ["0.9.0"]
     description: >
       Inner/nested classes, enum values()/valueOf()/entries, sealed
@@ -712,10 +712,13 @@ milestones:
           class Outer { class Nested { } } — Nested is a static inner
           class on JVM. No reference to Outer instance.
 
-      - name: "Inner classes"
+      - name: "Inner classes (landed)"
+        completed: true
         description: >
           class Outer { inner class Inner { } } — Inner holds implicit
-          reference to Outer. Access outer members via this@Outer.
+          this$0 reference to Outer. outer.Inner(args) passes the outer
+          instance. Inner class methods access outer fields via this$0.
+          Parsed via `inner` soft keyword. See fixture 109-inner-class.
 
       - name: "Enum values() and valueOf()"
         completed: true

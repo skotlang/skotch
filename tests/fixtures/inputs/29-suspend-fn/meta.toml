@@ -1,3 +1,4 @@
 name = "29-suspend-fn"
-status = "stub"
-reason = "Coroutines require CPS-style state machine generation."
+status = "active"
+features = ["suspend", "coroutine"]
+expected_output = "coroutine ready\n"
