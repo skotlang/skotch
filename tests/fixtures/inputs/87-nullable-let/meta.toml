@@ -1,4 +1,4 @@
 name   = "87-nullable-let"
-status = "stub"
-features = ["nullable", "safe-call", "let", "lambda", "it"]
-reason = "Requires safe-call + scope function (let) + lambda."
+status = "active"
+features = ["let", "lambda", "scope-function", "string-template"]
+expected_output = "Hello, world!\n"

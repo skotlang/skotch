@@ -2296,6 +2296,59 @@ impl<'a> Parser<'a> {
                 };
             }
         }
+        // `in` operator: `5 in r` → `r.contains(5)`.
+        // `!in` operator: `5 !in r` → `!r.contains(5)`.
+        if self.peek_kind() == TokenKind::KwIn {
+            let kw_span = self.peek_span();
+            self.bump(); // consume `in`
+            self.skip_trivia();
+            let rhs = self.parse_equality();
+            let span = lhs.span().merge(rhs.span());
+            let contains_name = self.interner.intern("contains");
+            // `lhs in rhs` → `rhs.contains(lhs)`
+            return Expr::Call {
+                callee: Box::new(Expr::Field {
+                    receiver: Box::new(rhs),
+                    name: contains_name,
+                    span: kw_span,
+                }),
+                args: vec![CallArg {
+                    name: None,
+                    expr: lhs,
+                }],
+                type_args: Vec::new(),
+                span,
+            };
+        }
+        if self.peek_kind() == TokenKind::Bang && self.peek_kind_at(1) == TokenKind::KwIn {
+            let kw_span = self.peek_span();
+            self.bump(); // consume `!`
+            self.bump(); // consume `in`
+            self.skip_trivia();
+            let rhs = self.parse_equality();
+            let span = lhs.span().merge(rhs.span());
+            let contains_name = self.interner.intern("contains");
+            // `lhs !in rhs` → `!rhs.contains(lhs)`
+            let call = Expr::Call {
+                callee: Box::new(Expr::Field {
+                    receiver: Box::new(rhs),
+                    name: contains_name,
+                    span: kw_span,
+                }),
+                args: vec![CallArg {
+                    name: None,
+                    expr: lhs,
+                }],
+                type_args: Vec::new(),
+                span,
+            };
+            return Expr::Unary {
+                op: skotch_syntax::UnaryOp::Not,
+                operand: Box::new(call),
+                span,
+            };
+        }
+
         // Check if the next token is a known infix function name that is
         // NOT followed by `(` (which would be a regular call, already
         // handled by parse_postfix).

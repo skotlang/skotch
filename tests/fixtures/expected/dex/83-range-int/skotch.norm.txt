@@ -1,0 +1,57 @@
+dex_version   035
+strings       22
+types         9
+methods       8
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/ranges/IntRange;"
+  "V"
+  "VI"
+  "VII"
+  "VL"
+  "VZ"
+  "Z"
+  "ZI"
+  "[Ljava/lang/String;"
+  "contains"
+  "getFirst"
+  "getLast"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/ranges/IntRange;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Z)V
+  Lkotlin/ranges/IntRange;.<init>(II)V
+  Lkotlin/ranges/IntRange;.contains(I)Z
+  Lkotlin/ranges/IntRange;.getFirst()I
+  Lkotlin/ranges/IntRange;.getLast()I
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=15 ins=0 outs=3 insns=53
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

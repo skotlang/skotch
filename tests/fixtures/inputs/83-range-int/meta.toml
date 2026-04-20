@@ -1,4 +1,4 @@
 name   = "83-range-int"
-status = "stub"
+status = "active"
 features = ["range", "in-operator", "IntRange", "property"]
-reason = "Requires IntRange creation and `in` operator (contains)."
+expected_output = "true\nfalse\n1\n10\n"

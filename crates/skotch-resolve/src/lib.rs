@@ -441,6 +441,11 @@ impl<'a> Resolver<'a> {
                 for p in params {
                     scope.push((p.name, DefId::PossibleExternal(p.name)));
                 }
+                // If no explicit params, add implicit `it` to scope.
+                if params.is_empty() {
+                    let it_sym = self.interner.intern("it");
+                    scope.push((it_sym, DefId::Local(fn_idx, 9998)));
+                }
                 for s in &body.stmts {
                     self.resolve_stmt(fn_idx, s, scope, rf);
                 }

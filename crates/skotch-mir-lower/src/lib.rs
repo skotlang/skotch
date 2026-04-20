@@ -4633,6 +4633,26 @@ fn lower_expr(
                     return Some(dest);
                 }
 
+                // ── IntRange.contains(Int) → boolean check ──────────
+                if method_name_str == "contains"
+                    && args.len() == 1
+                    && matches!(&recv_ty, Ty::Class(n) if n.contains("IntRange"))
+                {
+                    let dest = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "kotlin/ranges/IntRange".to_string(),
+                                method_name: "contains".to_string(),
+                                descriptor: "(I)Z".to_string(),
+                            },
+                            args: all_args,
+                        },
+                    });
+                    return Some(dest);
+                }
+
                 // ── Scope functions (let, also, run, apply) ─────────
                 // Lowered as inline intrinsics: the trailing lambda arg
                 // is invoked with the receiver, and the result depends
@@ -9021,6 +9041,29 @@ fn lower_expr(
                             return Some(dest);
                         }
                     }
+                    // IntRange .first / .last → getFirst() / getLast()
+                    if declaring_class.contains("IntRange") {
+                        let range_prop: Option<(&str, &str)> = match field_name.as_str() {
+                            "first" => Some(("getFirst", "()I")),
+                            "last" => Some(("getLast", "()I")),
+                            _ => None,
+                        };
+                        if let Some((getter, desc)) = range_prop {
+                            let dest = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "kotlin/ranges/IntRange".to_string(),
+                                        method_name: getter.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
                     // Exception .message → Throwable.getMessage()
                     // Handles all JVM exception types (they all inherit from Throwable).
                     if field_name == "message"
@@ -10035,6 +10078,16 @@ fn lower_expr(
                     } else {
                         invoke_scope.push((p.name, erased_pid));
                     }
+                }
+                // Implicit `it` for single-param or no-param lambdas:
+                // When a lambda has no explicit params, the scope function
+                // passes the receiver as the first invoke arg. Add `it` to
+                // scope pointing to that arg.
+                if params.is_empty() && invoke_fb.mf.params.len() > 1 {
+                    // params[0] is `this`, params[1] is the implicit `it`
+                    let it_sym = interner.intern("it");
+                    let it_local = invoke_fb.mf.params[1];
+                    invoke_scope.push((it_sym, it_local));
                 }
                 for s in &body.stmts {
                     lower_stmt(

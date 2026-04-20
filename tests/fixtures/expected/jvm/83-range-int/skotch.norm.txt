@@ -1,0 +1,62 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=15
+    0000 iconst_1
+    0001 istore 1
+    0003 bipush 10
+    0005 istore 2
+    0007 new Class(kotlin/ranges/IntRange)
+    0010 dup
+    0011 iload 1
+    0013 iload 2
+    0015 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
+    0018 astore 3
+    0020 aload 3
+    0022 checkcast Class(kotlin/ranges/IntRange)
+    0025 astore 4
+    0027 aload 4
+    0029 checkcast Class(kotlin/ranges/IntRange)
+    0032 astore 5
+    0034 iconst_5
+    0035 istore 6
+    0037 aload 5
+    0039 iload 6
+    0041 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0044 istore 7
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 iload 7
+    0051 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0054 aload 4
+    0056 checkcast Class(kotlin/ranges/IntRange)
+    0059 astore 8
+    0061 bipush 11
+    0063 istore 9
+    0065 aload 8
+    0067 iload 9
+    0069 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0072 istore 10
+    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0077 iload 10
+    0079 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0082 aload 4
+    0084 checkcast Class(kotlin/ranges/IntRange)
+    0087 astore 11
+    0089 aload 11
+    0091 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
+    0094 istore 12
+    0096 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0099 iload 12
+    0101 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0104 aload 4
+    0106 checkcast Class(kotlin/ranges/IntRange)
+    0109 astore 13
+    0111 aload 13
+    0113 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
+    0116 istore 14
+    0118 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0121 iload 14
+    0123 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0126 return
