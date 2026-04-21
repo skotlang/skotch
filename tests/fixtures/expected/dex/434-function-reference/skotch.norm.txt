@@ -1,0 +1,68 @@
+dex_version   035
+strings       27
+types         11
+methods       10
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "II"
+  "ILI"
+  "LI"
+  "LInputKt$Lambda$0;"
+  "LInputKt$Lambda$1;"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/jvm/functions/Function1;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "apply"
+  "double"
+  "input.kt"
+  "intValue"
+  "invoke"
+  "main"
+  "out"
+  "println"
+  "valueOf"
+
+--- types ---
+  I
+  LInputKt$Lambda$0;
+  LInputKt$Lambda$1;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/jvm/functions/Function1;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$Lambda$0;.<init>()V
+  LInputKt$Lambda$1;.<init>()V
+  LInputKt;.apply(Ljava/lang/Object;I)I
+  LInputKt;.double(I)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=2 insns=14
+  method       double(I)I flags=0x0019 regs=4 ins=1 outs=0 insns=5
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=32
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

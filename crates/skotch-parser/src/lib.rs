@@ -2873,6 +2873,59 @@ impl<'a> Parser<'a> {
             TokenKind::StringStart => self.parse_string_literal(),
             TokenKind::LBrace => self.parse_lambda_expr(),
             TokenKind::KwObject => self.parse_object_expr(),
+            TokenKind::ColonColon => {
+                // ::functionName — callable reference.
+                // Desugar to a lambda: { args... -> functionName(args...) }
+                // For simplicity, generate a single-arg lambda { $it -> f($it) }
+                // since most use cases are single-arg functions.
+                self.bump(); // consume ::
+                self.skip_trivia();
+                let fn_idx = self.pos;
+                let fn_span = self.peek_span();
+                self.expect(TokenKind::Ident, "function name after ::");
+                let fn_name = self.intern_ident_at(fn_idx);
+                let end_span = fn_span;
+                let full_span = span.merge(end_span);
+                // Desugar to: { $ref_arg: Any -> functionName($ref_arg) }
+                let param_name = self.interner.intern("$ref_arg");
+                let param_ty = TypeRef {
+                    name: self.interner.intern("Any"),
+                    nullable: false,
+                    func_params: None,
+                    type_args: Vec::new(),
+                    is_suspend: false,
+                    span: fn_span,
+                };
+                let param = Param {
+                    name: param_name,
+                    ty: param_ty,
+                    default: None,
+                    is_vararg: false,
+                    span: fn_span,
+                };
+                let call = Expr::Call {
+                    callee: Box::new(Expr::Ident(fn_name, fn_span)),
+                    args: vec![CallArg {
+                        name: None,
+                        expr: Expr::Ident(param_name, fn_span),
+                    }],
+                    type_args: Vec::new(),
+                    span: full_span,
+                };
+                Expr::Lambda {
+                    params: vec![param],
+                    body: Block {
+                        stmts: vec![Stmt::Return {
+                            value: Some(call),
+                            label: None,
+                            span: full_span,
+                        }],
+                        span: full_span,
+                    },
+                    is_suspend: false,
+                    span: full_span,
+                }
+            }
             other => {
                 self.diags.push(Diagnostic::error(
                     span,

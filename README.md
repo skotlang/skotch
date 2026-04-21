@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 412 language-feature fixtures validated across 5 targets.
+> implemented. 413 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-412 active test fixtures (415 total, 3 stubs for upcoming features).
+413 active test fixtures (416 total, 3 stubs for upcoming features).
 
 ### Implemented and stable
 
@@ -400,7 +400,7 @@ nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
 | Infix operators | [§7.2.5](https://kotlinlang.org/spec/expressions.html#infix-function-call) | Easy | `to`, `shl`, `shr`, `and`, `or`, `xor`, `contains`, `zip` |
 | Sealed interfaces | [§4.5.4](https://kotlinlang.org/spec/declarations.html#sealed-classes-and-interfaces) | Easy | `sealed interface Result` with subclass hierarchy |
 | Enum properties | [§4.5.3](https://kotlinlang.org/spec/declarations.html#enum-class-declaration) | Easy | `enum class Color(val rgb: Int) { RED(0xFF0000) }` |
-| Function references | [§7.2.8](https://kotlinlang.org/spec/expressions.html#callable-references) | Medium | `::functionName` syntax |
+| [Function references](https://kotlinlang.org/spec/expressions.html#callable-references) | §7.2.8 | `::functionName` desugars to lambda; works with HOFs like `apply(::double, 5)` |
 
 ## Running the tests
 

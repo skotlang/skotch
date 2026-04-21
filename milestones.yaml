@@ -187,12 +187,12 @@ milestones:
           erased types (all params Ty::Any, return Ty::Any). Lambda body
           unboxes params to annotated types. Return values autoboxed.
 
-      - name: "Function reference syntax (NOT YET IMPLEMENTED)"
+      - name: "Function reference syntax (landed)"
+        completed: true
         description: >
-          ::functionName creates a FunctionN reference to a named function.
-          val f: (Int) -> Int = ::double. DEFERRED — requires parser support
-          for :: prefix operator and lambda-wrapping codegen. Workaround:
-          use lambda { x -> f(x) } instead.
+          ::functionName creates a lambda wrapper for the named function.
+          Parser recognizes :: prefix, desugars to { $ref_arg -> f($ref_arg) }.
+          Works with HOFs: apply(::double, 5). See fixture 434-function-reference.
         acceptance_criteria:
           - "val f = ::println; f(42) prints 42"
 

@@ -7540,13 +7540,77 @@ fn walk_block(
                             .get(i)
                             .and_then(|p| target.locals.get(p.0 as usize));
                         if let Some(p_ty) = param_ty {
-                            if matches!(p_ty, Ty::Any) {
+                            if matches!(p_ty, Ty::Any) && !matches!(arg_ty, Ty::Any | Ty::Class(_))
+                            {
+                                // Box primitive → Object.
                                 autobox(code, cp, stack, max_stack, arg_ty);
+                            } else if matches!(arg_ty, Ty::Any | Ty::Class(_))
+                                && matches!(
+                                    p_ty,
+                                    Ty::Int | Ty::Char | Ty::Long | Ty::Double | Ty::Bool
+                                )
+                            {
+                                // Unbox Object → primitive.
+                                match p_ty {
+                                    Ty::Int => {
+                                        let ci = cp.class("java/lang/Integer");
+                                        code.push(0xC0);
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                        let m =
+                                            cp.methodref("java/lang/Integer", "intValue", "()I");
+                                        code.push(0xB6);
+                                        code.write_u16::<BigEndian>(m).unwrap();
+                                    }
+                                    Ty::Bool => {
+                                        let ci = cp.class("java/lang/Boolean");
+                                        code.push(0xC0);
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                        let m = cp.methodref(
+                                            "java/lang/Boolean",
+                                            "booleanValue",
+                                            "()Z",
+                                        );
+                                        code.push(0xB6);
+                                        code.write_u16::<BigEndian>(m).unwrap();
+                                    }
+                                    Ty::Long => {
+                                        let ci = cp.class("java/lang/Long");
+                                        code.push(0xC0);
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                        let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                                        code.push(0xB6);
+                                        code.write_u16::<BigEndian>(m).unwrap();
+                                        bump(stack, max_stack, 1); // long is 2 slots
+                                    }
+                                    Ty::Double => {
+                                        let ci = cp.class("java/lang/Double");
+                                        code.push(0xC0);
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                        let m =
+                                            cp.methodref("java/lang/Double", "doubleValue", "()D");
+                                        code.push(0xB6);
+                                        code.write_u16::<BigEndian>(m).unwrap();
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
                     }
                     let descriptor = jvm_descriptor(target);
-                    let mref = cp.methodref(class_name, &target.name, &descriptor);
+                    // If we're inside a lambda class but the target is a
+                    // top-level function, use the module's main class name
+                    // (e.g. "InputKt") instead of the lambda class name.
+                    let effective_class = if class_name.contains("$Lambda$") {
+                        // Extract the enclosing class: "InputKt$Lambda$0" → "InputKt"
+                        class_name
+                            .find("$Lambda$")
+                            .map(|pos| &class_name[..pos])
+                            .unwrap_or(class_name)
+                    } else {
+                        class_name
+                    };
+                    let mref = cp.methodref(effective_class, &target.name, &descriptor);
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mref).unwrap();
                     if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {

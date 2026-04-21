@@ -128,6 +128,7 @@ pub enum TokenKind {
     GtEq,        // >=
     AmpAmp,      // &&
     PipePipe,    // ||
+    ColonColon,  // :: (callable reference)
     DotDot,      // .. (range operator)
     PlusEq,      // +=
     MinusEq,     // -=

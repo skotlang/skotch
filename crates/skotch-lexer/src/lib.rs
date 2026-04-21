@@ -248,6 +248,7 @@ impl<'a> Lexer<'a> {
             (b'>', Some(b'=')) => Some((TokenKind::GtEq, 2)),
             (b'&', Some(b'&')) => Some((TokenKind::AmpAmp, 2)),
             (b'|', Some(b'|')) => Some((TokenKind::PipePipe, 2)),
+            (b':', Some(b':')) => Some((TokenKind::ColonColon, 2)),
             (b'.', Some(b'.')) => Some((TokenKind::DotDot, 2)),
             (b'+', Some(b'=')) => Some((TokenKind::PlusEq, 2)),
             (b'-', Some(b'=')) => Some((TokenKind::MinusEq, 2)),
