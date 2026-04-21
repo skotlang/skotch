@@ -305,10 +305,10 @@ pub enum Stmt {
     },
     /// Local function declaration inside a block.
     LocalFun(FunDecl),
-    /// `break` — exits the innermost loop.
-    Break(Span),
-    /// `continue` — skips to the next iteration of the innermost loop.
-    Continue(Span),
+    /// `break` or `break@label` — exits a loop.
+    Break { label: Option<Symbol>, span: Span },
+    /// `continue` or `continue@label` — skips to next iteration.
+    Continue { label: Option<Symbol>, span: Span },
     /// `while (cond) { body }`.
     While { cond: Expr, body: Block, span: Span },
     /// `do { body } while (cond)`.
