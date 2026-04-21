@@ -2720,15 +2720,42 @@ fn lower_stmt(
                 loop_ctx,
             );
             if let (Some(a), Some(i), Some(v)) = (arr, idx, val) {
-                let dest = fb.new_local(Ty::Unit);
-                fb.push_stmt(MStmt::Assign {
-                    dest,
-                    value: Rvalue::ArrayStore {
-                        array: a,
-                        index: i,
-                        value: v,
-                    },
-                });
+                let arr_ty = fb.mf.locals[a.0 as usize].clone();
+                // Check for operator fun set() on user-defined classes.
+                let has_set = if let Ty::Class(ref cn) = arr_ty {
+                    module
+                        .classes
+                        .iter()
+                        .find(|c| &c.name == cn)
+                        .is_some_and(|cls| cls.methods.iter().any(|m| m.name == "set"))
+                } else {
+                    false
+                };
+                if has_set {
+                    if let Ty::Class(cn) = &arr_ty {
+                        let dest = fb.new_local(Ty::Unit);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: cn.clone(),
+                                    method_name: "set".to_string(),
+                                },
+                                args: vec![a, i, v],
+                            },
+                        });
+                    }
+                } else {
+                    let dest = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayStore {
+                            array: a,
+                            index: i,
+                            value: v,
+                        },
+                    });
+                }
             }
             true
         }
@@ -6051,13 +6078,14 @@ fn lower_expr(
                             name_span: *lspan,
                             type_params: Vec::new(),
                             params: lparams.clone(),
-                            return_ty: None, // inferred from body
+                            return_ty: None,
                             receiver_ty: None,
                             body: lbody.clone(),
                             is_open: false,
                             is_override: true,
                             is_abstract: false,
                             is_suspend: false,
+                            visibility: skotch_syntax::Visibility::Public,
                             span: *lspan,
                         };
                         // If the SAM method returns non-Unit, set return type.
@@ -9095,10 +9123,39 @@ fn lower_expr(
                     });
                     Some(dest)
                 }
+                Ty::Class(cn) => {
+                    // Check for operator fun get() on the class.
+                    let get_method = module
+                        .classes
+                        .iter()
+                        .find(|c| &c.name == cn)
+                        .and_then(|cls| cls.methods.iter().find(|m| m.name == "get"))
+                        .map(|m| m.return_ty.clone());
+                    if let Some(ret_ty) = get_method {
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: cn.clone(),
+                                    method_name: "get".to_string(),
+                                },
+                                args: vec![arr, idx],
+                            },
+                        });
+                        Some(dest)
+                    } else {
+                        diags.push(Diagnostic::error(
+                            receiver.span(),
+                            format!("no operator fun get() on class `{cn}`"),
+                        ));
+                        None
+                    }
+                }
                 _ => {
                     diags.push(Diagnostic::error(
                         receiver.span(),
-                        "index operator is only supported on String, IntArray, List, and Map",
+                        "index operator is only supported on String, IntArray, List, Map, and classes with operator fun get()",
                     ));
                     None
                 }

@@ -1,0 +1,80 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=20
+    0000 bipush 10
+    0002 istore 1
+    0004 bipush 20
+    0006 istore 2
+    0008 bipush 30
+    0010 istore 3
+    0012 iconst_3
+    0013 istore 4
+    0015 iload 4
+    0017 op_0xBC
+    0018 op_0x0A
+    0019 astore 5
+    0021 iconst_0
+    0022 istore 6
+    0024 aload 5
+    0026 iload 6
+    0028 iload 1
+    0030 op_0x4F
+    0031 iconst_1
+    0032 istore 7
+    0034 aload 5
+    0036 iload 7
+    0038 iload 2
+    0040 op_0x4F
+    0041 iconst_2
+    0042 istore 8
+    0044 aload 5
+    0046 iload 8
+    0048 iload 3
+    0050 op_0x4F
+    0051 new Class(Wrapper)
+    0054 dup
+    0055 aload 5
+    0057 invokespecial Method(Wrapper.<init>:([I)V)
+    0060 astore 9
+    0062 aload 9
+    0064 checkcast Class(Wrapper)
+    0067 astore 10
+    0069 aload 10
+    0071 checkcast Class(Wrapper)
+    0074 astore 11
+    0076 iconst_1
+    0077 istore 12
+    0079 aload 11
+    0081 iload 12
+    0083 invokevirtual Method(Wrapper.get:(I)I)
+    0086 istore 13
+    0088 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0091 iload 13
+    0093 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0096 aload 10
+    0098 checkcast Class(Wrapper)
+    0101 astore 14
+    0103 iconst_1
+    0104 istore 15
+    0106 bipush 99
+    0108 istore 16
+    0110 aload 14
+    0112 iload 15
+    0114 iload 16
+    0116 invokevirtual Method(Wrapper.set:(II)V)
+    0119 aload 10
+    0121 checkcast Class(Wrapper)
+    0124 astore 17
+    0126 iconst_1
+    0127 istore 18
+    0129 aload 17
+    0131 iload 18
+    0133 invokevirtual Method(Wrapper.get:(I)I)
+    0136 istore 19
+    0138 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0141 iload 19
+    0143 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0146 return

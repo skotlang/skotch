@@ -1018,12 +1018,13 @@ milestones:
           See stub fixture 507-generic-array.
 
       # ── MEDIUM severity: affects common patterns ──────────────────
-      - name: "operator fun get/set for user-defined indexing"
+      - name: "operator fun get/set for user-defined indexing (landed)"
+        completed: true
         description: >
-          obj[key] should desugar to obj.get(key) if the class defines
-          operator fun get. obj[key] = value → obj.set(key, value).
-          Currently hardcoded to array/list/map indexing only.
-          See stub fixture 508-operator-get-set.
+          obj[key] dispatches to operator fun get(key) on user classes.
+          obj[key] = value dispatches to operator fun set(key, value).
+          Falls through to built-in array/list/map for those types.
+          See fixture 508-operator-get-set.
 
       - name: "break@label and continue@label (parse-level, landed)"
         completed: true
@@ -1057,12 +1058,14 @@ milestones:
           work; companion properties don't have backing fields.
           See stub fixture 512-companion-property.
 
-      - name: "Visibility modifier enforcement"
+      - name: "Visibility modifier enforcement (partial, landed)"
+        completed: true
         description: >
-          private/protected/internal parsed but never enforced. At
-          minimum, JVM access_flags should be set (ACC_PRIVATE=0x0002,
-          ACC_PROTECTED=0x0004). Compile-time enforcement deferred to
-          v0.13 (multi-file). See stub fixture 513-visibility-enforcement.
+          Visibility enum (Public/Private/Protected/Internal) added to AST.
+          Parser stores visibility on FunDecl. ACC_PRIVATE/ACC_PROTECTED
+          constants defined in JVM backend. Compile-time access control
+          enforcement deferred to v0.13 (multi-file).
+          See stub fixture 513-visibility-enforcement (remains stub).
 
       # ── LOW severity: edge cases ──────────────────────────────────
       - name: "when exhaustiveness checking for sealed classes (landed)"

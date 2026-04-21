@@ -38,7 +38,7 @@ use skotch_syntax::{
     BinOp, Block, CallArg, ClassDecl, ConstructorParam, Decl, EnumDecl, Expr, FunDecl, ImportDecl,
     InterfaceDecl, KtFile, ObjectDecl, PackageDecl, Param, PropertyDecl, SecondaryConstructor,
     Stmt, SuperClassRef, TemplatePart, Token, TokenKind, TypeAliasDecl, TypeParam, TypeRef,
-    UnaryOp, ValDecl, WhenBranch,
+    UnaryOp, ValDecl, Visibility, WhenBranch,
 };
 
 /// Parse a lexed file into an AST. The lexer's `LexedFile` is consumed
@@ -231,6 +231,7 @@ impl<'a> Parser<'a> {
             let mut is_abstract = false;
             let mut is_sealed = false;
             let mut is_suspend = false;
+            let mut visibility = Visibility::Public;
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -256,6 +257,9 @@ impl<'a> Parser<'a> {
                     TokenKind::KwAbstract => is_abstract = true,
                     TokenKind::KwSealed => is_sealed = true,
                     TokenKind::KwSuspend => is_suspend = true,
+                    TokenKind::KwPrivate => visibility = Visibility::Private,
+                    TokenKind::KwProtected => visibility = Visibility::Protected,
+                    TokenKind::KwInternal => visibility = Visibility::Internal,
                     _ => {}
                 }
                 self.bump();
@@ -268,6 +272,7 @@ impl<'a> Parser<'a> {
                     f.is_override = false;
                     f.is_abstract = is_abstract;
                     f.is_suspend = is_suspend;
+                    f.visibility = visibility;
                     decls.push(Decl::Fun(f));
                 }
                 TokenKind::KwVal | TokenKind::KwVar => {
@@ -1354,6 +1359,7 @@ impl<'a> Parser<'a> {
             is_override: false,
             is_abstract: false,
             is_suspend: false,
+            visibility: Visibility::Public,
             span,
         }
     }
@@ -1680,6 +1686,7 @@ impl<'a> Parser<'a> {
             is_open: false,
             is_abstract: false,
             is_override: false,
+            visibility: Visibility::Public,
             receiver_ty: Some(receiver_type),
         }
     }

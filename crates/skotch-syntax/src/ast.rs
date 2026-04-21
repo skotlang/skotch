@@ -19,6 +19,16 @@
 use skotch_intern::Symbol;
 use skotch_span::{FileId, Span};
 
+/// Kotlin visibility modifier.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Visibility {
+    #[default]
+    Public,
+    Private,
+    Protected,
+    Internal,
+}
+
 /// One parsed `.kt` file.
 #[derive(Clone, Debug)]
 pub struct KtFile {
@@ -131,11 +141,9 @@ pub struct FunDecl {
     pub is_open: bool,
     pub is_override: bool,
     pub is_abstract: bool,
-    /// True when declared with the `suspend` modifier. The keyword is
-    /// currently accepted for source compatibility but no CPS transform
-    /// is applied; the function is lowered as a normal (non-suspending)
-    /// function. See milestones.yaml v0.9.0 for the full coroutine plan.
+    /// True when declared with the `suspend` modifier.
     pub is_suspend: bool,
+    pub visibility: Visibility,
     pub span: Span,
 }
 

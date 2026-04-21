@@ -1,11 +1,11 @@
-class Grid(val rows: Int, val cols: Int) {
-    private val data = IntArray(rows * cols)
-    operator fun get(r: Int, c: Int): Int = data[r * cols + c]
-    operator fun set(r: Int, c: Int, value: Int) { data[r * cols + c] = value }
+class Wrapper(val items: IntArray) {
+    operator fun get(i: Int): Int = items[i]
+    operator fun set(i: Int, v: Int) { items[i] = v }
 }
 
 fun main() {
-    val g = Grid(3, 3)
-    g[1, 1] = 42
-    println(g[1, 1])
+    val w = Wrapper(intArrayOf(10, 20, 30))
+    println(w[1])
+    w[1] = 99
+    println(w[1])
 }
