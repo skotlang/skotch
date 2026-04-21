@@ -1,4 +1,4 @@
 name   = "112-string-builder"
-status = "stub"
-features = ["StringBuilder", "for-loop", "range", "if", "method-chain"]
-reason = "Requires StringBuilder usage with method chaining and for-in loop."
+status = "active"
+features = ["StringBuilder", "append", "toString", "method-call"]
+expected_output = "Hello, World\n"

@@ -5606,6 +5606,28 @@ fn lower_expr(
                         }
                     }
 
+                    // Fallback: if the method wasn't found in MIR classes,
+                    // check for known Java methods.
+                    if return_ty == Ty::Unit {
+                        return_ty = match (method_name_str.as_str(), args.len()) {
+                            ("toString", 0) => Ty::String,
+                            ("hashCode", 0) => Ty::Int,
+                            ("equals", 1) => Ty::Bool,
+                            ("length", 0) => Ty::Int,
+                            ("size", 0) => Ty::Int,
+                            _ => {
+                                // StringBuilder.append returns StringBuilder.
+                                if class_name.contains("StringBuilder")
+                                    && method_name_str == "append"
+                                {
+                                    Ty::Class(class_name.clone())
+                                } else {
+                                    Ty::Unit
+                                }
+                            }
+                        };
+                    }
+
                     // Session 28: suspend instance method calls. Append
                     // the $completion continuation and emit as VirtualJava
                     // so the state machine extractor detects it as a
