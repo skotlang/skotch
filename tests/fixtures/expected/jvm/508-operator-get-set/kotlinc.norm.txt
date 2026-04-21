@@ -1,0 +1,50 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=2
+    0000 new Class(Wrapper)
+    0003 dup
+    0004 iconst_3
+    0005 op_0xBC
+    0006 op_0x0A
+    0007 astore_1
+    0008 aload_1
+    0009 iconst_0
+    0010 bipush 10
+    0012 op_0x4F
+    0013 aload_1
+    0014 iconst_1
+    0015 bipush 20
+    0017 op_0x4F
+    0018 aload_1
+    0019 iconst_2
+    0020 bipush 30
+    0022 op_0x4F
+    0023 aload_1
+    0024 invokespecial Method(Wrapper.<init>:([I)V)
+    0027 astore_0
+    0028 aload_0
+    0029 iconst_1
+    0030 invokevirtual Method(Wrapper.get:(I)I)
+    0033 istore_1
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 iload_1
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 aload_0
+    0042 iconst_1
+    0043 bipush 99
+    0045 invokevirtual Method(Wrapper.set:(II)V)
+    0048 aload_0
+    0049 iconst_1
+    0050 invokevirtual Method(Wrapper.get:(I)I)
+    0053 istore_1
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 iload_1
+    0058 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0061 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

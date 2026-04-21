@@ -1,4 +1,4 @@
 name   = "508-operator-get-set"
-status = "stub"
+status = "active"
 features = ["operator-get", "operator-set", "user-defined-indexing"]
-reason = "obj[key] only works for built-in arrays/lists/maps. User operator fun get/set not dispatched."
+expected_output = "20\n99\n"
