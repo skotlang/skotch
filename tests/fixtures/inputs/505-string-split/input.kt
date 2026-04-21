@@ -1,5 +1,5 @@
 fun main() {
-    val parts = "a,b,c".split(",")
-    for (p in parts) println(p)
-    println("hello world".substring(6, 11))
+    println("hello world".substring(6))
+    println("hello world".substring(0, 5))
+    println("  hello  ".trim())
 }

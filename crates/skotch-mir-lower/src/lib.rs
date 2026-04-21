@@ -5296,6 +5296,36 @@ fn lower_expr(
                             "(Ljava/lang/String;)Z",
                             Ty::Bool,
                         )),
+                        (Ty::String, "substring", 2) => Some((
+                            "java/lang/String",
+                            "substring",
+                            "(II)Ljava/lang/String;",
+                            Ty::String,
+                        )),
+                        (Ty::String, "substring", 1) => Some((
+                            "java/lang/String",
+                            "substring",
+                            "(I)Ljava/lang/String;",
+                            Ty::String,
+                        )),
+                        (Ty::String, "split", 1) => Some((
+                            "java/lang/String",
+                            "split",
+                            "(Ljava/lang/String;)[Ljava/lang/String;",
+                            Ty::Any, // returns String[] which maps to Object
+                        )),
+                        (Ty::String, "trim", 0) => Some((
+                            "java/lang/String",
+                            "trim",
+                            "()Ljava/lang/String;",
+                            Ty::String,
+                        )),
+                        (Ty::String, "toByteArray", 0) => {
+                            Some(("java/lang/String", "getBytes", "()[B", Ty::Any))
+                        }
+                        (Ty::String, "toCharArray", 0) => {
+                            Some(("java/lang/String", "toCharArray", "()[C", Ty::Any))
+                        }
                         (Ty::String, "repeat", 1) => Some((
                             "java/lang/String",
                             "repeat",
@@ -9957,9 +9987,13 @@ fn lower_expr(
             }
             // TODO: smart casts — narrow obj's type in the then-branch
         }
-        Expr::AsCast { expr: casted, .. } => {
-            // For now, `as` is a no-op — just return the expression.
-            lower_expr(
+        Expr::AsCast {
+            expr: casted,
+            type_name,
+            safe,
+            ..
+        } => {
+            let obj = lower_expr(
                 casted,
                 fb,
                 scope,
@@ -9969,13 +10003,77 @@ fn lower_expr(
                 interner,
                 diags,
                 loop_ctx,
-            )
+            )?;
+            let type_str = interner.resolve(*type_name);
+            let target_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
+                if module.classes.iter().any(|c| c.name == type_str) {
+                    Ty::Class(type_str.to_string())
+                } else {
+                    Ty::Any
+                }
+            });
+            let jvm_type = match type_str {
+                "String" => "java/lang/String",
+                "Int" => "java/lang/Integer",
+                "Long" => "java/lang/Long",
+                "Double" => "java/lang/Double",
+                "Boolean" => "java/lang/Boolean",
+                "Char" => "java/lang/Character",
+                other => other,
+            };
+            if *safe {
+                // `as?` — emit instanceof check: returns T? (null if not match)
+                let check = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: check,
+                    value: Rvalue::InstanceOf {
+                        obj,
+                        type_descriptor: jvm_type.to_string(),
+                    },
+                });
+                let then_block = fb.new_block();
+                let else_block = fb.new_block();
+                let merge_block = fb.new_block();
+                let result = fb.new_local(Ty::Nullable(Box::new(target_ty.clone())));
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: check,
+                        then_block,
+                        else_block,
+                    },
+                    then_block,
+                );
+                // then: cast succeeded — copy obj as target type
+                let cast_local = fb.new_local(target_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest: cast_local,
+                    value: Rvalue::Local(obj),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Local(cast_local),
+                });
+                fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
+                // else: cast failed — result = null
+                fb.push_stmt(MStmt::Assign {
+                    dest: result,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
+                Some(result)
+            } else {
+                // `as` — just retype (JVM backend emits checkcast from the
+                // Rvalue::Local copy when dest type is narrower than source).
+                let dest = fb.new_local(target_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Local(obj),
+                });
+                Some(dest)
+            }
         }
         Expr::NotNullAssert { expr: asserted, .. } => {
-            // x!! → unwrap the Nullable wrapper so downstream dispatch
-            // sees the concrete inner type (e.g. String instead of
-            // Nullable(String)).  The JVM will throw NPE naturally if
-            // the value is null and a method is called on it.
+            // x!! → null check + unwrap. If null, throw KotlinNullPointerException.
             let inner = lower_expr(
                 asserted,
                 fb,
@@ -9989,6 +10087,50 @@ fn lower_expr(
             )?;
             let inner_ty = fb.mf.locals[inner.0 as usize].clone();
             if let Ty::Nullable(unwrapped) = inner_ty {
+                // Emit null check: if (inner == null) throw NPE
+                let null_val = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                fb.push_stmt(MStmt::Assign {
+                    dest: null_val,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                let is_null = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: is_null,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpEq,
+                        lhs: inner,
+                        rhs: null_val,
+                    },
+                });
+                let throw_block = fb.new_block();
+                let ok_block = fb.new_block();
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: is_null,
+                        then_block: throw_block,
+                        else_block: ok_block,
+                    },
+                    throw_block,
+                );
+                // throw block: new NullPointerException + athrow
+                let npe = fb.new_local(Ty::Class("java/lang/NullPointerException".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: npe,
+                    value: Rvalue::NewInstance("java/lang/NullPointerException".to_string()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: npe,
+                    value: Rvalue::Call {
+                        kind: CallKind::ConstructorJava {
+                            class_name: "java/lang/NullPointerException".to_string(),
+                            descriptor: "()V".to_string(),
+                        },
+                        args: vec![],
+                    },
+                });
+                fb.set_terminator(Terminator::Throw(npe));
+                fb.cur_block = ok_block;
+                // ok block: unwrap to non-nullable type
                 let dest = fb.new_local(*unwrapped);
                 fb.push_stmt(MStmt::Assign {
                     dest,
@@ -9996,7 +10138,6 @@ fn lower_expr(
                 });
                 Some(dest)
             } else {
-                // Already non-nullable — pass through.
                 Some(inner)
             }
         }

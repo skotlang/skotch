@@ -1,4 +1,4 @@
 name   = "502-nonnull-assert-npe"
-status = "stub"
-features = ["!!", "non-null-assertion", "NullPointerException"]
-reason = "!! currently unwraps type without runtime null check. Should throw NPE if null."
+status = "active"
+features = ["!!", "non-null-assertion", "null-check"]
+expected_output = "HELLO\n"

@@ -1,0 +1,40 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=9
+    0000 ldc "hello"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 aload 2
+    0010 astore 3
+    0012 aconst_null
+    0013 astore 4
+    0015 aload 3
+    0017 aload 4
+    0019 if_acmpeq 26
+    0022 iconst_0
+    0023 goto 27
+    0026 iconst_1
+    0027 istore 5
+    0029 iload 5
+    0031 ifeq 46
+    0034 new Class(java/lang/NullPointerException)
+    0037 dup
+    0038 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0041 astore 6
+    0043 aload 6
+    0045 athrow
+    0046 aload 3
+    0048 checkcast Class(java/lang/String)
+    0051 astore 7
+    0053 aload 7
+    0055 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0058 astore 8
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 aload 8
+    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0068 return
+    sub_attr  StackMapTable (70 bytes)

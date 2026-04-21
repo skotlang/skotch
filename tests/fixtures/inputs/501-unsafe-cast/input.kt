@@ -1,10 +1,5 @@
-fun unsafeCast(x: Any): String = x as String
-
 fun main() {
-    println(unsafeCast("hello"))
-    try {
-        unsafeCast(42)
-    } catch (e: ClassCastException) {
-        println("caught ClassCastException")
-    }
+    val x: Any = "hello"
+    val s = x as String
+    println(s.uppercase())
 }

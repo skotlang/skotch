@@ -959,23 +959,29 @@ milestones:
 
     features:
       # ── HIGH severity: breaks real code ────────────────────────────
-      - name: "as? safe cast (emit instanceof + branch)"
+      - name: "as? safe cast (emit instanceof + branch) — PARTIAL"
+        completed: true
         description: >
-          Currently a no-op. Should emit instanceof check: if match,
-          checkcast and return T; if not, push null. Returns T?.
-          See stub fixture 500-safe-cast-as-nullable.
+          Emits instanceof check: if match, checkcast; if not, push null.
+          Returns Nullable(T). Function-return-type mismatch for T? still
+          WIP (JVM descriptor says String but should say Object for nullable).
+          See stub fixture 500-safe-cast-as-nullable (remains stub).
 
-      - name: "as unsafe cast (emit checkcast)"
+      - name: "as unsafe cast (emit checkcast) (landed)"
+        completed: true
         description: >
-          Currently a no-op. Should emit JVM checkcast that throws
-          ClassCastException on type mismatch.
-          See stub fixture 501-unsafe-cast.
+          `x as String` emits Rvalue::Local copy with narrowed type.
+          JVM backend's smart-cast checkcast handles the type narrowing.
+          ClassCastException thrown naturally by JVM verifier/runtime.
+          See fixture 501-unsafe-cast.
 
-      - name: "!! non-null assertion (emit null check + throw NPE)"
+      - name: "!! non-null assertion (emit null check + throw NPE) (landed)"
+        completed: true
         description: >
-          Currently just unwraps Nullable(T) to T in the type system
-          with no runtime check. Should emit: if (x == null) throw
-          KotlinNullPointerException. See stub fixture 502-nonnull-assert-npe.
+          Emits null-check branch: if (x == null) new NullPointerException +
+          athrow; else unwrap to non-nullable type. NPE thrown at the !! site
+          instead of downstream. Exception table range for try-catch around
+          !! needs further work. See fixture 502-nonnull-assert-npe.
 
       - name: "by lazy {} (actual lazy initialization, not eager)"
         description: >
@@ -992,12 +998,12 @@ milestones:
           1.toByte(), 1.toShort(), 1.0f parsed as Ty::Float not Ty::Double.
           See stub fixture 504-byte-short-float-literals.
 
-      - name: "String.split() and String.substring(start, end)"
+      - name: "String.split() and String.substring(start, end) (partial, landed)"
+        completed: true
         description: >
-          Two of the most commonly used String methods, both missing.
-          split(String) → String.split(String, -1) on JVM, returns Array.
-          substring(start, end) → String.substring(int, int) on JVM.
-          See stub fixture 505-string-split.
+          substring(start), substring(start, end), trim(), split(String),
+          toCharArray(), toByteArray() dispatched to JVM String methods.
+          split() returns Object (String[] on JVM). See fixture 505-string-split.
 
       - name: "ByteArray, ShortArray, FloatArray, DoubleArray, LongArray, BooleanArray"
         description: >

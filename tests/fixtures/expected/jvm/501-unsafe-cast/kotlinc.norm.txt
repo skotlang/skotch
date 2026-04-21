@@ -1,0 +1,25 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=3
+    0000 ldc "hello"
+    0002 astore_0
+    0003 aload_0
+    0004 astore_1
+    0005 aload_1
+    0006 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0009 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0012 dup
+    0013 ldc "toUpperCase(...)"
+    0015 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0018 astore_2
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 aload_2
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

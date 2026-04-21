@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=22
+  code        max_stack=3 max_locals=25
     0000 ldc "hello"
     0002 astore 1
     0004 aload 1
@@ -41,49 +41,66 @@ method        main ([Ljava/lang/String;)V 0x0009
     0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0076 aload 2
     0078 astore 10
-    0080 aload 10
-    0082 checkcast Class(java/lang/String)
-    0085 astore 11
-    0087 aload 11
-    0089 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0092 astore 12
-    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0097 aload 12
-    0099 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0102 aconst_null
-    0103 astore 13
-    0105 aload 13
-    0107 astore 14
-    0109 aload 14
-    0111 astore 15
-    0113 aconst_null
-    0114 astore 16
-    0116 aload 15
-    0118 aload 16
-    0120 if_acmpne 127
-    0123 iconst_0
-    0124 goto 128
-    0127 iconst_1
-    0128 istore 17
-    0130 iload 17
-    0132 ifeq 163
-    0135 aload 15
-    0137 checkcast Class(java/lang/String)
-    0140 astore 18
-    0142 aload 18
-    0144 invokevirtual Method(java/lang/String.length:()I)
-    0147 istore 19
-    0149 iload 19
-    0151 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0154 astore 20
-    0156 aload 20
-    0158 astore 21
-    0160 goto 169
-    0163 aconst_null
-    0164 astore 21
-    0166 goto 169
-    0169 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0172 aload 21
-    0174 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0177 return
-    sub_attr  StackMapTable (308 bytes)
+    0080 aconst_null
+    0081 astore 11
+    0083 aload 10
+    0085 aload 11
+    0087 if_acmpeq 94
+    0090 iconst_0
+    0091 goto 95
+    0094 iconst_1
+    0095 istore 12
+    0097 iload 12
+    0099 ifeq 114
+    0102 new Class(java/lang/NullPointerException)
+    0105 dup
+    0106 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0109 astore 13
+    0111 aload 13
+    0113 athrow
+    0114 aload 10
+    0116 checkcast Class(java/lang/String)
+    0119 astore 14
+    0121 aload 14
+    0123 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0126 astore 15
+    0128 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0131 aload 15
+    0133 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0136 aconst_null
+    0137 astore 16
+    0139 aload 16
+    0141 astore 17
+    0143 aload 17
+    0145 astore 18
+    0147 aconst_null
+    0148 astore 19
+    0150 aload 18
+    0152 aload 19
+    0154 if_acmpne 161
+    0157 iconst_0
+    0158 goto 162
+    0161 iconst_1
+    0162 istore 20
+    0164 iload 20
+    0166 ifeq 197
+    0169 aload 18
+    0171 checkcast Class(java/lang/String)
+    0174 astore 21
+    0176 aload 21
+    0178 invokevirtual Method(java/lang/String.length:()I)
+    0181 istore 22
+    0183 iload 22
+    0185 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0188 astore 23
+    0190 aload 23
+    0192 astore 24
+    0194 goto 203
+    0197 aconst_null
+    0198 astore 24
+    0200 goto 203
+    0203 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0206 aload 24
+    0208 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0211 return
+    sub_attr  StackMapTable (435 bytes)
