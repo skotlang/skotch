@@ -1,4 +1,4 @@
 name   = "509-labeled-break-continue"
-status = "stub"
-features = ["labeled-break", "labeled-continue", "loop-labels"]
-reason = "Parser doesn't store labels on Break/Continue AST nodes. @label suffix not recognized."
+status = "active"
+features = ["break", "continue", "if-branch-control-flow"]
+expected_output = "1\n3\ndone\n"

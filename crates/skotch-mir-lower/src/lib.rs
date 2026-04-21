@@ -3202,13 +3202,13 @@ fn lower_stmt(
             );
             true
         }
-        Stmt::Break(_) => {
+        Stmt::Break { .. } => {
             if let Some((_continue_blk, break_blk)) = loop_ctx {
                 fb.set_terminator(Terminator::Goto(break_blk));
             }
             true
         }
-        Stmt::Continue(_) => {
+        Stmt::Continue { .. } => {
             if let Some((continue_blk, _break_blk)) = loop_ctx {
                 fb.set_terminator(Terminator::Goto(continue_blk));
             }
@@ -4198,7 +4198,7 @@ fn lower_expr(
                         );
                         then_terminates = true;
                     }
-                    skotch_syntax::Stmt::Break(_) | skotch_syntax::Stmt::Continue(_) => {
+                    skotch_syntax::Stmt::Break { .. } | skotch_syntax::Stmt::Continue { .. } => {
                         let _ = lower_stmt(
                             s,
                             fb,
@@ -4272,8 +4272,8 @@ fn lower_expr(
                             }
                         }
                         skotch_syntax::Stmt::Return { .. }
-                        | skotch_syntax::Stmt::Break(_)
-                        | skotch_syntax::Stmt::Continue(_) => {
+                        | skotch_syntax::Stmt::Break { .. }
+                        | skotch_syntax::Stmt::Continue { .. } => {
                             let _ = lower_stmt(
                                 s,
                                 fb,

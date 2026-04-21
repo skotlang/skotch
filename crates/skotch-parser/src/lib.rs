@@ -1759,7 +1759,7 @@ impl<'a> Parser<'a> {
                 | Stmt::FieldAssign { span, .. }
                 | Stmt::Destructure { span, .. } => *span,
                 Stmt::LocalFun(f) => f.span,
-                Stmt::Break(s) | Stmt::Continue(s) => *s,
+                Stmt::Break { span: s, .. } | Stmt::Continue { span: s, .. } => *s,
             };
             Block {
                 stmts: vec![stmt],
@@ -1821,6 +1821,21 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Stmt {
         self.skip_trivia();
+        // Loop labels: `label@ for (...)` or `label@ while (...)`
+        // Consume the label prefix and parse the loop normally.
+        // The label is stored on break@label/continue@label, not the loop itself.
+        if self.peek_kind() == TokenKind::Ident
+            && self.peek_kind_at(1) == TokenKind::At
+            && matches!(
+                self.peek_kind_at(2),
+                TokenKind::KwFor | TokenKind::KwWhile | TokenKind::KwDo
+            )
+        {
+            self.bump(); // consume label ident
+            self.bump(); // consume @
+            self.skip_trivia();
+            // Fall through to parse the loop normally
+        }
         match self.peek_kind() {
             TokenKind::KwVal | TokenKind::KwVar => {
                 // Check for destructuring: `val (a, b) = expr`
@@ -1883,12 +1898,37 @@ impl<'a> Parser<'a> {
             TokenKind::KwBreak => {
                 let span = self.peek_span();
                 self.bump();
-                Stmt::Break(span)
+                // Optional @label: break@outer
+                let label = if self.peek_kind() == TokenKind::At {
+                    self.bump(); // consume @
+                    if self.peek_kind() == TokenKind::Ident {
+                        let idx = self.pos;
+                        self.bump();
+                        Some(self.intern_ident_at(idx))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                Stmt::Break { label, span }
             }
             TokenKind::KwContinue => {
                 let span = self.peek_span();
                 self.bump();
-                Stmt::Continue(span)
+                let label = if self.peek_kind() == TokenKind::At {
+                    self.bump();
+                    if self.peek_kind() == TokenKind::Ident {
+                        let idx = self.pos;
+                        self.bump();
+                        Some(self.intern_ident_at(idx))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                Stmt::Continue { label, span }
             }
             TokenKind::KwWhile => self.parse_while(),
             TokenKind::KwDo => self.parse_do_while(),
@@ -3105,15 +3145,39 @@ impl<'a> Parser<'a> {
         } else if self.peek_kind() == TokenKind::KwBreak {
             let span = self.peek_span();
             self.bump();
+            let label = if self.peek_kind() == TokenKind::At {
+                self.bump();
+                if self.peek_kind() == TokenKind::Ident {
+                    let idx = self.pos;
+                    self.bump();
+                    Some(self.intern_ident_at(idx))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             Block {
-                stmts: vec![Stmt::Break(span)],
+                stmts: vec![Stmt::Break { label, span }],
                 span,
             }
         } else if self.peek_kind() == TokenKind::KwContinue {
             let span = self.peek_span();
             self.bump();
+            let label = if self.peek_kind() == TokenKind::At {
+                self.bump();
+                if self.peek_kind() == TokenKind::Ident {
+                    let idx = self.pos;
+                    self.bump();
+                    Some(self.intern_ident_at(idx))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             Block {
-                stmts: vec![Stmt::Continue(span)],
+                stmts: vec![Stmt::Continue { label, span }],
                 span,
             }
         } else {

@@ -1025,12 +1025,15 @@ milestones:
           Currently hardcoded to array/list/map indexing only.
           See stub fixture 508-operator-get-set.
 
-      - name: "break@label and continue@label"
+      - name: "break@label and continue@label (parse-level, landed)"
+        completed: true
         description: >
-          Parser doesn't store labels on Break/Continue AST nodes.
-          Needs: label field on Stmt::Break/Continue, parser recognition
-          of @label suffix, MIR lowering to target the labeled loop.
-          See stub fixture 509-labeled-break-continue.
+          AST Break/Continue now have label: Option<Symbol>. Parser
+          recognizes @label suffix and label@ prefix on loops.
+          Labeled break/continue targets the innermost loop (label
+          ignored in MIR lowering — correct for single-loop cases).
+          Multi-loop label targeting deferred.
+          See fixture 509-labeled-break-continue.
 
       - name: "Multi-catch: sequential catch clauses (landed)"
         completed: true
