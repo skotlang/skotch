@@ -15,7 +15,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0018 checkcast Class(Config)
     0021 astore 3
     0023 aload 3
-    0025 getfield Field(Config.greeting:Ljava/lang/String;)
+    0025 invokevirtual Method(Config.getGreeting:()Ljava/lang/String;)
     0028 astore 4
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 aload 4
@@ -24,7 +24,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0040 checkcast Class(Config)
     0043 astore 5
     0045 aload 5
-    0047 getfield Field(Config.greeting:Ljava/lang/String;)
+    0047 invokevirtual Method(Config.getGreeting:()Ljava/lang/String;)
     0050 astore 6
     0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0055 aload 6

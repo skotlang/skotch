@@ -12116,94 +12116,6 @@ fn lower_class(
         }
     }
 
-    // Eagerly lower `by lazy { ... }` delegate bodies in the constructor.
-    // Each delegate block is executed during construction; the last
-    // expression's value is stored into the backing field.
-    if !delegate_props.is_empty() {
-        let init_fn_idx = module.functions.len() + 2000; // temporary index
-        let mut fb = FnBuilder::new(init_fn_idx, "<init-delegate>".to_string(), Ty::Unit);
-        fb.mf.locals = init_fn.locals.clone();
-        fb.mf.params = init_fn.params.clone();
-        fb.mf.blocks[0].stmts = init_fn.blocks[0].stmts.clone();
-
-        let this_sym = interner.intern("this");
-        let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_id)];
-        for (sym, lid) in &ctor_param_ids {
-            scope.push((*sym, *lid));
-        }
-
-        for prop in &delegate_props {
-            let block = prop.delegate.as_ref().unwrap();
-            let field_name = interner.resolve(prop.name).to_string();
-            // Lower all statements in the delegate body.
-            // The last statement, if it is an expression, produces the
-            // result value for the field.
-            let mut result_local: Option<LocalId> = None;
-            for (i, s) in block.stmts.iter().enumerate() {
-                let is_last = i + 1 == block.stmts.len();
-                if is_last {
-                    // The last statement should be an expression whose value
-                    // we capture for the field.
-                    if let Stmt::Expr(e) = s {
-                        result_local = lower_expr(
-                            e,
-                            &mut fb,
-                            &mut scope,
-                            module,
-                            name_to_func,
-                            name_to_global,
-                            interner,
-                            diags,
-                            None,
-                        );
-                    } else {
-                        lower_stmt(
-                            s,
-                            &mut fb,
-                            &mut scope,
-                            module,
-                            name_to_func,
-                            name_to_global,
-                            interner,
-                            diags,
-                            None,
-                        );
-                    }
-                } else {
-                    lower_stmt(
-                        s,
-                        &mut fb,
-                        &mut scope,
-                        module,
-                        name_to_func,
-                        name_to_global,
-                        interner,
-                        diags,
-                        None,
-                    );
-                }
-            }
-            // Store the result into the field.
-            if let Some(val_id) = result_local {
-                fb.push_stmt(MStmt::Assign {
-                    dest: this_id,
-                    value: Rvalue::PutField {
-                        receiver: this_id,
-                        class_name: class_name.clone(),
-                        field_name,
-                        value: val_id,
-                    },
-                });
-            }
-        }
-        // Transfer lowered results back to init_fn.
-        init_fn.locals = fb.mf.locals;
-        init_fn.blocks = fb.mf.blocks;
-        if let Some(last) = init_fn.blocks.last_mut() {
-            last.terminator = Terminator::Return;
-        }
-    }
-
     // Lower init blocks — execute statements in the constructor.
     // We need a FnBuilder-like scope for the init block body. Since init_fn
     // is a raw MirFunction (not a FnBuilder), we create a temporary FnBuilder,
@@ -12316,6 +12228,164 @@ fn lower_class(
 
     // Lower methods.
     let mut mir_methods = Vec::new();
+    // Lower `by lazy { ... }` as truly lazy initialization.
+    // For each lazy property: generate a getter method that checks an
+    // `initialized` flag, runs the body on first access, and caches.
+    // The eager approach has been replaced with this lazy pattern.
+    if !delegate_props.is_empty() {
+        for prop in &delegate_props {
+            let block = prop.delegate.as_ref().unwrap();
+            let field_name = interner.resolve(prop.name).to_string();
+            let prop_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Any);
+
+            // Add a $initialized boolean field.
+            let init_field_name = format!("{}$initialized", field_name);
+            fields.push(MirField {
+                name: init_field_name.clone(),
+                ty: Ty::Bool,
+            });
+
+            // Generate getter: if (!field$initialized) { field = <body>; field$initialized = true } return field
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let getter_name = format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
+            let mut fb = FnBuilder::new(fn_idx, getter_name, prop_ty.clone());
+            let this_local = fb.new_local(Ty::Class(class_name.clone()));
+            fb.mf.params.push(this_local);
+            let this_sym = interner.intern("this");
+            let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+
+            // Load fields into scope for the lazy body.
+            for field in &fields {
+                if field.name == field_name || field.name == init_field_name {
+                    continue; // don't pre-load the lazy field itself
+                }
+                let fsym = interner.intern(&field.name);
+                let fl = fb.new_local(field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: fl,
+                    value: Rvalue::GetField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                    },
+                });
+                scope.push((fsym, fl));
+            }
+
+            // Check initialized flag.
+            let init_flag = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: init_flag,
+                value: Rvalue::GetField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: init_field_name.clone(),
+                },
+            });
+            let init_block = fb.new_block();
+            let done_block = fb.new_block();
+            fb.terminate_and_switch(
+                Terminator::Branch {
+                    cond: init_flag,
+                    then_block: done_block, // already initialized → skip
+                    else_block: init_block, // not initialized → run body
+                },
+                init_block,
+            );
+
+            // Init block: run the lazy body.
+            let mut result_local: Option<LocalId> = None;
+            for (i, s) in block.stmts.iter().enumerate() {
+                let is_last = i + 1 == block.stmts.len();
+                if is_last {
+                    if let Stmt::Expr(e) | Stmt::Return { value: Some(e), .. } = s {
+                        result_local = lower_expr(
+                            e,
+                            &mut fb,
+                            &mut scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            None,
+                        );
+                    } else {
+                        lower_stmt(
+                            s,
+                            &mut fb,
+                            &mut scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            None,
+                        );
+                    }
+                } else {
+                    lower_stmt(
+                        s,
+                        &mut fb,
+                        &mut scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    );
+                }
+            }
+            // Store result into backing field.
+            if let Some(val) = result_local {
+                let dummy = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: dummy,
+                    value: Rvalue::PutField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field_name.clone(),
+                        value: val,
+                    },
+                });
+            }
+            // Set initialized = true.
+            let true_val = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: true_val,
+                value: Rvalue::Const(MirConst::Bool(true)),
+            });
+            let dummy2 = fb.new_local(Ty::Unit);
+            fb.push_stmt(MStmt::Assign {
+                dest: dummy2,
+                value: Rvalue::PutField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: init_field_name,
+                    value: true_val,
+                },
+            });
+            fb.terminate_and_switch(Terminator::Goto(done_block), done_block);
+
+            // Done block: load and return the cached value.
+            let cached = fb.new_local(prop_ty);
+            fb.push_stmt(MStmt::Assign {
+                dest: cached,
+                value: Rvalue::GetField {
+                    receiver: this_local,
+                    class_name: class_name.clone(),
+                    field_name: field_name.clone(),
+                },
+            });
+            fb.set_terminator(Terminator::ReturnValue(cached));
+            mir_methods.push(fb.finish());
+        }
+    }
     for method in &c.methods {
         let method_name = interner.resolve(method.name).to_string();
         let declared_ret = method

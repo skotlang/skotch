@@ -1,0 +1,37 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=8
+    0000 new Class(Config)
+    0003 dup
+    0004 invokespecial Method(Config.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 checkcast Class(Config)
+    0014 astore 2
+    0016 ldc "before access"
+    0018 astore 3
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 aload 3
+    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0028 aload 2
+    0030 checkcast Class(Config)
+    0033 astore 4
+    0035 aload 4
+    0037 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
+    0040 astore 5
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 aload 5
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0050 aload 2
+    0052 checkcast Class(Config)
+    0055 astore 6
+    0057 aload 6
+    0059 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
+    0062 astore 7
+    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0067 aload 7
+    0069 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0072 return

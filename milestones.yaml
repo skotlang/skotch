@@ -983,12 +983,14 @@ milestones:
           instead of downstream. Exception table range for try-catch around
           !! needs further work. See fixture 502-nonnull-assert-npe.
 
-      - name: "by lazy {} (actual lazy initialization, not eager)"
+      - name: "by lazy {} (actual lazy initialization) (landed)"
+        completed: true
         description: >
-          Currently desugared to eager evaluation in constructor. Should
-          use a holder field + double-checked locking (or AtomicReference)
-          so the initializer runs on first access, not at construction time.
-          See stub fixture 503-lazy-delegation.
+          Truly lazy: generates $initialized boolean field + getter method
+          that checks the flag, runs the body on first access, and caches.
+          "computing..." only prints on first access, not in constructor.
+          Thread safety deferred (single-threaded check-and-set pattern).
+          See fixture 503-lazy-delegation.
 
       - name: "Byte/Short/Float literal production"
         description: >

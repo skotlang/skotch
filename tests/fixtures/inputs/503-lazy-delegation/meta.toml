@@ -1,4 +1,4 @@
 name   = "503-lazy-delegation"
-status = "stub"
+status = "active"
 features = ["by-lazy", "lazy-initialization", "delegate"]
-reason = "by lazy is currently eager (runs in constructor). Should defer to first access."
+expected_output = "before access\ninitializing\ncomputed\ncomputed\n"
