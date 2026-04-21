@@ -1,0 +1,4 @@
+name   = "500-safe-cast-as-nullable"
+status = "stub"
+features = ["as?", "safe-cast", "nullable-return"]
+reason = "as? is currently a no-op. Should emit instanceof + branch returning T? or null."

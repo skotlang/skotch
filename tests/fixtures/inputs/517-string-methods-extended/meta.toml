@@ -1,0 +1,4 @@
+name   = "517-string-methods-extended"
+status = "stub"
+features = ["String.trim", "String.padStart", "String.removePrefix", "String.removeSuffix"]
+reason = "Additional commonly-used String methods not yet dispatched to JVM."

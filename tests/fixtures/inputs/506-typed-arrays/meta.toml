@@ -1,0 +1,4 @@
+name   = "506-typed-arrays"
+status = "stub"
+features = ["ByteArray", "DoubleArray", "typed-array", "newarray"]
+reason = "Only IntArray exists. ByteArray/DoubleArray/etc. need Rvalue variants + JVM newarray opcodes."

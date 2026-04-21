@@ -275,7 +275,7 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-413 active test fixtures (416 total, 3 stubs for upcoming features).
+413 active test fixtures (434 total, 21 stubs tracking known gaps).
 
 ### Implemented and stable
 

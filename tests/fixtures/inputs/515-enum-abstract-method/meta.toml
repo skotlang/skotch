@@ -1,0 +1,4 @@
+name   = "515-enum-abstract-method"
+status = "stub"
+features = ["enum", "abstract-method", "per-entry-override"]
+reason = "Parser doesn't support method declarations inside enum entries."

@@ -1,0 +1,4 @@
+name   = "505-string-split"
+status = "stub"
+features = ["String.split", "String.substring", "two-arg"]
+reason = "String.split() and two-arg substring() not dispatched to JVM String methods."

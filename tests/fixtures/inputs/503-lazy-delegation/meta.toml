@@ -1,0 +1,4 @@
+name   = "503-lazy-delegation"
+status = "stub"
+features = ["by-lazy", "lazy-initialization", "delegate"]
+reason = "by lazy is currently eager (runs in constructor). Should defer to first access."

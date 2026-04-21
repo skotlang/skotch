@@ -1,0 +1,4 @@
+name   = "512-companion-property"
+status = "stub"
+features = ["companion-object", "companion-property", "static-field"]
+reason = "Companion methods work but companion var/val properties lack backing fields."

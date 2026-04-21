@@ -1,0 +1,4 @@
+name   = "501-unsafe-cast"
+status = "stub"
+features = ["as", "unsafe-cast", "ClassCastException"]
+reason = "as is currently a no-op. Should emit checkcast that throws ClassCastException."

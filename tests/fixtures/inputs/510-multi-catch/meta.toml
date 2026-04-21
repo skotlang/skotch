@@ -1,0 +1,4 @@
+name   = "510-multi-catch"
+status = "stub"
+features = ["multi-catch", "exception-hierarchy", "multiple-catch-clauses"]
+reason = "Only single catch clause per try. Parser doesn't support sequential catch blocks."

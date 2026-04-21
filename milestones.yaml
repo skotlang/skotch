@@ -933,6 +933,160 @@ milestones:
         mitigation: "Require explicit types where inference fails; add inference iteratively"
 
 # ============================================================================
+# v0.12.5 — Correctness Hardening
+# ============================================================================
+# Identified gaps in "completed" milestones v0.1–v0.12. These are
+# correctness issues, missing implementations behind parsed syntax,
+# and absent primitive/array types that real Kotlin code expects.
+#
+# This milestone exists to track technical debt honestly. Features
+# here were either:
+#   (a) Parsed but never lowered/emitted (as, as?, break@label)
+#   (b) Implemented with wrong semantics (by lazy = eager, !! = no check)
+#   (c) Missing from the type system entirely (ByteArray, Array<T>)
+#   (d) Present but never enforced (visibility modifiers)
+# ============================================================================
+
+  - version: "0.12.5"
+    title: "Correctness Hardening"
+    status: planned
+    depends_on: ["0.12.0"]
+    description: >
+      Fix correctness gaps in completed milestones. Covers: safe/unsafe
+      casts, non-null assertion runtime checks, lazy delegation, missing
+      primitive arrays, labeled break/continue, multi-catch, operator
+      overloading for get/set, visibility enforcement, and String methods.
+
+    features:
+      # ── HIGH severity: breaks real code ────────────────────────────
+      - name: "as? safe cast (emit instanceof + branch)"
+        description: >
+          Currently a no-op. Should emit instanceof check: if match,
+          checkcast and return T; if not, push null. Returns T?.
+          See stub fixture 500-safe-cast-as-nullable.
+
+      - name: "as unsafe cast (emit checkcast)"
+        description: >
+          Currently a no-op. Should emit JVM checkcast that throws
+          ClassCastException on type mismatch.
+          See stub fixture 501-unsafe-cast.
+
+      - name: "!! non-null assertion (emit null check + throw NPE)"
+        description: >
+          Currently just unwraps Nullable(T) to T in the type system
+          with no runtime check. Should emit: if (x == null) throw
+          KotlinNullPointerException. See stub fixture 502-nonnull-assert-npe.
+
+      - name: "by lazy {} (actual lazy initialization, not eager)"
+        description: >
+          Currently desugared to eager evaluation in constructor. Should
+          use a holder field + double-checked locking (or AtomicReference)
+          so the initializer runs on first access, not at construction time.
+          See stub fixture 503-lazy-delegation.
+
+      - name: "Byte/Short/Float literal production"
+        description: >
+          Ty::Byte/Short/Float exist in enum and all backends handle them,
+          but no code path produces these types. Need: val b: Byte = 1
+          (literal narrowing from Int to Byte based on target type annotation),
+          1.toByte(), 1.toShort(), 1.0f parsed as Ty::Float not Ty::Double.
+          See stub fixture 504-byte-short-float-literals.
+
+      - name: "String.split() and String.substring(start, end)"
+        description: >
+          Two of the most commonly used String methods, both missing.
+          split(String) → String.split(String, -1) on JVM, returns Array.
+          substring(start, end) → String.substring(int, int) on JVM.
+          See stub fixture 505-string-split.
+
+      - name: "ByteArray, ShortArray, FloatArray, DoubleArray, LongArray, BooleanArray"
+        description: >
+          Only IntArray exists. Each needs: Rvalue::New*Array, constructor
+          call, indexing, .size property, for-in iteration. JVM opcodes:
+          newarray T_BYTE/T_SHORT/etc. See stub fixture 506-typed-arrays.
+
+      - name: "Generic Array<T>"
+        description: >
+          arrayOf("hello", "world") → Object[] via anewarray. Needs
+          Rvalue::NewObjectArray, aastore, aaload, .size via arraylength.
+          See stub fixture 507-generic-array.
+
+      # ── MEDIUM severity: affects common patterns ──────────────────
+      - name: "operator fun get/set for user-defined indexing"
+        description: >
+          obj[key] should desugar to obj.get(key) if the class defines
+          operator fun get. obj[key] = value → obj.set(key, value).
+          Currently hardcoded to array/list/map indexing only.
+          See stub fixture 508-operator-get-set.
+
+      - name: "break@label and continue@label"
+        description: >
+          Parser doesn't store labels on Break/Continue AST nodes.
+          Needs: label field on Stmt::Break/Continue, parser recognition
+          of @label suffix, MIR lowering to target the labeled loop.
+          See stub fixture 509-labeled-break-continue.
+
+      - name: "Multi-catch: catch (e: A | B)"
+        description: >
+          Only single exception type per catch. Needs parser support for
+          | in catch type position, Vec<Symbol> for catch_type, JVM
+          exception table with multiple handler entries for same target.
+          See stub fixture 510-multi-catch.
+
+      - name: "Smart cast with && conditions"
+        description: >
+          if (x is String && x.length > 0) — the x.length call should
+          see x narrowed to String. Currently narrowing only applies to
+          the direct is-check, not propagated across && in the same
+          condition. See stub fixture 511-smart-cast-and.
+
+      - name: "Companion object properties (val/var with backing fields)"
+        description: >
+          companion object { var count: Int = 0 } should generate a
+          static field on the class. Currently only companion methods
+          work; companion properties don't have backing fields.
+          See stub fixture 512-companion-property.
+
+      - name: "Visibility modifier enforcement"
+        description: >
+          private/protected/internal parsed but never enforced. At
+          minimum, JVM access_flags should be set (ACC_PRIVATE=0x0002,
+          ACC_PROTECTED=0x0004). Compile-time enforcement deferred to
+          v0.13 (multi-file). See stub fixture 513-visibility-enforcement.
+
+      # ── LOW severity: edge cases ──────────────────────────────────
+      - name: "when exhaustiveness checking for sealed classes"
+        description: >
+          when (sealedObj) { ... } without else should be a compile
+          error if not all subtypes are covered. Currently accepted
+          silently. See stub fixture 514-when-exhaustiveness.
+
+      - name: "Enum abstract methods and per-entry overrides"
+        description: >
+          enum class Op { PLUS { override fun apply(a: Int, b: Int) = a + b };
+          abstract fun apply(a: Int, b: Int): Int }. Parser doesn't
+          support method declarations inside enum entries.
+          See stub fixture 515-enum-abstract-method.
+
+      - name: "Custom property delegates (getValue/setValue)"
+        description: >
+          class MyDelegate { operator fun getValue(...) }; val x by MyDelegate().
+          Currently only by lazy {} is recognized. Generic delegation
+          protocol not implemented. See stub fixture 516-custom-delegate.
+
+      - name: "String.trim(), padStart(), removePrefix(), etc."
+        description: >
+          Additional commonly-used String methods not yet dispatched.
+          Most map directly to java.lang.String methods.
+          See stub fixture 517-string-methods-extended.
+
+    risks:
+      - description: "Fixing as?/as/!! changes runtime semantics of existing code"
+        mitigation: "Add new fixtures; existing fixtures should not use these patterns incorrectly"
+      - description: "Lazy delegation requires thread-safe initialization pattern"
+        mitigation: "Start with single-threaded lazy; add synchronized wrapper later"
+
+# ============================================================================
 # v0.13.0 — Multi-File Compilation, Packages, and Imports
 # ============================================================================
 # THIS IS THE HARDEST REMAINING GATE. Every real Kotlin project uses

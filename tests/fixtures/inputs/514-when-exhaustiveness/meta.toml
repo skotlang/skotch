@@ -1,0 +1,4 @@
+name   = "514-when-exhaustiveness"
+status = "stub"
+features = ["when", "sealed-class", "exhaustiveness-check"]
+reason = "Non-exhaustive when on sealed class accepted without error. Should require else or all subtypes."
