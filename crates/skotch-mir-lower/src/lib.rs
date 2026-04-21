@@ -3750,6 +3750,48 @@ fn lower_expr(
                         rhs_block,
                     );
                 }
+                // Smart cast with &&: if lhs is `x is Type`, narrow x
+                // in the rhs_block scope (reached only when lhs is true).
+                let and_smart_cast = if *op == BinOp::And {
+                    if let Expr::IsCheck {
+                        expr: checked,
+                        type_name,
+                        negated: false,
+                        ..
+                    } = lhs.as_ref()
+                    {
+                        if let Expr::Ident(var_name, _) = checked.as_ref() {
+                            let type_str = interner.resolve(*type_name);
+                            let narrowed_ty =
+                                skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
+                                    if module.classes.iter().any(|c| c.name == type_str) {
+                                        Ty::Class(type_str.to_string())
+                                    } else {
+                                        Ty::Any
+                                    }
+                                });
+                            if let Some((_, old_local)) =
+                                scope.iter().rev().find(|(s, _)| s == var_name)
+                            {
+                                let cast_local = fb.new_local(narrowed_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: cast_local,
+                                    value: Rvalue::Local(*old_local),
+                                });
+                                scope.push((*var_name, cast_local));
+                                1usize
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
                 let r = lower_expr(
                     rhs,
                     fb,
@@ -3761,6 +3803,10 @@ fn lower_expr(
                     diags,
                     loop_ctx,
                 )?;
+                // Pop smart cast scope entries from && narrowing.
+                for _ in 0..and_smart_cast {
+                    scope.pop();
+                }
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
                     value: Rvalue::Local(r),
@@ -4060,15 +4106,38 @@ fn lower_expr(
                 } else {
                     0
                 }
-            } else if let Expr::IsCheck {
-                expr: checked,
-                type_name,
-                negated: false,
-                ..
-            } = cond.as_ref()
-            {
-                if let Expr::Ident(var_name, _) = checked.as_ref() {
-                    let type_str = interner.resolve(*type_name);
+            } else {
+                // Check for IsCheck directly, or IsCheck as LHS of &&.
+                let is_check_info: Option<(&Expr, Symbol)> = if let Expr::IsCheck {
+                    expr: checked,
+                    type_name,
+                    negated: false,
+                    ..
+                } = cond.as_ref()
+                {
+                    Some((checked.as_ref(), *type_name))
+                } else if let Expr::Binary {
+                    op: BinOp::And,
+                    lhs: and_lhs,
+                    ..
+                } = cond.as_ref()
+                {
+                    if let Expr::IsCheck {
+                        expr: checked,
+                        type_name,
+                        negated: false,
+                        ..
+                    } = and_lhs.as_ref()
+                    {
+                        Some((checked.as_ref(), *type_name))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some((Expr::Ident(var_name, _), type_name)) = is_check_info {
+                    let type_str = interner.resolve(type_name);
                     let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
                         // Check if it's a user-defined class/interface.
                         if module.classes.iter().any(|c| c.name == type_str) {
@@ -4088,15 +4157,13 @@ fn lower_expr(
                         });
                         // Push new binding that shadows the original.
                         scope.push((*var_name, cast_local));
-                        1 // we pushed one scope entry to remove later
+                        1
                     } else {
                         0
                     }
                 } else {
                     0
                 }
-            } else {
-                0
             };
 
             // Then branch.

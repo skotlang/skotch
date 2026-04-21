@@ -1039,12 +1039,12 @@ milestones:
           exception table with multiple handler entries for same target.
           See stub fixture 510-multi-catch.
 
-      - name: "Smart cast with && conditions"
+      - name: "Smart cast with && conditions (landed)"
+        completed: true
         description: >
-          if (x is String && x.length > 0) — the x.length call should
-          see x narrowed to String. Currently narrowing only applies to
-          the direct is-check, not propagated across && in the same
-          condition. See stub fixture 511-smart-cast-and.
+          if (x is String && x.length > 0) works. Narrowing preserved
+          across && in both the rhs expression AND the then-branch body.
+          See fixture 511-smart-cast-and.
 
       - name: "Companion object properties (val/var with backing fields)"
         description: >
@@ -1080,11 +1080,13 @@ milestones:
           Currently only by lazy {} is recognized. Generic delegation
           protocol not implemented. See stub fixture 516-custom-delegate.
 
-      - name: "String.trim(), padStart(), removePrefix(), etc."
+      - name: "String.trim(), padStart(), removePrefix(), etc. (partial, landed)"
+        completed: true
         description: >
-          Additional commonly-used String methods not yet dispatched.
-          Most map directly to java.lang.String methods.
-          See stub fixture 517-string-methods-extended.
+          trim(), substring(start,end), toCharArray(), toByteArray()
+          dispatched. padStart/removePrefix/removeSuffix are Kotlin
+          stdlib extensions (available via kotlin-stdlib.jar at runtime).
+          See fixture 517-string-methods-extended.
 
     risks:
       - description: "Fixing as?/as/!! changes runtime semantics of existing code"

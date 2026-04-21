@@ -1,6 +1,6 @@
 fun main() {
     println("  hello  ".trim())
-    println("hello".padStart(10, '*'))
-    println("hello world".removePrefix("hello "))
-    println("hello world".removeSuffix(" world"))
+    println("hello world".substring(0, 5))
+    println("hello world".substring(6))
+    println("ABC".lowercase())
 }

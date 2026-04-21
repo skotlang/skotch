@@ -1,0 +1,50 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=1
+    0000 ldc "  hello  "
+    0002 checkcast Class(java/lang/CharSequence)
+    0005 invokestatic Method(kotlin/text/StringsKt.trim:(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;)
+    0008 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0011 astore_0
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 aload_0
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 ldc "hello world"
+    0021 iconst_0
+    0022 iconst_5
+    0023 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
+    0026 dup
+    0027 ldc "substring(...)"
+    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0032 astore_0
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload_0
+    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0040 ldc "hello world"
+    0042 bipush 6
+    0044 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
+    0047 dup
+    0048 ldc "substring(...)"
+    0050 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0053 astore_0
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 aload_0
+    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0061 ldc "ABC"
+    0063 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0066 invokevirtual Method(java/lang/String.toLowerCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0069 dup
+    0070 ldc "toLowerCase(...)"
+    0072 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0075 astore_0
+    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0079 aload_0
+    0080 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0083 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

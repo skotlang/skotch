@@ -1,4 +1,4 @@
 name   = "511-smart-cast-and"
-status = "stub"
+status = "active"
 features = ["smart-cast", "&&-condition", "type-narrowing"]
-reason = "is-check narrowing not preserved across && in the same if-condition."
+expected_output = "long string: HELLO\nother\nother\n"
