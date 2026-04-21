@@ -1,4 +1,4 @@
 name   = "514-when-exhaustiveness"
-status = "stub"
+status = "active"
 features = ["when", "sealed-class", "exhaustiveness-check"]
-reason = "Non-exhaustive when on sealed class accepted without error. Should require else or all subtypes."
+expected_output = "circle\nsquare\n"

@@ -1,0 +1,52 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 new Class(Circle)
+    0003 dup
+    0004 invokespecial Method(Circle.<init>:()V)
+    0007 checkcast Class(Shape)
+    0010 invokestatic Method(InputKt.name:(LShape;)Ljava/lang/String;)
+    0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0016 op_0x5F
+    0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0020 new Class(Square)
+    0023 dup
+    0024 invokespecial Method(Square.<init>:()V)
+    0027 checkcast Class(Shape)
+    0030 invokestatic Method(InputKt.name:(LShape;)Ljava/lang/String;)
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 op_0x5F
+    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0040 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        name (LShape;)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(Circle)
+    0012 ifeq 20
+    0015 ldc "circle"
+    0017 goto 40
+    0020 aload_1
+    0021 instanceof Class(Square)
+    0024 ifeq 32
+    0027 ldc "square"
+    0029 goto 40
+    0032 new Class(kotlin/NoWhenBranchMatchedException)
+    0035 dup
+    0036 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0039 athrow
+    0040 areturn
+    sub_attr  StackMapTable (13 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

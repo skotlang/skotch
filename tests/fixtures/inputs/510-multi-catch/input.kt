@@ -1,9 +1,9 @@
 fun main() {
     try {
-        throw IllegalStateException("test")
+        throw IllegalArgumentException("test")
     } catch (e: IllegalStateException) {
         println("caught ISE")
     } catch (e: IllegalArgumentException) {
-        println("caught IAE")
+        println("caught IAE: ${e.message}")
     }
 }

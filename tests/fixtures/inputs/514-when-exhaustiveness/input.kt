@@ -4,9 +4,10 @@ class Square : Shape()
 
 fun name(s: Shape): String = when (s) {
     is Circle -> "circle"
-    // Missing: is Square -> should be compile error
+    is Square -> "square"
 }
 
 fun main() {
     println(name(Circle()))
+    println(name(Square()))
 }

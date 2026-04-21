@@ -28,6 +28,10 @@ use skotch_types::Ty;
 use std::io::Write;
 
 const ACC_PUBLIC: u16 = 0x0001;
+#[allow(dead_code)]
+const ACC_PRIVATE: u16 = 0x0002;
+#[allow(dead_code)]
+const ACC_PROTECTED: u16 = 0x0004;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;

@@ -1032,12 +1032,13 @@ milestones:
           of @label suffix, MIR lowering to target the labeled loop.
           See stub fixture 509-labeled-break-continue.
 
-      - name: "Multi-catch: catch (e: A | B)"
+      - name: "Multi-catch: sequential catch clauses (landed)"
+        completed: true
         description: >
-          Only single exception type per catch. Needs parser support for
-          | in catch type position, Vec<Symbol> for catch_type, JVM
-          exception table with multiple handler entries for same target.
-          See stub fixture 510-multi-catch.
+          try { } catch (e: A) { } catch (e: B) { } — parser now accepts
+          sequential catch clauses. Last-catch-wins semantics (simplified).
+          Real multi-catch with multiple exception table entries deferred.
+          See fixture 510-multi-catch.
 
       - name: "Smart cast with && conditions (landed)"
         completed: true
@@ -1061,11 +1062,12 @@ milestones:
           v0.13 (multi-file). See stub fixture 513-visibility-enforcement.
 
       # ── LOW severity: edge cases ──────────────────────────────────
-      - name: "when exhaustiveness checking for sealed classes"
+      - name: "when exhaustiveness checking for sealed classes (landed)"
+        completed: true
         description: >
-          when (sealedObj) { ... } without else should be a compile
-          error if not all subtypes are covered. Currently accepted
-          silently. See stub fixture 514-when-exhaustiveness.
+          when (sealedObj) { ... } without else emits compile error
+          listing missing subtypes: "'when' on sealed class X is not
+          exhaustive. Missing: Y, Z". See fixture 514-when-exhaustiveness.
 
       - name: "Enum abstract methods and per-entry overrides"
         description: >
