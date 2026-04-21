@@ -17,13 +17,19 @@ pub enum Ty {
     Unit,
     /// `Boolean`.
     Bool,
+    /// `Byte` — 8-bit signed. JVM type `B`.
+    Byte,
+    /// `Short` — 16-bit signed. JVM type `S`.
+    Short,
     /// `Char` — 16-bit unsigned (UTF-16 code unit). JVM type `C`.
     Char,
     /// `Int` — 32-bit signed.
     Int,
-    /// `Long` — 64-bit signed. Not produced in PR #1; reserved.
+    /// `Float` — 32-bit float. JVM type `F`.
+    Float,
+    /// `Long` — 64-bit signed.
     Long,
-    /// `Double` — 64-bit float. Not produced in PR #1; reserved.
+    /// `Double` — 64-bit float.
     Double,
     /// `String`.
     String,
@@ -100,8 +106,11 @@ impl Ty {
         match self {
             Ty::Unit => "Unit",
             Ty::Bool => "Boolean",
+            Ty::Byte => "Byte",
+            Ty::Short => "Short",
             Ty::Char => "Char",
             Ty::Int => "Int",
+            Ty::Float => "Float",
             Ty::Long => "Long",
             Ty::Double => "Double",
             Ty::String => "String",
@@ -122,8 +131,11 @@ pub fn ty_from_name(name: &str) -> Option<Ty> {
     Some(match name {
         "Unit" => Ty::Unit,
         "Boolean" => Ty::Bool,
+        "Byte" => Ty::Byte,
+        "Short" => Ty::Short,
         "Char" => Ty::Char,
         "Int" => Ty::Int,
+        "Float" => Ty::Float,
         "Long" => Ty::Long,
         "Double" => Ty::Double,
         "String" => Ty::String,

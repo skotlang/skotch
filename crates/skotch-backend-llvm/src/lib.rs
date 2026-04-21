@@ -864,7 +864,10 @@ impl<'a> BlockWalker<'a> {
             let arg_ty = &self.func.locals[arg.0 as usize];
             let ssa = self.ssa_of(arg);
             let arg_text = match arg_ty {
-                Ty::Int | Ty::Char | Ty::Bool => format!("i32 {ssa}"),
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => {
+                    format!("i32 {ssa}")
+                }
+                Ty::Float => format!("float {ssa}"),
                 _ => format!("ptr {ssa}"),
             };
             runtime.push(arg_text);
@@ -984,8 +987,10 @@ fn build_concat_format(
             let arg_ty = &func.locals[arg.0 as usize];
             match arg_ty {
                 Ty::Char => format.push_str("%c"),
-                Ty::Int | Ty::Bool => format.push_str("%d"),
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Bool => format.push_str("%d"),
+                Ty::Float => format.push_str("%f"),
                 Ty::Long => format.push_str("%lld"),
+                Ty::Double => format.push_str("%f"),
                 _ => format.push_str("%s"),
             }
         }
@@ -1005,15 +1010,18 @@ fn block_label(idx: u32) -> String {
 fn llvm_type(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "void",
-        Ty::Bool => "i32", // bools are 0/1 ints; icmp produces i1 but we zext
-        Ty::Char => "i32", // Kotlin Char is a 16-bit value stored as i32
+        Ty::Bool => "i32",  // bools are 0/1 ints; icmp produces i1 but we zext
+        Ty::Byte => "i8",   // 8-bit signed
+        Ty::Short => "i16", // 16-bit signed
+        Ty::Char => "i32",  // Kotlin Char is a 16-bit value stored as i32
         Ty::Int => "i32",
+        Ty::Float => "float",
         Ty::Long => "i64",
         Ty::Double => "double",
         Ty::String => "ptr",
-        Ty::IntArray => "ptr", // int[] → pointer in LLVM
+        Ty::IntArray => "ptr",
         Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
-        Ty::Nothing => "void", // Nothing → void (unreachable)
+        Ty::Nothing => "void",
         Ty::Error => "void",
     }
 }

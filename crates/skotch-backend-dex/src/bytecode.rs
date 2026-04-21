@@ -191,7 +191,7 @@ pub fn lower_function(
                 let ty = &func.locals[local.0 as usize];
                 let reg = slot.get(&local.0).copied().unwrap_or(0);
                 match ty {
-                    Ty::Int | Ty::Char | Ty::Bool => {
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                         code.push(opcode_aa(0x0F, reg as u8)); // return vAA
                     }
                     _ => {
@@ -380,7 +380,9 @@ fn walk_block(
                 let dest_reg = slot[&dest.0];
                 let dest_ty = &locals[dest.0 as usize];
                 let (op, field_desc) = match dest_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => (0x52_u16, "I"),
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                        (0x52_u16, "I")
+                    }
                     Ty::Long => (0x53, "J"),
                     Ty::Double => (0x53, "D"), // iget-wide
                     _ => (0x54, "Ljava/lang/Object;"),
@@ -407,7 +409,9 @@ fn walk_block(
                 let val_reg = slot[&val.0];
                 let val_ty = &locals[val.0 as usize];
                 let (op, field_desc) = match val_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => (0x59_u16, "I"),
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                        (0x59_u16, "I")
+                    }
                     Ty::Long => (0x5A, "J"),
                     Ty::Double => (0x5A, "D"),
                     _ => (0x5B, "Ljava/lang/Object;"),
@@ -921,8 +925,8 @@ fn emit_call(
             if target.return_ty != Ty::Unit {
                 let dest_reg = slot[&dest.0];
                 let move_op = match &target.return_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => 0x0A, // move-result
-                    _ => 0x0C,                             // move-result-object
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x0A, // move-result
+                    _ => 0x0C, // move-result-object
                 };
                 code.push(opcode_aa(move_op, dest_reg as u8));
             }
@@ -982,7 +986,7 @@ fn emit_call(
                 let arg_ty = &locals[arg.0 as usize];
                 let param_desc = match arg_ty {
                     Ty::String => "Ljava/lang/String;",
-                    Ty::Int | Ty::Char | Ty::Bool => "I",
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => "I",
                     Ty::Long => "J",
                     Ty::Double => "D",
                     _ => "Ljava/lang/Object;",
@@ -1081,7 +1085,7 @@ fn emit_call(
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8)); // move-result-wide
                     }
-                    Ty::Int | Ty::Char | Ty::Bool => {
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                         code.push(opcode_aa(0x0A, dest_reg as u8)); // move-result
                     }
                     _ => {
@@ -1114,7 +1118,7 @@ fn emit_call(
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8));
                     }
-                    Ty::Int | Ty::Char | Ty::Bool => {
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                         code.push(opcode_aa(0x0A, dest_reg as u8));
                     }
                     _ => {
@@ -1187,7 +1191,7 @@ fn emit_call(
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8));
                     }
-                    Ty::Int | Ty::Char | Ty::Bool => {
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                         code.push(opcode_aa(0x0A, dest_reg as u8));
                     }
                     _ => {
@@ -1229,15 +1233,18 @@ fn type_descriptor(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "V",
         Ty::Bool => "Z",
+        Ty::Byte => "B",
+        Ty::Short => "S",
         Ty::Char => "C",
         Ty::Int => "I",
+        Ty::Float => "F",
         Ty::Long => "J",
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
         Ty::IntArray => "[I",
         Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;",
-        Ty::Nothing => "V", // Nothing → void (unreachable on DEX)
+        Ty::Nothing => "V",
         Ty::Error => "V",
     }
 }

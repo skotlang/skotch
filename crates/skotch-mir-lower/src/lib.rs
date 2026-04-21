@@ -38,10 +38,14 @@ use skotch_types::Ty;
 /// method descriptors in the MIR lowerer).
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
     match ty {
+        Ty::Bool => "Z".to_string(),
+        Ty::Byte => "B".to_string(),
+        Ty::Short => "S".to_string(),
+        Ty::Char => "C".to_string(),
         Ty::Int => "I".to_string(),
+        Ty::Float => "F".to_string(),
         Ty::Long => "J".to_string(),
         Ty::Double => "D".to_string(),
-        Ty::Bool => "Z".to_string(),
         Ty::String => "Ljava/lang/String;".to_string(),
         Ty::Unit => "V".to_string(),
         Ty::Class(name) => format!("L{name};"),
@@ -1209,6 +1213,51 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
                         class_name: "java/lang/Character".to_string(),
                         method_name: "valueOf".to_string(),
                         descriptor: "(C)Ljava/lang/Character;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Byte => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Byte".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(B)Ljava/lang/Byte;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Short => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Short".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(S)Ljava/lang/Short;".to_string(),
+                    },
+                    args: vec![val],
+                },
+            });
+            boxed
+        }
+        Ty::Float => {
+            let boxed = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: boxed,
+                value: Rvalue::Call {
+                    kind: CallKind::StaticJava {
+                        class_name: "java/lang/Float".to_string(),
+                        method_name: "valueOf".to_string(),
+                        descriptor: "(F)Ljava/lang/Float;".to_string(),
                     },
                     args: vec![val],
                 },
@@ -8829,7 +8878,9 @@ fn lower_expr(
                 // implicit fall-through path.
                 let result_ty = &fb.mf.locals[result.0 as usize];
                 let default_val = match result_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => MirConst::Int(0),
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                        MirConst::Int(0)
+                    }
                     Ty::Long => MirConst::Long(0),
                     Ty::Double => MirConst::Double(0.0),
                     _ => MirConst::Null,

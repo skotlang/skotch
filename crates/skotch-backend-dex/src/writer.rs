@@ -574,15 +574,18 @@ fn ty_descriptor(ty: &skotch_types::Ty) -> &'static str {
     match ty {
         Ty::Unit => "V",
         Ty::Bool => "Z",
+        Ty::Byte => "B",
+        Ty::Short => "S",
         Ty::Char => "C",
         Ty::Int => "I",
+        Ty::Float => "F",
         Ty::Long => "J",
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
         Ty::IntArray => "[I",
         Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;",
-        Ty::Nothing => "V", // Nothing → void (unreachable on DEX)
+        Ty::Nothing => "V",
         Ty::Error => "V",
     }
 }

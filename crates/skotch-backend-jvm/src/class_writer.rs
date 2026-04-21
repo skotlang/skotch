@@ -537,7 +537,7 @@ fn emit_suspend_lambda_shell(
                              // captures, widen the load opcode selection.
             let cap_ty = &capture_fields[i].ty;
             match cap_ty {
-                Ty::Int | Ty::Char | Ty::Bool => {
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                     code.push(0x15); // iload
                     code.push(slot);
                 }
@@ -1178,10 +1178,12 @@ fn emit_user_method(
                 }
                 // Use the FUNCTION's return type for the return opcode.
                 match &func.return_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => code.push(0xAC), // ireturn
-                    Ty::Long => code.push(0xAD),                      // lreturn
-                    Ty::Double => code.push(0xAF),                    // dreturn
-                    _ => code.push(0xB0),                             // areturn
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                        code.push(0xAC)
+                    } // ireturn
+                    Ty::Long => code.push(0xAD),   // lreturn
+                    Ty::Double => code.push(0xAF), // dreturn
+                    _ => code.push(0xB0),          // areturn
                 }
             }
             Terminator::Branch {
@@ -1730,10 +1732,12 @@ fn emit_method(
                 // Use the FUNCTION's return type for the return opcode,
                 // not the local's type.
                 match &func.return_ty {
-                    Ty::Int | Ty::Char | Ty::Bool => code.push(0xAC), // ireturn
-                    Ty::Long => code.push(0xAD),                      // lreturn
-                    Ty::Double => code.push(0xAF),                    // dreturn
-                    _ => code.push(0xB0),                             // areturn
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                        code.push(0xAC)
+                    } // ireturn
+                    Ty::Long => code.push(0xAD),   // lreturn
+                    Ty::Double => code.push(0xAF), // dreturn
+                    _ => code.push(0xB0),          // areturn
                 }
             }
             Terminator::Branch {
@@ -4722,7 +4726,7 @@ fn emit_load_mir_local(
         .copied()
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
     let op: u8 = match ty {
-        Ty::Int | Ty::Char | Ty::Bool => 0x15,
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x15,
         Ty::Long => 0x16,
         Ty::Double => 0x18,
         _ => 0x19, // aload
@@ -4745,7 +4749,7 @@ fn emit_store_mir_local(
         .get(&local.0)
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
     let op: u8 = match ty {
-        Ty::Int | Ty::Char | Ty::Bool => 0x36,
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x36,
         Ty::Long => 0x37,
         Ty::Double => 0x39,
         _ => 0x3A, // astore
@@ -4813,8 +4817,11 @@ fn checkcast_class_for_return_ty(ty: &Ty) -> Option<String> {
         Ty::Any => Some("java/lang/Object".to_string()),
         Ty::String => Some("java/lang/String".to_string()),
         Ty::Bool => Some("java/lang/Boolean".to_string()),
+        Ty::Byte => Some("java/lang/Byte".to_string()),
+        Ty::Short => Some("java/lang/Short".to_string()),
         Ty::Char => Some("java/lang/Character".to_string()),
         Ty::Int => Some("java/lang/Integer".to_string()),
+        Ty::Float => Some("java/lang/Float".to_string()),
         Ty::Long => Some("java/lang/Long".to_string()),
         Ty::Double => Some("java/lang/Double".to_string()),
         Ty::IntArray => Some("[I".to_string()),
@@ -4950,7 +4957,7 @@ fn emit_invoke_suspend_method(
         // Push remaining user params as dummies (skip first = this)
         for ty in sm.outer_user_param_tys.iter().skip(1) {
             match ty {
-                Ty::Int | Ty::Char | Ty::Bool => code.push(0x03),
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => code.push(0x03),
                 Ty::Long => code.push(0x09),
                 Ty::Double => code.push(0x0E),
                 _ => code.push(0x01),
@@ -4959,7 +4966,7 @@ fn emit_invoke_suspend_method(
     } else {
         for ty in &sm.outer_user_param_tys {
             match ty {
-                Ty::Int | Ty::Char | Ty::Bool => code.push(0x03), // iconst_0
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => code.push(0x03), // iconst_0
                 Ty::Long => {
                     code.push(0x09); // lconst_0
                 }
@@ -6913,19 +6920,33 @@ fn autobox(
     ty: &Ty,
 ) {
     match ty {
+        Ty::Bool => {
+            let m = cp.methodref("java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+        }
+        Ty::Byte => {
+            let m = cp.methodref("java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+        }
+        Ty::Short => {
+            let m = cp.methodref("java/lang/Short", "valueOf", "(S)Ljava/lang/Short;");
+            code.push(0xB8);
+            code.write_u16::<BigEndian>(m).unwrap();
+        }
         Ty::Char => {
             let m = cp.methodref("java/lang/Character", "valueOf", "(C)Ljava/lang/Character;");
-            code.push(0xB8); // invokestatic
+            code.push(0xB8);
             code.write_u16::<BigEndian>(m).unwrap();
         }
         Ty::Int => {
             let m = cp.methodref("java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;");
-            code.push(0xB8); // invokestatic
+            code.push(0xB8);
             code.write_u16::<BigEndian>(m).unwrap();
-            // stack: consumed int, pushed Integer → net 0
         }
-        Ty::Bool => {
-            let m = cp.methodref("java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;");
+        Ty::Float => {
+            let m = cp.methodref("java/lang/Float", "valueOf", "(F)Ljava/lang/Float;");
             code.push(0xB8);
             code.write_u16::<BigEndian>(m).unwrap();
         }
@@ -6949,8 +6970,11 @@ fn jvm_type(ty: &Ty) -> &'static str {
     match ty {
         Ty::Unit => "V",
         Ty::Bool => "Z",
+        Ty::Byte => "B",
+        Ty::Short => "S",
         Ty::Char => "C",
         Ty::Int => "I",
+        Ty::Float => "F",
         Ty::Long => "J",
         Ty::Double => "D",
         Ty::String => "Ljava/lang/String;",
@@ -8289,10 +8313,10 @@ fn store_local(
     }
     let slot = slot_for_ty(slots, next_slot, local, ty);
     let (opcode, width) = match ty {
-        Ty::Int | Ty::Char | Ty::Bool => (0x36u8, 1), // istore
-        Ty::Long => (0x37, 2),                        // lstore (takes 2 stack slots)
-        Ty::Double => (0x39, 2),                      // dstore
-        _ => (0x3A, 1),                               // astore
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => (0x36u8, 1), // istore
+        Ty::Long => (0x37, 2),   // lstore (takes 2 stack slots)
+        Ty::Double => (0x39, 2), // dstore
+        _ => (0x3A, 1),          // astore
     };
     code.push(opcode);
     code.push(slot);
@@ -8333,10 +8357,10 @@ fn load_local(
         }
     };
     let (opcode, width) = match ty {
-        Ty::Int | Ty::Char | Ty::Bool => (0x15u8, 1), // iload
-        Ty::Long => (0x16, 2),                        // lload (pushes 2 stack slots)
-        Ty::Double => (0x18, 2),                      // dload
-        _ => (0x19, 1),                               // aload
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => (0x15u8, 1), // iload
+        Ty::Long => (0x16, 2),   // lload (pushes 2 stack slots)
+        Ty::Double => (0x18, 2), // dload
+        _ => (0x19, 1),          // aload
     };
     code.push(opcode);
     code.push(slot);
@@ -8400,9 +8424,9 @@ fn write_slot_verif(
         if let Some(mir_id) = slot_to_local.get(slot).copied().flatten() {
             let ty = &func.locals[mir_id as usize];
             match ty {
-                Ty::Int | Ty::Char | Ty::Bool => out.push(1), // Integer_variable_info
-                Ty::Long => out.push(4),                      // Long_variable_info
-                Ty::Double => out.push(3),                    // Double_variable_info
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => out.push(1), // Integer_variable_info
+                Ty::Long => out.push(4),   // Long_variable_info
+                Ty::Double => out.push(3), // Double_variable_info
                 Ty::String => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class("java/lang/String");
