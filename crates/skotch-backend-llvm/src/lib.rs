@@ -1019,7 +1019,7 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::Long => "i64",
         Ty::Double => "double",
         Ty::String => "ptr",
-        Ty::IntArray => "ptr",
+        Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::BooleanArray | Ty::ByteArray => "ptr",
         Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
         Ty::Nothing => "void",
         Ty::Error => "void",

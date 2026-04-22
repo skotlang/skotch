@@ -1007,11 +1007,15 @@ milestones:
           toCharArray(), toByteArray() dispatched to JVM String methods.
           split() returns Object (String[] on JVM). See fixture 505-string-split.
 
-      - name: "ByteArray, ShortArray, FloatArray, DoubleArray, LongArray, BooleanArray"
+      - name: "Typed arrays: LongArray, DoubleArray, BooleanArray, ByteArray (landed)"
+        completed: true
         description: >
-          Only IntArray exists. Each needs: Rvalue::New*Array, constructor
-          call, indexing, .size property, for-in iteration. JVM opcodes:
-          newarray T_BYTE/T_SHORT/etc. See stub fixture 506-typed-arrays.
+          Added Ty::LongArray, DoubleArray, BooleanArray, ByteArray to type
+          system. All backends handle descriptors ([J, [D, [Z, [B). JVM
+          backend selects correct newarray type code, iaload/laload/daload/
+          baload, and iastore/lastore/dastore/bastore from dest/value type.
+          Constructors, indexing, .size, for-in iteration all work.
+          See fixture 506-typed-arrays.
 
       - name: "Generic Array<T>"
         description: >

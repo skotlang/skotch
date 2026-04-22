@@ -3018,7 +3018,10 @@ fn lower_stmt(
 
             let collection_ty = fb.mf.locals[collection_local.0 as usize].clone();
 
-            if matches!(collection_ty, Ty::IntArray) {
+            if matches!(
+                collection_ty,
+                Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::BooleanArray | Ty::ByteArray
+            ) {
                 // IntArray iteration: desugar to index-based loop
                 //   var i = 0
                 //   while (i < array.size) { val x = array[i]; body; i++ }
@@ -6394,7 +6397,14 @@ fn lower_expr(
                         // it's already an IntArray, pass it directly (no repack).
                         // This handles `sum(*intArrayOf(1,2,3))` and `sum(*arr)`.
                         let is_spread = vararg_args.len() == 1
-                            && matches!(fb.mf.locals[vararg_args[0].0 as usize], Ty::IntArray);
+                            && matches!(
+                                fb.mf.locals[vararg_args[0].0 as usize],
+                                Ty::IntArray
+                                    | Ty::LongArray
+                                    | Ty::DoubleArray
+                                    | Ty::BooleanArray
+                                    | Ty::ByteArray
+                            );
                         if is_spread {
                             arg_locals.push(vararg_args[0]);
                         } else {
@@ -7645,49 +7655,68 @@ fn lower_expr(
             }
 
             // `IntArray(size)` intrinsic — create a primitive int[].
-            if callee_str == "IntArray" && !arg_locals.is_empty() {
-                let size_local = arg_locals[0];
-                let dest = fb.new_local(Ty::IntArray);
-                fb.push_stmt(MStmt::Assign {
-                    dest,
-                    value: Rvalue::NewIntArray(size_local),
-                });
-                return Some(dest);
+            // Typed array constructors: IntArray(n), LongArray(n), etc.
+            let typed_array_ty = match callee_str {
+                "IntArray" => Some(Ty::IntArray),
+                "LongArray" => Some(Ty::LongArray),
+                "DoubleArray" => Some(Ty::DoubleArray),
+                "BooleanArray" => Some(Ty::BooleanArray),
+                "ByteArray" => Some(Ty::ByteArray),
+                _ => None,
+            };
+            if let Some(arr_ty) = typed_array_ty {
+                if !arg_locals.is_empty() {
+                    let size_local = arg_locals[0];
+                    let dest = fb.new_local(arr_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::NewIntArray(size_local), // reuses NewIntArray; JVM backend infers type from dest
+                    });
+                    return Some(dest);
+                }
             }
 
-            // `intArrayOf(1, 2, 3)` — create IntArray with given values.
-            // Emits: newarray int[n] + iastore for each element.
-            if callee_str == "intArrayOf" && !arg_locals.is_empty() {
-                // Create size constant
-                let n = arg_locals.len() as i32;
-                let size = fb.new_local(Ty::Int);
-                fb.push_stmt(MStmt::Assign {
-                    dest: size,
-                    value: Rvalue::Const(MirConst::Int(n)),
-                });
-                let arr = fb.new_local(Ty::IntArray);
-                fb.push_stmt(MStmt::Assign {
-                    dest: arr,
-                    value: Rvalue::NewIntArray(size),
-                });
-                // Store each element
-                for (i, &val) in arg_locals.iter().enumerate() {
-                    let idx = fb.new_local(Ty::Int);
+            // `intArrayOf(...)`, `longArrayOf(...)`, etc.
+            let arrayof_ty = match callee_str {
+                "intArrayOf" => Some(Ty::IntArray),
+                "longArrayOf" => Some(Ty::LongArray),
+                "doubleArrayOf" => Some(Ty::DoubleArray),
+                "booleanArrayOf" => Some(Ty::BooleanArray),
+                "byteArrayOf" => Some(Ty::ByteArray),
+                _ => None,
+            };
+            if let Some(arr_ty) = arrayof_ty {
+                if !arg_locals.is_empty() {
+                    let n = arg_locals.len() as i32;
+                    let size = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
-                        dest: idx,
-                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                        dest: size,
+                        value: Rvalue::Const(MirConst::Int(n)),
                     });
-                    let dummy = fb.new_local(Ty::Unit);
+                    let arr = fb.new_local(arr_ty);
                     fb.push_stmt(MStmt::Assign {
-                        dest: dummy,
-                        value: Rvalue::ArrayStore {
-                            array: arr,
-                            index: idx,
-                            value: val,
-                        },
+                        dest: arr,
+                        value: Rvalue::NewIntArray(size),
                     });
+                    // Store each element
+                    for (i, &val) in arg_locals.iter().enumerate() {
+                        let idx = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: idx,
+                            value: Rvalue::Const(MirConst::Int(i as i32)),
+                        });
+                        let dummy = fb.new_local(Ty::Unit);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: dummy,
+                            value: Rvalue::ArrayStore {
+                                array: arr,
+                                index: idx,
+                                value: val,
+                            },
+                        });
+                    }
+                    return Some(arr);
                 }
-                return Some(arr);
             }
 
             // `repeat(n) { body }` — execute lambda n times.
@@ -9062,8 +9091,35 @@ fn lower_expr(
             )?;
             let arr_ty = fb.mf.locals[arr.0 as usize].clone();
             match &arr_ty {
-                Ty::IntArray => {
-                    let dest = fb.new_local(Ty::Int);
+                Ty::IntArray | Ty::BooleanArray | Ty::ByteArray => {
+                    let elem_ty = match &arr_ty {
+                        Ty::BooleanArray => Ty::Bool,
+                        Ty::ByteArray => Ty::Byte,
+                        _ => Ty::Int,
+                    };
+                    let dest = fb.new_local(elem_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayLoad {
+                            array: arr,
+                            index: idx,
+                        },
+                    });
+                    Some(dest)
+                }
+                Ty::LongArray => {
+                    let dest = fb.new_local(Ty::Long);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayLoad {
+                            array: arr,
+                            index: idx,
+                        },
+                    });
+                    Some(dest)
+                }
+                Ty::DoubleArray => {
+                    let dest = fb.new_local(Ty::Double);
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::ArrayLoad {
@@ -9498,7 +9554,15 @@ fn lower_expr(
                     return Some(dest);
                 }
                 // IntArray.size → arraylength
-                if matches!(recv_ty, Ty::IntArray) && field_name == "size" {
+                if matches!(
+                    recv_ty,
+                    Ty::IntArray
+                        | Ty::LongArray
+                        | Ty::DoubleArray
+                        | Ty::BooleanArray
+                        | Ty::ByteArray
+                ) && field_name == "size"
+                {
                     let dest = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -9947,7 +10011,11 @@ fn lower_expr(
                     },
                 });
                 d
-            } else if matches!(inner_ty, Ty::IntArray) && field_name == "size" {
+            } else if matches!(
+                inner_ty,
+                Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::BooleanArray | Ty::ByteArray
+            ) && field_name == "size"
+            {
                 let d = fb.new_local(Ty::Int);
                 fb.push_stmt(MStmt::Assign {
                     dest: d,

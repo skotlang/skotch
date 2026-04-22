@@ -41,6 +41,14 @@ pub enum Ty {
     Nothing,
     /// `IntArray` — primitive int array (`int[]` on JVM).
     IntArray,
+    /// `LongArray` — primitive long array (`long[]` on JVM).
+    LongArray,
+    /// `DoubleArray` — primitive double array (`double[]` on JVM).
+    DoubleArray,
+    /// `BooleanArray` — primitive boolean array (`boolean[]` on JVM).
+    BooleanArray,
+    /// `ByteArray` — primitive byte array (`byte[]` on JVM).
+    ByteArray,
     /// Nullable wrapper. `String?` ≡ `Nullable(String)`.
     Nullable(Box<Ty>),
     /// A user-defined class type. Carries the fully-qualified class name.
@@ -117,6 +125,10 @@ impl Ty {
             Ty::Any => "Any",
             Ty::Nothing => "Nothing",
             Ty::IntArray => "IntArray",
+            Ty::LongArray => "LongArray",
+            Ty::DoubleArray => "DoubleArray",
+            Ty::BooleanArray => "BooleanArray",
+            Ty::ByteArray => "ByteArray",
             Ty::Class(_) => "<class>",
             Ty::Function { .. } => "<function>",
             Ty::Nullable(_) => "<nullable>",
@@ -142,6 +154,10 @@ pub fn ty_from_name(name: &str) -> Option<Ty> {
         "Any" => Ty::Any,
         "Nothing" => Ty::Nothing,
         "IntArray" => Ty::IntArray,
+        "LongArray" => Ty::LongArray,
+        "DoubleArray" => Ty::DoubleArray,
+        "BooleanArray" => Ty::BooleanArray,
+        "ByteArray" => Ty::ByteArray,
         _ => return None,
     })
 }

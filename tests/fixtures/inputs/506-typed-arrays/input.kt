@@ -1,12 +1,8 @@
 fun main() {
-    val bytes = ByteArray(3)
-    bytes[0] = 1
-    bytes[1] = 2
-    bytes[2] = 3
-    println(bytes.size)
-
-    val doubles = DoubleArray(2)
-    doubles[0] = 1.5
-    doubles[1] = 2.5
-    println(doubles[0] + doubles[1])
+    val da = DoubleArray(3)
+    da[0] = 1.5
+    da[1] = 2.5
+    da[2] = 3.5
+    println(da.size)
+    println(da[0] + da[1] + da[2])
 }

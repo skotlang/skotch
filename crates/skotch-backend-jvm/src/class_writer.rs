@@ -4829,6 +4829,10 @@ fn checkcast_class_for_return_ty(ty: &Ty) -> Option<String> {
         Ty::Long => Some("java/lang/Long".to_string()),
         Ty::Double => Some("java/lang/Double".to_string()),
         Ty::IntArray => Some("[I".to_string()),
+        Ty::LongArray => Some("[J".to_string()),
+        Ty::DoubleArray => Some("[D".to_string()),
+        Ty::BooleanArray => Some("[Z".to_string()),
+        Ty::ByteArray => Some("[B".to_string()),
         Ty::Class(name) => Some(name.clone()),
         Ty::Nullable(inner) => checkcast_class_for_return_ty(inner),
         Ty::Function { .. } => None,
@@ -6984,6 +6988,10 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::String => "Ljava/lang/String;",
         Ty::Any => "Ljava/lang/Object;",
         Ty::IntArray => "[I",
+        Ty::LongArray => "[J",
+        Ty::DoubleArray => "[D",
+        Ty::BooleanArray => "[Z",
+        Ty::ByteArray => "[B",
         Ty::Class(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
         Ty::Nothing => "V",                          // Nothing → void (unreachable on JVM)
@@ -8109,20 +8117,38 @@ fn walk_block(
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::NewIntArray(size) => {
-                // Push size onto the stack, then emit newarray T_INT.
+                // Push size onto the stack, then emit newarray with the
+                // appropriate type code based on the dest array type.
                 load_local(code, stack, max_stack, slots, *size, &func.locals);
                 code.push(0xBC); // newarray
-                code.push(10); // T_INT = 10
-                               // newarray pops int (size), pushes arrayref: net 0
+                let type_code: u8 = match &func.locals[dest.0 as usize] {
+                    Ty::BooleanArray => 4, // T_BOOLEAN
+                    Ty::ByteArray => 8,    // T_BYTE
+                    Ty::DoubleArray => 7,  // T_DOUBLE
+                    Ty::LongArray => 11,   // T_LONG
+                    _ => 10,               // T_INT (default for IntArray)
+                };
+                code.push(type_code);
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::ArrayLoad { array, index } => {
-                // Push array ref and index, then emit iaload.
                 load_local(code, stack, max_stack, slots, *array, &func.locals);
                 load_local(code, stack, max_stack, slots, *index, &func.locals);
-                code.push(0x2E); // iaload
-                                 // iaload pops arrayref + index (2), pushes int (1): net -1
-                bump(stack, max_stack, -1);
+                // Select load opcode based on element type.
+                let load_op: u8 = match &func.locals[dest.0 as usize] {
+                    Ty::Long => 0x2F,   // laload
+                    Ty::Double => 0x31, // daload
+                    Ty::Byte => 0x33,   // baload
+                    Ty::Bool => 0x33,   // baload (boolean arrays use baload)
+                    _ => 0x2E,          // iaload (int, char, short)
+                };
+                code.push(load_op);
+                let width = if matches!(func.locals[dest.0 as usize], Ty::Long | Ty::Double) {
+                    0 // wide: pops 2, pushes 2 → net 0
+                } else {
+                    -1 // narrow: pops 2, pushes 1 → net -1
+                };
+                bump(stack, max_stack, width);
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::ArrayStore {
@@ -8130,14 +8156,24 @@ fn walk_block(
                 index,
                 value,
             } => {
-                // Push array ref, index, and value, then emit iastore.
                 load_local(code, stack, max_stack, slots, *array, &func.locals);
                 load_local(code, stack, max_stack, slots, *index, &func.locals);
                 load_local(code, stack, max_stack, slots, *value, &func.locals);
-                code.push(0x4F); // iastore
-                                 // iastore pops arrayref + index + value (3): net -3
-                bump(stack, max_stack, -3);
-                // dest is Unit — nothing to store.
+                // Select store opcode based on value type.
+                let val_ty = &func.locals[value.0 as usize];
+                let store_op: u8 = match val_ty {
+                    Ty::Long => 0x50,            // lastore
+                    Ty::Double => 0x52,          // dastore
+                    Ty::Byte | Ty::Bool => 0x54, // bastore
+                    _ => 0x4F,                   // iastore (int, char, short)
+                };
+                code.push(store_op);
+                let width = if matches!(val_ty, Ty::Long | Ty::Double) {
+                    -4 // wide: pops 2+1+2 → net -4... actually pops array+index+wide_value
+                } else {
+                    -3 // narrow: pops 3
+                };
+                bump(stack, max_stack, width);
             }
             Rvalue::ArrayLength(array) => {
                 // Push array ref, then emit arraylength.
