@@ -906,7 +906,6 @@ impl<'a> Parser<'a> {
         }
 
         let mut entries = Vec::new();
-        #[allow(unused_mut)]
         let mut enum_methods = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
@@ -987,14 +986,14 @@ impl<'a> Parser<'a> {
                 }
             }
             // Parse class-body methods after the entries (abstract methods, etc.).
-            let mut enum_methods = Vec::new();
             loop {
                 self.skip_trivia();
-                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                let pk = self.peek_kind();
+                if pk == TokenKind::RBrace || pk == TokenKind::Eof {
                     break;
                 }
                 // Skip `abstract` keyword if present.
-                let is_abstract = self.peek_kind() == TokenKind::KwAbstract;
+                let is_abstract = pk == TokenKind::KwAbstract;
                 if is_abstract {
                     self.bump();
                     self.skip_trivia();

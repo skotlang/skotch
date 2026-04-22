@@ -4460,6 +4460,97 @@ fn lower_expr(
                     return Some(static_call);
                 }
 
+                // Check for enum dispatch functions. When an enum has
+                // abstract methods, the lowerer registers dispatch
+                // functions as "EnumName$methodName". We detect this
+                // for chains like `Op.PLUS.apply(3, 2)` by extracting
+                // the class name from the receiver field access.
+                {
+                    let method_str = interner.resolve(method_name).to_string();
+                    // Try to determine the enum class name from the
+                    // receiver. For `Op.PLUS.apply()`, the receiver is
+                    // `Field { Ident("Op"), "PLUS" }`. Check if the
+                    // receiver's outermost ident is an enum class.
+                    let enum_class = if let Expr::Field {
+                        receiver: inner_recv,
+                        ..
+                    } = receiver.as_ref()
+                    {
+                        if let Expr::Ident(sym, _) = inner_recv.as_ref() {
+                            let name = interner.resolve(*sym).to_string();
+                            if module.enum_names.contains(&name) {
+                                Some(name)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else if let Expr::Ident(sym, _) = receiver.as_ref() {
+                        // `op.apply()` where op is a local variable —
+                        // look up its type from scope.
+                        let found = scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| s == sym)
+                            .map(|(_, lid)| &fb.mf.locals[lid.0 as usize]);
+                        if let Some(Ty::Class(cname)) = found {
+                            if module.enum_names.contains(cname.as_str()) {
+                                Some(cname.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    if let Some(cls_name) = enum_class {
+                        let dispatch_name = format!("{}${}", cls_name, method_str);
+                        let dispatch_sym = interner.intern(&dispatch_name);
+                        if let Some(&fid) = name_to_func.get(&dispatch_sym) {
+                            // Lower the receiver (the enum instance)
+                            let recv_local = lower_expr(
+                                receiver,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            let mut all_args = vec![recv_local];
+                            for a in args {
+                                let id = lower_expr(
+                                    &a.expr,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                )?;
+                                all_args.push(id);
+                            }
+                            let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Static(fid),
+                                    args: all_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                }
+
                 // Check for nested class constructor: `Outer.Nested(args)`.
                 // The parser sees this as receiver=Ident("Outer"),
                 // name="Nested". We look for a MirClass named "Outer$Nested".
@@ -11737,16 +11828,17 @@ fn lower_enum(
     //
     // For each abstract method declared on the enum class, we generate a
     // concrete instance method that dispatches based on `this.name`.
-    // The method body is a cascading if-else chain comparing the name
-    // field against each entry that provides an override, then inlining
-    // that entry's override body.
-    let mut class_methods = vec![ts_fn];
+    // For each abstract method, generate a dispatch function as a
+    // top-level function (not a class method) so the JVM backend's
+    // walk_block path handles StackMapTable correctly. The function
+    // takes (this: EnumClass, params...) and dispatches on this.name.
+    let class_methods = vec![ts_fn];
 
     for abs_method in &e.methods {
         if !abs_method.is_abstract {
             continue;
         }
-        let method_name = interner.resolve(abs_method.name).to_string();
+        let method_name_str = interner.resolve(abs_method.name).to_string();
         let ret_ty = abs_method
             .return_ty
             .as_ref()
@@ -11754,7 +11846,13 @@ fn lower_enum(
             .unwrap_or(Ty::Unit);
 
         let fn_idx = module.functions.len();
-        let mut fb = FnBuilder::new(fn_idx, method_name.clone(), ret_ty.clone());
+        let fn_id = FuncId(fn_idx as u32);
+        // Register under "EnumName$methodName" so call sites can find it.
+        let dispatch_name = format!("{}${}", enum_name, method_name_str);
+        let dispatch_sym = interner.intern(&dispatch_name);
+        name_to_func.insert(dispatch_sym, fn_id);
+
+        let mut fb = FnBuilder::new(fn_idx, dispatch_name, ret_ty.clone());
 
         // this parameter
         let this_local = fb.new_local(Ty::Class(enum_name.clone()));
@@ -11782,7 +11880,6 @@ fn lower_enum(
         // For each entry with an override of this method, generate an
         // if-branch comparing this.name == "ENTRY_NAME".
         let scope: Vec<(Symbol, LocalId)> = param_locals.clone();
-        let _fallback_block = fb.new_block(); // final else (unreachable)
 
         for entry in &e.entries {
             let override_method = entry
@@ -11837,8 +11934,6 @@ fn lower_enum(
                     None,
                 );
             }
-            // If the body didn't terminate (e.g., the Return stmt handled it),
-            // set a fallback return.
             if !matches!(
                 fb.mf.blocks[fb.cur_block as usize].terminator,
                 Terminator::ReturnValue(_) | Terminator::Return
@@ -11861,10 +11956,7 @@ fn lower_enum(
             fb.set_terminator(Terminator::Return);
         }
 
-        let dispatch_fn = fb.finish();
-        // Register as a function so method calls can resolve it.
-        module.add_function(dispatch_fn.clone());
-        class_methods.push(dispatch_fn);
+        module.add_function(fb.finish());
     }
 
     module.classes.push(MirClass {

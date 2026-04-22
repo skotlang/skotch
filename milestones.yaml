@@ -1087,14 +1087,17 @@ milestones:
           listing missing subtypes: "'when' on sealed class X is not
           exhaustive. Missing: Y, Z". See fixture 514-when-exhaustiveness.
 
-      - name: "Enum abstract methods and per-entry overrides"
+      - name: "Enum abstract methods and per-entry overrides (landed)"
+        completed: true
         description: >
           enum class Op { PLUS { override fun apply(a: Int, b: Int) = a + b };
-          abstract fun apply(a: Int, b: Int): Int }. Parser now supports
-          method declarations inside enum entries and abstract methods after
-          the semicolon separator. MIR dispatch method generation is WIP.
-          Remaining: instance method call resolution on enum instances
-          (Op.PLUS.apply(3, 2)). See stub fixture 515-enum-abstract-method.
+          abstract fun apply(a: Int, b: Int): Int }. Parser supports method
+          declarations inside enum entries and abstract methods after the
+          semicolon separator. Dispatch generates a top-level function
+          (EnumName$methodName) that compares this.name against each entry
+          and inlines the override body. Supports both direct chains
+          (Op.PLUS.apply(3, 2)) and variable calls (val op = Op.PLUS;
+          op.apply(3, 2)). See fixture 515-enum-abstract-method.
 
       - name: "Custom property delegates (getValue/setValue)"
         description: >
