@@ -1,4 +1,3 @@
 name   = "76-lambda-with-receiver"
-status = "stub"
+status = "active"
 features = ["lambda-with-receiver", "function-type", "StringBuilder"]
-reason = "Requires lambda-with-receiver (extension function type)."

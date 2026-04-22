@@ -1099,6 +1099,19 @@ milestones:
           (Op.PLUS.apply(3, 2)) and variable calls (val op = Op.PLUS;
           op.apply(3, 2)). See fixture 515-enum-abstract-method.
 
+      - name: "Lambda-with-receiver and extension function types (landed)"
+        completed: true
+        description: >
+          Extension function types like StringBuilder.() -> Unit are now
+          supported. The parser sets has_receiver on TypeRef. At call sites,
+          lambda_receiver_type propagates the receiver class to the lambda
+          body. Inside the lambda, bare method calls (append, etc.) resolve
+          via implicit this dispatch including JDK class lookup. Callable
+          locals invoked on receivers (sb.block()) dispatch as
+          block.invoke(sb). FunctionN.invoke correctly returns Object on
+          JVM with aconst_null/areturn for Unit lambdas.
+          See fixtures 76-lambda-with-receiver, 518-scope-function-apply.
+
       - name: "Custom property delegates (getValue/setValue)"
         description: >
           class MyDelegate { operator fun getValue(...) }; val x by MyDelegate().

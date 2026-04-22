@@ -81,18 +81,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0140 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0145 istore 21
     0147 iload 21
-    0149 ifeq 171
+    0149 ifeq 172
     0152 aload 20
     0154 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0159 astore 22
     0161 aload 19
     0163 aload 22
-    0165 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0168 goto 138
-    0171 ldc "done"
-    0173 astore 23
-    0175 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0178 aload 23
-    0180 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0183 return
+    0165 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0168 pop
+    0169 goto 138
+    0172 ldc "done"
+    0174 astore 23
+    0176 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0179 aload 23
+    0181 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0184 return
     sub_attr  StackMapTable (99 bytes)

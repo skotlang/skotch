@@ -17,12 +17,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0022 astore 4
     0024 aload 2
     0026 aload 4
-    0028 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0031 ldc "world"
-    0033 astore 5
-    0035 aload 5
-    0037 astore 6
-    0039 aload 2
-    0041 aload 6
-    0043 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0046 return
+    0028 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0031 pop
+    0032 ldc "world"
+    0034 astore 5
+    0036 aload 5
+    0038 astore 6
+    0040 aload 2
+    0042 aload 6
+    0044 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0047 pop
+    0048 return

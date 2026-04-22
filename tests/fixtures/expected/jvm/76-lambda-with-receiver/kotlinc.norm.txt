@@ -1,0 +1,62 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        buildString (Lkotlin/jvm/functions/Function1;)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 ldc "block"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/StringBuilder)
+    0009 dup
+    0010 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0013 astore_1
+    0014 aload_0
+    0015 aload_1
+    0016 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0021 pop
+    0022 aload_1
+    0023 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0026 dup
+    0027 ldc "toString(...)"
+    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0032 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 op_0xBA
+    0001 nop
+    0002 astore 0
+    0004 nop
+    0005 invokestatic Method(InputKt.buildString:(Lkotlin/jvm/functions/Function1;)Ljava/lang/String;)
+    0008 astore_0
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 aload_0
+    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0016 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (Ljava/lang/StringBuilder;)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "$this$buildString"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 ldc "Hello"
+    0009 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0012 pop
+    0013 aload_0
+    0014 ldc ", "
+    0016 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0019 pop
+    0020 aload_0
+    0021 ldc "world!"
+    0023 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0026 pop
+    0027 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0030 areturn
+class_attr    BootstrapMethods (12 bytes)

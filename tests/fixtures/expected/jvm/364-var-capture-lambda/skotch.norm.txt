@@ -22,15 +22,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0031 checkcast Class(InputKt$Lambda$1)
     0034 astore 5
     0036 aload 5
-    0038 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
-    0041 aload 5
-    0043 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
-    0046 aload 5
-    0048 invokevirtual Method(InputKt$Lambda$1.invoke:()V)
-    0051 aload 3
-    0053 getfield Field($Ref$0.element:I)
-    0056 istore 6
-    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0061 iload 6
-    0063 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0066 return
+    0038 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0041 pop
+    0042 aload 5
+    0044 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0047 pop
+    0048 aload 5
+    0050 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0053 pop
+    0054 aload 3
+    0056 getfield Field($Ref$0.element:I)
+    0059 istore 6
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 iload 6
+    0066 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0069 return
