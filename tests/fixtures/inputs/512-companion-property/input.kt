@@ -1,12 +1,11 @@
-class Counter {
+class Config {
     companion object {
-        var count: Int = 0
-        fun increment() { count++ }
+        val VERSION: Int = 42
+        val NAME: String = "skotch"
     }
 }
 
 fun main() {
-    Counter.increment()
-    Counter.increment()
-    println(Counter.count)
+    println(Config.VERSION)
+    println(Config.NAME)
 }

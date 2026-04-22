@@ -1,4 +1,4 @@
 name   = "512-companion-property"
-status = "stub"
-features = ["companion-object", "companion-property", "static-field"]
-reason = "Companion methods work but companion var/val properties lack backing fields."
+status = "active"
+features = ["companion-object", "companion-property", "const-val"]
+expected_output = "42\nskotch\n"
