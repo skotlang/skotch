@@ -1,0 +1,155 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        MINUS ()LOp; 0x0009
+  code        max_stack=3 max_locals=2
+    0000 new Class(Op)
+    0003 dup
+    0004 ldc "MINUS"
+    0006 astore 1
+    0008 aload 1
+    0010 invokespecial Method(Op.<init>:(Ljava/lang/String;)V)
+    0013 astore 0
+    0015 aload 0
+    0017 areturn
+method        Op$apply (LOp;II)I 0x0009
+  code        max_stack=3 max_locals=15
+    0000 aload 0
+    0002 getfield Field(Op.name:Ljava/lang/String;)
+    0005 astore 3
+    0007 ldc "PLUS"
+    0009 astore 4
+    0011 aload 3
+    0013 aload 4
+    0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0018 istore 5
+    0020 iload 5
+    0022 ifeq 43
+    0025 iload 1
+    0027 istore 6
+    0029 iload 2
+    0031 istore 7
+    0033 iload 6
+    0035 iload 7
+    0037 iadd
+    0038 istore 8
+    0040 iload 8
+    0042 op_0xAC
+    0043 ldc "MINUS"
+    0045 astore 9
+    0047 aload 3
+    0049 aload 9
+    0051 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0054 istore 10
+    0056 iload 10
+    0058 ifeq 79
+    0061 iload 1
+    0063 istore 11
+    0065 iload 2
+    0067 istore 12
+    0069 iload 11
+    0071 iload 12
+    0073 isub
+    0074 istore 13
+    0076 iload 13
+    0078 op_0xAC
+    0079 iconst_0
+    0080 istore 14
+    0082 iload 14
+    0084 op_0xAC
+    sub_attr  StackMapTable (47 bytes)
+method        Op$valueOf (Ljava/lang/String;)LOp; 0x0009
+  code        max_stack=3 max_locals=8
+    0000 ldc "PLUS"
+    0002 astore 1
+    0004 aload 0
+    0006 aload 1
+    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0011 istore 2
+    0013 iload 2
+    0015 ifeq 29
+    0018 goto 55
+    0021 invokestatic Method(InputKt.PLUS:()LOp;)
+    0024 astore 3
+    0026 aload 3
+    0028 areturn
+    0029 ldc "MINUS"
+    0031 astore 4
+    0033 aload 0
+    0035 aload 4
+    0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0040 istore 5
+    0042 iload 5
+    0044 ifeq 21
+    0047 invokestatic Method(InputKt.MINUS:()LOp;)
+    0050 astore 6
+    0052 aload 6
+    0054 areturn
+    0055 invokestatic Method(InputKt.PLUS:()LOp;)
+    0058 astore 7
+    0060 aload 7
+    0062 areturn
+    sub_attr  StackMapTable (49 bytes)
+method        Op$values ()Ljava/util/ArrayList; 0x0009
+  code        max_stack=2 max_locals=5
+    0000 new Class(java/util/ArrayList)
+    0003 dup
+    0004 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0007 astore 0
+    0009 invokestatic Method(InputKt.PLUS:()LOp;)
+    0012 astore 1
+    0014 aload 0
+    0016 aload 1
+    0018 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0021 istore 2
+    0023 invokestatic Method(InputKt.MINUS:()LOp;)
+    0026 astore 3
+    0028 aload 0
+    0030 aload 3
+    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0035 istore 4
+    0037 aload 0
+    0039 areturn
+method        PLUS ()LOp; 0x0009
+  code        max_stack=3 max_locals=2
+    0000 new Class(Op)
+    0003 dup
+    0004 ldc "PLUS"
+    0006 astore 1
+    0008 aload 1
+    0010 invokespecial Method(Op.<init>:(Ljava/lang/String;)V)
+    0013 astore 0
+    0015 aload 0
+    0017 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=9
+    0000 invokestatic Method(InputKt.PLUS:()LOp;)
+    0003 astore 1
+    0005 iconst_3
+    0006 istore 2
+    0008 iconst_2
+    0009 istore 3
+    0011 aload 1
+    0013 iload 2
+    0015 iload 3
+    0017 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
+    0020 istore 4
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 iload 4
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 invokestatic Method(InputKt.MINUS:()LOp;)
+    0033 astore 5
+    0035 iconst_3
+    0036 istore 6
+    0038 iconst_2
+    0039 istore 7
+    0041 aload 5
+    0043 iload 6
+    0045 iload 7
+    0047 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
+    0050 istore 8
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 iload 8
+    0057 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0060 return
