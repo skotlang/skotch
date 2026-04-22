@@ -1,4 +1,3 @@
 name   = "513-visibility-enforcement"
-status = "stub"
+status = "active"
 features = ["private", "visibility", "access-control"]
-reason = "Visibility modifiers parsed but not enforced. ACC_PRIVATE not set in JVM bytecode."

@@ -1,0 +1,47 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=6
+    0000 ldc "hello"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(InputKt.safeCast:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0009 astore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 bipush 42
+    0021 istore 3
+    0023 iload 3
+    0025 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0028 astore 4
+    0030 aload 4
+    0032 invokestatic Method(InputKt.safeCast:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0035 astore 5
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 aload 5
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 return
+method        safeCast (Ljava/lang/Object;)Ljava/lang/Object; 0x0009
+  code        max_stack=1 max_locals=5
+    0000 aload 0
+    0002 astore 1
+    0004 aload 1
+    0006 instanceof Class(java/lang/String)
+    0009 istore 2
+    0011 iload 2
+    0013 ifeq 30
+    0016 aload 1
+    0018 checkcast Class(java/lang/String)
+    0021 astore 3
+    0023 aload 3
+    0025 astore 4
+    0027 goto 36
+    0030 aconst_null
+    0031 astore 4
+    0033 goto 36
+    0036 aload 4
+    0038 areturn
+    sub_attr  StackMapTable (34 bytes)

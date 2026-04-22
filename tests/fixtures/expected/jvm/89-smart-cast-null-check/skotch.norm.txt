@@ -7,13 +7,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 ldc "hello"
     0002 astore 1
     0004 aload 1
-    0006 invokestatic Method(InputKt.printLength:(Ljava/lang/String;)V)
+    0006 invokestatic Method(InputKt.printLength:(Ljava/lang/Object;)V)
     0009 aconst_null
     0010 astore 2
     0012 aload 2
-    0014 invokestatic Method(InputKt.printLength:(Ljava/lang/String;)V)
+    0014 invokestatic Method(InputKt.printLength:(Ljava/lang/Object;)V)
     0017 return
-method        printLength (Ljava/lang/String;)V 0x0009
+method        printLength (Ljava/lang/Object;)V 0x0009
   code        max_stack=2 max_locals=8
     0000 aload 0
     0002 astore 1

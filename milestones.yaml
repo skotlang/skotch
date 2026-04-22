@@ -959,13 +959,13 @@ milestones:
 
     features:
       # ── HIGH severity: breaks real code ────────────────────────────
-      - name: "as? safe cast (emit instanceof + branch) — PARTIAL"
+      - name: "as? safe cast (emit instanceof + branch) (landed)"
         completed: true
         description: >
           Emits instanceof check: if match, checkcast; if not, push null.
-          Returns Nullable(T). Function-return-type mismatch for T? still
-          WIP (JVM descriptor says String but should say Object for nullable).
-          See stub fixture 500-safe-cast-as-nullable (remains stub).
+          Returns Nullable(T). JVM descriptor now correctly uses Object for
+          nullable return types (Ty::Nullable → Ljava/lang/Object;).
+          See fixture 500-safe-cast-as-nullable.
 
       - name: "as unsafe cast (emit checkcast) (landed)"
         completed: true
@@ -1074,9 +1074,10 @@ milestones:
         description: >
           Visibility enum (Public/Private/Protected/Internal) added to AST.
           Parser stores visibility on FunDecl. ACC_PRIVATE/ACC_PROTECTED
-          constants defined in JVM backend. Compile-time access control
-          enforcement deferred to v0.13 (multi-file).
-          See stub fixture 513-visibility-enforcement (remains stub).
+          constants defined in JVM backend. Private fields correctly hidden
+          behind getter methods. Compile-time access control enforcement
+          deferred to v0.13 (multi-file).
+          See fixture 513-visibility-enforcement.
 
       # ── LOW severity: edge cases ──────────────────────────────────
       - name: "when exhaustiveness checking for sealed classes (landed)"

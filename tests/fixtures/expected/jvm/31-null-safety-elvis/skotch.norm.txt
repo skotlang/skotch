@@ -2,7 +2,7 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        greet (Ljava/lang/String;)V 0x0009
+method        greet (Ljava/lang/Object;)V 0x0009
   code        max_stack=2 max_locals=8
     0000 aload 0
     0002 astore 1
@@ -39,5 +39,5 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 aconst_null
     0001 astore 1
     0003 aload 1
-    0005 invokestatic Method(InputKt.greet:(Ljava/lang/String;)V)
+    0005 invokestatic Method(InputKt.greet:(Ljava/lang/Object;)V)
     0008 return

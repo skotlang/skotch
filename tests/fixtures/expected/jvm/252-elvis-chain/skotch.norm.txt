@@ -2,7 +2,7 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        first (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0009
+method        first (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=11
     0000 aload 0
     0002 astore 2
@@ -56,7 +56,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0006 astore 2
     0008 aload 1
     0010 aload 2
-    0012 invokestatic Method(InputKt.first:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0012 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
     0015 astore 3
     0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0020 aload 3
@@ -67,7 +67,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0030 astore 5
     0032 aload 4
     0034 aload 5
-    0036 invokestatic Method(InputKt.first:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0036 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
     0039 astore 6
     0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0044 aload 6
@@ -78,7 +78,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0053 astore 8
     0055 aload 7
     0057 aload 8
-    0059 invokestatic Method(InputKt.first:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0059 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
     0062 astore 9
     0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0067 aload 9

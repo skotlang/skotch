@@ -7,7 +7,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0000 ldc "Alice"
     0002 astore 1
     0004 aload 1
-    0006 invokestatic Method(InputKt.nameOrDefault:(Ljava/lang/String;)Ljava/lang/String;)
+    0006 invokestatic Method(InputKt.nameOrDefault:(Ljava/lang/Object;)Ljava/lang/String;)
     0009 astore 2
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 aload 2
@@ -15,13 +15,13 @@ method        main ([Ljava/lang/String;)V 0x0009
     0019 aconst_null
     0020 astore 3
     0022 aload 3
-    0024 invokestatic Method(InputKt.nameOrDefault:(Ljava/lang/String;)Ljava/lang/String;)
+    0024 invokestatic Method(InputKt.nameOrDefault:(Ljava/lang/Object;)Ljava/lang/String;)
     0027 astore 4
     0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0032 aload 4
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0037 return
-method        nameOrDefault (Ljava/lang/String;)Ljava/lang/String; 0x0009
+method        nameOrDefault (Ljava/lang/Object;)Ljava/lang/String; 0x0009
   code        max_stack=2 max_locals=6
     0000 aload 0
     0002 astore 1
