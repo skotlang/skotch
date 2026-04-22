@@ -906,6 +906,8 @@ impl<'a> Parser<'a> {
         }
 
         let mut entries = Vec::new();
+        #[allow(unused_mut)]
+        let mut enum_methods = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
             loop {
@@ -934,11 +936,46 @@ impl<'a> Parser<'a> {
                         }
                         self.expect(TokenKind::RParen, ")");
                     }
+                    // Optional anonymous class body: PLUS { override fun ... }
+                    let mut entry_methods = Vec::new();
+                    // Skip newlines but NOT semicolons before checking for body.
+                    while self.peek_kind() == TokenKind::Newline {
+                        self.pos += 1;
+                    }
+                    if self.peek_kind() == TokenKind::LBrace {
+                        self.bump();
+                        loop {
+                            self.skip_trivia();
+                            if self.peek_kind() == TokenKind::RBrace
+                                || self.peek_kind() == TokenKind::Eof
+                            {
+                                break;
+                            }
+                            // Skip `override` keyword if present.
+                            if self.peek_kind() == TokenKind::KwOverride {
+                                self.bump();
+                                self.skip_trivia();
+                            }
+                            if self.peek_kind() == TokenKind::KwFun {
+                                entry_methods.push(self.parse_fun_decl());
+                            } else {
+                                self.bump(); // skip unknown token
+                            }
+                        }
+                        if self.peek_kind() == TokenKind::RBrace {
+                            self.bump();
+                        }
+                    }
                     entries.push(skotch_syntax::EnumEntry {
                         name: entry_name,
                         args: entry_args,
+                        methods: entry_methods,
                     });
-                    self.skip_trivia();
+                    // Skip newlines but NOT semicolons — we need to detect
+                    // the `;` separator between entries and class body.
+                    while self.peek_kind() == TokenKind::Newline {
+                        self.pos += 1;
+                    }
                     if self.peek_kind() == TokenKind::Comma {
                         self.bump();
                     } else if self.peek_kind() == TokenKind::Semi {
@@ -949,9 +986,26 @@ impl<'a> Parser<'a> {
                     self.bump(); // skip unknown
                 }
             }
-            // Skip any remaining content until closing brace.
-            while self.peek_kind() != TokenKind::RBrace && self.peek_kind() != TokenKind::Eof {
-                self.bump();
+            // Parse class-body methods after the entries (abstract methods, etc.).
+            let mut enum_methods = Vec::new();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
+                    break;
+                }
+                // Skip `abstract` keyword if present.
+                let is_abstract = self.peek_kind() == TokenKind::KwAbstract;
+                if is_abstract {
+                    self.bump();
+                    self.skip_trivia();
+                }
+                if self.peek_kind() == TokenKind::KwFun {
+                    let mut fd = self.parse_fun_decl();
+                    fd.is_abstract = is_abstract;
+                    enum_methods.push(fd);
+                } else {
+                    self.bump(); // skip unknown token
+                }
             }
             if self.peek_kind() == TokenKind::RBrace {
                 self.bump();
@@ -963,6 +1017,7 @@ impl<'a> Parser<'a> {
             name_span,
             constructor_params,
             entries,
+            methods: enum_methods,
             span: kw.merge(name_span),
         }
     }
@@ -2900,6 +2955,14 @@ impl<'a> Parser<'a> {
                 };
                 self.bump();
                 Expr::DoubleLit(v, span)
+            }
+            TokenKind::FloatLit => {
+                let v = match self.payload(self.pos) {
+                    Some(TokenPayload::Double(v)) => *v,
+                    _ => 0.0,
+                };
+                self.bump();
+                Expr::FloatLit(v, span)
             }
             TokenKind::KwNull => {
                 self.bump();

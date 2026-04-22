@@ -541,8 +541,12 @@ fn emit_suspend_lambda_shell(
                              // captures, widen the load opcode selection.
             let cap_ty = &capture_fields[i].ty;
             match cap_ty {
-                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => {
                     code.push(0x15); // iload
+                    code.push(slot);
+                }
+                Ty::Float => {
+                    code.push(0x17); // fload
                     code.push(slot);
                 }
                 Ty::Long => {
@@ -1182,9 +1186,8 @@ fn emit_user_method(
                 }
                 // Use the FUNCTION's return type for the return opcode.
                 match &func.return_ty {
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
-                        code.push(0xAC)
-                    } // ireturn
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => code.push(0xAC), // ireturn
+                    Ty::Float => code.push(0xAE),  // freturn
                     Ty::Long => code.push(0xAD),   // lreturn
                     Ty::Double => code.push(0xAF), // dreturn
                     _ => code.push(0xB0),          // areturn
@@ -1736,9 +1739,8 @@ fn emit_method(
                 // Use the FUNCTION's return type for the return opcode,
                 // not the local's type.
                 match &func.return_ty {
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
-                        code.push(0xAC)
-                    } // ireturn
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => code.push(0xAC), // ireturn
+                    Ty::Float => code.push(0xAE),  // freturn
                     Ty::Long => code.push(0xAD),   // lreturn
                     Ty::Double => code.push(0xAF), // dreturn
                     _ => code.push(0xB0),          // areturn
@@ -4444,7 +4446,8 @@ fn emit_mir_segment(
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
                             Ty::Char => "(C)V",
-                            Ty::Int => "(I)V",
+                            Ty::Int | Ty::Byte | Ty::Short => "(I)V",
+                            Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
                             Ty::String => "(Ljava/lang/String;)V",
@@ -4690,6 +4693,10 @@ fn emit_const(
                 code.write_u16::<BigEndian>(idx).unwrap();
             }
         }
+        MirConst::Float(v) => {
+            let idx = cp.float(*v);
+            emit_ldc(code, idx);
+        }
         MirConst::Double(v) => {
             let idx = cp.double(*v);
             code.push(0x14); // ldc2_w
@@ -4730,7 +4737,8 @@ fn emit_load_mir_local(
         .copied()
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
     let op: u8 = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x15,
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => 0x15,
+        Ty::Float => 0x17, // fload
         Ty::Long => 0x16,
         Ty::Double => 0x18,
         _ => 0x19, // aload
@@ -4753,7 +4761,8 @@ fn emit_store_mir_local(
         .get(&local.0)
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
     let op: u8 = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x36,
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => 0x36,
+        Ty::Float => 0x38, // fstore
         Ty::Long => 0x37,
         Ty::Double => 0x39,
         _ => 0x3A, // astore
@@ -4965,7 +4974,8 @@ fn emit_invoke_suspend_method(
         // Push remaining user params as dummies (skip first = this)
         for ty in sm.outer_user_param_tys.iter().skip(1) {
             match ty {
-                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => code.push(0x03),
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => code.push(0x03),
+                Ty::Float => code.push(0x0B), // fconst_0
                 Ty::Long => code.push(0x09),
                 Ty::Double => code.push(0x0E),
                 _ => code.push(0x01),
@@ -4974,7 +4984,8 @@ fn emit_invoke_suspend_method(
     } else {
         for ty in &sm.outer_user_param_tys {
             match ty {
-                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => code.push(0x03), // iconst_0
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => code.push(0x03), // iconst_0
+                Ty::Float => code.push(0x0B),                                            // fconst_0
                 Ty::Long => {
                     code.push(0x09); // lconst_0
                 }
@@ -6995,7 +7006,10 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::Class(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
         Ty::Nothing => "V",                          // Nothing → void (unreachable on JVM)
-        Ty::Nullable(inner) => jvm_type(inner),
+        // Nullable reference types use Object in JVM descriptors so
+        // the verifier accepts null returns.  Nullable primitives box
+        // (Integer?, Long?, etc.) and are also Object.
+        Ty::Nullable(_) => "Ljava/lang/Object;",
         Ty::Error => "V",
     }
 }
@@ -7004,6 +7018,7 @@ fn jvm_type(ty: &Ty) -> &'static str {
 fn jvm_type_string(ty: &Ty) -> String {
     match ty {
         Ty::Class(name) => format!("L{name};"),
+        Ty::Nullable(_) => "Ljava/lang/Object;".to_string(),
         other => jvm_type(other).to_string(),
     }
 }
@@ -7511,7 +7526,8 @@ fn walk_block(
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
                             Ty::Char => "(C)V",
-                            Ty::Int => "(I)V",
+                            Ty::Int | Ty::Byte | Ty::Short => "(I)V",
+                            Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
                             Ty::String => "(Ljava/lang/String;)V",
@@ -7547,7 +7563,9 @@ fn walk_block(
                         let arg_ty = &func.locals[a.0 as usize];
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
-                            Ty::Int => "(I)V",
+                            Ty::Char => "(C)V",
+                            Ty::Int | Ty::Byte | Ty::Short => "(I)V",
+                            Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
                             Ty::String => "(Ljava/lang/String;)V",
@@ -8254,6 +8272,11 @@ fn emit_load_const(
             }
             bump(stack, max_stack, 2); // Long takes 2 stack slots
         }
+        MirConst::Float(v) => {
+            let idx = cp.float(*v);
+            emit_ldc(code, idx);
+            bump(stack, max_stack, 1);
+        }
         MirConst::Double(v) => {
             let idx = cp.double(*v);
             code.push(0x14); // ldc2_w
@@ -8355,7 +8378,8 @@ fn store_local(
     }
     let slot = slot_for_ty(slots, next_slot, local, ty);
     let (opcode, width) = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => (0x36u8, 1), // istore
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x36u8, 1), // istore
+        Ty::Float => (0x38, 1),                                              // fstore
         Ty::Long => (0x37, 2),   // lstore (takes 2 stack slots)
         Ty::Double => (0x39, 2), // dstore
         _ => (0x3A, 1),          // astore
@@ -8399,7 +8423,8 @@ fn load_local(
         }
     };
     let (opcode, width) = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => (0x15u8, 1), // iload
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x15u8, 1), // iload
+        Ty::Float => (0x17, 1),                                              // fload
         Ty::Long => (0x16, 2),   // lload (pushes 2 stack slots)
         Ty::Double => (0x18, 2), // dload
         _ => (0x19, 1),          // aload
@@ -8466,7 +8491,8 @@ fn write_slot_verif(
         if let Some(mir_id) = slot_to_local.get(slot).copied().flatten() {
             let ty = &func.locals[mir_id as usize];
             match ty {
-                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => out.push(1), // Integer_variable_info
+                Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => out.push(1), // Integer_variable_info
+                Ty::Float => out.push(2),  // Float_variable_info
                 Ty::Long => out.push(4),   // Long_variable_info
                 Ty::Double => out.push(3), // Double_variable_info
                 Ty::String => {

@@ -1,0 +1,188 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=47
+    0000 iconst_1
+    0001 istore 1
+    0003 iconst_2
+    0004 istore 2
+    0006 iconst_3
+    0007 istore 3
+    0009 iconst_4
+    0010 istore 4
+    0012 iconst_5
+    0013 istore 5
+    0015 bipush 6
+    0017 istore 6
+    0019 bipush 7
+    0021 istore 7
+    0023 bipush 8
+    0025 istore 8
+    0027 bipush 9
+    0029 istore 9
+    0031 bipush 10
+    0033 istore 10
+    0035 bipush 10
+    0037 istore 11
+    0039 iload 11
+    0041 op_0xBD
+    0042 nop
+    0043 iconst_1
+    0044 astore 12
+    0046 iconst_0
+    0047 istore 13
+    0049 iload 1
+    0051 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0054 astore 14
+    0056 aload 12
+    0058 iload 13
+    0060 aload 14
+    0062 op_0x53
+    0063 iconst_1
+    0064 istore 15
+    0066 iload 2
+    0068 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0071 astore 16
+    0073 aload 12
+    0075 iload 15
+    0077 aload 16
+    0079 op_0x53
+    0080 iconst_2
+    0081 istore 17
+    0083 iload 3
+    0085 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0088 astore 18
+    0090 aload 12
+    0092 iload 17
+    0094 aload 18
+    0096 op_0x53
+    0097 iconst_3
+    0098 istore 19
+    0100 iload 4
+    0102 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0105 astore 20
+    0107 aload 12
+    0109 iload 19
+    0111 aload 20
+    0113 op_0x53
+    0114 iconst_4
+    0115 istore 21
+    0117 iload 5
+    0119 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0122 astore 22
+    0124 aload 12
+    0126 iload 21
+    0128 aload 22
+    0130 op_0x53
+    0131 iconst_5
+    0132 istore 23
+    0134 iload 6
+    0136 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0139 astore 24
+    0141 aload 12
+    0143 iload 23
+    0145 aload 24
+    0147 op_0x53
+    0148 bipush 6
+    0150 istore 25
+    0152 iload 7
+    0154 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0157 astore 26
+    0159 aload 12
+    0161 iload 25
+    0163 aload 26
+    0165 op_0x53
+    0166 bipush 7
+    0168 istore 27
+    0170 iload 8
+    0172 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0175 astore 28
+    0177 aload 12
+    0179 iload 27
+    0181 aload 28
+    0183 op_0x53
+    0184 bipush 8
+    0186 istore 29
+    0188 iload 9
+    0190 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0193 astore 30
+    0195 aload 12
+    0197 iload 29
+    0199 aload 30
+    0201 op_0x53
+    0202 bipush 9
+    0204 istore 31
+    0206 iload 10
+    0208 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0211 astore 32
+    0213 aload 12
+    0215 iload 31
+    0217 aload 32
+    0219 op_0x53
+    0220 aload 12
+    0222 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0225 astore 33
+    0227 aload 33
+    0229 checkcast Class(java/util/List)
+    0232 astore 34
+    0234 aload 34
+    0236 checkcast Class(java/util/List)
+    0239 astore 35
+    0241 new Class(InputKt$Lambda$0)
+    0244 dup
+    0245 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0248 astore 36
+    0250 aload 35
+    0252 aload 36
+    0254 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0257 astore 37
+    0259 aload 37
+    0261 checkcast Class(java/util/List)
+    0264 astore 38
+    0266 aload 34
+    0268 checkcast Class(java/util/List)
+    0271 astore 39
+    0273 new Class(InputKt$Lambda$1)
+    0276 dup
+    0277 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0280 astore 40
+    0282 aload 39
+    0284 aload 40
+    0286 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0289 astore 41
+    0291 aload 41
+    0293 checkcast Class(java/util/List)
+    0296 astore 42
+    0298 ldc "evens: "
+    0300 astore 43
+    0302 aload 38
+    0304 checkcast Class(java/util/List)
+    0307 astore 44
+    0309 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0312 new Class(java/lang/StringBuilder)
+    0315 dup
+    0316 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0319 aload 43
+    0321 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0324 aload 44
+    0326 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0329 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0332 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0335 ldc "odds: "
+    0337 astore 45
+    0339 aload 42
+    0341 checkcast Class(java/util/List)
+    0344 astore 46
+    0346 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0349 new Class(java/lang/StringBuilder)
+    0352 dup
+    0353 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0356 aload 45
+    0358 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0361 aload 46
+    0363 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0366 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0369 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0372 return

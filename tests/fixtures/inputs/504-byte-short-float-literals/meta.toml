@@ -1,4 +1,3 @@
 name   = "504-byte-short-float-literals"
-status = "stub"
+status = "active"
 features = ["Byte", "Short", "Float", "literal-narrowing"]
-reason = "Ty::Byte/Short/Float exist but no code path produces them from literals."

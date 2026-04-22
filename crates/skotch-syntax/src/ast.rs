@@ -106,6 +106,9 @@ pub struct EnumDecl {
     pub constructor_params: Vec<ConstructorParam>,
     /// Enum constant names with optional args in declaration order.
     pub entries: Vec<EnumEntry>,
+    /// Methods declared on the enum class body (after the entries).
+    /// Includes abstract methods that entries must override.
+    pub methods: Vec<FunDecl>,
     pub span: Span,
 }
 
@@ -114,6 +117,8 @@ pub struct EnumDecl {
 pub struct EnumEntry {
     pub name: Symbol,
     pub args: Vec<Expr>,
+    /// Methods overridden in this entry's anonymous class body.
+    pub methods: Vec<FunDecl>,
 }
 
 /// An `object` declaration (singleton).
@@ -391,6 +396,8 @@ pub enum Expr {
     CharLit(i64, Span),
     LongLit(i64, Span),
     DoubleLit(f64, Span),
+    /// Float literal with `f`/`F` suffix: `3.14f`.
+    FloatLit(f64, Span),
     BoolLit(bool, Span),
     NullLit(Span),
     StringLit(String, Span),
@@ -574,6 +581,7 @@ impl Expr {
             | Expr::CharLit(_, s)
             | Expr::LongLit(_, s)
             | Expr::DoubleLit(_, s)
+            | Expr::FloatLit(_, s)
             | Expr::BoolLit(_, s)
             | Expr::NullLit(s)
             | Expr::StringLit(_, s)

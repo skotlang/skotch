@@ -380,9 +380,8 @@ fn walk_block(
                 let dest_reg = slot[&dest.0];
                 let dest_ty = &locals[dest.0 as usize];
                 let (op, field_desc) = match dest_ty {
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
-                        (0x52_u16, "I")
-                    }
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x52_u16, "I"),
+                    Ty::Float => (0x52, "F"),
                     Ty::Long => (0x53, "J"),
                     Ty::Double => (0x53, "D"), // iget-wide
                     _ => (0x54, "Ljava/lang/Object;"),
@@ -409,9 +408,8 @@ fn walk_block(
                 let val_reg = slot[&val.0];
                 let val_ty = &locals[val.0 as usize];
                 let (op, field_desc) = match val_ty {
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
-                        (0x59_u16, "I")
-                    }
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x59_u16, "I"),
+                    Ty::Float => (0x59, "F"),
                     Ty::Long => (0x5A, "J"),
                     Ty::Double => (0x5A, "D"),
                     _ => (0x5B, "Ljava/lang/Object;"),
@@ -554,6 +552,13 @@ fn emit_const(
             code.push(((bits >> 16) & 0xFFFF) as u16);
             code.push(((bits >> 32) & 0xFFFF) as u16);
             code.push(((bits >> 48) & 0xFFFF) as u16);
+        }
+        MirConst::Float(v) => {
+            // const vAA, #+BBBBBBBB (op 0x14, format 31i) — float bits
+            let bits = v.to_bits();
+            code.push(opcode_aa(0x14, dest_reg as u8));
+            code.push((bits & 0xFFFF) as u16);
+            code.push(((bits >> 16) & 0xFFFF) as u16);
         }
         MirConst::Double(v) => {
             // const-wide vAA, #+BBBBBBBBBBBBBBBB (op 0x18, format 51l)
@@ -986,7 +991,8 @@ fn emit_call(
                 let arg_ty = &locals[arg.0 as usize];
                 let param_desc = match arg_ty {
                     Ty::String => "Ljava/lang/String;",
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => "I",
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => "I",
+                    Ty::Float => "F",
                     Ty::Long => "J",
                     Ty::Double => "D",
                     _ => "Ljava/lang/Object;",

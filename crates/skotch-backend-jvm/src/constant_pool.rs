@@ -19,6 +19,7 @@ use std::io::Write;
 enum Key {
     Utf8(String),
     Integer(i32),
+    Float(u32), // f32 bits for hashing
     Long(i64),
     Double(u64), // f64 bits for hashing
     Class(u16),
@@ -33,6 +34,7 @@ enum Key {
 enum Entry {
     Utf8(String),
     Integer(i32),
+    Float(f32),
     Long(i64),
     Double(f64),
     Class(u16),
@@ -77,6 +79,10 @@ impl ConstantPool {
 
     pub fn integer(&mut self, v: i32) -> u16 {
         self.add(Key::Integer(v), Entry::Integer(v))
+    }
+
+    pub fn float(&mut self, v: f32) -> u16 {
+        self.add(Key::Float(v.to_bits()), Entry::Float(v))
     }
 
     pub fn long(&mut self, v: i64) -> u16 {
@@ -146,6 +152,10 @@ impl ConstantPool {
                 Entry::Integer(v) => {
                     out.push(3); // CONSTANT_Integer
                     out.write_i32::<BigEndian>(*v).unwrap();
+                }
+                Entry::Float(v) => {
+                    out.push(4); // CONSTANT_Float
+                    out.write_u32::<BigEndian>(v.to_bits()).unwrap();
                 }
                 Entry::Long(v) => {
                     out.push(5); // CONSTANT_Long

@@ -1,0 +1,26 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=6
+    0000 ldc "Hello"
+    0002 astore 1
+    0004 new Class(Document)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Document.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(Document)
+    0020 astore 3
+    0022 aload 3
+    0024 checkcast Class(Document)
+    0027 astore 4
+    0029 aload 4
+    0031 invokevirtual Method(Document.prettyPrint:()Ljava/lang/String;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0044 return

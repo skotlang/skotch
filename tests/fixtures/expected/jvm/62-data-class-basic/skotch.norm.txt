@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=10
+    0000 ldc "Alice"
+    0002 astore 1
+    0004 bipush 30
+    0006 istore 2
+    0008 new Class(User)
+    0011 dup
+    0012 aload 1
+    0014 iload 2
+    0016 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
+    0019 astore 3
+    0021 aload 3
+    0023 checkcast Class(User)
+    0026 astore 4
+    0028 aload 4
+    0030 checkcast Class(User)
+    0033 astore 5
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 aload 5
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0043 aload 4
+    0045 checkcast Class(User)
+    0048 astore 6
+    0050 aload 6
+    0052 getfield Field(User.name:Ljava/lang/String;)
+    0055 astore 7
+    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0060 aload 7
+    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0065 aload 4
+    0067 checkcast Class(User)
+    0070 astore 8
+    0072 aload 8
+    0074 getfield Field(User.age:I)
+    0077 istore 9
+    0079 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0082 iload 9
+    0084 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0087 return

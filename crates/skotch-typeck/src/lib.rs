@@ -556,6 +556,7 @@ impl<'a> TypeChecker<'a> {
             Expr::IntLit(_, _) => Ty::Int,
             Expr::LongLit(_, _) => Ty::Long,
             Expr::DoubleLit(_, _) => Ty::Double,
+            Expr::FloatLit(_, _) => Ty::Float,
             Expr::BoolLit(_, _) => Ty::Bool,
             Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
             Expr::StringLit(_, _) => Ty::String,
@@ -589,7 +590,15 @@ impl<'a> TypeChecker<'a> {
                         Some(tr) => self.type_ref(tr).unwrap_or(Ty::Error),
                         None => init_ty.clone(),
                     };
-                    if !init_ty.assignable_to(&declared) && declared != Ty::Error {
+                    // Kotlin allows integer literal narrowing: `val b: Byte = 42`
+                    let narrowing_ok = matches!(
+                        (&init_ty, &declared),
+                        (Ty::Int, Ty::Byte | Ty::Short) | (Ty::Double, Ty::Float)
+                    ) && matches!(
+                        v.init,
+                        Expr::IntLit(..) | Expr::DoubleLit(..) | Expr::FloatLit(..)
+                    );
+                    if !narrowing_ok && !init_ty.assignable_to(&declared) && declared != Ty::Error {
                         self.diags.push(Diagnostic::error(
                             v.span,
                             format!(
@@ -759,6 +768,7 @@ impl<'a> TypeChecker<'a> {
             Expr::CharLit(_, _) => Ty::Char,
             Expr::LongLit(_, _) => Ty::Long,
             Expr::DoubleLit(_, _) => Ty::Double,
+            Expr::FloatLit(_, _) => Ty::Float,
             Expr::BoolLit(_, _) => Ty::Bool,
             Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
             Expr::StringLit(_, _) => Ty::String,

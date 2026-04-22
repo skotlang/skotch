@@ -1,0 +1,26 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=6
+    0000 iconst_1
+    0001 istore 1
+    0003 bipush 10
+    0005 istore 2
+    0007 new Class(kotlin/ranges/IntRange)
+    0010 dup
+    0011 iload 1
+    0013 iload 2
+    0015 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
+    0018 astore 3
+    0020 aload 3
+    0022 checkcast Class(kotlin/ranges/IntRange)
+    0025 astore 4
+    0027 aload 4
+    0029 checkcast Class(kotlin/ranges/IntRange)
+    0032 astore 5
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 aload 5
+    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0042 return

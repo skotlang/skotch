@@ -992,13 +992,15 @@ milestones:
           Thread safety deferred (single-threaded check-and-set pattern).
           See fixture 503-lazy-delegation.
 
-      - name: "Byte/Short/Float literal production"
+      - name: "Byte/Short/Float literal production (landed)"
+        completed: true
         description: >
-          Ty::Byte/Short/Float exist in enum and all backends handle them,
-          but no code path produces these types. Need: val b: Byte = 1
-          (literal narrowing from Int to Byte based on target type annotation),
-          1.toByte(), 1.toShort(), 1.0f parsed as Ty::Float not Ty::Double.
-          See stub fixture 504-byte-short-float-literals.
+          Float literal (3.14f) parsed as Ty::Float with proper fload/fstore
+          JVM opcodes, CONSTANT_Float pool entry, println(F)V descriptor.
+          Integer literal narrowing: val b: Byte = 42 and val s: Short = 1000
+          narrow from Ty::Int to Ty::Byte/Short via type annotation in the
+          typechecker and MIR lowerer. All 5 backends handle MirConst::Float.
+          See fixture 504-byte-short-float-literals.
 
       - name: "String.split() and String.substring(start, end) (partial, landed)"
         completed: true
@@ -1087,9 +1089,11 @@ milestones:
       - name: "Enum abstract methods and per-entry overrides"
         description: >
           enum class Op { PLUS { override fun apply(a: Int, b: Int) = a + b };
-          abstract fun apply(a: Int, b: Int): Int }. Parser doesn't
-          support method declarations inside enum entries.
-          See stub fixture 515-enum-abstract-method.
+          abstract fun apply(a: Int, b: Int): Int }. Parser now supports
+          method declarations inside enum entries and abstract methods after
+          the semicolon separator. MIR dispatch method generation is WIP.
+          Remaining: instance method call resolution on enum instances
+          (Op.PLUS.apply(3, 2)). See stub fixture 515-enum-abstract-method.
 
       - name: "Custom property delegates (getValue/setValue)"
         description: >

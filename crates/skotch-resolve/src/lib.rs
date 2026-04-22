@@ -443,6 +443,7 @@ impl<'a> Resolver<'a> {
             | Expr::CharLit(_, _)
             | Expr::LongLit(_, _)
             | Expr::DoubleLit(_, _)
+            | Expr::FloatLit(_, _)
             | Expr::BoolLit(_, _)
             | Expr::NullLit(_)
             | Expr::StringLit(_, _) => {}
@@ -587,6 +588,7 @@ impl<'a> Resolver<'a> {
             | Expr::CharLit(_, _)
             | Expr::LongLit(_, _)
             | Expr::DoubleLit(_, _)
+            | Expr::FloatLit(_, _)
             | Expr::BoolLit(_, _)
             | Expr::NullLit(_)
             | Expr::StringLit(_, _) => {}
