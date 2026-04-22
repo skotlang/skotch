@@ -1,0 +1,3 @@
+name   = "519-import-java-class"
+status = "active"
+features = ["import", "java-interop", "ArrayList"]

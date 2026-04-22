@@ -1,0 +1,3 @@
+name   = "521-java-static-call"
+status = "active"
+features = ["java-static-call", "Integer.parseInt", "System.currentTimeMillis", "Math.max"]

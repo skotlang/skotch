@@ -667,6 +667,12 @@ pub struct MirModule {
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,
+    /// Import map: simple class name → JVM internal path.
+    /// Built from `import` declarations and default java.lang.* imports.
+    /// Used to resolve bare class names like `Random` to `java/util/Random`.
+    /// Skipped during serialization since it's only needed at lowering time.
+    #[serde(skip)]
+    pub import_map: rustc_hash::FxHashMap<String, String>,
 }
 
 impl MirModule {

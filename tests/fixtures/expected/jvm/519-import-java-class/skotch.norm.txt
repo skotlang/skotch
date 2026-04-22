@@ -1,0 +1,41 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=11
+    0000 new Class(java/util/ArrayList)
+    0003 dup
+    0004 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 checkcast Class(java/util/ArrayList)
+    0014 astore 2
+    0016 aload 2
+    0018 checkcast Class(java/util/ArrayList)
+    0021 astore 3
+    0023 ldc "Hello"
+    0025 astore 4
+    0027 aload 3
+    0029 aload 4
+    0031 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0036 istore 5
+    0038 aload 2
+    0040 checkcast Class(java/util/ArrayList)
+    0043 astore 6
+    0045 ldc "World"
+    0047 astore 7
+    0049 aload 6
+    0051 aload 7
+    0053 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0058 istore 8
+    0060 aload 2
+    0062 checkcast Class(java/util/ArrayList)
+    0065 astore 9
+    0067 aload 9
+    0069 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0074 istore 10
+    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0079 iload 10
+    0081 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0084 return

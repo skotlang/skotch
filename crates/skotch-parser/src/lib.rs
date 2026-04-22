@@ -431,6 +431,14 @@ impl<'a> Parser<'a> {
                     self.skip_trivia();
                     self.skip_annotations();
                     let param_start = self.peek_span();
+                    // Skip visibility modifiers: private/protected/internal.
+                    if matches!(
+                        self.peek_kind(),
+                        TokenKind::KwPrivate | TokenKind::KwProtected | TokenKind::KwInternal
+                    ) {
+                        self.bump();
+                        self.skip_trivia();
+                    }
                     // Check for val/var prefix.
                     let is_val = self.peek_kind() == TokenKind::KwVal;
                     let is_var = self.peek_kind() == TokenKind::KwVar;

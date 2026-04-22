@@ -762,6 +762,8 @@ pub fn lower_file(
         }
     }
 
+    module.import_map = import_map;
+
     // ── Register a synthetic $Callable interface so all lambda classes
     //    can share a common dispatch target for invokevirtual. ────────
     //    This interface declares `invoke` with Object params/return so
@@ -6500,6 +6502,42 @@ fn lower_expr(
                 return Some(dest);
             }
 
+            // ─── Imported class constructors ─────────────────────────
+            // Check import_map for Java classes: `import java.util.Random`
+            // allows `Random()` as a constructor call.
+            if let Some(jvm_class) = module.import_map.get(&callee_str).cloned() {
+                if skotch_classinfo::load_jdk_class(&jvm_class).is_ok() {
+                    let mut arg_locals = Vec::new();
+                    for a in args {
+                        let id = lower_expr(
+                            &a.expr,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?;
+                        arg_locals.push(id);
+                    }
+                    let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::NewInstance(jvm_class.clone()),
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Constructor(jvm_class),
+                            args: arg_locals,
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
+
             // ─── Special form: println(<string template>) ───────────
             if interner.resolve(callee_name) == "println"
                 && args.len() == 1
@@ -11861,8 +11899,14 @@ fn try_java_static_call(
     let class_name = extract_qualified_name(receiver, interner)?;
 
     let method_str = interner.resolve(method_name).to_string();
+    // Resolve through import_map if the simple name is imported.
+    let resolved_class = module
+        .import_map
+        .get(&class_name)
+        .cloned()
+        .unwrap_or_else(|| class_name.clone());
     let (jvm_class, jvm_method, descriptor, return_ty) =
-        lookup_java_static(&class_name, &method_str, args.len())?;
+        lookup_java_static(&resolved_class, &method_str, args.len())?;
 
     // Lower arguments.
     let mut arg_locals = Vec::new();

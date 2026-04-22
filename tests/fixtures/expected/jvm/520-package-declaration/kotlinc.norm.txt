@@ -1,0 +1,41 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 new Class(java/util/ArrayList)
+    0003 dup
+    0004 invokespecial Method(java/util/ArrayList.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 ldc "alpha"
+    0011 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0014 pop
+    0015 aload_0
+    0016 ldc "beta"
+    0018 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0021 pop
+    0022 aload_0
+    0023 invokevirtual Method(java/util/ArrayList.size:()I)
+    0026 istore_1
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_1
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 aload_0
+    0035 iconst_0
+    0036 invokevirtual Method(java/util/ArrayList.get:(I)Ljava/lang/Object;)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 op_0x5F
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 aload_0
+    0047 iconst_1
+    0048 invokevirtual Method(java/util/ArrayList.get:(I)Ljava/lang/Object;)
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 op_0x5F
+    0055 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0058 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1173,16 +1173,24 @@ milestones:
       downstream — real projects are never single-file.
 
     features:
-      - name: "Import statements"
+      - name: "Import statements (landed)"
+        completed: true
         description: >
-          import kotlin.math.sqrt, import java.util.*, import as aliases.
-          Resolve FQ names from kotlin-stdlib.jar and dependency JARs
-          via .class file parsing (already implemented in skotch-classinfo).
+          import java.util.ArrayList, import java.util.Collections —
+          import declarations are parsed, stored in the module's import_map
+          (simple name → JVM internal path), and used to resolve bare
+          class constructors (e.g., ArrayList()) and static method calls
+          (e.g., Collections.sort()). Default java.lang.* imports included.
+          Star imports recognized but not enumerated. Import-as aliases
+          deferred. See fixtures 519-import-java-class, 520-package-declaration.
 
-      - name: "Package declarations"
+      - name: "Package declarations (landed)"
+        completed: true
         description: >
           package com.example.app — emitted class has FQ name
-          com/example/app/MainKt. Package matches directory structure.
+          com/example/app/MainKt. Package prefix applied to wrapper class
+          and all user-defined classes. Already implemented in MIR lowerer.
+          See fixture 520-package-declaration.
 
       - name: "Multi-file compilation (same package)"
         description: >
@@ -1261,11 +1269,15 @@ milestones:
           Types from Java are platform types — assignable to both T and T?.
           No null-safety enforcement at Java boundaries. Matches kotlinc.
 
-      - name: "Java static method calls"
+      - name: "Java static method calls (landed)"
+        completed: true
         description: >
-          System.currentTimeMillis(), Integer.parseInt(), Files.readString().
-          Static Java methods called via invokestatic with FQ class name
-          resolved from import or classpath.
+          System.currentTimeMillis(), Integer.parseInt(), Math.max(), etc.
+          Static Java methods resolved via try_java_static_call with
+          import_map for imported classes (Collections.sort()) and default
+          java.lang.* for Math/Integer/System. JDK .class files parsed
+          via skotch-classinfo for method descriptors.
+          See fixture 521-java-static-call.
 
       - name: "Annotation classes"
         description: >

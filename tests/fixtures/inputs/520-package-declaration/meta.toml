@@ -1,0 +1,3 @@
+name   = "520-package-declaration"
+status = "active"
+features = ["import", "package-import-combo"]
