@@ -998,7 +998,15 @@ fn emit_user_method(
             d.push_str(&jvm_type_string(ty));
         }
         d.push(')');
-        d.push_str(&jvm_type_string(&func.return_ty));
+        // Lambda invoke methods always return Object on JVM to match
+        // the FunctionN interface, even when the Kotlin return type
+        // is Unit. The JVM verifier requires the descriptor to match
+        // the interface's abstract method signature.
+        if func.name == "invoke" && class_name.contains("$Lambda$") {
+            d.push_str("Ljava/lang/Object;");
+        } else {
+            d.push_str(&jvm_type_string(&func.return_ty));
+        }
         d
     };
 
@@ -1132,7 +1140,15 @@ fn emit_user_method(
                 );
                 code.push(0xBF); // athrow
             }
-            Terminator::Return => code.push(0xB1), // return (void)
+            Terminator::Return => {
+                // Lambda invoke must return Object to match FunctionN.
+                if func.name == "invoke" && class_name.contains("$Lambda$") {
+                    code.push(0x01); // aconst_null
+                    code.push(0xB0); // areturn
+                } else {
+                    code.push(0xB1); // return (void)
+                }
+            }
             Terminator::ReturnValue(local) => {
                 load_local(
                     &mut code,
@@ -1681,7 +1697,15 @@ fn emit_method(
                 );
                 code.push(0xBF); // athrow
             }
-            Terminator::Return => code.push(0xB1), // return (void)
+            Terminator::Return => {
+                // Lambda invoke must return Object to match FunctionN.
+                if func.name == "invoke" && class_name.contains("$Lambda$") {
+                    code.push(0x01); // aconst_null
+                    code.push(0xB0); // areturn
+                } else {
+                    code.push(0xB1); // return (void)
+                }
+            }
             Terminator::ReturnValue(local) => {
                 load_local(
                     &mut code,
@@ -4404,7 +4428,15 @@ fn emit_mir_segment(
                         emit_load_mir_local(code, func, local_slot, *a);
                     }
                     let dest_ty = &func.locals[dest.0 as usize];
-                    let ret_desc = jvm_type_string(dest_ty);
+                    let ret_desc = if method_name == "invoke"
+                        && (class_name.contains("$Lambda$")
+                            || class_name
+                                .starts_with("kotlin/jvm/functions/Function"))
+                    {
+                        "Ljava/lang/Object;".to_string()
+                    } else {
+                        jvm_type_string(dest_ty)
+                    };
                     let mut descriptor = String::from("(");
                     for a in args.iter().skip(1) {
                         let ty = &func.locals[a.0 as usize];
@@ -8031,7 +8063,15 @@ fn walk_block(
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
                     }
                     let dest_ty = &func.locals[dest.0 as usize];
-                    let ret_desc = jvm_type_string(dest_ty);
+                    let ret_desc = if method_name == "invoke"
+                        && (class_name.contains("$Lambda$")
+                            || class_name.starts_with("kotlin/jvm/functions/Function"))
+                    {
+                        // FunctionN.invoke always returns Object on JVM.
+                        "Ljava/lang/Object;".to_string()
+                    } else {
+                        jvm_type_string(dest_ty)
+                    };
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for a in args.iter().skip(1) {
@@ -8070,14 +8110,19 @@ fn walk_block(
                         code.push(0xB6); // invokevirtual
                         code.write_u16::<BigEndian>(mref).unwrap();
                     }
-                    let net = if dest_ty == &Ty::Unit {
-                        -(args.len() as i32)
-                    } else {
+                    let is_object_return = ret_desc.contains("Object");
+                    let net = if is_object_return || *dest_ty != Ty::Unit {
                         -(args.len() as i32) + 1
+                    } else {
+                        -(args.len() as i32)
                     };
                     bump(stack, max_stack, net);
                     if *dest_ty != Ty::Unit {
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    } else if is_object_return {
+                        // Discard unused Object return from invoke.
+                        code.push(0x57); // pop
+                        bump(stack, max_stack, -1);
                     }
                 }
                 CallKind::Super {

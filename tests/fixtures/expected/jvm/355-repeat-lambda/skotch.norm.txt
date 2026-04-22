@@ -23,19 +23,20 @@ method        main ([Ljava/lang/String;)V 0x0009
     0029 iconst_1
     0030 istore 4
     0032 iload 4
-    0034 ifeq 64
+    0034 ifeq 65
     0037 iload 3
     0039 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0042 astore 5
     0044 aload 2
     0046 aload 5
-    0048 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)V)
-    0051 iconst_1
-    0052 istore 6
-    0054 iload 3
-    0056 iload 6
-    0058 iadd
-    0059 istore 3
-    0061 goto 18
-    0064 return
+    0048 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0051 pop
+    0052 iconst_1
+    0053 istore 6
+    0055 iload 3
+    0057 iload 6
+    0059 iadd
+    0060 istore 3
+    0062 goto 18
+    0065 return
     sub_attr  StackMapTable (64 bytes)
