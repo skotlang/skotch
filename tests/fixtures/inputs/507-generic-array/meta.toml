@@ -1,4 +1,4 @@
 name   = "507-generic-array"
-status = "stub"
-features = ["arrayOf", "Array<T>", "anewarray", "generic-array"]
-reason = "arrayOf() and generic Array<T> not implemented. Only IntArray exists."
+status = "active"
+features = ["arrayOf", "Array<T>", "anewarray", "aaload"]
+expected_output = "Alice\nBob\nCharlie\n"

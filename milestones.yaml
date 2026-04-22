@@ -1017,11 +1017,13 @@ milestones:
           Constructors, indexing, .size, for-in iteration all work.
           See fixture 506-typed-arrays.
 
-      - name: "Generic Array<T>"
+      - name: "Generic Array<T> (landed)"
+        completed: true
         description: >
-          arrayOf("hello", "world") → Object[] via anewarray. Needs
-          Rvalue::NewObjectArray, aastore, aaload, .size via arraylength.
-          See stub fixture 507-generic-array.
+          arrayOf("a", "b", "c") → Object[] via anewarray + aastore.
+          Indexing via aaload (0x32). Autoboxing for primitive elements.
+          JVM ArrayLoad/ArrayStore dispatch based on dest/value types.
+          See fixture 507-generic-array.
 
       # ── MEDIUM severity: affects common patterns ──────────────────
       - name: "operator fun get/set for user-defined indexing (landed)"

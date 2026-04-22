@@ -7719,6 +7719,41 @@ fn lower_expr(
                 }
             }
 
+            // `arrayOf(a, b, c)` — create Object[] with given elements.
+            if callee_str == "arrayOf" && !arg_locals.is_empty() {
+                let n = arg_locals.len() as i32;
+                let size = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: size,
+                    value: Rvalue::Const(MirConst::Int(n)),
+                });
+                let arr = fb.new_local(Ty::Any); // Object[]
+                fb.push_stmt(MStmt::Assign {
+                    dest: arr,
+                    value: Rvalue::NewObjectArray(size),
+                });
+                for (i, &val) in arg_locals.iter().enumerate() {
+                    let idx = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: idx,
+                        value: Rvalue::Const(MirConst::Int(i as i32)),
+                    });
+                    // Autobox primitives for Object[].
+                    let val_ty = fb.mf.locals[val.0 as usize].clone();
+                    let boxed = mir_autobox(fb, val, &val_ty);
+                    let dummy = fb.new_local(Ty::Unit);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: dummy,
+                        value: Rvalue::ObjectArrayStore {
+                            array: arr,
+                            index: idx,
+                            value: boxed,
+                        },
+                    });
+                }
+                return Some(arr);
+            }
+
             // `repeat(n) { body }` — execute lambda n times.
             if callee_str == "repeat" && arg_locals.len() == 2 {
                 let count = arg_locals[0];
@@ -9208,10 +9243,23 @@ fn lower_expr(
                         None
                     }
                 }
+                Ty::Any => {
+                    // Object[] indexing (from arrayOf): uses ArrayLoad,
+                    // JVM backend emits aaload based on dest type Any.
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayLoad {
+                            array: arr,
+                            index: idx,
+                        },
+                    });
+                    Some(dest)
+                }
                 _ => {
                     diags.push(Diagnostic::error(
                         receiver.span(),
-                        "index operator is only supported on String, IntArray, List, Map, and classes with operator fun get()",
+                        "index operator is only supported on String, IntArray, List, Map, Array, and classes with operator fun get()",
                     ));
                     None
                 }
