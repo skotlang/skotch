@@ -204,6 +204,8 @@ pub struct ClassDecl {
     pub methods: Vec<FunDecl>,
     /// Methods from a `companion object { }` block.
     pub companion_methods: Vec<FunDecl>,
+    /// Properties from a `companion object { }` block.
+    pub companion_properties: Vec<PropertyDecl>,
     /// Init blocks (statements run in the constructor).
     pub init_blocks: Vec<Block>,
     /// Secondary constructors: `constructor(params) : this(args) { body }`.

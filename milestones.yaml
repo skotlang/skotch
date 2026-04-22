@@ -1057,12 +1057,13 @@ milestones:
           across && in both the rhs expression AND the then-branch body.
           See fixture 511-smart-cast-and.
 
-      - name: "Companion object properties (val/var with backing fields)"
+      - name: "Companion object properties (val/var with backing fields) (landed)"
+        completed: true
         description: >
-          companion object { var count: Int = 0 } should generate a
-          static field on the class. Currently only companion methods
-          work; companion properties don't have backing fields.
-          See stub fixture 512-companion-property.
+          companion object { val VERSION: Int = 42 } — parser collects
+          companion_properties, lowerer registers as global constants and
+          class fields. ClassName.PROP access resolved via name_to_global.
+          See fixture 512-companion-property.
 
       - name: "Visibility modifier enforcement (partial, landed)"
         completed: true

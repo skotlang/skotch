@@ -799,7 +799,7 @@ pub fn lower_file(
                 lower_class(
                     c,
                     &mut name_to_func,
-                    &name_to_global,
+                    &mut name_to_global,
                     &mut module,
                     interner,
                     diags,
@@ -9222,11 +9222,23 @@ fn lower_expr(
             name,
             span,
         } => {
-            // Field access: Color.RED.hex → lower receiver then GetField.
-            // (Enum member access works via the normal class field path now
-            // that enums are real MirClass instances.)
-            if false {
-                // removed: compound-name hack
+            // Companion object property access: ClassName.PROP → global constant lookup.
+            if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                let recv_str = interner.resolve(*recv_sym).to_string();
+                let field_str = interner.resolve(*name).to_string();
+                let is_class = module.classes.iter().any(|c| c.name == recv_str);
+                if is_class {
+                    let companion_sym = interner.intern(&field_str);
+                    if let Some(constant) = name_to_global.get(&companion_sym).cloned() {
+                        let ty = const_ty(&constant);
+                        let dest = fb.new_local(ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(constant),
+                        });
+                        return Some(dest);
+                    }
+                }
             }
 
             // Session 27: Dispatchers.IO / .Default / .Main / .Unconfined
@@ -11974,7 +11986,7 @@ fn lower_object(
 fn lower_class(
     c: &skotch_syntax::ClassDecl,
     name_to_func: &mut FxHashMap<Symbol, FuncId>,
-    name_to_global: &FxHashMap<Symbol, MirConst>,
+    name_to_global: &mut FxHashMap<Symbol, MirConst>,
     module: &mut MirModule,
     interner: &mut Interner,
     diags: &mut Diagnostics,
@@ -12878,6 +12890,40 @@ fn lower_class(
         }
 
         module.add_function(fb.finish());
+    }
+
+    // Lower companion object properties as static fields.
+    // Each companion property becomes a field on the class and is
+    // registered as a top-level global constant for ClassName.propName access.
+    for prop in &c.companion_properties {
+        let prop_name = interner.resolve(prop.name).to_string();
+        let prop_ty = prop
+            .ty
+            .as_ref()
+            .map(|tr| resolve_type(interner.resolve(tr.name), module))
+            .unwrap_or(Ty::Any);
+        // Add as a field on the class.
+        fields.push(MirField {
+            name: prop_name.clone(),
+            ty: prop_ty.clone(),
+        });
+        // If there's an initializer, register as a global constant.
+        if let Some(init) = &prop.init {
+            let const_val = match init {
+                Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
+                Expr::LongLit(v, _) => Some(MirConst::Long(*v)),
+                Expr::DoubleLit(v, _) => Some(MirConst::Double(*v)),
+                Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
+                Expr::StringLit(s, _) => {
+                    let sid = module.intern_string(s);
+                    Some(MirConst::String(sid))
+                }
+                _ => None,
+            };
+            if let Some(cv) = const_val {
+                name_to_global.insert(prop.name, cv);
+            }
+        }
     }
 
     // Synthesize toString() for data classes.

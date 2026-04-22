@@ -537,6 +537,7 @@ impl<'a> Parser<'a> {
         let mut properties = Vec::new();
         let mut methods = Vec::new();
         let mut companion_methods = Vec::new();
+        let mut companion_properties = Vec::new();
         let mut init_blocks = Vec::new();
         let mut secondary_constructors = Vec::new();
         let mut nested_classes = Vec::new();
@@ -636,8 +637,23 @@ impl<'a> Parser<'a> {
                                             break;
                                         }
                                         self.skip_annotations();
+                                        // Skip modifiers (const, private, etc.)
+                                        while matches!(
+                                            self.peek_kind(),
+                                            TokenKind::KwConst
+                                                | TokenKind::KwPrivate
+                                                | TokenKind::KwInternal
+                                        ) {
+                                            self.bump();
+                                            self.skip_trivia();
+                                        }
                                         if self.peek_kind() == TokenKind::KwFun {
                                             companion_methods.push(self.parse_fun_decl());
+                                        } else if matches!(
+                                            self.peek_kind(),
+                                            TokenKind::KwVal | TokenKind::KwVar
+                                        ) {
+                                            companion_properties.push(self.parse_property_decl());
                                         } else {
                                             self.bump();
                                         }
@@ -673,6 +689,7 @@ impl<'a> Parser<'a> {
             properties,
             methods,
             companion_methods,
+            companion_properties,
             init_blocks,
             secondary_constructors,
             nested_classes,
