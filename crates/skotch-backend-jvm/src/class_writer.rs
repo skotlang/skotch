@@ -8136,11 +8136,12 @@ fn walk_block(
                 load_local(code, stack, max_stack, slots, *index, &func.locals);
                 // Select load opcode based on element type.
                 let load_op: u8 = match &func.locals[dest.0 as usize] {
-                    Ty::Long => 0x2F,   // laload
-                    Ty::Double => 0x31, // daload
-                    Ty::Byte => 0x33,   // baload
-                    Ty::Bool => 0x33,   // baload (boolean arrays use baload)
-                    _ => 0x2E,          // iaload (int, char, short)
+                    Ty::Long => 0x2F,                            // laload
+                    Ty::Double => 0x31,                          // daload
+                    Ty::Byte => 0x33,                            // baload
+                    Ty::Bool => 0x33,                            // baload
+                    Ty::Any | Ty::String | Ty::Class(_) => 0x32, // aaload (Object[])
+                    _ => 0x2E,                                   // iaload (int, char, short)
                 };
                 code.push(load_op);
                 let width = if matches!(func.locals[dest.0 as usize], Ty::Long | Ty::Double) {
@@ -8162,10 +8163,11 @@ fn walk_block(
                 // Select store opcode based on value type.
                 let val_ty = &func.locals[value.0 as usize];
                 let store_op: u8 = match val_ty {
-                    Ty::Long => 0x50,            // lastore
-                    Ty::Double => 0x52,          // dastore
-                    Ty::Byte | Ty::Bool => 0x54, // bastore
-                    _ => 0x4F,                   // iastore (int, char, short)
+                    Ty::Long => 0x50,                            // lastore
+                    Ty::Double => 0x52,                          // dastore
+                    Ty::Byte | Ty::Bool => 0x54,                 // bastore
+                    Ty::Any | Ty::String | Ty::Class(_) => 0x53, // aastore (Object[])
+                    _ => 0x4F,                                   // iastore (int, char, short)
                 };
                 code.push(store_op);
                 let width = if matches!(val_ty, Ty::Long | Ty::Double) {
