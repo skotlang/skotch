@@ -797,6 +797,11 @@ impl<'a> BlockWalker<'a> {
                 writeln!(self.out, "  {dst} = add i64 0, {v}").unwrap();
                 self.ssa_for_local[dest.0 as usize] = Some(dst);
             }
+            MirConst::Float(v) => {
+                let dst = self.fresh();
+                writeln!(self.out, "  {dst} = fadd float 0.0, {v:e}").unwrap();
+                self.ssa_for_local[dest.0 as usize] = Some(dst);
+            }
             MirConst::Double(v) => {
                 let dst = self.fresh();
                 writeln!(self.out, "  {dst} = fadd double 0.0, {v:e}").unwrap();

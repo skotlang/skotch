@@ -1505,6 +1505,7 @@ fn lower_const_init(e: &Expr, module: &mut MirModule) -> Option<MirConst> {
     match e {
         Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
         Expr::LongLit(v, _) => Some(MirConst::Long(*v)),
+        Expr::FloatLit(v, _) => Some(MirConst::Float(*v as f32)),
         Expr::DoubleLit(v, _) => Some(MirConst::Double(*v)),
         Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
         Expr::NullLit(_) => Some(MirConst::Null),
@@ -1528,6 +1529,7 @@ fn const_ty(c: &MirConst) -> Ty {
         MirConst::Bool(_) => Ty::Bool,
         MirConst::Int(_) => Ty::Int,
         MirConst::Long(_) => Ty::Long,
+        MirConst::Float(_) => Ty::Float,
         MirConst::Double(_) => Ty::Double,
         MirConst::Null => Ty::Nullable(Box::new(Ty::Any)),
         MirConst::String(_) => Ty::String,
@@ -3576,11 +3578,24 @@ fn lower_val_stmt(
                 Ty::Nullable(Box::new(rhs_ty))
             }
         } else {
-            rhs_ty
+            // Narrow integer/float literals to the annotated type.
+            // e.g. `val b: Byte = 42` → Ty::Byte, `val s: Short = 1000` → Ty::Short
+            let annotated = resolve_type(interner.resolve(tr.name), module);
+            match (&annotated, &rhs_ty) {
+                (Ty::Byte | Ty::Short, Ty::Int) | (Ty::Float, Ty::Double) => annotated,
+                _ => rhs_ty,
+            }
         }
     } else {
         rhs_ty
     };
+    // When narrowing from Int→Byte/Short or Double→Float, patch the
+    // RHS local's type in-place so backends emit the right opcodes
+    // for load/store. This is safe because the RHS local is a
+    // freshly-created temporary that is only consumed here.
+    if ty != fb.mf.locals[rhs.0 as usize] {
+        fb.mf.locals[rhs.0 as usize] = ty.clone();
+    }
     let dest = fb.new_local(ty);
     fb.push_stmt(MStmt::Assign {
         dest,
@@ -3639,6 +3654,14 @@ fn lower_expr(
             fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Const(MirConst::Double(*v)),
+            });
+            Some(dest)
+        }
+        Expr::FloatLit(v, _) => {
+            let dest = fb.new_local(Ty::Float);
+            fb.push_stmt(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Float(*v as f32)),
             });
             Some(dest)
         }
@@ -8540,7 +8563,7 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
-                    if let Expr::DoubleLit(v, _) = operand.as_ref() {
+                    if let Expr::DoubleLit(v, _) | Expr::FloatLit(v, _) = operand.as_ref() {
                         let dest = fb.new_local(Ty::Double);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -11710,6 +11733,140 @@ fn lower_enum(
     });
     ts_fn.blocks[0].terminator = Terminator::ReturnValue(ts_name);
 
+    // ── Abstract method dispatch ──────────────────────────────────────
+    //
+    // For each abstract method declared on the enum class, we generate a
+    // concrete instance method that dispatches based on `this.name`.
+    // The method body is a cascading if-else chain comparing the name
+    // field against each entry that provides an override, then inlining
+    // that entry's override body.
+    let mut class_methods = vec![ts_fn];
+
+    for abs_method in &e.methods {
+        if !abs_method.is_abstract {
+            continue;
+        }
+        let method_name = interner.resolve(abs_method.name).to_string();
+        let ret_ty = abs_method
+            .return_ty
+            .as_ref()
+            .map(|tr| resolve_type(interner.resolve(tr.name), module))
+            .unwrap_or(Ty::Unit);
+
+        let fn_idx = module.functions.len();
+        let mut fb = FnBuilder::new(fn_idx, method_name.clone(), ret_ty.clone());
+
+        // this parameter
+        let this_local = fb.new_local(Ty::Class(enum_name.clone()));
+        fb.mf.params.push(this_local);
+        // user params
+        let mut param_locals = Vec::new();
+        for p in &abs_method.params {
+            let pty = resolve_type(interner.resolve(p.ty.name), module);
+            let pid = fb.new_local(pty);
+            fb.mf.params.push(pid);
+            param_locals.push((p.name, pid));
+        }
+
+        // Get this.name for dispatch
+        let name_field = fb.new_local(Ty::String);
+        fb.push_stmt(MStmt::Assign {
+            dest: name_field,
+            value: Rvalue::GetField {
+                receiver: this_local,
+                class_name: enum_name.clone(),
+                field_name: "name".to_string(),
+            },
+        });
+
+        // For each entry with an override of this method, generate an
+        // if-branch comparing this.name == "ENTRY_NAME".
+        let scope: Vec<(Symbol, LocalId)> = param_locals.clone();
+        let _fallback_block = fb.new_block(); // final else (unreachable)
+
+        for entry in &e.entries {
+            let override_method = entry
+                .methods
+                .iter()
+                .find(|m| interner.resolve(m.name) == interner.resolve(abs_method.name));
+            let Some(om) = override_method else {
+                continue;
+            };
+
+            let entry_name_str = interner.resolve(entry.name).to_string();
+            let entry_name_sid = module.intern_string(&entry_name_str);
+            let entry_name_local = fb.new_local(Ty::String);
+            fb.push_stmt(MStmt::Assign {
+                dest: entry_name_local,
+                value: Rvalue::Const(MirConst::String(entry_name_sid)),
+            });
+
+            // Compare name_field == entry_name_str
+            let cmp = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: cmp,
+                value: Rvalue::BinOp {
+                    op: MBinOp::CmpEq,
+                    lhs: name_field,
+                    rhs: entry_name_local,
+                },
+            });
+
+            let then_block = fb.new_block();
+            let next_block = fb.new_block();
+            fb.set_terminator(Terminator::Branch {
+                cond: cmp,
+                then_block,
+                else_block: next_block,
+            });
+
+            // Then block: inline the override body
+            fb.cur_block = then_block;
+            let mut entry_scope = scope.clone();
+            let mut diags = Diagnostics::new();
+            for stmt in &om.body.stmts {
+                lower_stmt(
+                    stmt,
+                    &mut fb,
+                    &mut entry_scope,
+                    module,
+                    name_to_func,
+                    _name_to_global,
+                    interner,
+                    &mut diags,
+                    None,
+                );
+            }
+            // If the body didn't terminate (e.g., the Return stmt handled it),
+            // set a fallback return.
+            if !matches!(
+                fb.mf.blocks[fb.cur_block as usize].terminator,
+                Terminator::ReturnValue(_) | Terminator::Return
+            ) {
+                fb.set_terminator(Terminator::Return);
+            }
+
+            fb.cur_block = next_block;
+        }
+
+        // Fallback: return default value (shouldn't be reached)
+        if ret_ty == Ty::Int {
+            let zero = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
+                dest: zero,
+                value: Rvalue::Const(MirConst::Int(0)),
+            });
+            fb.set_terminator(Terminator::ReturnValue(zero));
+        } else {
+            fb.set_terminator(Terminator::Return);
+        }
+
+        let dispatch_fn = fb.finish();
+        // Register as a function so method calls can resolve it.
+        module.add_function(dispatch_fn.clone());
+        class_methods.push(dispatch_fn);
+    }
+
     module.classes.push(MirClass {
         name: enum_name.clone(),
         super_class: None,
@@ -11718,7 +11875,7 @@ fn lower_enum(
         is_interface: false,
         interfaces: Vec::new(),
         fields,
-        methods: vec![ts_fn],
+        methods: class_methods,
         constructor: init_fn,
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
@@ -12215,6 +12372,7 @@ fn lower_class(
                 Expr::IntLit(v, _) => (Some(MirConst::Int(*v as i32)), Ty::Int),
                 Expr::LongLit(v, _) => (Some(MirConst::Long(*v)), Ty::Long),
                 Expr::DoubleLit(v, _) => (Some(MirConst::Double(*v)), Ty::Double),
+                Expr::FloatLit(v, _) => (Some(MirConst::Float(*v as f32)), Ty::Float),
                 Expr::BoolLit(v, _) => (Some(MirConst::Bool(*v)), Ty::Bool),
                 Expr::StringLit(s, _) => {
                     let sid = module.intern_string(s);
@@ -12960,6 +13118,7 @@ fn lower_class(
             let const_val = match init {
                 Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
                 Expr::LongLit(v, _) => Some(MirConst::Long(*v)),
+                Expr::FloatLit(v, _) => Some(MirConst::Float(*v as f32)),
                 Expr::DoubleLit(v, _) => Some(MirConst::Double(*v)),
                 Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
                 Expr::StringLit(s, _) => {

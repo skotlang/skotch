@@ -1,0 +1,78 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        describe (LResult;)Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=12
+    0000 iconst_1
+    0001 istore 1
+    0003 goto 6
+    0006 aload 0
+    0008 checkcast Class(Result)
+    0011 astore 2
+    0013 aload 2
+    0015 instanceof Class(Ok)
+    0018 istore 3
+    0020 iload 3
+    0022 ifeq 43
+    0025 aload 0
+    0027 checkcast Class(Ok)
+    0030 astore 4
+    0032 ldc "ok"
+    0034 astore 5
+    0036 aload 5
+    0038 astore 6
+    0040 goto 91
+    0043 aload 0
+    0045 checkcast Class(Result)
+    0048 astore 7
+    0050 aload 7
+    0052 instanceof Class(Err)
+    0055 istore 8
+    0057 iload 8
+    0059 ifeq 80
+    0062 aload 0
+    0064 checkcast Class(Err)
+    0067 astore 9
+    0069 ldc "err"
+    0071 astore 10
+    0073 aload 10
+    0075 astore 6
+    0077 goto 91
+    0080 ldc "unknown"
+    0082 astore 11
+    0084 aload 11
+    0086 astore 6
+    0088 goto 91
+    0091 aload 6
+    0093 areturn
+    sub_attr  StackMapTable (69 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=7
+    0000 bipush 42
+    0002 istore 1
+    0004 new Class(Ok)
+    0007 dup
+    0008 iload 1
+    0010 invokespecial Method(Ok.<init>:(I)V)
+    0013 astore 2
+    0015 aload 2
+    0017 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0020 astore 3
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 3
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 ldc "fail"
+    0032 astore 4
+    0034 new Class(Err)
+    0037 dup
+    0038 aload 4
+    0040 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
+    0043 astore 5
+    0045 aload 5
+    0047 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0050 astore 6
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 aload 6
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0060 return

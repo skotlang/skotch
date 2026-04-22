@@ -58,6 +58,7 @@ pub enum MirConst {
     Bool(bool),
     Int(i32),
     Long(i64),
+    Float(f32),
     Double(f64),
     Null,
     String(StringId),

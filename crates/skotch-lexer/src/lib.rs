@@ -402,10 +402,10 @@ impl<'a> Lexer<'a> {
                     }
                 }
             }
-            // Optional f/F suffix (Float, treated as Double for now).
-            if self.pos < self.bytes.len()
-                && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F')
-            {
+            // Optional f/F suffix → FloatLit instead of DoubleLit.
+            let is_float_suffix = self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F');
+            if is_float_suffix {
                 self.pos += 1;
             }
             let raw = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII float");
@@ -413,13 +413,13 @@ impl<'a> Lexer<'a> {
                 .chars()
                 .filter(|c| *c != '_' && *c != 'f' && *c != 'F')
                 .collect();
+            let token_kind = if is_float_suffix {
+                TokenKind::FloatLit
+            } else {
+                TokenKind::DoubleLit
+            };
             match s.parse::<f64>() {
-                Ok(v) => self.emit(
-                    TokenKind::DoubleLit,
-                    start,
-                    self.pos,
-                    Some(TokenPayload::Double(v)),
-                ),
+                Ok(v) => self.emit(token_kind, start, self.pos, Some(TokenPayload::Double(v))),
                 Err(_) => {
                     self.error(
                         start,
