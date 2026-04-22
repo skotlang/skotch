@@ -436,6 +436,7 @@ impl<'a> TypeChecker<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                has_receiver: false,
                 span: tr.span,
             });
             return Ty::Function {

@@ -1350,6 +1350,7 @@ impl<'a> Parser<'a> {
                     func_params: None,
                     type_args: Vec::new(),
                     is_suspend: false,
+                    has_receiver: false,
                     span: recv_span,
                 });
                 self.bump(); // consume `.`
@@ -1464,6 +1465,7 @@ impl<'a> Parser<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                has_receiver: false,
                 span: name_span,
             }
         };
@@ -1532,6 +1534,7 @@ impl<'a> Parser<'a> {
                     func_params: Some(param_types),
                     type_args: Vec::new(),
                     is_suspend: is_suspend_type,
+                    has_receiver: false,
                     span: span.merge(end),
                 };
             }
@@ -1583,6 +1586,7 @@ impl<'a> Parser<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                has_receiver: false,
                 span,
             };
             let mut all_params = vec![receiver_type];
@@ -1593,6 +1597,7 @@ impl<'a> Parser<'a> {
                 func_params: Some(all_params),
                 type_args: Vec::new(),
                 is_suspend: false,
+                has_receiver: true,
                 span: span.merge(end),
             };
         }
@@ -1616,6 +1621,7 @@ impl<'a> Parser<'a> {
                         func_params: None,
                         type_args: Vec::new(),
                         is_suspend: false,
+                        has_receiver: false,
                         span: star_span,
                     });
                 } else {
@@ -1649,6 +1655,7 @@ impl<'a> Parser<'a> {
             func_params: None,
             type_args,
             is_suspend: false,
+            has_receiver: false,
             span: span.merge(end),
         }
     }
@@ -1742,6 +1749,7 @@ impl<'a> Parser<'a> {
             func_params: None,
             type_args: Vec::new(),
             is_suspend: false,
+            has_receiver: false,
             span: recv_span,
         };
 
@@ -3020,6 +3028,7 @@ impl<'a> Parser<'a> {
                     func_params: None,
                     type_args: Vec::new(),
                     is_suspend: false,
+                    has_receiver: false,
                     span: fn_span,
                 };
                 let param = Param {
@@ -3462,6 +3471,7 @@ impl<'a> Parser<'a> {
                         func_params: None,
                         type_args: Vec::new(),
                         is_suspend: false,
+                        has_receiver: false,
                         span: start,
                     },
                     default: None,

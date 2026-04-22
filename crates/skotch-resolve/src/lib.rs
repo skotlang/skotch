@@ -475,11 +475,10 @@ impl<'a> Resolver<'a> {
                         if is_possible_external(name_str) {
                             return DefId::PossibleExternal(*name);
                         }
-                        self.diags.push(Diagnostic::error(
-                            *span,
-                            format!("unresolved identifier `{name_str}`"),
-                        ));
-                        DefId::Error
+                        // Defer to MIR lowering — the identifier might
+                        // be a method on an implicit receiver (e.g.,
+                        // `append` inside a lambda-with-receiver body).
+                        DefId::PossibleExternal(*name)
                     })
                 });
                 rf.body_refs.push(ResolvedRef { span: *span, def });

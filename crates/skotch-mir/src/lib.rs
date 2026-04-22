@@ -289,6 +289,12 @@ pub struct MirFunction {
     /// Parameter names (for named argument resolution at call sites).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub param_names: Vec<String>,
+    /// For parameters with extension function type (e.g.,
+    /// `block: StringBuilder.() -> Unit`), maps param index to
+    /// the receiver class name. Used at call sites to set up
+    /// lambda-with-receiver dispatch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub param_receiver_types: Vec<(usize, String)>,
     /// Default values for optional parameters, indexed by param position.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub param_defaults: Vec<Option<MirConst>>,
@@ -652,6 +658,12 @@ pub struct MirModule {
     /// Cleared by the Expr::Lambda handler after use.
     #[serde(skip)]
     pub force_suspend_lambda: bool,
+    /// When set, the next lambda creation should treat its first invoke
+    /// param as a `this` receiver of this type. Used for extension
+    /// function types like `StringBuilder.() -> Unit`. Set by call-site
+    /// handlers before the lambda arg is lowered; cleared after use.
+    #[serde(skip)]
+    pub lambda_receiver_type: Option<String>,
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,

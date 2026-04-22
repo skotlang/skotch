@@ -405,6 +405,7 @@ pub fn lower_file(
                 required_params: required,
                 param_names,
                 param_defaults,
+                param_receiver_types: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index,
@@ -440,6 +441,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -488,6 +490,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -518,6 +521,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -552,6 +556,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -584,6 +589,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -616,6 +622,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -650,6 +657,7 @@ pub fn lower_file(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -1035,6 +1043,7 @@ fn build_continuation_class(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -1071,6 +1080,7 @@ fn build_continuation_class(
         required_params: 0,
         param_names: vec!["$result".to_string()],
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -1572,6 +1582,7 @@ impl FnBuilder {
             required_params: 0,
             param_names: Vec::new(),
             param_defaults: Vec::new(),
+            param_receiver_types: Vec::new(),
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
@@ -2276,6 +2287,23 @@ fn lower_function(
                 })
                 .unwrap_or_else(|| resolve_type(interner.resolve(p.ty.name), module))
         };
+        // Detect extension function type parameters. The parser sets
+        // `has_receiver = true` on types like `StringBuilder.() -> Unit`
+        // and encodes the receiver as func_params[0]. Record the
+        // receiver class name for call-site lambda-with-receiver dispatch.
+        if p.ty.has_receiver {
+            if let Some(ref fparams) = p.ty.func_params {
+                if !fparams.is_empty() {
+                    let recv_name = interner.resolve(fparams[0].name).to_string();
+                    let jvm_class = match recv_name.as_str() {
+                        "StringBuilder" => "java/lang/StringBuilder".to_string(),
+                        "String" => "java/lang/String".to_string(),
+                        other => other.to_string(),
+                    };
+                    fb.mf.param_receiver_types.push((pi, jvm_class));
+                }
+            }
+        }
         // Function-typed parameters → kotlin/jvm/functions/FunctionN interface.
         // Session 9: suspend function types bump arity by +1 for the
         // implicit Continuation parameter — `suspend () -> T` maps to
@@ -2450,6 +2478,7 @@ fn lower_function(
             required_params: 0,
             param_names: Vec::new(),
             param_defaults: Vec::new(),
+            param_receiver_types: Vec::new(),
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
@@ -3212,6 +3241,7 @@ fn lower_stmt(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -4777,6 +4807,18 @@ fn lower_expr(
                     diags,
                     loop_ctx,
                 )?;
+                let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
+                let method_name_str = interner.resolve(method_name).to_string();
+
+                // For scope functions (apply, run, with, also, let),
+                // set the receiver type so the lambda body can bind
+                // `this` to the receiver for implicit dispatch.
+                if matches!(method_name_str.as_str(), "apply" | "run" | "also" | "let") {
+                    if let Ty::Class(ref cn) = recv_ty {
+                        module.lambda_receiver_type = Some(cn.clone());
+                    }
+                }
+
                 let mut all_args = vec![recv_local];
                 for a in args {
                     let id = lower_expr(
@@ -4792,9 +4834,7 @@ fn lower_expr(
                     )?;
                     all_args.push(id);
                 }
-
-                let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
-                let method_name_str = interner.resolve(method_name).to_string();
+                module.lambda_receiver_type = None; // clear after use
 
                 // ── data class copy() with default-fill ──────────
                 // `p.copy(y = 3)` fills unspecified params from receiver fields.
@@ -5967,6 +6007,48 @@ fn lower_expr(
                             },
                             return_ty,
                         )
+                    } else if let Some((_, callable_local)) = scope
+                        .iter()
+                        .rev()
+                        .find(|(s, _)| interner.resolve(*s) == method_name_str)
+                    {
+                        // receiver.callable(args) where callable is a
+                        // local variable of function/lambda type.
+                        // Invoke as callable.invoke(receiver, args).
+                        let callable_local = *callable_local;
+                        let callable_ty = fb.mf.locals[callable_local.0 as usize].clone();
+                        let invoke_class = if let Ty::Class(ref cn) = callable_ty {
+                            cn.clone()
+                        } else {
+                            "java/lang/Object".to_string()
+                        };
+                        let recv_arg = {
+                            let widened = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: widened,
+                                value: Rvalue::Local(recv_local),
+                            });
+                            widened
+                        };
+                        let mut invoke_args = vec![callable_local, recv_arg];
+                        for &a in all_args.iter().skip(1) {
+                            let a_ty = fb.mf.locals[a.0 as usize].clone();
+                            let boxed = mir_autobox(fb, a, &a_ty);
+                            invoke_args.push(boxed);
+                        }
+                        // FunctionN.invoke always returns Object on JVM.
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: invoke_class,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: invoke_args,
+                            },
+                        });
+                        return Some(dest);
                     } else {
                         (
                             CallKind::Virtual {
@@ -6013,6 +6095,57 @@ fn lower_expr(
                         CallKind::Static(*fid),
                         module.functions[fid.0 as usize].return_ty.clone(),
                     )
+                } else if let Some((_, callable_local)) =
+                    scope.iter().rev().find(|(s, _)| *s == method_name)
+                {
+                    // receiver.callable(args) where callable is a local
+                    // variable of function type → callable.invoke(receiver, args).
+                    // This handles extension function type invocations like
+                    // `sb.block()` where block: StringBuilder.() -> Unit.
+                    let callable_local = *callable_local;
+                    let callable_ty = fb.mf.locals[callable_local.0 as usize].clone();
+                    let is_callable = matches!(&callable_ty, Ty::Class(n) if n.contains("$Lambda$"))
+                        || matches!(callable_ty, Ty::Any | Ty::Function { .. });
+                    if is_callable {
+                        let invoke_class = if let Ty::Class(ref cn) = callable_ty {
+                            cn.clone()
+                        } else {
+                            "java/lang/Object".to_string()
+                        };
+                        // Widen receiver to Any for the erased invoke signature.
+                        let recv_arg = {
+                            let widened = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: widened,
+                                value: Rvalue::Local(recv_local),
+                            });
+                            widened
+                        };
+                        let mut invoke_args = vec![callable_local, recv_arg];
+                        for &a in all_args.iter().skip(1) {
+                            let a_ty = fb.mf.locals[a.0 as usize].clone();
+                            let boxed = mir_autobox(fb, a, &a_ty);
+                            invoke_args.push(boxed);
+                        }
+                        // FunctionN.invoke always returns Object on JVM.
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: invoke_class,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: invoke_args,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                    diags.push(Diagnostic::error(
+                        *span,
+                        format!("unknown method `{}`", interner.resolve(method_name)),
+                    ));
+                    return None;
                 } else {
                     diags.push(Diagnostic::error(
                         *span,
@@ -6399,6 +6532,10 @@ fn lower_expr(
                 }
             }
 
+            // For `with(receiver) { ... }`, set the lambda receiver
+            // type after lowering the first (receiver) arg.
+            let is_with_call = callee_str == "with";
+
             // If the callee is a coroutine builder, set a flag so
             // trailing lambda args are created as SuspendLambda.
             let is_coroutine_builder = callee_str == "runBlocking"
@@ -6416,7 +6553,25 @@ fn lower_expr(
             // Lower arguments. If any are named, we'll reorder after.
             let has_named = args.iter().any(|a| a.name.is_some());
             let mut named_pairs: Vec<(Option<Symbol>, LocalId)> = Vec::new();
-            for a in args {
+            // Look up param_receiver_types for the target function so
+            // we can set lambda_receiver_type before lowering lambda args.
+            let param_recv_types: Vec<(usize, String)> = name_to_func
+                .get(&callee_name)
+                .map(|fid| {
+                    module.functions[fid.0 as usize]
+                        .param_receiver_types
+                        .clone()
+                })
+                .unwrap_or_default();
+            for (arg_idx, a) in args.iter().enumerate() {
+                // If this arg position has a receiver type and the arg
+                // is a lambda, set the receiver type flag.
+                if let Some((_, recv_ty)) = param_recv_types.iter().find(|(idx, _)| *idx == arg_idx)
+                {
+                    if matches!(&a.expr, Expr::Lambda { .. }) {
+                        module.lambda_receiver_type = Some(recv_ty.clone());
+                    }
+                }
                 let id = lower_expr(
                     &a.expr,
                     fb,
@@ -6429,6 +6584,14 @@ fn lower_expr(
                     loop_ctx,
                 )?;
                 named_pairs.push((a.name, id));
+                // For `with(receiver, lambda)`: after lowering the first
+                // (receiver) arg, set the receiver type for the lambda.
+                if is_with_call && arg_idx == 0 {
+                    let arg_ty = &fb.mf.locals[id.0 as usize];
+                    if let Ty::Class(cn) = arg_ty {
+                        module.lambda_receiver_type = Some(cn.clone());
+                    }
+                }
             }
             // Clear the force flag in case it wasn't consumed
             // (e.g. the lambda was a capture, not a literal).
@@ -8481,6 +8644,26 @@ fn lower_expr(
                                 search_class = cls.super_class.clone();
                             } else {
                                 break;
+                            }
+                        }
+                        // If not found in MirClass hierarchy, try JDK
+                        // class lookup for Java classes (StringBuilder,
+                        // etc.). This enables implicit `this.method()`
+                        // dispatch in lambda-with-receiver bodies.
+                        if resolved.is_none() {
+                            if let Ok(info) = skotch_classinfo::load_jdk_class(class_name) {
+                                if let Some(m) = info.methods.iter().find(|m| m.name == callee_str)
+                                {
+                                    arg_locals.insert(0, *this_local);
+                                    resolved = Some((
+                                        CallKind::VirtualJava {
+                                            class_name: class_name.clone(),
+                                            method_name: callee_str.to_string(),
+                                            descriptor: m.descriptor.clone(),
+                                        },
+                                        Ty::Any,
+                                    ));
+                                }
                             }
                         }
                     }
@@ -10573,6 +10756,7 @@ fn lower_expr(
                     required_params: 0,
                     param_names: Vec::new(),
                     param_defaults: Vec::new(),
+                    param_receiver_types: Vec::new(),
                     is_abstract: false,
                     exception_handlers: Vec::new(),
                     vararg_index: None,
@@ -10682,6 +10866,7 @@ fn lower_expr(
                     required_params: 0,
                     param_names: Vec::new(),
                     param_defaults: Vec::new(),
+                    param_receiver_types: Vec::new(),
                     is_abstract: false,
                     exception_handlers: Vec::new(),
                     vararg_index: None,
@@ -10828,6 +11013,32 @@ fn lower_expr(
                     let it_sym = interner.intern("it");
                     let it_local = invoke_fb.mf.params[1];
                     invoke_scope.push((it_sym, it_local));
+                }
+                // Lambda-with-receiver: if the caller set a receiver type
+                // (e.g., apply/run/with scope functions), bind the first
+                // invoke arg as `this` with the receiver type so bare
+                // calls like `append("Hello")` resolve as this.append().
+                if let Some(recv_type) = module.lambda_receiver_type.take() {
+                    // Add an invoke parameter for the receiver and bind
+                    // it as `this` in scope. The invoke method becomes
+                    // invoke(Object receiver, ...) matching FunctionN.
+                    let recv_param = invoke_fb.new_local(Ty::Any);
+                    invoke_fb.mf.params.push(recv_param);
+                    {
+                        let raw_param = recv_param;
+                        let typed_recv = invoke_fb.new_local(Ty::Class(recv_type));
+                        invoke_fb.push_stmt(MStmt::Assign {
+                            dest: typed_recv,
+                            value: Rvalue::Local(raw_param),
+                        });
+                        let this_sym = interner.intern("this");
+                        // Replace the lambda-self `this` with the receiver.
+                        if let Some(pos) = invoke_scope.iter().position(|(s, _)| *s == this_sym) {
+                            invoke_scope[pos] = (this_sym, typed_recv);
+                        } else {
+                            invoke_scope.push((this_sym, typed_recv));
+                        }
+                    }
                 }
                 for s in &body.stmts {
                     lower_stmt(
@@ -11017,6 +11228,7 @@ fn lower_expr(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -11062,7 +11274,12 @@ fn lower_expr(
             // `FunctionN` interface. So `{ yield_() }` (0 user params,
             // 1 suspend call) implements `Function1<Continuation, Object>`
             // rather than `Function0<Object>`.
-            let lambda_arity = params.len() + if is_suspend_lambda { 1 } else { 0 };
+            // Receiver-bearing lambdas have an extra invoke param for
+            // the receiver, so the FunctionN arity is +1.
+            let has_lambda_recv = invoke_fn.params.len() > params.len() + 1;
+            let lambda_arity = params.len()
+                + if is_suspend_lambda { 1 } else { 0 }
+                + if has_lambda_recv { 1 } else { 0 };
             let iface_name = stdlib_function_interface(lambda_arity);
 
             // SESSION 7: suspend lambdas extend SuspendLambda instead of
@@ -11106,6 +11323,7 @@ fn lower_expr(
                     required_params: 0,
                     param_names: Vec::new(),
                     param_defaults: Vec::new(),
+                    param_receiver_types: Vec::new(),
                     is_abstract: false,
                     exception_handlers: Vec::new(),
                     vararg_index: None,
@@ -11329,6 +11547,7 @@ fn lower_expr(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: false,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -11744,6 +11963,7 @@ fn lower_enum(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -11804,6 +12024,7 @@ fn lower_enum(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -12219,6 +12440,7 @@ fn lower_object(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -12348,6 +12570,7 @@ fn lower_class(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -12575,6 +12798,7 @@ fn lower_class(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -13712,6 +13936,7 @@ fn lower_class(
             required_params: 0,
             param_names: Vec::new(),
             param_defaults: Vec::new(),
+            param_receiver_types: Vec::new(),
             is_abstract: false,
             exception_handlers: Vec::new(),
             vararg_index: None,
@@ -13968,6 +14193,7 @@ fn lower_class(
                     func_params: None,
                     type_args: Vec::new(),
                     is_suspend: false,
+                    has_receiver: false,
                     span: nested.span,
                 },
                 span: nested.span,
@@ -14021,6 +14247,7 @@ fn lower_interface(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: m.is_abstract,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
@@ -14050,6 +14277,7 @@ fn lower_interface(
         required_params: 0,
         param_names: Vec::new(),
         param_defaults: Vec::new(),
+        param_receiver_types: Vec::new(),
         is_abstract: false,
         exception_handlers: Vec::new(),
         vararg_index: None,
@@ -14097,6 +14325,7 @@ fn lower_interface(
                 required_params: 0,
                 param_names: Vec::new(),
                 param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
                 is_abstract: true,
                 exception_handlers: Vec::new(),
                 vararg_index: None,
