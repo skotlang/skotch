@@ -295,6 +295,9 @@ pub struct TypeRef {
     /// `suspend () -> String`.  Non-function TypeRefs always have
     /// this set to `false`.
     pub is_suspend: bool,
+    /// True for extension function types: `StringBuilder.() -> Unit`.
+    /// The first element of `func_params` is the receiver type.
+    pub has_receiver: bool,
     pub span: Span,
 }
 
