@@ -1,0 +1,63 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=15
+    0000 ldc "Rex"
+    0002 astore 1
+    0004 new Class(Dog)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Dog.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(Dog)
+    0020 astore 3
+    0022 aload 3
+    0024 checkcast Class(Dog)
+    0027 astore 4
+    0029 aload 4
+    0031 getfield Field(Animal.name:Ljava/lang/String;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0044 aload 3
+    0046 checkcast Class(Dog)
+    0049 astore 6
+    0051 aload 6
+    0053 invokevirtual Method(Dog.sound:()Ljava/lang/String;)
+    0056 astore 7
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 aload 7
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0066 ldc "Whiskers"
+    0068 astore 8
+    0070 new Class(Cat)
+    0073 dup
+    0074 aload 8
+    0076 invokespecial Method(Cat.<init>:(Ljava/lang/String;)V)
+    0079 astore 9
+    0081 aload 9
+    0083 checkcast Class(Cat)
+    0086 astore 10
+    0088 aload 10
+    0090 checkcast Class(Cat)
+    0093 astore 11
+    0095 aload 11
+    0097 getfield Field(Animal.name:Ljava/lang/String;)
+    0100 astore 12
+    0102 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0105 aload 12
+    0107 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0110 aload 10
+    0112 checkcast Class(Cat)
+    0115 astore 13
+    0117 aload 13
+    0119 invokevirtual Method(Cat.sound:()Ljava/lang/String;)
+    0122 astore 14
+    0124 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0127 aload 14
+    0129 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0132 return

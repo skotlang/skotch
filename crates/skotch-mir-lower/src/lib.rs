@@ -54,6 +54,35 @@ fn jvm_type_string_for_ty(ty: &Ty) -> String {
 }
 
 /// Resolve a type name to a `Ty`, checking built-in types first, then
+/// Resolve a full TypeRef to a Ty, handling function types and nullable.
+fn resolve_type_ref(tr: &skotch_syntax::TypeRef, interner: &Interner, module: &MirModule) -> Ty {
+    if let Some(ref fparams) = tr.func_params {
+        // Function type: (P1, P2, ...) -> R
+        let params: Vec<Ty> = fparams
+            .iter()
+            .map(|p| resolve_type_ref(p, interner, module))
+            .collect();
+        let ret = resolve_type(interner.resolve(tr.name), module);
+        let base = Ty::Function {
+            params,
+            ret: Box::new(ret),
+            is_suspend: tr.is_suspend,
+        };
+        if tr.nullable {
+            Ty::Nullable(Box::new(base))
+        } else {
+            base
+        }
+    } else {
+        let base = resolve_type(interner.resolve(tr.name), module);
+        if tr.nullable {
+            Ty::Nullable(Box::new(base))
+        } else {
+            base
+        }
+    }
+}
+
 /// user-defined classes/enums in the module.
 fn resolve_type(name: &str, module: &MirModule) -> Ty {
     // Resolve type aliases before anything else.
@@ -8805,6 +8834,66 @@ fn lower_expr(
                                 }
                             }
                         }
+                        // Check callable fields: `greet()` where `greet` is
+                        // a val of function type on `this`.
+                        if resolved.is_none() {
+                            let field_info: Option<(String, Ty)> = module
+                                .classes
+                                .iter()
+                                .find(|c| &c.name == class_name)
+                                .and_then(|cls| cls.fields.iter().find(|f| f.name == callee_str))
+                                .map(|f| (f.name.clone(), f.ty.clone()));
+                            if let Some((field_name, field_ty)) = field_info {
+                                let this_copy = *this_local;
+                                let class_copy = class_name.clone();
+                                // Load the field from this.
+                                let field_local = fb.new_local(field_ty.clone());
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: field_local,
+                                    value: Rvalue::GetField {
+                                        receiver: this_copy,
+                                        class_name: class_copy,
+                                        field_name,
+                                    },
+                                });
+                                // Invoke the callable field.
+                                let invoke_class = if let Ty::Class(ref cn) = field_ty {
+                                    cn.clone()
+                                } else {
+                                    "$Callable".to_string()
+                                };
+                                let _invoke_ret = if let Ty::Class(ref cn) = field_ty {
+                                    module
+                                        .classes
+                                        .iter()
+                                        .find(|c| &c.name == cn)
+                                        .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                                        .map(|m| m.return_ty.clone())
+                                        .unwrap_or(Ty::Any)
+                                } else {
+                                    Ty::Any
+                                };
+                                let mut invoke_args = vec![field_local];
+                                // Box primitive args for the erased invoke signature.
+                                for a in &arg_locals {
+                                    let a_ty = fb.mf.locals[a.0 as usize].clone();
+                                    let boxed = mir_autobox(fb, *a, &a_ty);
+                                    invoke_args.push(boxed);
+                                }
+                                let dest = fb.new_local(Ty::Any);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::Virtual {
+                                            class_name: invoke_class,
+                                            method_name: "invoke".to_string(),
+                                        },
+                                        args: invoke_args,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
                     }
                 }
                 if let Some((k, _)) = resolved {
@@ -12691,7 +12780,7 @@ fn lower_class(
     let mut fields = Vec::new();
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
-            let ty = resolve_type(interner.resolve(p.ty.name), module);
+            let ty = resolve_type_ref(&p.ty, interner, module);
             fields.push(MirField {
                 name: interner.resolve(p.name).to_string(),
                 ty,
@@ -12758,26 +12847,14 @@ fn lower_class(
     init_fn.params.push(this_id);
 
     // Build a scope for lowering super args (this + constructor params).
-    // We need to add constructor params first so super args like `Base(y)`
-    // can reference them.
+    // ALL constructor params are added as init params so they're available
+    // for super-constructor delegation, e.g. `class Dog(name: String) : Animal(name)`.
     let mut ctor_param_ids: Vec<(Symbol, LocalId)> = Vec::new();
     for p in &c.constructor_params {
-        if p.is_val || p.is_var {
-            let ty = resolve_type(interner.resolve(p.ty.name), module);
-            let param_id = init_fn.new_local(ty);
-            init_fn.params.push(param_id);
-            ctor_param_ids.push((p.name, param_id));
-        }
-    }
-    // Add delegate parameters (non-val/var) as constructor params and track them
-    // for field assignment.
-    for p in &c.constructor_params {
-        if !p.is_val && !p.is_var && delegate_param_names.contains(&p.name) {
-            let ty = resolve_type(interner.resolve(p.ty.name), module);
-            let param_id = init_fn.new_local(ty);
-            init_fn.params.push(param_id);
-            ctor_param_ids.push((p.name, param_id));
-        }
+        let ty = resolve_type_ref(&p.ty, interner, module);
+        let param_id = init_fn.new_local(ty);
+        init_fn.params.push(param_id);
+        ctor_param_ids.push((p.name, param_id));
     }
 
     // Emit super constructor call.
