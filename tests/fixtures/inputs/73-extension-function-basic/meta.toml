@@ -1,5 +1,4 @@
 name   = "73-extension-function-basic"
-status   = "stub"
+status = "supported"
 features = ["extension-function", "this-receiver", "string", "boolean"]
 skip_dex = true
-reason   = "Produces VerifyError or incorrect output under e2e JVM test."

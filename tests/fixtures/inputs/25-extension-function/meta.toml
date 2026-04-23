@@ -1,4 +1,3 @@
 name   = "25-extension-function"
-status   = "stub"
+status = "supported"
 skip_dex = true
-reason   = "Produces VerifyError or incorrect output under e2e JVM test."

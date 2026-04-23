@@ -3,28 +3,40 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=5
-    0000 invokestatic Method(InputKt.toFahrenheit:(I)I)
-    0003 istore 1
-    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 iload 1
-    0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0013 invokestatic Method(InputKt.toFahrenheit:(I)I)
-    0016 istore 2
-    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 iload 2
-    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0026 invokestatic Method(InputKt.toCelsius:(I)I)
-    0029 istore 3
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 iload 3
-    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0039 invokestatic Method(InputKt.toCelsius:(I)I)
-    0042 istore 4
-    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0047 iload 4
-    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0052 return
+  code        max_stack=2 max_locals=9
+    0000 iconst_0
+    0001 istore 1
+    0003 iload 1
+    0005 invokestatic Method(InputKt.toFahrenheit:(I)I)
+    0008 istore 2
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload 2
+    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0018 bipush 100
+    0020 istore 3
+    0022 iload 3
+    0024 invokestatic Method(InputKt.toFahrenheit:(I)I)
+    0027 istore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 iload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0037 bipush 32
+    0039 istore 5
+    0041 iload 5
+    0043 invokestatic Method(InputKt.toCelsius:(I)I)
+    0046 istore 6
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 iload 6
+    0053 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0056 sipush 212
+    0059 istore 7
+    0061 iload 7
+    0063 invokestatic Method(InputKt.toCelsius:(I)I)
+    0066 istore 8
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 iload 8
+    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0076 return
 method        toCelsius (I)I 0x0009
   code        max_stack=2 max_locals=8
     0000 iload 0

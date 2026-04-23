@@ -42,7 +42,7 @@ method        squared (I)I 0x0009
     0015 iload 3
     0017 op_0xAC
 method        sumOfSquares (I)I 0x0009
-  code        max_stack=2 max_locals=13
+  code        max_stack=2 max_locals=14
     0000 iconst_0
     0001 istore 1
     0003 iload 1
@@ -53,50 +53,43 @@ method        sumOfSquares (I)I 0x0009
     0012 istore 4
     0014 iload 3
     0016 istore 5
-    0018 op_0xA7
-    0019 nop
-    0020 iconst_0
+    0018 goto 21
     0021 iload 5
     0023 iload 4
     0025 op_0xA4
     0026 nop
     0027 iconst_4
     0028 iconst_0
-    0029 op_0xA7
-    0030 nop
-    0031 iconst_1
+    0029 goto 33
     0032 iconst_1
     0033 istore 6
     0035 iload 6
-    0037 op_0x99
-    0038 nop
-    0039 op_0x2B
+    0037 ifeq 86
     0040 iload 2
     0042 istore 7
-    0044 invokestatic Method(InputKt.squared:(I)I)
-    0047 istore 8
-    0049 iload 7
-    0051 iload 8
-    0053 iadd
-    0054 istore 9
-    0056 iload 9
-    0058 istore 2
-    0060 op_0xA7
-    0061 nop
-    0062 iconst_0
-    0063 iconst_1
-    0064 istore 10
-    0066 iload 5
-    0068 iload 10
-    0070 iadd
-    0071 istore 11
-    0073 iload 11
-    0075 istore 5
-    0077 op_0xA7
-    0078 op_0xFF
-    0079 op_0xC8
-    0080 iload 2
-    0082 istore 12
-    0084 iload 12
-    0086 op_0xAC
-    sub_attr  StackMapTable (73 bytes)
+    0044 iload 5
+    0046 istore 8
+    0048 iload 8
+    0050 invokestatic Method(InputKt.squared:(I)I)
+    0053 istore 9
+    0055 iload 7
+    0057 iload 9
+    0059 iadd
+    0060 istore 10
+    0062 iload 10
+    0064 istore 2
+    0066 goto 69
+    0069 iconst_1
+    0070 istore 11
+    0072 iload 5
+    0074 iload 11
+    0076 iadd
+    0077 istore 12
+    0079 iload 12
+    0081 istore 5
+    0083 goto 21
+    0086 iload 2
+    0088 istore 13
+    0090 iload 13
+    0092 op_0xAC
+    sub_attr  StackMapTable (74 bytes)

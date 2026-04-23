@@ -4445,11 +4445,32 @@ fn lower_expr(
                     }
                 }
 
-                // Check if this is an object method call (Singleton.method()).
-                // Object methods are registered as top-level functions.
+                // Check if this is an object method call (Singleton.method())
+                // or an extension function call (receiver.extFun()).
+                // Object methods and extension functions are registered as
+                // top-level functions. Extension functions have params.len() > args.len()
+                // because the receiver is the first param.
                 if let Some(&fid) = name_to_func.get(&method_name) {
-                    let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                    let target = &module.functions[fid.0 as usize];
+                    let ret_ty = target.return_ty.clone();
+                    let is_extension = target.params.len() == args.len() + 1;
                     let mut arg_locals = Vec::new();
+                    if is_extension {
+                        // Extension function: lower the receiver and pass
+                        // it as the first argument.
+                        let recv_local = lower_expr(
+                            receiver,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?;
+                        arg_locals.push(recv_local);
+                    }
                     for a in args {
                         let id = lower_expr(
                             &a.expr,

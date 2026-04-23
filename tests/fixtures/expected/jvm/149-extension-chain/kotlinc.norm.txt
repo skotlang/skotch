@@ -4,13 +4,13 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        addOne (I)I 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 iconst_1
     0002 iadd
     0003 op_0xAC
 method        double (I)I 0x0019
   code        max_stack=2 max_locals=1
-    0000 op_0x1A
+    0000 iload_0
     0001 iconst_2
     0002 imul
     0003 op_0xAC
@@ -19,16 +19,16 @@ method        main ()V 0x0019
     0000 iconst_5
     0001 invokestatic Method(InputKt.double:(I)I)
     0004 invokestatic Method(InputKt.addOne:(I)I)
-    0007 op_0x3B
+    0007 istore_0
     0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0011 op_0x1A
+    0011 iload_0
     0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0015 iconst_3
     0016 invokestatic Method(InputKt.addOne:(I)I)
     0019 invokestatic Method(InputKt.double:(I)I)
-    0022 op_0x3C
+    0022 istore_1
     0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 op_0x1B
+    0026 iload_1
     0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0030 return
 method        main ([Ljava/lang/String;)V 0x1009
