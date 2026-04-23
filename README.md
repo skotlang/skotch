@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 446 language-feature fixtures validated across 5 targets.
+> implemented. 449 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,8 +275,9 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-446 active test fixtures (438 total, 10 stubs tracking known gaps).
-Extension functions (`fun String.shout()`, `fun Int.isEven()`) are fully supported.
+449 active test fixtures (438 total, 7 stubs tracking known gaps).
+Extension functions, Long/Double mixed-type comparisons, and Java static
+method calls (`System.currentTimeMillis()`, `Math.random()`) are supported.
 
 ### Implemented and stable
 

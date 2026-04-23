@@ -1,5 +1,4 @@
 name   = "230-math-random"
-status   = "stub"
+status = "supported"
 features = ["java-interop", "Math.random", "double-return"]
 skip_dex = true
-reason   = "Produces VerifyError or incorrect output under e2e JVM test."

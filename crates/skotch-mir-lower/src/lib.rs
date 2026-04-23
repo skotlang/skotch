@@ -4069,7 +4069,78 @@ fn lower_expr(
             };
 
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
-            let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
+            let is_long = !is_double && (matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long));
+            // Widen Int→Double when comparing/operating with a Double operand.
+            let (l, lhs_ty) = if is_double && matches!(lhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Double);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2d".to_string(),
+                            descriptor: "(I)D".to_string(),
+                        },
+                        args: vec![l],
+                    },
+                });
+                (widened, Ty::Double)
+            } else {
+                (l, lhs_ty)
+            };
+            let (r, rhs_ty) = if is_double && matches!(rhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Double);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2d".to_string(),
+                            descriptor: "(I)D".to_string(),
+                        },
+                        args: vec![r],
+                    },
+                });
+                (widened, Ty::Double)
+            } else {
+                (r, rhs_ty)
+            };
+            // Widen Int→Long when comparing/operating with a Long operand.
+            let (l, lhs_ty) = if is_long && matches!(lhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Long);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2l".to_string(),
+                            descriptor: "(I)J".to_string(),
+                        },
+                        args: vec![l],
+                    },
+                });
+                (widened, Ty::Long)
+            } else {
+                (l, lhs_ty)
+            };
+            #[allow(unused_variables)]
+            let (r, rhs_ty) = if is_long && matches!(rhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Long);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2l".to_string(),
+                            descriptor: "(I)J".to_string(),
+                        },
+                        args: vec![r],
+                    },
+                });
+                (widened, Ty::Long)
+            } else {
+                (r, rhs_ty)
+            };
             let (mop, result_ty) = match op {
                 BinOp::Add if matches!(lhs_ty, Ty::String) || matches!(rhs_ty, Ty::String) => {
                     (MBinOp::ConcatStr, Ty::String)

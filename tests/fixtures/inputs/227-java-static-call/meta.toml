@@ -1,5 +1,4 @@
 name   = "227-java-static-call"
-status   = "stub"
+status = "supported"
 features = ["java-interop", "static-method-call", "System.currentTimeMillis"]
 skip_dex = true
-reason   = "Produces VerifyError or incorrect output under e2e JVM test."
