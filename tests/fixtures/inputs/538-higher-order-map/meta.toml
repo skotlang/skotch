@@ -1,0 +1,3 @@
+name   = "538-higher-order-map"
+status = "active"
+features = ["higher-order", "generic", "lambda", "trailing-lambda"]

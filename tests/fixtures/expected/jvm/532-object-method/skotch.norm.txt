@@ -1,0 +1,53 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        double (I)I 0x0009
+  code        max_stack=2 max_locals=4
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_2
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 imul
+    0012 istore 3
+    0014 iload 3
+    0016 op_0xAC
+method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=6
+    0000 ldc "Hello, "
+    0002 astore 1
+    0004 aload 0
+    0006 astore 2
+    0008 aload 1
+    0010 aload 2
+    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0015 astore 3
+    0017 ldc "!"
+    0019 astore 4
+    0021 aload 3
+    0023 aload 4
+    0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 astore 5
+    0030 aload 5
+    0032 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 bipush 21
+    0002 istore 1
+    0004 iload 1
+    0006 invokestatic Method(InputKt.double:(I)I)
+    0009 istore 2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 iload 2
+    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0019 ldc "World"
+    0021 astore 3
+    0023 aload 3
+    0025 invokestatic Method(InputKt.greet:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 astore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 aload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0038 return
