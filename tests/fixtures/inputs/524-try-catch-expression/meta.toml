@@ -1,0 +1,3 @@
+name   = "524-try-catch-expression"
+status = "active"
+features = ["try-catch", "expression-body", "exception"]

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isEven (I)Z 0x0009
-  code        max_stack=3 max_locals=9
+  code        max_stack=3 max_locals=10
     0000 iload 0
     0002 istore 1
     0004 iconst_0
@@ -33,10 +33,15 @@ method        isEven (I)Z 0x0009
     0046 isub
     0047 istore 7
     0049 iload 7
-    0051 invokestatic Method(InputKt.isOdd:(I)Z)
-    0054 istore 8
-    0056 iload 8
-    0058 op_0xAC
+    0051 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0054 astore 8
+    0056 aload 8
+    0058 checkcast Class(java/lang/Integer)
+    0061 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0064 invokestatic Method(InputKt.isOdd:(I)Z)
+    0067 istore 9
+    0069 iload 9
+    0071 op_0xAC
     sub_attr  StackMapTable (45 bytes)
 method        isOdd (I)Z 0x0009
   code        max_stack=3 max_locals=9

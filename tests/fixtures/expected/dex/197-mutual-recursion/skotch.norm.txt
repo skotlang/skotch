@@ -1,13 +1,15 @@
 dex_version   035
-strings       17
-types         8
-methods       5
+strings       20
+types         9
+methods       6
 classes       1
 
 --- strings ---
   "I"
+  "LI"
   "LInputKt;"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "V"
@@ -22,11 +24,13 @@ classes       1
   "main"
   "out"
   "println"
+  "valueOf"
 
 --- types ---
   I
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/System;
   V
@@ -39,12 +43,13 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Z)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       isEven(I)Z flags=0x0019 regs=10 ins=1 outs=1 insns=20
+  method       isEven(I)Z flags=0x0019 regs=11 ins=1 outs=1 insns=24
   method       isOdd(I)Z flags=0x0019 regs=10 ins=1 outs=1 insns=20
   method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=31
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

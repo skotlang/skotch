@@ -39,7 +39,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0070 return
 method        power (II)I 0x0009
-  code        max_stack=3 max_locals=13
+  code        max_stack=3 max_locals=15
     0000 iload 1
     0002 istore 2
     0004 iconst_0
@@ -73,13 +73,23 @@ method        power (II)I 0x0009
     0054 isub
     0055 istore 10
     0057 iload 7
-    0059 iload 10
-    0061 invokestatic Method(InputKt.power:(II)I)
-    0064 istore 11
-    0066 iload 6
-    0068 iload 11
-    0070 imul
-    0071 istore 12
-    0073 iload 12
-    0075 op_0xAC
+    0059 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0062 astore 11
+    0064 iload 10
+    0066 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0069 astore 12
+    0071 aload 11
+    0073 checkcast Class(java/lang/Integer)
+    0076 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0079 aload 12
+    0081 checkcast Class(java/lang/Integer)
+    0084 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0087 invokestatic Method(InputKt.power:(II)I)
+    0090 istore 13
+    0092 iload 6
+    0094 iload 13
+    0096 imul
+    0097 istore 14
+    0099 iload 14
+    0101 op_0xAC
     sub_attr  StackMapTable (49 bytes)

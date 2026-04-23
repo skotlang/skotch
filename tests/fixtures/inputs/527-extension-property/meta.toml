@@ -1,0 +1,3 @@
+name   = "527-extension-property"
+status = "active"
+features = ["extension-property", "get", "String"]

@@ -1,0 +1,3 @@
+name   = "528-string-repeat"
+status = "active"
+features = ["string", "repeat", "stdlib"]

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        gcd (II)I 0x0009
-  code        max_stack=3 max_locals=11
+  code        max_stack=3 max_locals=13
     0000 iload 1
     0002 istore 2
     0004 iconst_0
@@ -35,11 +35,21 @@ method        gcd (II)I 0x0009
     0052 irem
     0053 istore 9
     0055 iload 6
-    0057 iload 9
-    0059 invokestatic Method(InputKt.gcd:(II)I)
-    0062 istore 10
-    0064 iload 10
-    0066 op_0xAC
+    0057 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0060 astore 10
+    0062 iload 9
+    0064 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0067 astore 11
+    0069 aload 10
+    0071 checkcast Class(java/lang/Integer)
+    0074 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0077 aload 11
+    0079 checkcast Class(java/lang/Integer)
+    0082 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0085 invokestatic Method(InputKt.gcd:(II)I)
+    0088 istore 12
+    0090 iload 12
+    0092 op_0xAC
     sub_attr  StackMapTable (49 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7

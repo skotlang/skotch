@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        factorial (I)I 0x0009
-  code        max_stack=3 max_locals=11
+  code        max_stack=3 max_locals=12
     0000 iload 0
     0002 istore 1
     0004 iconst_1
@@ -35,14 +35,19 @@ method        factorial (I)I 0x0009
     0050 isub
     0051 istore 8
     0053 iload 8
-    0055 invokestatic Method(InputKt.factorial:(I)I)
-    0058 istore 9
-    0060 iload 5
-    0062 iload 9
-    0064 imul
-    0065 istore 10
-    0067 iload 10
-    0069 op_0xAC
+    0055 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0058 astore 9
+    0060 aload 9
+    0062 checkcast Class(java/lang/Integer)
+    0065 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0068 invokestatic Method(InputKt.factorial:(I)I)
+    0071 istore 10
+    0073 iload 5
+    0075 iload 10
+    0077 imul
+    0078 istore 11
+    0080 iload 11
+    0082 op_0xAC
     sub_attr  StackMapTable (45 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7

@@ -1,0 +1,3 @@
+name   = "526-generic-identity"
+status = "active"
+features = ["generic", "type-parameter", "identity"]

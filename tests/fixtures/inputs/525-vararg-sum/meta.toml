@@ -1,0 +1,3 @@
+name   = "525-vararg-sum"
+status = "active"
+features = ["vararg", "for-in", "array"]

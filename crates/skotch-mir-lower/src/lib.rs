@@ -395,11 +395,20 @@ pub fn lower_file(
                 param_defaults.push(None);
                 required += 1;
             }
+            // Set up placeholder params so extension function detection
+            // (is_extension = params.len() == args.len() + 1) works for
+            // recursive calls before the function is fully lowered.
+            let placeholder_param_count = f.params.len()
+                + if f.receiver_ty.is_some() { 1 } else { 0 }
+                + if f.is_suspend { 1 } else { 0 };
+            let placeholder_params: Vec<LocalId> =
+                (0..placeholder_param_count as u32).map(LocalId).collect();
+            let placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
-                params: Vec::new(),
-                locals: Vec::new(),
+                params: placeholder_params,
+                locals: placeholder_locals,
                 blocks: Vec::new(),
                 return_ty,
                 required_params: required,
