@@ -1,0 +1,3 @@
+name   = "556-sealed-result"
+status = "active"
+features = ["sealed", "Result", "Success", "Failure", "smart-cast"]

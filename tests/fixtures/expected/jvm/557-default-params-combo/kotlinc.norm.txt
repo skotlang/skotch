@@ -1,0 +1,71 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "prefix"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_1
+    0013 aload_0
+    0014 op_0xBA
+    0015 nop
+    0016 iload_2
+    0017 nop
+    0018 nop
+    0019 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        greet$default (Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String; 0x1009
+  code        max_stack=2 max_locals=4
+    0000 iload_2
+    0001 iconst_1
+    0002 iand
+    0003 ifeq 9
+    0006 ldc "World"
+    0008 astore_0
+    0009 iload_2
+    0010 iconst_2
+    0011 iand
+    0012 ifeq 18
+    0015 ldc "Hello"
+    0017 astore_1
+    0018 aload_0
+    0019 aload_1
+    0020 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0023 areturn
+    sub_attr  StackMapTable (4 bytes)
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=0
+    0000 aconst_null
+    0001 aconst_null
+    0002 iconst_3
+    0003 aconst_null
+    0004 invokestatic Method(InputKt.greet$default:(Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;)
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 op_0x5F
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0014 ldc "Kotlin"
+    0016 aconst_null
+    0017 iconst_2
+    0018 aconst_null
+    0019 invokestatic Method(InputKt.greet$default:(Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;)
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 op_0x5F
+    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0029 ldc "Kotlin"
+    0031 ldc "Hi"
+    0033 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 op_0x5F
+    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0043 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

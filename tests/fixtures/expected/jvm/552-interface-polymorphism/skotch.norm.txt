@@ -1,0 +1,54 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=7 max_locals=9
+    0000 op_0x14
+    0001 nop
+    0002 op_0x1E
+    0003 op_0x39
+    0004 aconst_null
+    0005 new Class(Circle)
+    0008 dup
+    0009 op_0x18
+    0010 aconst_null
+    0011 invokespecial Method(Circle.<init>:(D)V)
+    0014 astore 3
+    0016 aload 3
+    0018 invokestatic Method(InputKt.printArea:(LShape;)V)
+    0021 op_0x14
+    0022 nop
+    0023 op_0x27
+    0024 op_0x39
+    0025 iconst_1
+    0026 op_0x14
+    0027 nop
+    0028 op_0x29
+    0029 op_0x39
+    0030 iconst_3
+    0031 new Class(Rectangle)
+    0034 dup
+    0035 op_0x18
+    0036 iconst_1
+    0037 op_0x18
+    0038 iconst_3
+    0039 invokespecial Method(Rectangle.<init>:(DD)V)
+    0042 astore 8
+    0044 aload 8
+    0046 invokestatic Method(InputKt.printArea:(LShape;)V)
+    0049 return
+method        printArea (LShape;)V 0x0009
+  code        max_stack=5 max_locals=4
+    0000 aload 0
+    0002 checkcast Class(Shape)
+    0005 astore 1
+    0007 aload 1
+    0009 invokeinterface InterfaceMethod(Shape.area:()D)
+    0014 op_0x39
+    0015 iconst_m1
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 op_0x18
+    0020 iconst_m1
+    0021 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0024 return

@@ -1,0 +1,64 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=9
+    0000 aload 1
+    0002 astore 2
+    0004 ldc ", "
+    0006 astore 3
+    0008 aload 2
+    0010 aload 3
+    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0015 astore 4
+    0017 aload 0
+    0019 astore 5
+    0021 aload 4
+    0023 aload 5
+    0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 astore 6
+    0030 ldc "!"
+    0032 astore 7
+    0034 aload 6
+    0036 aload 7
+    0038 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0041 astore 8
+    0043 aload 8
+    0045 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=10
+    0000 ldc "World"
+    0002 astore 1
+    0004 ldc "Hello"
+    0006 astore 2
+    0008 aload 1
+    0010 aload 2
+    0012 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0015 astore 3
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 aload 3
+    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0025 ldc "Kotlin"
+    0027 astore 4
+    0029 ldc "Hello"
+    0031 astore 5
+    0033 aload 4
+    0035 aload 5
+    0037 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0040 astore 6
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 aload 6
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0050 ldc "Kotlin"
+    0052 astore 7
+    0054 ldc "Hi"
+    0056 astore 8
+    0058 aload 7
+    0060 aload 8
+    0062 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0065 astore 9
+    0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0070 aload 9
+    0072 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0075 return

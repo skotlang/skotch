@@ -1,0 +1,3 @@
+name   = "554-list-for-sum"
+status = "active"
+features = ["listOf", "for-in", "sum", "accumulator"]

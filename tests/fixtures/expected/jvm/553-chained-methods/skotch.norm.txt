@@ -1,0 +1,42 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=12
+    0000 ldc "hello world"
+    0002 astore 1
+    0004 aload 1
+    0006 astore 2
+    0008 aload 2
+    0010 astore 3
+    0012 aload 3
+    0014 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0017 astore 4
+    0019 iconst_0
+    0020 istore 5
+    0022 iconst_5
+    0023 istore 6
+    0025 aload 4
+    0027 iload 5
+    0029 iload 6
+    0031 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
+    0034 astore 7
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 7
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0044 aload 2
+    0046 astore 8
+    0048 aload 8
+    0050 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
+    0053 astore 9
+    0055 bipush 6
+    0057 istore 10
+    0059 aload 9
+    0061 iload 10
+    0063 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
+    0066 astore 11
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 aload 11
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0076 return

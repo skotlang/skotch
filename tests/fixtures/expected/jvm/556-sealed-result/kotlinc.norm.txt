@@ -1,0 +1,69 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        describe (LResult;)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "r"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(Success)
+    0012 ifeq 30
+    0015 aload_0
+    0016 checkcast Class(Success)
+    0019 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
+    0022 op_0xBA
+    0023 nop
+    0024 op_0x21
+    0025 nop
+    0026 nop
+    0027 goto 60
+    0030 aload_1
+    0031 instanceof Class(Failure)
+    0034 ifeq 52
+    0037 aload_0
+    0038 checkcast Class(Failure)
+    0041 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
+    0044 op_0xBA
+    0045 nop
+    0046 op_0x29
+    0047 nop
+    0048 nop
+    0049 goto 60
+    0052 new Class(kotlin/NoWhenBranchMatchedException)
+    0055 dup
+    0056 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0059 athrow
+    0060 areturn
+    sub_attr  StackMapTable (13 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=0
+    0000 new Class(Success)
+    0003 dup
+    0004 ldc "hello"
+    0006 invokespecial Method(Success.<init>:(Ljava/lang/String;)V)
+    0009 checkcast Class(Result)
+    0012 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 op_0x5F
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 new Class(Failure)
+    0025 dup
+    0026 ldc "oops"
+    0028 invokespecial Method(Failure.<init>:(Ljava/lang/String;)V)
+    0031 checkcast Class(Result)
+    0034 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 op_0x5F
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0044 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (14 bytes)

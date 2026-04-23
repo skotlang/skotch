@@ -1,0 +1,3 @@
+name   = "552-interface-polymorphism"
+status = "active"
+features = ["interface", "polymorphism", "override", "area"]

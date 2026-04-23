@@ -1,0 +1,97 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        classify (I)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=1
+    0000 nop
+    0001 iload_0
+    0002 bipush 90
+    0004 op_0xA1
+    0005 nop
+    0006 iconst_5
+    0007 ldc "A"
+    0009 goto 36
+    0012 iload_0
+    0013 bipush 80
+    0015 op_0xA1
+    0016 nop
+    0017 iconst_5
+    0018 ldc "B"
+    0020 goto 36
+    0023 iload_0
+    0024 bipush 70
+    0026 op_0xA1
+    0027 nop
+    0028 iconst_5
+    0029 ldc "C"
+    0031 goto 36
+    0034 ldc "F"
+    0036 areturn
+    sub_attr  StackMapTable (9 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=6 max_locals=3
+    0000 iconst_3
+    0001 op_0xBD
+    0002 nop
+    0003 op_0x17
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 new Class(Student)
+    0010 dup
+    0011 ldc "Alice"
+    0013 bipush 95
+    0015 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0018 op_0x53
+    0019 aload_1
+    0020 iconst_1
+    0021 new Class(Student)
+    0024 dup
+    0025 ldc "Bob"
+    0027 bipush 82
+    0029 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0032 op_0x53
+    0033 aload_1
+    0034 iconst_2
+    0035 new Class(Student)
+    0038 dup
+    0039 ldc "Carol"
+    0041 bipush 67
+    0043 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0046 op_0x53
+    0047 aload_1
+    0048 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0051 astore_0
+    0052 aload_0
+    0053 invokeinterface InterfaceMethod(java/util/List.iterator:()Ljava/util/Iterator;)
+    0058 astore_1
+    0059 aload_1
+    0060 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0065 ifeq 104
+    0068 aload_1
+    0069 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0074 checkcast Class(Student)
+    0077 astore_2
+    0078 aload_2
+    0079 invokevirtual Method(Student.getName:()Ljava/lang/String;)
+    0082 aload_2
+    0083 invokevirtual Method(Student.getGrade:()I)
+    0086 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0089 op_0xBA
+    0090 nop
+    0091 astore_2
+    0092 nop
+    0093 nop
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 op_0x5F
+    0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0101 goto 59
+    0104 return
+    sub_attr  StackMapTable (12 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

@@ -1,0 +1,3 @@
+name   = "555-when-as-val"
+status = "active"
+features = ["when", "expression", "val", "even-odd"]

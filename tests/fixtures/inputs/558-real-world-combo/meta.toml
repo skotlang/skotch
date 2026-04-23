@@ -1,0 +1,3 @@
+name   = "558-real-world-combo"
+status = "active"
+features = ["data-class", "extension-function", "when", "listOf", "for-in", "string-template"]
