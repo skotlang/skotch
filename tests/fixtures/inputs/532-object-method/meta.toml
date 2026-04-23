@@ -1,0 +1,3 @@
+name   = "532-object-method"
+status = "active"
+features = ["object", "singleton", "method-call"]

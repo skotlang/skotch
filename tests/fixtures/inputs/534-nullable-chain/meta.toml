@@ -1,0 +1,3 @@
+name   = "534-nullable-chain"
+status = "active"
+features = ["nullable", "safe-call", "elvis", "uppercase"]

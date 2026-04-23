@@ -1,0 +1,3 @@
+name   = "535-multi-method-class"
+status = "active"
+features = ["class", "method", "multiple-methods"]

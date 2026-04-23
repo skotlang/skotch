@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=10
+    0000 iconst_5
+    0001 istore 1
+    0003 new Class(Square)
+    0006 dup
+    0007 iload 1
+    0009 invokespecial Method(Square.<init>:(I)V)
+    0012 astore 2
+    0014 aload 2
+    0016 checkcast Class(Square)
+    0019 astore 3
+    0021 aload 3
+    0023 checkcast Class(Square)
+    0026 astore 4
+    0028 aload 4
+    0030 invokevirtual Method(Square.area:()I)
+    0033 istore 5
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload 5
+    0040 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0043 aload 3
+    0045 checkcast Class(Square)
+    0048 astore 6
+    0050 aload 6
+    0052 invokevirtual Method(Square.toString:()Ljava/lang/String;)
+    0055 astore 7
+    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0060 aload 7
+    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0065 aload 3
+    0067 checkcast Class(Square)
+    0070 astore 8
+    0072 aload 8
+    0074 getfield Field(Shape.name:Ljava/lang/String;)
+    0077 astore 9
+    0079 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0082 aload 9
+    0084 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0087 return

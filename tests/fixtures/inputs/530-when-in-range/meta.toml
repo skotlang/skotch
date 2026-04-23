@@ -1,0 +1,3 @@
+name   = "530-when-in-range"
+status = "active"
+features = ["when", "in", "IntRange", "expression-body"]

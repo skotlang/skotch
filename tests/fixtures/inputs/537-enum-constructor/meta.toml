@@ -1,0 +1,3 @@
+name   = "537-enum-constructor"
+status = "active"
+features = ["enum", "constructor", "property-access"]

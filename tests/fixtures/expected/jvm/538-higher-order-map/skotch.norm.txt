@@ -1,0 +1,74 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0009
+  code        max_stack=2 max_locals=6
+    0000 iload 1
+    0002 istore 2
+    0004 iload 2
+    0006 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0009 astore 3
+    0011 aload 0
+    0013 aload 3
+    0015 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0020 astore 4
+    0022 aload 4
+    0024 checkcast Class(java/lang/Integer)
+    0027 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0030 istore 5
+    0032 iload 5
+    0034 op_0xAC
+method        applyStr (Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Ljava/lang/String; 0x0009
+  code        max_stack=2 max_locals=6
+    0000 aload 1
+    0002 astore 2
+    0004 aload 2
+    0006 astore 3
+    0008 aload 0
+    0010 aload 3
+    0012 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0017 astore 4
+    0019 aload 4
+    0021 checkcast Class(java/lang/Integer)
+    0024 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0027 istore 5
+    0029 iload 5
+    0031 areturn
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=11
+    0000 new Class(InputKt$Lambda$0)
+    0003 dup
+    0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0007 astore 1
+    0009 bipush 21
+    0011 istore 2
+    0013 aload 1
+    0015 iload 2
+    0017 invokestatic Method(InputKt.apply:(Lkotlin/jvm/functions/Function1;I)I)
+    0020 istore 3
+    0022 iload 3
+    0024 istore 4
+    0026 iload 4
+    0028 istore 5
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 5
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 new Class(InputKt$Lambda$1)
+    0041 dup
+    0042 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0045 astore 6
+    0047 ldc "world"
+    0049 astore 7
+    0051 aload 6
+    0053 aload 7
+    0055 invokestatic Method(InputKt.applyStr:(Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Ljava/lang/String;)
+    0058 astore 8
+    0060 aload 8
+    0062 astore 9
+    0064 aload 9
+    0066 astore 10
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 aload 10
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0076 return

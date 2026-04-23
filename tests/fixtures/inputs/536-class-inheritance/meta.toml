@@ -1,0 +1,3 @@
+name   = "536-class-inheritance"
+status = "active"
+features = ["open-class", "override", "inheritance", "toString"]

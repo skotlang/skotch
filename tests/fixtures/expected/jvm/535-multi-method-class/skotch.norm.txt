@@ -1,0 +1,68 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=17
+    0000 new Class(Calculator)
+    0003 dup
+    0004 invokespecial Method(Calculator.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 checkcast Class(Calculator)
+    0014 astore 2
+    0016 aload 2
+    0018 checkcast Class(Calculator)
+    0021 astore 3
+    0023 iconst_3
+    0024 istore 4
+    0026 iconst_4
+    0027 istore 5
+    0029 aload 3
+    0031 iload 4
+    0033 iload 5
+    0035 invokevirtual Method(Calculator.add:(II)I)
+    0038 istore 6
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 iload 6
+    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0048 aload 2
+    0050 checkcast Class(Calculator)
+    0053 astore 7
+    0055 iconst_5
+    0056 istore 8
+    0058 bipush 6
+    0060 istore 9
+    0062 aload 7
+    0064 iload 8
+    0066 iload 9
+    0068 invokevirtual Method(Calculator.multiply:(II)I)
+    0071 istore 10
+    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0076 iload 10
+    0078 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0081 aload 2
+    0083 checkcast Class(Calculator)
+    0086 astore 11
+    0088 iconst_m1
+    0089 istore 12
+    0091 aload 11
+    0093 iload 12
+    0095 invokevirtual Method(Calculator.isPositive:(I)Z)
+    0098 istore 13
+    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0103 iload 13
+    0105 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0108 aload 2
+    0110 checkcast Class(Calculator)
+    0113 astore 14
+    0115 bipush 42
+    0117 istore 15
+    0119 aload 14
+    0121 iload 15
+    0123 invokevirtual Method(Calculator.isPositive:(I)Z)
+    0126 istore 16
+    0128 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0131 iload 16
+    0133 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0136 return
