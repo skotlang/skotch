@@ -1,0 +1,79 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        divide (II)I 0x0009
+  code        max_stack=3 max_locals=11
+    0000 iload 1
+    0002 istore 2
+    0004 iconst_0
+    0005 istore 3
+    0007 iload 2
+    0009 iload 3
+    0011 op_0x9F
+    0012 nop
+    0013 iconst_4
+    0014 iconst_0
+    0015 goto 19
+    0018 iconst_1
+    0019 istore 4
+    0021 iload 4
+    0023 ifeq 48
+    0026 ldc "Division by zero"
+    0028 astore 5
+    0030 new Class(java/lang/IllegalArgumentException)
+    0033 dup
+    0034 aload 5
+    0036 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0039 astore 6
+    0041 aload 7
+    0043 astore 7
+    0045 goto 51
+    0048 goto 51
+    0051 iload 0
+    0053 istore 8
+    0055 iload 1
+    0057 istore 9
+    0059 iload 8
+    0061 iload 9
+    0063 idiv
+    0064 istore 10
+    0066 iload 10
+    0068 op_0xAC
+    sub_attr  StackMapTable (49 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=10
+    0000 bipush 10
+    0002 istore 1
+    0004 iconst_2
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 invokestatic Method(InputKt.divide:(II)I)
+    0014 istore 3
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 iload 3
+    0021 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0024 goto 27
+    0027 bipush 10
+    0029 istore 4
+    0031 iconst_0
+    0032 istore 5
+    0034 iload 4
+    0036 iload 5
+    0038 invokestatic Method(InputKt.divide:(II)I)
+    0041 istore 6
+    0043 goto 73
+    0046 astore 7
+    0048 aload 7
+    0050 checkcast Class(java/lang/Exception)
+    0053 astore 8
+    0055 aload 8
+    0057 invokevirtual Method(java/lang/Throwable.toString:()Ljava/lang/String;)
+    0060 astore 9
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 aload 9
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0070 goto 73
+    0073 return
+    sub_attr  StackMapTable (38 bytes)
