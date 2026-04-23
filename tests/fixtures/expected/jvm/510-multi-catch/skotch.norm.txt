@@ -21,7 +21,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0029 checkcast Class(java/lang/IllegalArgumentException)
     0032 astore 5
     0034 aload 5
-    0036 invokevirtual Method(java/lang/Throwable.getMessage:()Ljava/lang/String;)
+    0036 invokevirtual Method(java/lang/IllegalArgumentException.getMessage:()Ljava/lang/String;)
     0039 astore 6
     0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0044 new Class(java/lang/StringBuilder)

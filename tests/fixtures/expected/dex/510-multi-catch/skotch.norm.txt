@@ -1,6 +1,6 @@
 dex_version   035
-strings       23
-types         10
+strings       22
+types         9
 methods       8
 classes       1
 
@@ -15,7 +15,6 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/lang/StringBuilder;"
   "Ljava/lang/System;"
-  "Ljava/lang/Throwable;"
   "V"
   "VL"
   "[Ljava/lang/String;"
@@ -37,7 +36,6 @@ classes       1
   Ljava/lang/String;
   Ljava/lang/StringBuilder;
   Ljava/lang/System;
-  Ljava/lang/Throwable;
   V
   [Ljava/lang/String;
 
@@ -46,10 +44,10 @@ classes       1
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
   Ljava/lang/IllegalArgumentException;.<init>(Ljava/lang/String;)V
+  Ljava/lang/IllegalArgumentException;.getMessage()Ljava/lang/String;
   Ljava/lang/StringBuilder;.<init>()V
   Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
   Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
-  Ljava/lang/Throwable;.getMessage()Ljava/lang/String;
 
 --- class[0] ---
   descriptor   LInputKt;

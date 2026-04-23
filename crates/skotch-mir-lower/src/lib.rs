@@ -12111,24 +12111,56 @@ fn lookup_java_instance_from_jdk(
         }
     }
 
-    let class_info = reg.get(class_name)?;
-    let method = class_info
-        .methods
-        .iter()
-        .find(|m| {
-            m.name == method_name
-                && !m.is_static()
-                && m.is_public()
-                && count_descriptor_params(&m.descriptor) == arg_count
-        })
-        .or_else(|| {
-            class_info
+    // Walk the superclass chain to find the method. This handles
+    // cases like Exception.getMessage() where getMessage is declared
+    // on Throwable, not Exception itself.
+    let mut search_class = Some(class_name.to_string());
+    let mut found_method: Option<(String, String, String)> = None; // (class, name, desc)
+    while let Some(ref cname) = search_class {
+        // Ensure this class is loaded.
+        if !reg.contains_key(cname.as_str()) {
+            let jvm_path = if cname.contains('/') {
+                cname.clone()
+            } else {
+                format!("java/lang/{cname}")
+            };
+            if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
+                reg.insert(cname.clone(), info);
+            } else {
+                break;
+            }
+        }
+        if let Some(ci) = reg.get(cname.as_str()) {
+            let m = ci
                 .methods
                 .iter()
-                .find(|m| m.name == method_name && !m.is_static() && m.is_public())
-        })?;
+                .find(|m| {
+                    m.name == method_name
+                        && !m.is_static()
+                        && m.is_public()
+                        && count_descriptor_params(&m.descriptor) == arg_count
+                })
+                .or_else(|| {
+                    ci.methods
+                        .iter()
+                        .find(|m| m.name == method_name && !m.is_static() && m.is_public())
+                });
+            if let Some(method) = m {
+                found_method = Some((
+                    ci.name.clone(),
+                    method.name.clone(),
+                    method.descriptor.clone(),
+                ));
+                break;
+            }
+            search_class = ci.super_class.clone();
+        } else {
+            break;
+        }
+    }
+    let (found_class, method_name_found, descriptor) = found_method?;
 
-    let return_ty = match skotch_classinfo::return_type_from_descriptor(&method.descriptor) {
+    let return_ty = match skotch_classinfo::return_type_from_descriptor(&descriptor) {
         "Unit" => Ty::Unit,
         "Boolean" => Ty::Bool,
         "Int" => Ty::Int,
@@ -12138,12 +12170,7 @@ fn lookup_java_instance_from_jdk(
         _ => Ty::Any,
     };
 
-    Some((
-        class_info.name.clone(),
-        method.name.clone(),
-        method.descriptor.clone(),
-        return_ty,
-    ))
+    Some((found_class, method_name_found, descriptor, return_ty))
 }
 
 /// Try to lower a method call as a Java static call. Returns Some(dest_local) if successful.

@@ -1,0 +1,45 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        divide (II)I 0x0019
+  code        max_stack=3 max_locals=2
+    0000 iload_1
+    0001 ifne 14
+    0004 new Class(java/lang/IllegalArgumentException)
+    0007 dup
+    0008 ldc "Division by zero"
+    0010 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0013 athrow
+    0014 iload_0
+    0015 iload_1
+    0016 idiv
+    0017 op_0xAC
+    sub_attr  StackMapTable (3 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 bipush 10
+    0002 iconst_2
+    0003 invokestatic Method(InputKt.divide:(II)I)
+    0006 istore_0
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 iload_0
+    0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0014 nop
+    0015 bipush 10
+    0017 iconst_0
+    0018 invokestatic Method(InputKt.divide:(II)I)
+    0021 pop
+    0022 goto 37
+    0025 astore_1
+    0026 aload_1
+    0027 invokevirtual Method(java/lang/Exception.toString:()Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 op_0x5F
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 return
+    sub_attr  StackMapTable (14 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

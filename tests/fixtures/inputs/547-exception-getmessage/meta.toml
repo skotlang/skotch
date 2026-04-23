@@ -1,0 +1,3 @@
+name   = "547-exception-getmessage"
+status = "active"
+features = ["throw", "try-catch", "Exception.getMessage", "superclass-method"]

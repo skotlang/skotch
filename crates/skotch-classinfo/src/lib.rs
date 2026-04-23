@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 pub struct ClassInfo {
     /// JVM internal name, e.g. "java/lang/System".
     pub name: String,
+    /// JVM internal name of the superclass, e.g. "java/lang/Object".
+    pub super_class: Option<String>,
     /// Access flags (ACC_PUBLIC, ACC_STATIC, etc.).
     pub access_flags: u16,
     /// Methods in this class.
@@ -153,10 +155,22 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
 
     let access_flags = r.u16()?;
     let this_class = r.u16()? as usize;
-    let _super_class = r.u16()?;
+    let super_class_idx = r.u16()? as usize;
 
     // Class name.
     let class_name = resolve_class(&cp, this_class);
+
+    // Superclass name (0 means java/lang/Object itself).
+    let super_class = if super_class_idx == 0 {
+        None
+    } else {
+        let name = resolve_class(&cp, super_class_idx);
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        }
+    };
 
     // Interfaces.
     let iface_count = r.u16()? as usize;
@@ -204,6 +218,7 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
 
     Ok(ClassInfo {
         name: class_name,
+        super_class,
         access_flags,
         methods,
         fields,
