@@ -1,0 +1,3 @@
+name   = "551-custom-property-getter"
+status = "active"
+features = ["custom-getter", "computed-property", "Double"]

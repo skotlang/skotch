@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 488 language-feature fixtures validated across 5 targets.
+> implemented. 492 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
@@ -275,12 +275,12 @@ finally, numeric types (Int, Long, Double), Boolean, String with 20+ methods
 including `.repeat()`, Char, classes with mutable `var` field writeback and
 `override fun toString()`, `++`/`--` operators, null/const/visibility modifiers,
 nullable types with elvis (`?:`), Java interop, and Kotlin stdlib resolution.
-488 active test fixtures (461 total, 3 stubs tracking known gaps).
-Local functions with closure capture, Java interop with superclass method
-resolution (File, LinkedList, Exception.getMessage), abstract classes,
-sealed classes, when expressions, try-catch, object singletons, inheritance,
+492 active test fixtures (465 total, 3 stubs tracking known gaps).
+Nullable field assignment, custom property getters, multiple classes per file,
+local functions with closure capture, Java interop with superclass chain,
+abstract classes, sealed classes, when expressions, try-catch, inheritance,
 enums, higher-order functions, nullable chains, varargs, generics, extension
-functions/properties, and StringBuilder operations are all supported.
+functions, and callable fields with FunctionN dispatch are all supported.
 
 ### Implemented and stable
 

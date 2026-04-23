@@ -1,0 +1,33 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=7
+    0000 ldc "Rex"
+    0002 astore 1
+    0004 new Class(Dog)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Dog.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 invokevirtual Method(Dog.bark:()Ljava/lang/String;)
+    0020 astore 3
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 3
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 ldc "Whiskers"
+    0032 astore 4
+    0034 new Class(Cat)
+    0037 dup
+    0038 aload 4
+    0040 invokespecial Method(Cat.<init>:(Ljava/lang/String;)V)
+    0043 astore 5
+    0045 aload 5
+    0047 invokevirtual Method(Cat.meow:()Ljava/lang/String;)
+    0050 astore 6
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 aload 6
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0060 return

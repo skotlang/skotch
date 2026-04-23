@@ -8958,21 +8958,29 @@ fn lower_expr(
                                     },
                                 });
                                 // Invoke the callable field.
-                                let invoke_class = if let Ty::Class(ref cn) = field_ty {
-                                    cn.clone()
-                                } else {
-                                    "$Callable".to_string()
-                                };
-                                let _invoke_ret = if let Ty::Class(ref cn) = field_ty {
-                                    module
+                                let (invoke_class, _invoke_ret) = if let Ty::Class(ref cn) =
+                                    field_ty
+                                {
+                                    let ret = module
                                         .classes
                                         .iter()
                                         .find(|c| &c.name == cn)
                                         .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
                                         .map(|m| m.return_ty.clone())
-                                        .unwrap_or(Ty::Any)
+                                        .unwrap_or(Ty::Any);
+                                    (cn.clone(), ret)
+                                } else if let Ty::Function {
+                                    ref params,
+                                    ref ret,
+                                    ..
+                                } = field_ty
+                                {
+                                    // Function type: use FunctionN interface for invoke.
+                                    let arity = params.len();
+                                    let iface = stdlib_function_interface(arity);
+                                    (iface, (**ret).clone())
                                 } else {
-                                    Ty::Any
+                                    ("$Callable".to_string(), Ty::Any)
                                 };
                                 let mut invoke_args = vec![field_local];
                                 // Box primitive args for the erased invoke signature.
@@ -8981,6 +8989,7 @@ fn lower_expr(
                                     let boxed = mir_autobox(fb, *a, &a_ty);
                                     invoke_args.push(boxed);
                                 }
+                                // FunctionN.invoke returns Object on JVM.
                                 let dest = fb.new_local(Ty::Any);
                                 fb.push_stmt(MStmt::Assign {
                                     dest,

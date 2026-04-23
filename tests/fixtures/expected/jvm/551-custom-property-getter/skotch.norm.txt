@@ -1,0 +1,43 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=5 max_locals=11
+    0000 op_0x14
+    0001 nop
+    0002 op_0x0A
+    0003 op_0x39
+    0004 aconst_null
+    0005 new Class(Circle)
+    0008 dup
+    0009 op_0x18
+    0010 aconst_null
+    0011 invokespecial Method(Circle.<init>:(D)V)
+    0014 astore 3
+    0016 aload 3
+    0018 checkcast Class(Circle)
+    0021 astore 4
+    0023 aload 4
+    0025 checkcast Class(Circle)
+    0028 astore 5
+    0030 aload 5
+    0032 invokevirtual Method(Circle.getArea:()D)
+    0035 op_0x39
+    0036 iconst_3
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 op_0x18
+    0041 iconst_3
+    0042 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0045 aload 4
+    0047 checkcast Class(Circle)
+    0050 astore 8
+    0052 aload 8
+    0054 invokevirtual Method(Circle.getDiameter:()D)
+    0057 op_0x39
+    0058 op_0x09
+    0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0062 op_0x18
+    0063 op_0x09
+    0064 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0067 return

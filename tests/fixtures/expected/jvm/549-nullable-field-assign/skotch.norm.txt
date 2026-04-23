@@ -1,0 +1,40 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=9
+    0000 new Class(Box)
+    0003 dup
+    0004 invokespecial Method(Box.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 checkcast Class(Box)
+    0014 astore 2
+    0016 aload 2
+    0018 checkcast Class(Box)
+    0021 astore 3
+    0023 aload 3
+    0025 invokevirtual Method(Box.get:()Ljava/lang/String;)
+    0028 astore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 aload 4
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0038 aload 2
+    0040 checkcast Class(Box)
+    0043 astore 5
+    0045 ldc "hello"
+    0047 astore 6
+    0049 aload 5
+    0051 aload 6
+    0053 invokevirtual Method(Box.set:(Ljava/lang/String;)V)
+    0056 aload 2
+    0058 checkcast Class(Box)
+    0061 astore 7
+    0063 aload 7
+    0065 invokevirtual Method(Box.get:()Ljava/lang/String;)
+    0068 astore 8
+    0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0073 aload 8
+    0075 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0078 return
