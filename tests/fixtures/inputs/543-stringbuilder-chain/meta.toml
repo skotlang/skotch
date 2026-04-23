@@ -1,0 +1,3 @@
+name   = "543-stringbuilder-chain"
+status = "active"
+features = ["StringBuilder", "append", "length", "java-interop"]

@@ -1,0 +1,3 @@
+name   = "542-private-ctor-param"
+status = "active"
+features = ["private", "constructor-param", "encapsulation"]

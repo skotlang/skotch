@@ -33,9 +33,9 @@ method        main ([Ljava/lang/String;)V 0x0009
     0062 checkcast Class(java/util/ArrayList)
     0065 astore 9
     0067 aload 9
-    0069 invokeinterface InterfaceMethod(java/util/List.size:()I)
-    0074 istore 10
-    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0079 iload 10
-    0081 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0084 return
+    0069 invokevirtual Method(java/util/ArrayList.size:()I)
+    0072 istore 10
+    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0077 iload 10
+    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0082 return

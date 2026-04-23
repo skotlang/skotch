@@ -1,0 +1,3 @@
+name   = "541-member-reassign"
+status = "active"
+features = ["class", "var", "member-assignment", "this-field"]

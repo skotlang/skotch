@@ -9976,6 +9976,48 @@ fn lower_expr(
                             return Some(dest);
                         }
                     }
+                    // JDK class property-as-method: sb.length → length()
+                    // Many JVM classes expose properties as methods.
+                    if declaring_class.contains('/') {
+                        // Try the field name directly as a 0-arg method.
+                        if let Some((_, found_method, desc, ret_ty)) =
+                            lookup_java_instance(&declaring_class, &field_name, 0)
+                        {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: declaring_class.clone(),
+                                        method_name: found_method,
+                                        descriptor: desc,
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                        // Try getXxx() pattern.
+                        let jvm_getter =
+                            format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
+                        if let Some((_, found_method, desc, ret_ty)) =
+                            lookup_java_instance(&declaring_class, &jvm_getter, 0)
+                        {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: declaring_class.clone(),
+                                        method_name: found_method,
+                                        descriptor: desc,
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
                     // List .size → invokeinterface java/util/List.size()I
                     if field_name == "size"
                         && (declaring_class.contains("ArrayList")
