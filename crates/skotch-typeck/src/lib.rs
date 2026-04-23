@@ -1,5 +1,19 @@
 //! Type checker for the Kotlin subset skotch accepts.
 //!
+//! # Soundness Invariant
+//!
+//! All type checking MUST go through [`TypeChecker::is_assignable`],
+//! which delegates to [`Ty::assignable_to_in`] with the class hierarchy.
+//! **Never use `Ty::assignable_to` directly** in this crate — it lacks
+//! hierarchy info and is only a conservative fallback.
+//!
+//! When the type of an expression cannot be determined, the typechecker
+//! returns `Ty::Error` (NOT `Ty::Any`). `Ty::Error` suppresses
+//! cascading diagnostics without silently claiming a value is `Any`.
+//!
+//! The soundness invariant tests at the bottom of this file **must
+//! never be weakened, loosened, or removed**.
+//!
 //! ## Architecture
 //!
 //! **Type environment**: Before checking function bodies, the checker
@@ -161,6 +175,40 @@ impl TypeEnv {
             .get(type_name)
             .and_then(|d| d.companion_methods.iter().find(|m| m.name == method_name))
     }
+
+    /// Sound subtype check: is `child` the same class as, or a
+    /// subclass/implementor of, `parent`?
+    ///
+    /// Walks the declared superclass chain and interfaces transitively.
+    /// Returns `false` for unknown types (conservative — forces the
+    /// caller to emit an error rather than silently accept).
+    fn is_subclass(&self, child: &str, parent: &str) -> bool {
+        if child == parent {
+            return true;
+        }
+        let mut visited = rustc_hash::FxHashSet::default();
+        let mut stack = vec![child.to_string()];
+        while let Some(current) = stack.pop() {
+            if !visited.insert(current.clone()) {
+                continue; // cycle guard
+            }
+            if let Some(decl) = self.types.get(&current) {
+                if let Some(ref sup) = decl.super_class {
+                    if sup == parent {
+                        return true;
+                    }
+                    stack.push(sup.clone());
+                }
+                for iface in &decl.interfaces {
+                    if iface == parent {
+                        return true;
+                    }
+                    stack.push(iface.clone());
+                }
+            }
+        }
+        false
+    }
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
@@ -297,6 +345,15 @@ struct TypeChecker<'a> {
 }
 
 impl<'a> TypeChecker<'a> {
+    /// Sound assignability check using the class hierarchy.
+    ///
+    /// This is the ONLY method that should be used for type checking
+    /// assignability within the typechecker. It delegates to
+    /// `Ty::assignable_to_in` with the environment's class hierarchy.
+    fn is_assignable(&self, from: &Ty, to: &Ty) -> bool {
+        from.assignable_to_in(to, &|child, parent| self.env.is_subclass(child, parent))
+    }
+
     // ── Type environment builders ───────────────────────────────────────
 
     fn register_class(&mut self, c: &ClassDecl) {
@@ -559,7 +616,7 @@ impl<'a> TypeChecker<'a> {
             Expr::DoubleLit(_, _) => Ty::Double,
             Expr::FloatLit(_, _) => Ty::Float,
             Expr::BoolLit(_, _) => Ty::Bool,
-            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
+            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Nothing)),
             Expr::StringLit(_, _) => Ty::String,
             other => {
                 self.diags.push(Diagnostic::error(
@@ -599,7 +656,10 @@ impl<'a> TypeChecker<'a> {
                         v.init,
                         Expr::IntLit(..) | Expr::DoubleLit(..) | Expr::FloatLit(..)
                     );
-                    if !narrowing_ok && !init_ty.assignable_to(&declared) && declared != Ty::Error {
+                    if !narrowing_ok
+                        && !self.is_assignable(&init_ty, &declared)
+                        && declared != Ty::Error
+                    {
                         self.diags.push(Diagnostic::error(
                             v.span,
                             format!(
@@ -746,11 +806,15 @@ impl<'a> TypeChecker<'a> {
                     ..
                 } => {
                     let iter_ty = self.synth_expr(iterable, scope);
-                    // If iterating over IntArray, element type is Int.
-                    let elem_ty = if iter_ty == Ty::IntArray {
-                        Ty::Int
-                    } else {
-                        Ty::Any
+                    let elem_ty = match &iter_ty {
+                        Ty::IntArray => Ty::Int,
+                        Ty::LongArray => Ty::Long,
+                        Ty::DoubleArray => Ty::Double,
+                        Ty::BooleanArray => Ty::Bool,
+                        Ty::ByteArray => Ty::Byte,
+                        Ty::String => Ty::Char,
+                        // Generic collections erase to Any on JVM.
+                        _ => Ty::Any,
                     };
                     local_tys.push(elem_ty.clone());
                     scope.push((*var_name, elem_ty));
@@ -771,7 +835,7 @@ impl<'a> TypeChecker<'a> {
             Expr::DoubleLit(_, _) => Ty::Double,
             Expr::FloatLit(_, _) => Ty::Float,
             Expr::BoolLit(_, _) => Ty::Bool,
-            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Any)),
+            Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Nothing)),
             Expr::StringLit(_, _) => Ty::String,
 
             Expr::Ident(name, _) => {
@@ -779,13 +843,20 @@ impl<'a> TypeChecker<'a> {
                 if let Some((_, t)) = scope.iter().rev().find(|(n, _)| *n == *name) {
                     return t.clone();
                 }
-                // Top-level val/function.
                 let name_str = self.interner.resolve(*name).to_string();
                 // Enum entry: Color.RED → Ty::Class("Color")
                 if let Some(enum_name) = self.env.enum_entries.get(&name_str) {
                     return Ty::Class(enum_name.clone());
                 }
-                Ty::Any
+                // Known type → Class.
+                if self.env.types.contains_key(&name_str) {
+                    return Ty::Class(name_str);
+                }
+                // Deferred to MIR lowering (external classes, top-level
+                // functions used as values, etc.). Use Error so cascading
+                // type checks don't produce false positives — the real
+                // check happens during lowering.
+                Ty::Error
             }
 
             Expr::Paren(inner, _) => self.synth_expr(inner, scope),
@@ -962,10 +1033,10 @@ impl<'a> TypeChecker<'a> {
                             return Ty::Class(class_name.clone());
                         }
                     }
-                    return Ty::Any;
+                    return Ty::Error;
                 }
 
-                Ty::Any
+                Ty::Error
             }
 
             Expr::If {
@@ -1026,13 +1097,14 @@ impl<'a> TypeChecker<'a> {
                 ..
             } => {
                 self.check_block(body, scope, &mut Vec::new());
+                let body_ty = self.block_result_type(body, scope);
                 if let Some(cb) = catch_body {
                     self.check_block(cb, scope, &mut Vec::new());
                 }
                 if let Some(fb) = finally_body {
                     self.check_block(fb, scope, &mut Vec::new());
                 }
-                Ty::Unit
+                body_ty
             }
 
             Expr::ElvisOp { lhs, rhs, .. } => {
@@ -1083,7 +1155,7 @@ impl<'a> TypeChecker<'a> {
                     if self.env.types.contains_key(&name) {
                         Ty::Class(name)
                     } else {
-                        Ty::Any
+                        Ty::Error
                     }
                 });
                 if *safe {
@@ -1105,16 +1177,19 @@ impl<'a> TypeChecker<'a> {
             Expr::Lambda { params, body, .. } => {
                 // Synthesize lambda type from params and body result.
                 let mut lambda_scope = scope.clone();
+                let mut param_tys = Vec::new();
                 for p in params {
                     let ty = self.resolve_type_ref(&p.ty);
-                    lambda_scope.push((p.name, ty));
+                    lambda_scope.push((p.name, ty.clone()));
+                    param_tys.push(ty);
                 }
+                self.check_block(body, &mut lambda_scope, &mut Vec::new());
                 let ret = self.block_result_type(body, &mut lambda_scope);
-                // Return as a class type with synthetic name — the MIR lowering
-                // generates the actual class. The typechecker just needs to
-                // propagate this so `val f = { x: Int -> x }; f(5)` resolves.
-                let _ = ret;
-                Ty::Any // Lambda type details resolved by MIR lowering
+                Ty::Function {
+                    params: param_tys,
+                    ret: Box::new(ret),
+                    is_suspend: false,
+                }
             }
 
             Expr::ObjectExpr { super_type, .. } => {
@@ -1122,7 +1197,7 @@ impl<'a> TypeChecker<'a> {
                 if self.env.types.contains_key(&name) {
                     Ty::Class(name)
                 } else {
-                    Ty::Any
+                    Ty::Error
                 }
             }
 
@@ -1275,5 +1350,121 @@ fun main() {
         let (tf, d) = run("enum class Dir { NORTH, SOUTH }\nfun main() { println(Dir.NORTH) }");
         assert!(d.is_empty(), "{:?}", d);
         assert_eq!(tf.functions.len(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SOUNDNESS INVARIANT TESTS — TYPECHECKER
+    //
+    // These tests verify that the typechecker REJECTS invalid programs.
+    // They MUST NEVER be weakened, loosened, or removed.
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn soundness_reject_int_assigned_to_string() {
+        let (_, d) = run("fun main() { val x: String = 42 }");
+        assert!(d.has_errors(), "must reject Int → String assignment");
+    }
+
+    #[test]
+    fn soundness_reject_string_assigned_to_int() {
+        let (_, d) = run(r#"fun main() { val x: Int = "hello" }"#);
+        assert!(d.has_errors(), "must reject String → Int assignment");
+    }
+
+    #[test]
+    fn soundness_reject_null_to_non_nullable() {
+        let (_, d) = run("fun main() { val x: String = null }");
+        assert!(d.has_errors(), "must reject null → non-nullable String");
+    }
+
+    #[test]
+    fn soundness_accept_null_to_nullable() {
+        let (_, d) = run("fun main() { val x: String? = null }");
+        assert!(!d.has_errors(), "null → String? must be accepted: {:?}", d);
+    }
+
+    #[test]
+    fn soundness_accept_value_to_nullable() {
+        let (_, d) = run(r#"fun main() { val x: String? = "hello" }"#);
+        assert!(
+            !d.has_errors(),
+            "String → String? must be accepted: {:?}",
+            d
+        );
+    }
+
+    #[test]
+    fn soundness_reject_bool_assigned_to_int() {
+        let (_, d) = run("fun main() { val x: Int = true }");
+        assert!(d.has_errors(), "must reject Bool → Int assignment");
+    }
+
+    #[test]
+    fn soundness_accept_subclass_to_superclass() {
+        let src = r#"
+open class Animal
+class Dog : Animal()
+fun main() { val a: Animal = Dog() }
+"#;
+        let (_, d) = run(src);
+        assert!(!d.has_errors(), "Dog → Animal must be accepted: {:?}", d);
+    }
+
+    #[test]
+    fn soundness_accept_class_implementing_interface() {
+        let src = r#"
+interface Greetable { fun greet(): String }
+class Person : Greetable { override fun greet(): String = "Hi" }
+fun main() { val g: Greetable = Person() }
+"#;
+        let (_, d) = run(src);
+        assert!(
+            !d.has_errors(),
+            "Person → Greetable must be accepted: {:?}",
+            d
+        );
+    }
+
+    #[test]
+    fn soundness_lambda_has_function_type() {
+        let (tf, d) = run("fun main() { val f = { x: Int -> x + 1 } }");
+        assert!(!d.has_errors(), "lambda must typecheck: {:?}", d);
+        // The local for f should have a Function type.
+        assert!(!tf.functions.is_empty());
+        let main_fn = &tf.functions[0];
+        let f_ty = main_fn
+            .local_tys
+            .iter()
+            .find(|t| matches!(t, Ty::Function { .. }));
+        assert!(
+            f_ty.is_some(),
+            "lambda local should have Function type, got: {:?}",
+            main_fn.local_tys
+        );
+    }
+
+    #[test]
+    fn soundness_valid_program_no_errors() {
+        // A comprehensive valid program must produce zero diagnostics.
+        let src = r#"
+fun add(a: Int, b: Int): Int = a + b
+data class Point(val x: Int, val y: Int)
+fun main() {
+    val p = Point(1, 2)
+    println(p.x)
+    println(add(3, 4))
+    val n: Int? = null
+    val s: String? = "hello"
+    val x = 42
+    val y = x + 1
+    println(y)
+}
+"#;
+        let (_, d) = run(src);
+        assert!(
+            !d.has_errors(),
+            "valid program must not produce errors: {:?}",
+            d
+        );
     }
 }
