@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 bipush 42
+    0002 istore_0
+    0003 iload_0
+    0004 invokestatic Method(InputKt.main$double:(I)I)
+    0007 istore_1
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_1
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 ldc "Hello"
+    0017 astore_1
+    0018 aload_1
+    0019 ldc "World"
+    0021 invokestatic Method(InputKt.main$greet:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 op_0x5F
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$double (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 iconst_2
+    0002 imul
+    0003 op_0xAC
+method        main$greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 aload_1
+    0002 op_0xBA
+    0003 nop
+    0004 op_0x35
+    0005 nop
+    0006 nop
+    0007 areturn
+class_attr    BootstrapMethods (8 bytes)

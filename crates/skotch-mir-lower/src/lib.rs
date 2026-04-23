@@ -3261,21 +3261,31 @@ fn lower_stmt(
         }
         Stmt::LocalFun(f) => {
             // Lower local function as a synthetic top-level function.
+            // Captured outer variables are passed as extra parameters.
             let fn_idx = module.functions.len();
             let fn_name = interner.resolve(f.name).to_string();
             let return_ty = f
                 .return_ty
                 .as_ref()
-                .map(|tr| {
-                    let resolved = resolve_type(interner.resolve(tr.name), module);
-                    resolved
-                })
+                .map(|tr| resolve_type_ref(tr, interner, module))
                 .unwrap_or(Ty::Unit);
+
+            // Collect free variables in the local function body.
+            let param_names: Vec<Symbol> = f.params.iter().map(|p| p.name).collect();
+            let free_vars: Vec<(Symbol, LocalId, Ty)> =
+                collect_free_vars(&f.body, &param_names, scope, fb, interner);
+            let captures = free_vars;
+
+            // Push placeholder and register in name_to_func BEFORE lowering
+            // so recursive calls from inside the body can resolve.
+            let total_params = captures.len() + f.params.len();
+            let placeholder_params: Vec<LocalId> = (0..total_params as u32).map(LocalId).collect();
+            let placeholder_locals: Vec<Ty> = vec![Ty::Any; total_params];
             module.functions.push(MirFunction {
                 id: FuncId(fn_idx as u32),
-                name: fn_name,
-                params: Vec::new(),
-                locals: Vec::new(),
+                name: fn_name.clone(),
+                params: placeholder_params,
+                locals: placeholder_locals,
                 blocks: Vec::new(),
                 return_ty: return_ty.clone(),
                 required_params: 0,
@@ -3291,17 +3301,64 @@ fn lower_stmt(
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
-            // Lower the function body.
-            lower_function(
-                f,
-                fn_idx,
-                None,
-                name_to_func,
-                name_to_global,
-                module,
-                interner,
-                diags,
-            );
+            // Build the function with captures as extra leading params.
+            let mut inner_fb = FnBuilder::new(fn_idx, fn_name.clone(), return_ty.clone());
+
+            // Add capture params first.
+            let mut inner_scope: Vec<(Symbol, LocalId)> = Vec::new();
+            for (sym, _, ty) in &captures {
+                let pid = inner_fb.new_local(ty.clone());
+                inner_fb.mf.params.push(pid);
+                inner_scope.push((*sym, pid));
+            }
+
+            // Add explicit function params.
+            for p in &f.params {
+                let ty = resolve_type_ref(&p.ty, interner, module);
+                let pid = inner_fb.new_local(ty);
+                inner_fb.mf.params.push(pid);
+                inner_scope.push((p.name, pid));
+            }
+
+            // Lower the body with inner scope.
+            for s in &f.body.stmts {
+                lower_stmt(
+                    s,
+                    &mut inner_fb,
+                    &mut inner_scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            // If the body didn't terminate, add a default return.
+            if !matches!(
+                inner_fb.mf.blocks[inner_fb.cur_block as usize].terminator,
+                Terminator::ReturnValue(_) | Terminator::Return
+            ) {
+                inner_fb.set_terminator(Terminator::Return);
+            }
+
+            let inner_fn = inner_fb.finish();
+            // Replace the placeholder with the real lowered function.
+            module.functions[fn_idx] = inner_fn;
+
+            // When calling this local function, the caller must prepend
+            // capture args. Store capture info for the call site.
+            // We encode this by making the function's params count include
+            // captures, so the call site knows to pass them.
+            // Store the capture local IDs for later use at call sites.
+            for (sym, outer_lid, _) in &captures {
+                // Register a synthetic name→local mapping so the call site
+                // can find the outer locals to pass as capture args.
+                let key =
+                    interner.intern(&format!("$capture${}${}", fn_name, interner.resolve(*sym)));
+                scope.push((key, *outer_lid));
+            }
+
             true
         }
         Stmt::Break { .. } => {
@@ -8762,6 +8819,45 @@ fn lower_expr(
             } else if callee_str == "print" {
                 CallKind::Print
             } else if let Some(fid) = name_to_func.get(&callee_name) {
+                // Check if this function has capture params (local functions).
+                // If the function has more params than explicit args AND it's
+                // not a suspend function (which has an extra $completion param),
+                // the extra leading params are captures that need to be filled.
+                let target = &module.functions[fid.0 as usize];
+                let target_param_count = target.params.len();
+                let is_suspend_target = target.is_suspend;
+                if !is_suspend_target && target_param_count > arg_locals.len() {
+                    let fn_name = &module.functions[fid.0 as usize].name;
+                    let capture_count = target_param_count - arg_locals.len();
+                    let mut capture_args = Vec::new();
+                    for ci in 0..capture_count {
+                        // Find the capture param by checking the function's
+                        // local types and matching against scope.
+                        let capture_ty = module.functions[fid.0 as usize]
+                            .locals
+                            .get(ci)
+                            .cloned()
+                            .unwrap_or(Ty::Any);
+                        // Look for a $capture$ entry in scope.
+                        let found = scope.iter().rev().find(|(sym, _)| {
+                            let n = interner.resolve(*sym);
+                            n.starts_with(&format!("$capture${fn_name}$"))
+                        });
+                        if let Some((_, lid)) = found {
+                            capture_args.push(*lid);
+                        } else {
+                            // Fallback: try to find a local with matching type.
+                            let fallback = fb.new_local(capture_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: fallback,
+                                value: Rvalue::Const(MirConst::Int(0)),
+                            });
+                            capture_args.push(fallback);
+                        }
+                    }
+                    capture_args.extend_from_slice(&arg_locals);
+                    arg_locals = capture_args;
+                }
                 CallKind::Static(*fid)
             } else {
                 // Try implicit `this.method()` — if `this` is in scope

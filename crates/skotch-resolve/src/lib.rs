@@ -424,9 +424,20 @@ impl<'a> Resolver<'a> {
                 // to it resolve correctly. Use a synthetic Function DefId.
                 // The actual index will be assigned during MIR lowering.
                 self.out.top_level.insert(f.name, DefId::Function(999));
-                // Resolve the function body.
-                let inner_rf = self.resolve_function(fn_idx, f);
-                let _ = inner_rf; // body refs handled separately
+                // Resolve the function body with the OUTER scope visible
+                // so the inner function can capture outer variables.
+                let saved = scope.len();
+                // Add the inner function's own parameters.
+                let param_offset = if f.receiver_ty.is_some() { 1u32 } else { 0 };
+                if f.receiver_ty.is_some() {
+                    let this_sym = self.interner.intern("this");
+                    scope.push((this_sym, DefId::Param(fn_idx, 0)));
+                }
+                for (pi, p) in f.params.iter().enumerate() {
+                    scope.push((p.name, DefId::Param(fn_idx, pi as u32 + param_offset)));
+                }
+                self.resolve_block(fn_idx, &f.body, scope, rf);
+                scope.truncate(saved);
             }
         }
     }

@@ -1,0 +1,3 @@
+name   = "548-nested-fun-capture"
+status = "active"
+features = ["local-function", "capture", "closure", "free-variable"]
