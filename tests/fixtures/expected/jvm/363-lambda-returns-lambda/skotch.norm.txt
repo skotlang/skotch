@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=15
+  code        max_stack=2 max_locals=13
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
@@ -31,27 +31,19 @@ method        main ([Ljava/lang/String;)V 0x0009
     0051 aload 8
     0053 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0058 astore 9
-    0060 aload 9
-    0062 checkcast Class(java/lang/Integer)
-    0065 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0068 istore 10
-    0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0073 iload 10
-    0075 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0078 bipush 10
-    0080 istore 11
-    0082 iload 11
-    0084 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0087 astore 12
-    0089 aload 6
-    0091 aload 12
-    0093 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0098 astore 13
-    0100 aload 13
-    0102 checkcast Class(java/lang/Integer)
-    0105 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0108 istore 14
-    0110 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0113 iload 14
-    0115 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0118 return
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 aload 9
+    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0068 bipush 10
+    0070 istore 10
+    0072 iload 10
+    0074 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0077 astore 11
+    0079 aload 6
+    0081 aload 11
+    0083 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0088 astore 12
+    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0093 aload 12
+    0095 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0098 return

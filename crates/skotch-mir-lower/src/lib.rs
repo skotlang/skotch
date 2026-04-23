@@ -8647,27 +8647,36 @@ fn lower_expr(
                                 args: boxed_args,
                             },
                         });
-                        // Determine the expected return type from the function
-                        // signature. Look up the calling function's return type
-                        // as a heuristic — the return of f(x) in the expression
-                        // position determines the expected type.
-                        // For now, unbox to Int (the most common HOF return type).
-                        // If this is used in a println(f(x)) context, the Int
-                        // will be correct. For other types, the auto-unbox in
-                        // BinOp / println will handle it.
-                        let unboxed = fb.new_local(Ty::Int);
-                        fb.push_stmt(MStmt::Assign {
-                            dest: unboxed,
-                            value: Rvalue::Call {
-                                kind: CallKind::VirtualJava {
-                                    class_name: "java/lang/Integer".to_string(),
-                                    method_name: "intValue".to_string(),
-                                    descriptor: "()I".to_string(),
+                        // Use the function's declared return type to determine
+                        // whether to unbox the Object result or pass it through.
+                        let fn_ret = if let Ty::Function { ref ret, .. } = local_ty {
+                            (**ret).clone()
+                        } else {
+                            // For Ty::Any or FunctionN interface types, we
+                            // can't determine the return type statically.
+                            // Return the raw Object; the JVM backend or
+                            // smart-cast handles narrowing downstream.
+                            Ty::Any
+                        };
+                        if matches!(fn_ret, Ty::Int) {
+                            let unboxed = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: unboxed,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "java/lang/Integer".to_string(),
+                                        method_name: "intValue".to_string(),
+                                        descriptor: "()I".to_string(),
+                                    },
+                                    args: vec![raw_result],
                                 },
-                                args: vec![raw_result],
-                            },
-                        });
-                        return Some(unboxed);
+                            });
+                            return Some(unboxed);
+                        }
+                        // For reference types (String, Any, etc.),
+                        // return the Object as-is. The JVM backend
+                        // handles checkcast via Rvalue::Local.
+                        return Some(raw_result);
                     }
 
                     // ── Direct lambda / invoke-operator dispatch ──────

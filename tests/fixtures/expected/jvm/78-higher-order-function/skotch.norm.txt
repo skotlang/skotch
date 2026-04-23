@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0009
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=5
     0000 iload 1
     0002 istore 2
     0004 iload 2
@@ -16,9 +16,7 @@ method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0009
     0022 aload 4
     0024 checkcast Class(java/lang/Integer)
     0027 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0030 istore 5
-    0032 iload 5
-    0034 op_0xAC
+    0030 op_0xAC
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=7
     0000 new Class(InputKt$Lambda$0)
