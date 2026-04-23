@@ -1,0 +1,3 @@
+name   = "544-java-file-class"
+status = "active"
+features = ["import", "java.io.File", "getName", "exists", "isDirectory"]

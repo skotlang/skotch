@@ -5884,12 +5884,17 @@ fn lower_expr(
                 }
 
                 // Resolve methods dynamically from JDK class files.
+                let class_name_buf;
                 let jvm_class_for_ty = match &recv_ty {
                     Ty::String => Some("java/lang/String"),
                     Ty::Int => Some("java/lang/Integer"),
                     Ty::Long => Some("java/lang/Long"),
                     Ty::Double => Some("java/lang/Double"),
                     Ty::Bool => Some("java/lang/Boolean"),
+                    Ty::Class(cn) if cn.contains('/') => {
+                        class_name_buf = cn.clone();
+                        Some(class_name_buf.as_str())
+                    }
                     _ => None,
                 };
 

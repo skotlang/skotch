@@ -1,0 +1,33 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 new Class(java/io/File)
+    0003 dup
+    0004 ldc "/tmp"
+    0006 invokespecial Method(java/io/File.<init>:(Ljava/lang/String;)V)
+    0009 astore_0
+    0010 aload_0
+    0011 invokevirtual Method(java/io/File.getName:()Ljava/lang/String;)
+    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0017 op_0x5F
+    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0021 aload_0
+    0022 invokevirtual Method(java/io/File.exists:()Z)
+    0025 istore_1
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload_1
+    0030 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0033 aload_0
+    0034 invokevirtual Method(java/io/File.isDirectory:()Z)
+    0037 istore_1
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 iload_1
+    0042 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0045 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

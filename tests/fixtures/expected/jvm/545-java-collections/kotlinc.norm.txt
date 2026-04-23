@@ -1,0 +1,61 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=3
+    0000 new Class(java/util/LinkedList)
+    0003 dup
+    0004 invokespecial Method(java/util/LinkedList.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 ldc "hello"
+    0011 invokevirtual Method(java/util/LinkedList.add:(Ljava/lang/Object;)Z)
+    0014 pop
+    0015 aload_0
+    0016 ldc "world"
+    0018 invokevirtual Method(java/util/LinkedList.add:(Ljava/lang/Object;)Z)
+    0021 pop
+    0022 aload_0
+    0023 invokevirtual Method(java/util/LinkedList.size:()I)
+    0026 istore_1
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_1
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 aload_0
+    0035 invokevirtual Method(java/util/LinkedList.getFirst:()Ljava/lang/Object;)
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 op_0x5F
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 new Class(java/util/TreeMap)
+    0048 dup
+    0049 invokespecial Method(java/util/TreeMap.<init>:()V)
+    0052 astore_1
+    0053 aload_1
+    0054 ldc "b"
+    0056 iconst_2
+    0057 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0060 invokevirtual Method(java/util/TreeMap.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0063 pop
+    0064 aload_1
+    0065 ldc "a"
+    0067 iconst_1
+    0068 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0071 invokevirtual Method(java/util/TreeMap.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0074 pop
+    0075 aload_1
+    0076 invokevirtual Method(java/util/TreeMap.size:()I)
+    0079 istore_2
+    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0083 iload_2
+    0084 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0087 aload_1
+    0088 invokevirtual Method(java/util/TreeMap.firstKey:()Ljava/lang/Object;)
+    0091 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0094 op_0x5F
+    0095 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0098 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

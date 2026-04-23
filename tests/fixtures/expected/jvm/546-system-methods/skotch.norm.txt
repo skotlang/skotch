@@ -1,0 +1,80 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=5 max_locals=21
+    0000 ldc "HOME"
+    0002 astore 1
+    0004 aload 1
+    0006 invokestatic Method(java/lang/System.getenv:(Ljava/lang/String;)Ljava/lang/String;)
+    0009 astore 2
+    0011 aload 2
+    0013 astore 3
+    0015 aload 3
+    0017 astore 4
+    0019 aconst_null
+    0020 astore 5
+    0022 aload 4
+    0024 aload 5
+    0026 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0029 iconst_1
+    0030 op_0x5F
+    0031 isub
+    0032 istore 6
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 iload 6
+    0039 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0042 invokestatic Method(java/lang/System.currentTimeMillis:()J)
+    0045 op_0x37
+    0046 iconst_4
+    0047 op_0x16
+    0048 iconst_4
+    0049 op_0x37
+    0050 op_0x09
+    0051 op_0x16
+    0052 op_0x09
+    0053 op_0x37
+    0054 op_0x0B
+    0055 iconst_0
+    0056 istore 13
+    0058 iload 13
+    0060 op_0x85
+    0061 op_0x37
+    0062 op_0x0E
+    0063 op_0x16
+    0064 op_0x0B
+    0065 op_0x16
+    0066 op_0x0E
+    0067 op_0x94
+    0068 op_0x9D
+    0069 nop
+    0070 iconst_4
+    0071 iconst_0
+    0072 goto 76
+    0075 iconst_1
+    0076 istore 16
+    0078 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0081 iload 16
+    0083 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0086 invokestatic Method(java/lang/System.lineSeparator:()Ljava/lang/String;)
+    0089 astore 17
+    0091 aload 17
+    0093 invokevirtual Method(java/lang/String.length:()I)
+    0096 istore 18
+    0098 iconst_0
+    0099 istore 19
+    0101 iload 18
+    0103 iload 19
+    0105 op_0xA3
+    0106 nop
+    0107 iconst_4
+    0108 iconst_0
+    0109 goto 113
+    0112 iconst_1
+    0113 istore 20
+    0115 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0118 iload 20
+    0120 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0123 return
+    sub_attr  StackMapTable (152 bytes)

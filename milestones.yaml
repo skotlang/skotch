@@ -1258,11 +1258,15 @@ milestones:
           @JvmField on properties → public field (no getter/setter).
           @JvmOverloads → overloads for each default parameter combo.
 
-      - name: "Java type resolution from classfiles"
+      - name: "Java type resolution from classfiles (landed)"
+        completed: true
         description: >
-          Parse Signature attribute from .class files for generic Java
-          types. Map Java types to Kotlin types (String!, List<String>!,
-          platform types). Handle Java arrays, wildcards, raw types.
+          JDK classes resolved via skotch-classinfo .class file parsing.
+          Instance methods on imported Java classes (File.getName(),
+          LinkedList.getFirst(), TreeMap.firstKey()) dispatch correctly
+          via VirtualJava with proper descriptors. Constructor args,
+          property-as-method (sb.length), and getXxx() patterns all work.
+          See fixtures 544-java-file-class, 545-java-collections.
 
       - name: "Platform types (T!)"
         description: >

@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=10
+    0000 ldc "/tmp"
+    0002 astore 1
+    0004 new Class(java/io/File)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(java/io/File.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(java/io/File)
+    0020 astore 3
+    0022 aload 3
+    0024 checkcast Class(java/io/File)
+    0027 astore 4
+    0029 aload 4
+    0031 invokevirtual Method(java/io/File.getName:()Ljava/lang/String;)
+    0034 astore 5
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 aload 5
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0044 aload 3
+    0046 checkcast Class(java/io/File)
+    0049 astore 6
+    0051 aload 6
+    0053 invokevirtual Method(java/io/File.exists:()Z)
+    0056 istore 7
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 iload 7
+    0063 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0066 aload 3
+    0068 checkcast Class(java/io/File)
+    0071 astore 8
+    0073 aload 8
+    0075 invokevirtual Method(java/io/File.isDirectory:()Z)
+    0078 istore 9
+    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0083 iload 9
+    0085 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0088 return
