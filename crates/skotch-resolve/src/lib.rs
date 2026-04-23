@@ -438,6 +438,17 @@ impl<'a> Resolver<'a> {
         scope: &mut Vec<(Symbol, DefId)>,
         rf: &mut ResolvedFunction,
     ) {
+        self.resolve_expr_ctx(fn_idx, expr, scope, rf, false);
+    }
+
+    fn resolve_expr_ctx(
+        &mut self,
+        fn_idx: u32,
+        expr: &Expr,
+        scope: &mut Vec<(Symbol, DefId)>,
+        rf: &mut ResolvedFunction,
+        is_callee: bool,
+    ) {
         match expr {
             Expr::IntLit(_, _)
             | Expr::CharLit(_, _)
@@ -475,16 +486,24 @@ impl<'a> Resolver<'a> {
                         if is_possible_external(name_str) {
                             return DefId::PossibleExternal(*name);
                         }
-                        // Defer to MIR lowering — the identifier might
-                        // be a method on an implicit receiver (e.g.,
-                        // `append` inside a lambda-with-receiver body).
-                        DefId::PossibleExternal(*name)
+                        // When used as a call callee, defer to MIR
+                        // lowering — the identifier might be a method
+                        // on an implicit receiver (e.g., `append` in a
+                        // lambda-with-receiver body).
+                        if is_callee {
+                            return DefId::PossibleExternal(*name);
+                        }
+                        self.diags.push(Diagnostic::error(
+                            *span,
+                            format!("unresolved identifier `{name_str}`"),
+                        ));
+                        DefId::Error
                     })
                 });
                 rf.body_refs.push(ResolvedRef { span: *span, def });
             }
             Expr::Call { callee, args, .. } => {
-                self.resolve_expr(fn_idx, callee, scope, rf);
+                self.resolve_expr_ctx(fn_idx, callee, scope, rf, true);
                 for a in args {
                     self.resolve_expr(fn_idx, &a.expr, scope, rf);
                 }
