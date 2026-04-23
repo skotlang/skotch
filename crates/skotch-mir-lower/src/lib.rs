@@ -9716,6 +9716,35 @@ fn lower_expr(
                 }
             }
 
+            // Well-known Kotlin/Java stdlib constants:
+            // Long.MAX_VALUE, Long.MIN_VALUE, Int.MAX_VALUE, Int.MIN_VALUE
+            if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                let recv_str = interner.resolve(*recv_sym);
+                let field_str = interner.resolve(*name);
+                let constant: Option<(Ty, MirConst)> = match (recv_str, field_str) {
+                    ("Long", "MAX_VALUE") => Some((Ty::Long, MirConst::Long(i64::MAX))),
+                    ("Long", "MIN_VALUE") => Some((Ty::Long, MirConst::Long(i64::MIN))),
+                    ("Int", "MAX_VALUE") => Some((Ty::Int, MirConst::Int(i32::MAX))),
+                    ("Int", "MIN_VALUE") => Some((Ty::Int, MirConst::Int(i32::MIN))),
+                    ("Double", "MAX_VALUE") => Some((Ty::Double, MirConst::Double(f64::MAX))),
+                    ("Double", "MIN_VALUE") => {
+                        Some((Ty::Double, MirConst::Double(f64::MIN_POSITIVE)))
+                    }
+                    ("Float", "MAX_VALUE") => Some((Ty::Float, MirConst::Float(f32::MAX))),
+                    ("Byte", "MAX_VALUE") => Some((Ty::Int, MirConst::Int(i8::MAX as i32))),
+                    ("Short", "MAX_VALUE") => Some((Ty::Int, MirConst::Int(i16::MAX as i32))),
+                    _ => None,
+                };
+                if let Some((ty, val)) = constant {
+                    let dest = fb.new_local(ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(val),
+                    });
+                    return Some(dest);
+                }
+            }
+
             // Session 27: Dispatchers.IO / .Default / .Main / .Unconfined
             //
             // `Dispatchers` is a Kotlin object. Each dispatcher property
@@ -9922,7 +9951,8 @@ fn lower_expr(
                         return Some(dest);
                     }
                     // Pair .first / .second → invoke getFirst() / getSecond()
-                    if declaring_class.contains("Pair") || declaring_class == "kotlin/Pair" {
+                    // Only for kotlin/Pair, NOT user-defined classes named *Pair*.
+                    if declaring_class == "kotlin/Pair" {
                         let (getter, desc) = match field_name.as_str() {
                             "first" => ("getFirst", "()Ljava/lang/Object;"),
                             "second" => ("getSecond", "()Ljava/lang/Object;"),

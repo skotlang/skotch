@@ -19,20 +19,20 @@ method        main ([Ljava/lang/String;)V 0x0009
     0026 checkcast Class(Pair)
     0029 astore 5
     0031 aload 5
-    0033 invokevirtual Method(kotlin/Pair.getFirst:()Ljava/lang/Object;)
-    0036 astore 6
+    0033 getfield Field(Pair.first:I)
+    0036 istore 6
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 aload 6
-    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 iload 6
+    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0046 aload 4
     0048 checkcast Class(Pair)
     0051 astore 7
     0053 aload 7
-    0055 invokevirtual Method(kotlin/Pair.getSecond:()Ljava/lang/Object;)
-    0058 astore 8
+    0055 getfield Field(Pair.second:I)
+    0058 istore 8
     0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0063 aload 8
-    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0063 iload 8
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0068 return
 method        makePair (II)LPair; 0x0009
   code        max_stack=4 max_locals=5

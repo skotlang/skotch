@@ -1,0 +1,3 @@
+name   = "522-stdlib-constants"
+status = "active"
+features = ["Int.MAX_VALUE", "Long.MAX_VALUE", "stdlib-constants"]

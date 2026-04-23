@@ -1,4 +1,3 @@
 name     = "287-long-println"
-status   = "stub"
+status = "supported"
 features = ["long", "println", "Long.MAX_VALUE"]
-reason   = "Requires Long.MAX_VALUE constant from stdlib."
