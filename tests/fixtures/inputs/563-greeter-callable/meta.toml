@@ -1,0 +1,3 @@
+name   = "563-greeter-callable"
+status = "active"
+features = ["class", "lambda-field", "invoke"]

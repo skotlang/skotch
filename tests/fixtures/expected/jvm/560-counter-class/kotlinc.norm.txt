@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 new Class(Counter)
+    0003 dup
+    0004 iconst_0
+    0005 invokespecial Method(Counter.<init>:(I)V)
+    0008 astore_0
+    0009 aload_0
+    0010 invokevirtual Method(Counter.increment:()V)
+    0013 aload_0
+    0014 invokevirtual Method(Counter.increment:()V)
+    0017 aload_0
+    0018 invokevirtual Method(Counter.increment:()V)
+    0021 aload_0
+    0022 invokevirtual Method(Counter.value:()I)
+    0025 istore_1
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload_1
+    0030 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0033 aload_0
+    0034 invokevirtual Method(Counter.decrement:()V)
+    0037 aload_0
+    0038 invokevirtual Method(Counter.value:()I)
+    0041 istore_1
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 iload_1
+    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0049 aload_0
+    0050 invokevirtual Method(Counter.reset:()V)
+    0053 aload_0
+    0054 invokevirtual Method(Counter.value:()I)
+    0057 istore_1
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 iload_1
+    0062 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0065 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

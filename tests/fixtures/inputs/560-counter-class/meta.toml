@@ -1,0 +1,3 @@
+name   = "560-counter-class"
+status = "active"
+features = ["class", "var", "increment", "decrement", "reset"]

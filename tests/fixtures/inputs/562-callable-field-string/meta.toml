@@ -1,0 +1,3 @@
+name   = "562-callable-field-string"
+status = "active"
+features = ["callable-field", "function-type", "String-return"]

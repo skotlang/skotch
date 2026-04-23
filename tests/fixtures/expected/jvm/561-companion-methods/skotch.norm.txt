@@ -1,0 +1,53 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        cube (I)I 0x0009
+  code        max_stack=2 max_locals=6
+    0000 iload 0
+    0002 istore 1
+    0004 iload 0
+    0006 istore 2
+    0008 iload 1
+    0010 iload 2
+    0012 imul
+    0013 istore 3
+    0015 iload 0
+    0017 istore 4
+    0019 iload 3
+    0021 iload 4
+    0023 imul
+    0024 istore 5
+    0026 iload 5
+    0028 op_0xAC
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 invokestatic Method(InputKt.square:(I)I)
+    0008 istore 2
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload 2
+    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0018 iconst_3
+    0019 istore 3
+    0021 iload 3
+    0023 invokestatic Method(InputKt.cube:(I)I)
+    0026 istore 4
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 iload 4
+    0033 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0036 return
+method        square (I)I 0x0009
+  code        max_stack=2 max_locals=4
+    0000 iload 0
+    0002 istore 1
+    0004 iload 0
+    0006 istore 2
+    0008 iload 1
+    0010 iload 2
+    0012 imul
+    0013 istore 3
+    0015 iload 3
+    0017 op_0xAC

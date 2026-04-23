@@ -1,0 +1,24 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=5
+    0000 new Class(InputKt$Lambda$1)
+    0003 dup
+    0004 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0007 astore 1
+    0009 new Class(Greeter)
+    0012 dup
+    0013 aload 1
+    0015 invokespecial Method(Greeter.<init>:(Ljava/lang/Object;)V)
+    0018 astore 2
+    0020 aload 2
+    0022 checkcast Class(Greeter)
+    0025 astore 3
+    0027 aload 3
+    0029 checkcast Class(Greeter)
+    0032 astore 4
+    0034 aload 4
+    0036 invokevirtual Method(Greeter.run:()V)
+    0039 return
