@@ -12798,9 +12798,10 @@ fn make_lookup_result(
 /// Pick the best overload from multiple candidates using argument types.
 ///
 /// Scoring: each parameter gets a score based on type compatibility:
-/// - Exact match (Int→I, String→Ljava/lang/String;, Bool→Z): 3
-/// - Compatible (any→Ljava/lang/Object;): 1
-/// - Mismatch (String→I): 0
+///  - Exact match (Int→I, String→Ljava/lang/String;, Bool→Z): 3
+///  - Compatible (any→Ljava/lang/Object;): 1
+///  - Mismatch (String→I): 0
+///
 /// Best total score wins. Ties prefer the overload with Object params
 /// (most general).
 fn pick_best_overload<'a>(
@@ -12840,7 +12841,7 @@ fn overload_score(descriptor: &str, arg_types: &[Ty]) -> i32 {
             (Some(Ty::Long), "Ljava/lang/Object;") => 1,
             (Some(Ty::Bool), "Ljava/lang/Object;") => 1,
             (Some(Ty::Double), "Ljava/lang/Object;") => 1,
-            (_, p) if p == "Ljava/lang/Object;" => 1, // Object accepts anything
+            (_, "Ljava/lang/Object;") => 1, // Object accepts anything
             _ => 0,
         };
     }

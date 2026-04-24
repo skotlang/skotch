@@ -106,6 +106,10 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
             cp.push_str(&jar.to_string_lossy());
         }
         std::env::set_var("CLASSPATH", &cp);
+        // Pre-load dependency classes into the shared registry so the
+        // MIR lowerer can resolve external method signatures without
+        // relying on CLASSPATH (which is racy under parallel tests).
+        skotch_mir_lower::preload_registry_jars(&resolved_jars);
         eprintln!("  {} dependencies resolved", resolved_jars.len());
     }
 
