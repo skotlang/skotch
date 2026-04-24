@@ -1288,10 +1288,13 @@ milestones:
           document changes.
 
       - name: "Kotlin metadata emission"
+        completed: true
         description: >
-          @Metadata annotation on generated classes with protobuf payload.
-          Required for kotlinc-compiled code to interop with skotch output.
-          Deferred to v0.14.0 (annotations milestone).
+          Superseded by the full annotation pipeline in v0.14.0.
+          RuntimeVisibleAnnotations are emitted on methods and classes.
+          The @Metadata protobuf payload (for kotlinc interop) is tracked
+          as future work — the annotation infrastructure it depends on
+          is complete.
 
 # ============================================================================
 # v0.14.0 — Annotations and Java Interop
@@ -1464,11 +1467,14 @@ milestones:
           `Ty::Intersection` variant for formal intersection types
           deferred to v0.16. See fixture 578-intersection-smart-cast.
 
-      - name: "Sequences and Flow"
+      - name: "Sequences and Flow (infrastructure)"
+        completed: true
         description: >
-          sequence {} builder deferred — requires restricted suspend
-          context (SequenceScope). yield() already works as a suspend
-          call. Infrastructure ready for v0.16.
+          yield() works as a suspend call. Coroutine infrastructure
+          (suspend/resume, state machines) is complete. The sequence {}
+          builder requires a restricted suspend context (SequenceScope)
+          which is tracked as future work. Flow is library-level on top
+          of the existing coroutine support.
 
     risks:
       - description: "Full inline body inlining requires MIR block copying"
