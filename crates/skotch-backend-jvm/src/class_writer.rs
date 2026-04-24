@@ -1072,8 +1072,60 @@ fn emit_user_method(
         is_handler_um[eh.handler_block as usize] = true;
     }
 
+    // Compute reachable blocks — skip emitting dead blocks that follow
+    // throw/return-terminated branches to avoid VerifyError from missing
+    // StackMapTable entries on unreachable code.
+    let mut reachable = vec![false; func.blocks.len()];
+    if !func.blocks.is_empty() {
+        reachable[0] = true;
+    }
+    for _pass in 0..func.blocks.len() {
+        let mut changed = false;
+        for (bi, blk) in func.blocks.iter().enumerate() {
+            if !reachable[bi] {
+                continue;
+            }
+            match &blk.terminator {
+                Terminator::Goto(t) => {
+                    if !reachable[*t as usize] {
+                        reachable[*t as usize] = true;
+                        changed = true;
+                    }
+                }
+                Terminator::Branch { then_block, else_block, .. } => {
+                    if !reachable[*then_block as usize] {
+                        reachable[*then_block as usize] = true;
+                        changed = true;
+                    }
+                    if !reachable[*else_block as usize] {
+                        reachable[*else_block as usize] = true;
+                        changed = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for eh in &func.exception_handlers {
+            if reachable[eh.try_start_block as usize] {
+                if !reachable[eh.handler_block as usize] {
+                    reachable[eh.handler_block as usize] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
+
+        // Skip unreachable blocks — they would produce bytecode after
+        // athrow/return with no StackMapTable entry, causing VerifyError.
+        if !reachable[bi] {
+            continue;
+        }
 
         let skip_first_um = if is_handler_um[bi] && !block.stmts.is_empty() {
             if let Stmt::Assign {
@@ -1627,8 +1679,57 @@ fn emit_method(
         is_handler[eh.handler_block as usize] = true;
     }
 
+    // Compute reachable blocks (same as emit_class_method).
+    let mut reachable = vec![false; func.blocks.len()];
+    if !func.blocks.is_empty() {
+        reachable[0] = true;
+    }
+    for _pass in 0..func.blocks.len() {
+        let mut changed = false;
+        for (bi, blk) in func.blocks.iter().enumerate() {
+            if !reachable[bi] {
+                continue;
+            }
+            match &blk.terminator {
+                Terminator::Goto(t) => {
+                    if !reachable[*t as usize] {
+                        reachable[*t as usize] = true;
+                        changed = true;
+                    }
+                }
+                Terminator::Branch { then_block, else_block, .. } => {
+                    if !reachable[*then_block as usize] {
+                        reachable[*then_block as usize] = true;
+                        changed = true;
+                    }
+                    if !reachable[*else_block as usize] {
+                        reachable[*else_block as usize] = true;
+                        changed = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for eh in &func.exception_handlers {
+            if reachable[eh.try_start_block as usize] {
+                if !reachable[eh.handler_block as usize] {
+                    reachable[eh.handler_block as usize] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
+
+        // Skip unreachable blocks.
+        if !reachable[bi] {
+            continue;
+        }
 
         // Exception handler blocks: the JVM pushes the exception object
         // onto the operand stack at handler entry. The first MIR stmt is

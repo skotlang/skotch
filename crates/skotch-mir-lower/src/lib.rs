@@ -332,6 +332,13 @@ fn stdlib_extension(
             "(Ljava/util/Map;)Ljava/util/List;",
             Ty::Class("java/util/List".into()),
         )),
+        // ── joinToString — uses $default for default params ──
+        (_, "joinToString") => Some((
+            "kotlin/collections/CollectionsKt",
+            "joinToString$default",
+            "(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;",
+            Ty::Class("java/lang/String".into()),
+        )),
         // ── String stdlib extension functions (kotlin.text) ──
         ("java/lang/String", "lines") => Some((
             "kotlin/text/StringsKt",
@@ -4482,18 +4489,31 @@ fn lower_expr(
             for _ in 0..smart_cast_count {
                 scope.pop();
             }
-            // Patch the result local's type to match the then-branch.
+            // Check if the block already terminated (throw expression,
+            // return expression, etc.) — don't overwrite with Goto.
+            let already_terminated = matches!(
+                fb.mf.blocks[fb.cur_block as usize].terminator,
+                Terminator::Throw(_) | Terminator::ReturnValue(_)
+            );
+            // Only skip result assignment for Throw — the val from
+            // Expr::Throw is an uninitialized Nothing local (aload of
+            // Top triggers VerifyError). ReturnValue blocks still need
+            // their preceding assignments for coroutine state machines.
+            let throw_terminated = matches!(
+                fb.mf.blocks[fb.cur_block as usize].terminator,
+                Terminator::Throw(_)
+            );
             if let Some(val) = then_val {
-                let inferred_ty = fb.mf.locals[val.0 as usize].clone();
-                fb.mf.locals[result.0 as usize] = inferred_ty;
-                fb.push_stmt(MStmt::Assign {
-                    dest: result,
-                    value: Rvalue::Local(val),
-                });
+                if !throw_terminated {
+                    let inferred_ty = fb.mf.locals[val.0 as usize].clone();
+                    fb.mf.locals[result.0 as usize] = inferred_ty;
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Local(val),
+                    });
+                }
             }
-            // Only emit Goto(merge) if the then-block didn't contain
-            // an explicit return statement.
-            if then_terminates {
+            if then_terminates || already_terminated {
                 fb.cur_block = else_blk;
             } else {
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), else_blk);
@@ -4516,10 +4536,16 @@ fn lower_expr(
                                 diags,
                                 loop_ctx,
                             ) {
-                                fb.push_stmt(MStmt::Assign {
-                                    dest: result,
-                                    value: Rvalue::Local(val),
-                                });
+                                // Guard: don't assign result from a
+                                // throw expression (uninitialized Nothing local).
+                                let blk_term = &fb.mf.blocks[fb.cur_block as usize].terminator;
+                                let dead = matches!(blk_term, Terminator::Throw(_));
+                                if !dead {
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: result,
+                                        value: Rvalue::Local(val),
+                                    });
+                                }
                             }
                         }
                         skotch_syntax::Stmt::Return { .. }
@@ -4554,7 +4580,11 @@ fn lower_expr(
                     }
                 }
             }
-            if else_terminates {
+            let else_already_terminated = matches!(
+                fb.mf.blocks[fb.cur_block as usize].terminator,
+                Terminator::Throw(_) | Terminator::ReturnValue(_)
+            );
+            if else_terminates || else_already_terminated {
                 fb.cur_block = merge_blk;
             } else {
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
@@ -5665,6 +5695,73 @@ fn lower_expr(
                             let init = all_args[1];
                             let init_ty = fb.mf.locals[init.0 as usize].clone();
                             all_args[1] = mir_autobox(fb, init, &init_ty);
+                        }
+                        // joinToString$default needs all 9 params even when
+                        // the user only supplies the separator.  Cast the
+                        // String separator to CharSequence, pad nulls for
+                        // prefix/postfix/truncated/transform, 0 for limit,
+                        // set the bitmask, and add the trailing marker null.
+                        if facade_method == "joinToString$default" {
+                            // all_args[0] = receiver (Iterable)
+                            // all_args[1] = separator (user-supplied String)
+                            // Cast separator to CharSequence descriptor match
+                            // (no-op on JVM, types are compatible)
+
+                            // Build full arg list:
+                            //   Iterable, CharSequence, CharSequence, CharSequence, int, CharSequence, Function1, int, Object
+                            let receiver = all_args[0];
+                            let separator = if all_args.len() > 1 {
+                                all_args[1]
+                            } else {
+                                // default separator ", "
+                                let sid = module.intern_string(", ");
+                                let s = fb.new_local(Ty::String);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: s,
+                                    value: Rvalue::Const(MirConst::String(sid)),
+                                });
+                                s
+                            };
+                            let null_cs = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: null_cs,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            let null_cs2 = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: null_cs2,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            let zero = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: zero,
+                                value: Rvalue::Const(MirConst::Int(0)),
+                            });
+                            let null_cs3 = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: null_cs3,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            let null_fn = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: null_fn,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            // Bitmask: 62 = 0b111110 — all params except separator use defaults
+                            let bitmask = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: bitmask,
+                                value: Rvalue::Const(MirConst::Int(62)),
+                            });
+                            let null_marker = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: null_marker,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            all_args = vec![
+                                receiver, separator, null_cs, null_cs2, zero,
+                                null_cs3, null_fn, bitmask, null_marker,
+                            ];
                         }
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
