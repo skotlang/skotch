@@ -181,6 +181,8 @@ pub struct FunDecl {
     pub is_abstract: bool,
     /// True when declared with the `suspend` modifier.
     pub is_suspend: bool,
+    /// True when declared with the `inline` modifier.
+    pub is_inline: bool,
     pub visibility: Visibility,
     /// Annotations on this function.
     pub annotations: Vec<Annotation>,

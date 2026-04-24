@@ -345,16 +345,22 @@ impl<'a> Parser<'a> {
             let mut is_abstract = false;
             let mut is_sealed = false;
             let mut is_suspend = false;
+            let mut is_inline = false;
             let mut is_annotation_class = false;
+            let mut is_value_class = false;
             let mut visibility = Visibility::Public;
-            // Check for `annotation class` soft keyword.
-            if self.peek_kind() == TokenKind::Ident
-                && self.lexeme_str(self.pos) == "annotation"
-                && self.peek_kind_at(1) == TokenKind::KwClass
-            {
-                is_annotation_class = true;
-                self.bump(); // consume "annotation"
-                self.skip_trivia();
+            // Check for `annotation class` and `value class` soft keywords.
+            if self.peek_kind() == TokenKind::Ident {
+                let kw = self.lexeme_str(self.pos).to_string();
+                if kw == "annotation" && self.peek_kind_at(1) == TokenKind::KwClass {
+                    is_annotation_class = true;
+                    self.bump();
+                    self.skip_trivia();
+                } else if kw == "value" && self.peek_kind_at(1) == TokenKind::KwClass {
+                    is_value_class = true;
+                    self.bump();
+                    self.skip_trivia();
+                }
             }
             while matches!(
                 self.peek_kind(),
@@ -381,6 +387,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwAbstract => is_abstract = true,
                     TokenKind::KwSealed => is_sealed = true,
                     TokenKind::KwSuspend => is_suspend = true,
+                    TokenKind::KwInline => is_inline = true,
                     TokenKind::KwPrivate => visibility = Visibility::Private,
                     TokenKind::KwProtected => visibility = Visibility::Protected,
                     TokenKind::KwInternal => visibility = Visibility::Internal,
@@ -396,6 +403,7 @@ impl<'a> Parser<'a> {
                     f.is_override = false;
                     f.is_abstract = is_abstract;
                     f.is_suspend = is_suspend;
+                    f.is_inline = is_inline;
                     f.visibility = visibility;
                     f.annotations = annotations.clone();
                     decls.push(Decl::Fun(f));
@@ -432,7 +440,7 @@ impl<'a> Parser<'a> {
                         decls.push(Decl::Class(cd));
                     } else {
                         let mut cd = self.parse_class_decl();
-                        cd.is_data = is_data;
+                        cd.is_data = is_data || is_value_class;
                         cd.is_open = is_open || is_sealed;
                         cd.is_abstract = is_abstract || is_sealed;
                         cd.visibility = visibility;
@@ -1616,6 +1624,7 @@ impl<'a> Parser<'a> {
             is_override: false,
             is_abstract: false,
             is_suspend: false,
+            is_inline: false,
             visibility: Visibility::Public,
             annotations: Vec::new(),
             span,
@@ -1948,6 +1957,7 @@ impl<'a> Parser<'a> {
             body,
             span,
             is_suspend: false,
+            is_inline: false,
             is_open: false,
             is_abstract: false,
             is_override: false,

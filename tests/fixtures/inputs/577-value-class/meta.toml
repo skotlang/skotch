@@ -1,0 +1,4 @@
+name = "577-value-class"
+status = "supported"
+features = ["value-class", "jvm-inline", "data-class-behavior"]
+expected_output = "Password(value=secret123)\nsecret123\n"
