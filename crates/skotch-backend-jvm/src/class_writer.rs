@@ -1108,9 +1108,7 @@ fn emit_user_method(
             }
         }
         for eh in &func.exception_handlers {
-            if reachable[eh.try_start_block as usize]
-                && !reachable[eh.handler_block as usize]
-            {
+            if reachable[eh.try_start_block as usize] && !reachable[eh.handler_block as usize] {
                 reachable[eh.handler_block as usize] = true;
                 changed = true;
             }
@@ -1715,9 +1713,7 @@ fn emit_method(
             }
         }
         for eh in &func.exception_handlers {
-            if reachable[eh.try_start_block as usize]
-                && !reachable[eh.handler_block as usize]
-            {
+            if reachable[eh.try_start_block as usize] && !reachable[eh.handler_block as usize] {
                 reachable[eh.handler_block as usize] = true;
                 changed = true;
             }
