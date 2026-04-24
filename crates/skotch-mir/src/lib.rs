@@ -2,12 +2,11 @@
 //!
 //! MIR is the **narrow waist** between the front-end (lex/parse/resolve/
 //! typeck) and the backends (`skotch-backend-jvm`, `-dex`, `-llvm`,
-//! `-wasm`). The shape is deliberately small for PR #1: a flat list of
-//! basic blocks per function, three-address-code-style assignments
-//! into virtual locals, a tiny `Rvalue` enum, and a `Terminator` per
-//! block.
+//! `-wasm`). The core shape is: a flat list of basic blocks per
+//! function, three-address-code-style assignments into virtual locals,
+//! a tiny `Rvalue` enum, and a `Terminator` per block.
 //!
-//! ## What we model in PR #1
+//! ## What we model
 //!
 //! - Constant loads (string, int, bool, unit)
 //! - Local reads
@@ -16,7 +15,7 @@
 //! - Integer arithmetic (`Add`/`Sub`/`Mul`/`Div`/`Mod`)
 //! - `Return` and `ReturnValue` terminators
 //!
-//! ## What we deliberately punt to PR #1.5+
+//! ## Not yet supported
 //!
 //! - Branches (`if`/`when`) — needs `Terminator::Branch` plus `Switch`,
 //!   plus JVM `StackMapTable` support in the backend.
@@ -369,8 +368,8 @@ pub struct MirFunction {
     /// inlined at call sites rather than emitted as a separate method.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_inline: bool,
-    /// Session 5: the Kotlin-source-level declared return type of a
-    /// suspend function, captured before Session 2 rewrites
+    /// The Kotlin-source-level declared return type of a
+    /// suspend function, captured before the CPS transform rewrites
     /// `return_ty` to `Ty::Any`. Call sites need this to emit the
     /// right `checkcast` on resume (e.g. `checkcast String` after a
     /// `suspend fun greet(String): String` invoke). `None` for non-
@@ -379,13 +378,12 @@ pub struct MirFunction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suspend_original_return_ty: Option<Ty>,
     /// If present, this function's body is generated as a coroutine
-    /// state machine (Session 3 of the CPS transform). The JVM
-    /// backend bypasses the normal block-walking codegen and emits
-    /// the canonical dispatcher + tableswitch pattern kotlinc
-    /// produces for suspend functions. Only set when the function
+    /// state machine. The JVM backend bypasses the normal block-walking
+    /// codegen and emits the canonical dispatcher + tableswitch pattern
+    /// kotlinc produces for suspend functions. Only set when the function
     /// has **exactly one** suspension point; zero-suspension bodies
-    /// keep the plain Session 2 shape and multi-suspension bodies
-    /// are rejected at lowering time until Session 4 lands.
+    /// keep the plain signature-rewrite shape and multi-suspension bodies
+    /// are rejected at lowering time until multi-point support lands.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suspend_state_machine: Option<SuspendStateMachine>,
     /// Annotations on this function (emitted as RuntimeVisibleAnnotations).
@@ -398,14 +396,14 @@ pub struct MirFunction {
 /// the JVM backend can emit the canonical kotlinc-style bytecode
 /// without having to rediscover the structure.
 ///
-/// ## Session 3 (single-suspension)
+/// ## Single-suspension shape
 ///
 /// [`SuspendStateMachine::sites`] is empty. The `suspend_call_class` /
 /// `suspend_call_method` / `resume_return_text` fields describe the
 /// one callee and the literal-string tail. The backend emits the
 /// original hand-rolled shape.
 ///
-/// ## Session 4 (multi-suspension)
+/// ## Multi-suspension shape
 ///
 /// [`SuspendStateMachine::sites`] is non-empty — one entry per suspend
 /// call in source order — and [`SuspendStateMachine::spill_layout`]
@@ -438,13 +436,13 @@ pub struct SuspendStateMachine {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outer_user_param_tys: Vec<Ty>,
     /// JVM internal name of the class that owns the callee suspend
-    /// function (Session 3 single-callee shape). For same-file
+    /// function (single-callee shape). For same-file
     /// suspends this is the wrapper class, e.g. `"InputKt"`.
     /// Unused when [`SuspendStateMachine::sites`] is populated —
     /// multi-suspend bodies record per-site callees there.
     pub suspend_call_class: String,
     /// Source-level name of the callee suspend function, e.g.
-    /// `"yield_"` (Session 3 single-callee shape). The descriptor is
+    /// `"yield_"` (single-callee shape). The descriptor is
     /// always `(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;`.
     pub suspend_call_method: String,
     /// Pre-resolved constant the function returns once the
@@ -452,21 +450,21 @@ pub struct SuspendStateMachine {
     /// lowerer resolves the pool index to the literal text so the
     /// JVM backend can intern the string in its own constant pool
     /// without having to thread the module reference through.
-    /// Only meaningful for the Session 3 single-suspension shape;
-    /// Session 4 bodies emit the real return expression.
+    /// Only meaningful for the single-suspension shape;
+    /// multi-suspension bodies emit the real return expression.
     pub resume_return_text: String,
-    /// Session 4: one entry per suspend call in the outer function,
-    /// in source order. Empty for the Session 3 single-suspension
+    /// One entry per suspend call in the outer function,
+    /// in source order. Empty for the single-suspension
     /// shape (which uses the `suspend_call_*` + `resume_return_text`
     /// fields instead).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sites: Vec<SuspendCallSite>,
-    /// Session 4: spill slots the continuation class needs. Ordered
+    /// Spill slots the continuation class needs. Ordered
     /// to match the order backends emit fields. Empty when no local
-    /// crosses a suspend boundary (including the Session 3 shape).
+    /// crosses a suspend boundary (including the single-suspension shape).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub spill_layout: Vec<SpillSlot>,
-    /// Session 28: true when the outer function is an instance method.
+    /// True when the outer function is an instance method.
     /// The continuation's `invokeSuspend` must use `invokevirtual`
     /// instead of `invokestatic`, and the receiver (`this`) is stored
     /// as a field on the continuation class.
@@ -496,8 +494,8 @@ pub struct SuspendCallSite {
     pub callee_method: String,
     /// MIR locals holding the user-supplied arguments to this suspend
     /// call, in source order (i.e. excluding the trailing
-    /// `$completion`). Empty for Session 3/4-era no-arg calls like
-    /// `yield_()`. Session 5: the JVM backend loads these onto the
+    /// `$completion`). Empty for no-arg calls like
+    /// `yield_()`. The JVM backend loads these onto the
     /// stack before the continuation for the invoke.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<LocalId>,
@@ -508,11 +506,11 @@ pub struct SuspendCallSite {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arg_tys: Vec<Ty>,
     /// Declared return type of the callee suspend fun, **before**
-    /// Session 2's `Object`-rewrite. After the invoke returns the
+    /// the CPS `Object`-rewrite. After the invoke returns the
     /// boxed result, the backend emits `checkcast` against this type
     /// (for `Unit`/`Nothing` / non-reference slots no checkcast is
     /// emitted). Defaults to `Unit` for backwards compat with the
-    /// Session 3/4 shapes (their callees all return `Unit`).
+    /// the single-/multi-suspension shapes (their callees all return `Unit`).
     #[serde(default = "default_return_ty_unit")]
     pub return_ty: Ty,
     /// True if the suspend call dispatches through `invokeinterface`
@@ -521,8 +519,8 @@ pub struct SuspendCallSite {
     pub is_virtual: bool,
     /// MIR local that receives the (post-checkcast) result of this
     /// suspend call. For no-arg Unit-returning calls this local is
-    /// dead (we never load from it), matching the Session 3/4 shape.
-    /// For calls with a user-visible return value (Session 5+) the
+    /// dead (we never load from it), matching the single-/multi-suspension shape.
+    /// For calls with a user-visible return value the
     /// backend stores the checkcast'd Object into this slot.
     #[serde(default = "default_result_local_zero")]
     pub result_local: LocalId,
@@ -660,7 +658,7 @@ pub struct MirClass {
     /// Secondary constructors — additional `<init>` methods with different signatures.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary_constructors: Vec<MirFunction>,
-    /// Session 7: true for synthetic lambda classes whose body
+    /// True for synthetic lambda classes whose body
     /// contains a suspend call (or are declared `suspend {}`). When
     /// set, the JVM backend emits the class as a subclass of
     /// `kotlin/coroutines/jvm/internal/SuspendLambda` with the
@@ -671,16 +669,16 @@ pub struct MirClass {
     ///
     /// The first method in [`MirClass::methods`] is the lambda's
     /// `invoke` fn as built by the MIR lowerer. For suspend lambdas,
-    /// that fn's `suspend_state_machine` marker (Session 7 part 2)
-    /// tells the JVM backend how to emit the real CPS state machine
-    /// into `invokeSuspend(Object)Object`. Session 7 part 1 left the
-    /// body as an `IllegalStateException` stub; part 2 replaces it
-    /// with a kotlinc-shaped state machine for 0 or 1 suspension
-    /// points. Richer shapes (multi-suspension, capture-crossing
-    /// locals, non-literal tails) fall back to the stub and are
-    /// tracked for Session 7 part 3+.
+    /// that fn's `suspend_state_machine` marker tells the JVM backend
+    /// how to emit the real CPS state machine into
+    /// `invokeSuspend(Object)Object`. Initially the body was an
+    /// `IllegalStateException` stub; it is now replaced with a
+    /// kotlinc-shaped state machine for 0 or 1 suspension points.
+    /// Richer shapes (multi-suspension, capture-crossing locals,
+    /// non-literal tails) fall back to the stub and are tracked as
+    /// future work.
     ///
-    /// Non-suspend lambdas keep the Session 3/4/5 `$Lambda$N` shape
+    /// Non-suspend lambdas keep the standard `$Lambda$N` shape
     /// (Function1-only, direct invoke) byte-stable.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_suspend_lambda: bool,

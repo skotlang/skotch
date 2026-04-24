@@ -21,7 +21,7 @@
 //!
 //! ## Runtime
 //!
-//! For PR #4 the runtime is **libc**. We don't model the Kotlin
+//! The runtime is **libc**. We don't model the Kotlin
 //! standard library — `println(string)` lowers to `puts(str)` and
 //! `println(int)` lowers to `printf("%d\n", val)`. Each call site
 //! interns the format string into the module's global constants.

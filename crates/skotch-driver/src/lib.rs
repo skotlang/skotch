@@ -120,9 +120,9 @@ pub struct EmitOptions {
     pub norm_out: Option<PathBuf>,
 }
 
-/// Emit a single Kotlin source file to the requested target. The PR #1
-/// implementation handles the JVM target end-to-end and stubs the
-/// others (calls into the stub backend crates which `unimplemented!()`).
+/// Emit a single Kotlin source file to the requested target. The JVM
+/// target is handled end-to-end; the others call into their respective
+/// backend crates (some of which are still stubs).
 pub fn emit(opts: &EmitOptions) -> Result<()> {
     emit_inner(opts, true)
 }
@@ -172,7 +172,7 @@ fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
         Target::Klib => emit_klib(&mir, opts)?,
         Target::Llvm => emit_llvm(&mir, opts)?,
         Target::Native => emit_native(&mir, opts)?,
-        Target::Wasm => return Err(anyhow!("wasm target lands in PR #9")),
+        Target::Wasm => return Err(anyhow!("wasm target not yet implemented")),
     }
 
     // Drain any non-error diagnostics (warnings, notes).

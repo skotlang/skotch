@@ -50,7 +50,7 @@
 //! klib: their `module.skir.json` vs `default/ir/*.knb/.knd` payloads
 //! are fundamentally different IRs. A future PR could write a
 //! protobuf converter, but for the multi-stage validation goal of
-//! PR #4 a JSON IR is enough.
+//! for the multi-stage validation goal a JSON IR is enough.
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -67,7 +67,7 @@ pub struct KlibManifest {
     pub abi_version: String,
     pub compiler: String,
     pub compiler_version: String,
-    /// Module name. For the PR #4 fixtures this is the wrapper class
+    /// Module name. For the current fixtures this is the wrapper class
     /// name in lowercase, matching the `unique_name` kotlinc emits.
     pub unique_name: String,
     /// Comma-separated target triples (e.g. `macos_arm64`).

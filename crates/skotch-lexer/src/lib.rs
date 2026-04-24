@@ -1,4 +1,4 @@
-//! Hand-rolled lexer for the subset of Kotlin 2 we accept in PR #1.
+//! Hand-rolled lexer for the subset of Kotlin 2 that skotch accepts.
 //!
 //! Hand-rolled because Kotlin's string templates require mode switching
 //! mid-stream (`"hello $name"`, `"value: ${expr}"`), which is awkward in
@@ -54,7 +54,7 @@ use skotch_syntax::{Token, TokenKind};
 pub enum TokenPayload {
     /// Source text of an identifier. The parser interns it.
     Ident(String),
-    /// Parsed integer value. PR #1 only supports decimal `i64`.
+    /// Parsed integer value. Currently only supports decimal `i64`.
     Int(i64),
     /// Decoded string chunk content (escapes resolved).
     StringChunk(String),
@@ -150,7 +150,7 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        // Block comment: `/* ... */`. Not nested-aware in PR #1.
+        // Block comment: `/* ... */`. Not nested-aware yet.
         if b == b'/' && self.peek_at(1) == Some(b'*') {
             self.pos += 2;
             while self.pos < self.bytes.len() {
@@ -170,7 +170,7 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        // Integer literals: `[0-9]+`. PR #1 doesn't handle hex / float.
+        // Integer literals: `[0-9]+`. Hex / float handled elsewhere.
         if b.is_ascii_digit() {
             self.scan_int();
             return;

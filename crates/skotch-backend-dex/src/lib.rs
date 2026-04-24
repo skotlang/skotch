@@ -24,7 +24,7 @@
 //! - [`leb128`] is the canonical uleb128/sleb128 encoder used by the
 //!   pools and the class data.
 //!
-//! ## What we cover in PR #3
+//! ## What we currently cover
 //!
 //! - One class per `MirModule` (the wrapper class)
 //! - `static main([Ljava/lang/String;)V` plus arbitrary other
@@ -37,7 +37,7 @@
 //! - String literals via the string pool
 //!
 //! Branching, fields, instance methods, generics, and interfaces are
-//! intentionally out of scope (they need PR #1.5 fixtures to land
+//! intentionally out of scope (they need additional fixtures to land
 //! first).
 
 mod bytecode;

@@ -8,7 +8,7 @@ pub mod jvm {
     /// Minor version field. Always zero for "real" Java releases.
     pub const CLASS_FILE_MINOR: u16 = 0;
 
-    /// Major version 61 = Java 17 (JEP 410). PR #1 targets this.
+    /// Major version 61 = Java 17 (JEP 410).
     pub const CLASS_FILE_MAJOR_JAVA_17: u16 = 61;
 
     /// Major version 52 = Java 8. Kept as a constant for the test fixture

@@ -484,7 +484,7 @@ pub fn lower_file(
                 .get(fn_pass1_idx)
                 .map(|t| t.return_ty.clone())
                 .unwrap_or(Ty::Unit);
-            // Session 2 of the coroutine transform: rewrite the
+            // Coroutine transform: rewrite the
             // return type of every `suspend fun` to `Any` (which
             // lowers to `Ljava/lang/Object;` on JVM). The actual
             // `$completion: Continuation` parameter is appended in
@@ -508,7 +508,7 @@ pub fn lower_file(
                 .map(|p| interner.resolve(p.name).to_string())
                 .collect();
             let vararg_index = f.params.iter().position(|p| p.is_vararg);
-            // Session 2 of the coroutine transform: every `suspend
+            // Coroutine transform: every `suspend
             // fun` grows a trailing `$completion: Continuation`
             // parameter. The call site knows to synthesize an
             // argument for it from the target's `is_suspend` flag.
@@ -551,7 +551,7 @@ pub fn lower_file(
         }
     }
 
-    // ── Session 10: pre-register external suspend function stubs ──────
+    // ── Pre-register external suspend function stubs ──────
     //
     // External suspend functions like `delay` (from kotlinx-coroutines)
     // must be registered before any function bodies are lowered, so that
@@ -594,7 +594,7 @@ pub fn lower_file(
         }
     }
 
-    // ── Session 27: pre-register additional suspend function stubs ──────
+    // ── Pre-register additional suspend function stubs ──────
     //
     // `withContext`, `coroutineScope`, `supervisorScope`, `withTimeout`,
     // `withTimeoutOrNull`, and `yield` are all suspend functions from
@@ -862,7 +862,7 @@ pub fn lower_file(
     // anyway).
     //
     // Non-literal initializers are already rejected by `skotch-typeck`
-    // ("top-level val initializers must be a literal in PR #1"), so we
+    // ("top-level val initializers must be a literal"), so we
     // skip silently here when we can't extract a `MirConst`.
     let mut name_to_global: FxHashMap<Symbol, MirConst> = FxHashMap::default();
     for decl in &file.decls {
@@ -1227,7 +1227,7 @@ pub fn lower_file(
         }
     }
 
-    // ─── Session 3 coroutine transform: continuation classes ────────
+    // ─── Coroutine transform: continuation classes ────────
     //
     // Every suspend function the MIR lowerer marked with a
     // `SuspendStateMachine` needs a synthetic
@@ -1252,7 +1252,7 @@ pub fn lower_file(
         .collect();
     module.classes.extend(continuation_classes);
 
-    // Session 28: also generate continuation classes for suspend
+    // Also generate continuation classes for suspend
     // methods on user-defined classes. Skip SuspendLambda classes
     // (they ARE their own continuation — no separate companion).
     let class_cont_classes: Vec<MirClass> = module
@@ -1275,7 +1275,7 @@ pub fn lower_file(
 /// Build the synthetic `ContinuationImpl` subclass for a single-
 /// suspension-point state machine.
 ///
-/// Shape (for `run()` in the Session 3 fixture):
+/// Shape (for `run()`):
 ///
 /// ```text
 /// final class InputKt$run$1 extends ContinuationImpl {
@@ -1369,7 +1369,7 @@ fn build_continuation_class(
     invoke.params.push(invoke_this);
     invoke.params.push(result_param);
 
-    // Session 4: every local that lives across a suspend call
+    // Every local that lives across a suspend call
     // becomes a synthetic field on the continuation class. Fields
     // are emitted in `spill_layout` order so the backend's
     // getfield/putfield descriptors line up with what kotlinc
@@ -1555,8 +1555,8 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
 /// Used to mark the lambda as a suspend lambda so future codegen can
 /// generate a `SuspendLambda`-extending class.
 ///
-/// SESSION 6 SCOPE: currently this is detection-only. The flag flows
-/// through MIR but full codegen is Session 7+.
+/// Currently this is detection-only. The flag flows
+/// through MIR but full codegen is a follow-up.
 fn body_contains_suspend_call(
     body: &skotch_syntax::Block,
     module: &MirModule,
@@ -1829,7 +1829,7 @@ struct FnBuilder {
     cur_block: u32,
     /// Symbols declared as `var` (mutable) in this function scope.
     var_syms: rustc_hash::FxHashSet<Symbol>,
-    /// Session 9: MIR locals that correspond to suspend-typed function
+    /// MIR locals that correspond to suspend-typed function
     /// parameters (e.g. `block: suspend () -> String`). When such a
     /// local is invoked as a callable, the MIR lowerer must append the
     /// enclosing function's `$completion` continuation as the trailing
@@ -1912,15 +1912,15 @@ impl FnBuilder {
 }
 
 /// Outcome of [`extract_suspend_state_machine`] — the three cases
-/// the Sessions 3+4 lowering passes branch on.
+/// the coroutine lowering passes branch on.
 enum SuspendSitesResult {
-    /// No inner suspend calls; the Session 2 signature rewrite is
+    /// No inner suspend calls; the signature rewrite is
     /// all we need.
     Zero,
     /// At least one inner suspend call; we emit the state-machine
-    /// shape with the supplied marker. Session 3 (single-
-    /// suspension, string-literal tail) and Session 4 (N
-    /// suspensions, real expression tail) both surface here — the
+    /// shape with the supplied marker. Single-
+    /// suspension (string-literal tail) and N-
+    /// suspension (real expression tail) cases both surface here — the
     /// marker's `sites` vector distinguishes them for the backend.
     Found(SuspendStateMachine),
     /// The function has suspend calls, but the body shape is
@@ -1936,18 +1936,18 @@ enum SuspendSitesResult {
 ///
 /// Two shapes are recognized:
 ///
-/// - **Session 3.** A single suspend call with no arguments beyond
+/// - **Single-suspension.** A single suspend call with no arguments beyond
 ///   the synthesized `$completion`, followed by a literal-string
 ///   return terminator. Produces the historic marker shape
 ///   (`sites` empty, `resume_return_text` populated).
-/// - **Session 4.** Any number of suspend calls with no args beyond
+/// - **Multi-suspension.** Any number of suspend calls with no args beyond
 ///   `$completion`, in a straight-line single-block body. Produces
 ///   a marker with populated `sites` and `spill_layout` and lets
 ///   the JVM backend walk the real MIR for the resume tail.
 ///
 /// Anything richer (suspend calls with user args, branches across
 /// suspend sites) becomes [`SuspendSitesResult::Unsupported`] so the
-/// caller can emit a precise diagnostic. Sessions 5+ will lift
+/// caller can emit a precise diagnostic. Future work will lift
 /// these restrictions.
 fn extract_suspend_state_machine(
     mf: &MirFunction,
@@ -1965,8 +1965,8 @@ fn extract_suspend_state_machine(
 }
 
 /// Variant of [`extract_suspend_state_machine`] that lets the caller
-/// override the continuation class name. Session 7 part 2 uses this
-/// for suspend lambdas: the lambda class IS the continuation (it
+/// override the continuation class name. Suspend lambdas use this
+/// because the lambda class IS the continuation (it
 /// extends `SuspendLambda`), so there is no separate `InputKt$fn$1`
 /// companion — the state machine stored on the lambda's invoke
 /// method points at the lambda class itself.
@@ -2048,10 +2048,10 @@ fn extract_suspend_state_machine_with_cont(
     };
 
     // Single-suspension path: if the body also has a string-literal
-    // return tail we keep the Session 3 shape byte-for-byte (the
+    // return tail we keep the single-suspension shape byte-for-byte (the
     // committed 391 fixture depends on it). This only applies when
     // the sole suspend call has just the implicit `$completion` — a
-    // user-arg call can't be expressed in the pre-Session-5 marker
+    // user-arg call can't be expressed in the legacy marker
     // (there is no way to thread arg values into the legacy emitter).
     if sites_raw.len() == 1 && sites_raw[0].3 == 1 {
         if let Some(resume_return_text) = extract_trailing_string(mf, module) {
@@ -2072,7 +2072,7 @@ fn extract_suspend_state_machine_with_cont(
         }
     }
 
-    // Session 29: multi-block state machines are now supported.
+    // Multi-block state machines are now supported.
     // Build per-site callee info and the conservative spill layout.
     let (sites, spill_layout) = build_sites_and_spills(mf, module, &sites_raw);
 
@@ -2081,10 +2081,10 @@ fn extract_suspend_state_machine_with_cont(
         outer_class: wrapper_class.to_string(),
         outer_method: fn_name.to_string(),
         outer_user_param_tys,
-        // Session 3 compatibility fields stay populated (with the
+        // Legacy compatibility fields stay populated (with the
         // FIRST callee) purely so MIR consumers that peek at them
         // don't see empty strings; the backend ignores them in the
-        // Session 4 path.
+        // multi-suspension path.
         suspend_call_class: wrapper_class.to_string(),
         suspend_call_method: {
             let (_, _, fid, _) = sites_raw[0];
@@ -2117,7 +2117,7 @@ fn extract_suspend_state_machine_with_cont(
 /// liveness analysis: for each call site we just scan prior stmts
 /// for writes and later stmts (+ the terminator) for reads. That
 /// over-spills dead locals, but is always correct — a more precise
-/// analysis is a Session 4+ follow-up.
+/// analysis is a future follow-up.
 fn build_sites_and_spills(
     mf: &MirFunction,
     module: &MirModule,
@@ -2140,10 +2140,10 @@ fn build_sites_and_spills(
     let mut local_to_slot: FxHashMap<u32, u32> = FxHashMap::default();
     let mut spill_layout: Vec<SpillSlot> = Vec::new();
 
-    // Session 29: multi-block support. If all sites are in the same
+    // Multi-block support. If all sites are in the same
     // block, use the original single-block analysis. Otherwise use
     // a conservative inter-block analysis.
-    // Session 31: single-block only when ALL sites are in the SAME block
+    // Single-block only when ALL sites are in the SAME block
     // AND no other blocks have executable statements. Empty blocks with
     // just Goto/Return terminators are fine (common in lambda bodies).
     let is_single_block = {
@@ -2164,7 +2164,7 @@ fn build_sites_and_spills(
         let block = &mf.blocks[*bi as usize];
 
         // Collect locals WRITTEN before this site.
-        // Session 23: include function parameters (they're live from
+        // Include function parameters (they're live from
         // function entry). Exclude the last param ($completion).
         let mut written: Vec<LocalId> = Vec::new();
         let n_params = mf.params.len();
@@ -2230,7 +2230,7 @@ fn build_sites_and_spills(
             *dest
         };
 
-        // Session 28: for instance suspend methods, `this` (first param)
+        // For instance suspend methods, `this` (first param)
         // must always be spilled so `invokeSuspend` can use it as the
         // invokevirtual receiver. Force it into the read set.
         if !mf.params.is_empty() {
@@ -2273,13 +2273,13 @@ fn build_sites_and_spills(
         // stable across runs.
         live_spills.sort_by_key(|ls| ls.slot);
 
-        // Session 5: extract the user-argument locals (everything
+        // Extract the user-argument locals (everything
         // except the trailing `$completion`) plus their types, and
         // surface the callee's declared return type so the JVM
-        // backend can emit a post-invoke `checkcast`. Older Session
-        // 3/4 call shapes have no user args and a `Unit`-typed
-        // callee, which keeps `args`/`arg_tys` empty and the legacy
-        // emit path byte-stable.
+        // backend can emit a post-invoke `checkcast`. Older
+        // single-suspension call shapes have no user args and a
+        // `Unit`-typed callee, which keeps `args`/`arg_tys` empty
+        // and the legacy emit path byte-stable.
         let stmt = &block.stmts[*si as usize];
         let MStmt::Assign {
             dest: call_dest,
@@ -2295,12 +2295,12 @@ fn build_sites_and_spills(
         // appends; everything before it is a user argument.
         let user_arg_count = call_args.len().saturating_sub(1);
         let args: Vec<LocalId> = call_args[..user_arg_count].to_vec();
-        // Session 9: use the target function's declared parameter
+        // Use the target function's declared parameter
         // types (not the call-site argument types) so that the
         // callee descriptor uses the correct interface types. For
         // example, when passing an `InputKt$Lambda$0` to a param
         // typed as `Function1`, the descriptor must say `Function1`.
-        // Session 18: handle both Static and VirtualJava suspend calls.
+        // Handle both Static and VirtualJava suspend calls.
         // Virtual calls use a sentinel FuncId(u32::MAX).
         let is_virtual = fid.0 == u32::MAX;
         let (arg_tys, return_ty, callee_class, callee_method_name): (Vec<Ty>, Ty, String, String) =
@@ -2460,7 +2460,7 @@ fn collect_terminator_reads(t: &Terminator, out: &mut rustc_hash::FxHashSet<u32>
 /// `ReturnValue(local)` where `local` was assigned a
 /// `Rvalue::Const(MirConst::String(...))`, resolve the string
 /// id back to its text via the module's string pool. Used by
-/// Session 3 to recognize the "return \"done\"" post-suspend
+/// the single-suspension path to recognize the "return \"done\"" post-suspend
 /// tail pattern and thread the literal through to the JVM
 /// backend's constant pool.
 fn extract_trailing_string(mf: &MirFunction, module: &MirModule) -> Option<String> {
@@ -2469,7 +2469,7 @@ fn extract_trailing_string(mf: &MirFunction, module: &MirModule) -> Option<Strin
         return None;
     };
     // Scan the last block's stmts for the assignment to this local.
-    // The Session 2 path wraps the return in a `mir_autobox` call
+    // The CPS rewrite path wraps the return in a `mir_autobox` call
     // followed by a `Call` to `Integer.valueOf` etc., so the value
     // we care about might be several assignments back. Walk
     // backwards and stop at the first `Const(String(sid))` we see
@@ -2515,7 +2515,7 @@ fn lower_function(
             })
         })
         .unwrap_or(Ty::Unit);
-    // Session 2 of the coroutine transform: a `suspend fun`'s
+    // Coroutine transform: a `suspend fun`'s
     // JVM return type becomes `Object` (we use `Ty::Any`). The
     // original declared return type is still needed below so we
     // can box primitive `return` expressions before the
@@ -2527,9 +2527,9 @@ fn lower_function(
     };
     let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
     fb.mf.is_suspend = f.is_suspend;
-    // Session 5 of the coroutine transform: remember the source-
+    // Coroutine transform: remember the source-
     // level declared return type of every suspend fun before the
-    // Session 2 rewrite promotes it to `Object`. Callers that invoke
+    // CPS rewrite promotes it to `Object`. Callers that invoke
     // this suspend fun need it to emit the correct `checkcast` on
     // resume. Non-suspend funs leave this as `None`.
     if f.is_suspend {
@@ -2580,7 +2580,7 @@ fn lower_function(
             }
         }
         // Function-typed parameters → kotlin/jvm/functions/FunctionN interface.
-        // Session 9: suspend function types bump arity by +1 for the
+        // Suspend function types bump arity by +1 for the
         // implicit Continuation parameter — `suspend () -> T` maps to
         // `Function1<Continuation, Object>`, not `Function0`.
         let is_suspend_callable = matches!(
@@ -2605,7 +2605,7 @@ fn lower_function(
         // Override enum class types to String (enums are string-based).
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
-        // Session 9: record suspend-typed callable parameters so that
+        // Record suspend-typed callable parameters so that
         // when they're invoked the MIR lowerer threads the continuation.
         if is_suspend_callable {
             fb.suspend_callable_locals.insert(id.0);
@@ -2613,7 +2613,7 @@ fn lower_function(
         scope.push((p.name, id));
     }
 
-    // Session 2 of the coroutine transform: a `suspend fun`'s
+    // Coroutine transform: a `suspend fun`'s
     // last parameter is an implicit `$completion: Continuation`.
     // We append it AFTER the explicit user parameters so the
     // source-visible parameter positions are unchanged.
@@ -2645,7 +2645,7 @@ fn lower_function(
     // The current block's terminator stays `Return` (set by the
     // FnBuilder constructor and never overwritten for the last block).
 
-    // Session 2 of the coroutine transform: rewrite every
+    // Coroutine transform: rewrite every
     // return in this suspend function so that the returned value
     // is a reference (the method descriptor now promises
     // `Object`). `ReturnValue` terminators get autoboxed; bare
@@ -2653,7 +2653,7 @@ fn lower_function(
     // return type) become `return null`, which is a valid
     // `Object`. Emitting `kotlin.Unit.INSTANCE` instead is the
     // semantically correct thing and will land together with the
-    // full CPS state-machine in Session 3.
+    // full CPS state-machine.
     if f.is_suspend {
         for bi in 0..fb.mf.blocks.len() {
             match fb.mf.blocks[bi].terminator.clone() {
@@ -2681,11 +2681,11 @@ fn lower_function(
         }
     }
 
-    // Sessions 3+4 of the coroutine transform: if this suspend
+    // Coroutine transform: if this suspend
     // function contains any suspension points, attach a
     // [`SuspendStateMachine`] marker so the JVM backend emits the
     // canonical dispatcher + tableswitch pattern. Zero suspension
-    // points falls through to the Session 2 shape. The extractor
+    // points falls through to the signature-rewrite-only shape. The extractor
     // rejects shapes outside the current scope (suspend calls with
     // user args, branches across suspend sites) as hard errors
     // rather than silently miscompiling.
@@ -2710,7 +2710,7 @@ fn lower_function(
         }
     }
 
-    // Session 10: when a non-suspend function returns Unit but the body
+    // When a non-suspend function returns Unit but the body
     // ends with `ReturnValue(local)` whose type is non-Unit (e.g.
     // `fun main() = runBlocking { ... }` where runBlocking returns Object),
     // drop the value and emit plain `Return`. The JVM backend would
@@ -3764,7 +3764,7 @@ fn lower_stmt(
                         loop_ctx,
                     );
                 }
-                // Session 30: if the try body ends with an explicit
+                // If the try body ends with an explicit
                 // `return`, the current block already has a ReturnValue
                 // terminator. Don't overwrite it with Goto(after_block)
                 // — the block returns directly. Only add the Goto if
@@ -6372,7 +6372,7 @@ fn lower_expr(
                     return Some(dest);
                 }
 
-                // ── Session 12: `deferred.await()` ─────────────────
+                // ── `deferred.await()` ─────────────────
                 //
                 // `Deferred.await()` is a suspend function on the
                 // `kotlinx/coroutines/Deferred` interface. At the JVM
@@ -6382,7 +6382,7 @@ fn lower_expr(
                 //   invokeinterface Deferred.await(Continuation)Object
                 //
                 // This is a suspension point — it may return
-                // COROUTINE_SUSPENDED. For this session we emit it as
+                // COROUTINE_SUSPENDED. We emit it as
                 // a VirtualJava call; the JVM backend recognizes
                 // `Deferred` as an interface and emits `invokeinterface`.
                 if method_name_str == "await"
@@ -6421,7 +6421,7 @@ fn lower_expr(
                     return Some(dest);
                 }
 
-                // ── Session 27: `job.join()` ────────────────────────
+                // ── `job.join()` ────────────────────────
                 //
                 // `Job.join()` is a suspend function on the
                 // `kotlinx/coroutines/Job` interface. At JVM level:
@@ -6465,7 +6465,7 @@ fn lower_expr(
                     return Some(dest);
                 }
 
-                // ── Session 27: `job.cancel()` ──────────────────────
+                // ── `job.cancel()` ──────────────────────
                 //
                 // `Job.cancel()` is a non-suspend function on Job.
                 // It cancels the job (non-blocking).
@@ -6489,7 +6489,7 @@ fn lower_expr(
                     return Some(dest);
                 }
 
-                // ── Session 27: `job.isActive` property ─────────────
+                // ── `job.isActive` property ─────────────
                 //
                 // `Job.isActive` is a property (getter: isActive()Z).
                 if method_name_str == "isActive"
@@ -6724,7 +6724,7 @@ fn lower_expr(
                         };
                     }
 
-                    // Session 28: suspend instance method calls. Append
+                    // Suspend instance method calls. Append
                     // the $completion continuation and emit as VirtualJava
                     // so the state machine extractor detects it as a
                     // suspension point.
@@ -7563,7 +7563,7 @@ fn lower_expr(
             let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
 
-            // ── Session 10: `runBlocking { }` ──────────────────────────
+            // ── `runBlocking { }` ──────────────────────────
             //
             // `fun main() = runBlocking { delay(10); println("done") }`
             //
@@ -7658,7 +7658,7 @@ fn lower_expr(
                 return Some(result);
             }
 
-            // ── Session 12: `launch { }` and `async { }` builders ────
+            // ── `launch { }` and `async { }` builders ────
             //
             // `launch { body }` and `async { body }` are coroutine
             // builders from kotlinx-coroutines. For simplicity we use
@@ -7716,7 +7716,7 @@ fn lower_expr(
                     }
                 }
 
-                // Session 31: structured concurrency — use the enclosing
+                // Structured concurrency — use the enclosing
                 // CoroutineScope from this.p$0 if available (set by the
                 // SuspendLambda shell's create method). Fall back to
                 // GlobalScope for non-lambda contexts.
@@ -7870,7 +7870,7 @@ fn lower_expr(
                 }
             }
 
-            // ── Session 27: `withContext(Dispatchers.X) { body }` ───
+            // ── `withContext(Dispatchers.X) { body }` ───
             //
             // `withContext` is an inline suspend function from
             // kotlinx-coroutines:
@@ -7952,7 +7952,7 @@ fn lower_expr(
                 return Some(result);
             }
 
-            // ── Session 27: `coroutineScope { body }` ──────────────
+            // ── `coroutineScope { body }` ──────────────
             //
             // `coroutineScope` is an inline suspend function:
             //   kotlinx/coroutines/CoroutineScopeKt.coroutineScope(
@@ -8030,7 +8030,7 @@ fn lower_expr(
                 return Some(result);
             }
 
-            // ── Session 27: `withTimeout(ms) { body }` ────────────
+            // ── `withTimeout(ms) { body }` ────────────
             //
             // `withTimeout` and `withTimeoutOrNull` are suspend functions:
             //   kotlinx/coroutines/TimeoutKt.withTimeout(J, Function2, Continuation)Object
@@ -8147,7 +8147,7 @@ fn lower_expr(
                 return Some(result);
             }
 
-            // ── Session 27: `yield()` inside suspend context ───────
+            // ── `yield()` inside suspend context ───────
             //
             // `yield` is a suspend function from kotlinx-coroutines:
             //   kotlinx/coroutines/YieldKt.yield(Continuation)Object
@@ -8185,7 +8185,7 @@ fn lower_expr(
                 return Some(dest);
             }
 
-            // ── Session 10: `delay(ms)` inside suspend context ──────
+            // ── `delay(ms)` inside suspend context ──────
             //
             // `delay` is a kotlinx-coroutines suspend function:
             //   kotlinx/coroutines/DelayKt.delay(J, Continuation)Object
@@ -9120,7 +9120,7 @@ fn lower_expr(
                     let use_interface_dispatch =
                         is_function_interface || matches!(local_ty, Ty::Any | Ty::Function { .. });
                     if use_interface_dispatch {
-                        // ── Session 9: suspend callable parameter ────
+                        // ── Suspend callable parameter ────
                         // When the local is a suspend-typed function
                         // parameter inside a suspend function, the
                         // invocation becomes:
@@ -9725,7 +9725,7 @@ fn lower_expr(
                 }
             }
 
-            // Session 2 of the coroutine transform: when calling a
+            // Coroutine transform: when calling a
             // `suspend fun`, append the caller's own `$completion`
             // if the caller is itself suspend, otherwise pass
             // `null`. A real Kotlin compiler would reject the
@@ -10152,7 +10152,7 @@ fn lower_expr(
                 };
 
                 // Lower body in body_blks[i].
-                // Session 30: when branch bodies that are `{ stmts }` parse
+                // When branch bodies that are `{ stmts }` parse
                 // as Expr::Lambda with no params. Inline them as blocks
                 // rather than creating lambda classes — they're Kotlin block
                 // expressions, not closures.
@@ -10242,7 +10242,7 @@ fn lower_expr(
                 }
 
                 // Goto merge, switch to next comparison block.
-                // Session 30: don't overwrite explicit `return` terminators.
+                // Don't overwrite explicit `return` terminators.
                 let next = if i + 1 < branches.len() {
                     cmp_blks[i + 1]
                 } else {
@@ -10361,7 +10361,7 @@ fn lower_expr(
                 fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
             }
 
-            // Session 30: if the merge block is unreachable (all branches
+            // If the merge block is unreachable (all branches
             // returned explicitly) and the method returns non-void, the
             // merge block needs a valid return. Only fix non-void methods;
             // void methods' bare `Return` is correct.
@@ -10598,7 +10598,7 @@ fn lower_expr(
                 }
             }
 
-            // Session 27: Dispatchers.IO / .Default / .Main / .Unconfined
+            // Dispatchers.IO / .Default / .Main / .Unconfined
             //
             // `Dispatchers` is a Kotlin object. Each dispatcher property
             // is exposed as a static getter method on the JVM:
@@ -11757,12 +11757,12 @@ fn lower_expr(
             //   1. The AST flagged it (future: `suspend {}` syntax or
             //      inferred from function-type-parameter context)
             //   2. The body contains a call to a suspend function
-            // SESSION 6 SCOPE: detection flows through to MIR so future
-            // sessions can generate SuspendLambda-extending classes.
+            // Detection flows through to MIR so the codegen layer
+            // can generate SuspendLambda-extending classes.
             // Currently lambdas with suspend bodies still compile as
             // regular $Lambda$N classes — this means calling them from
             // real coroutine builders won't work at runtime. Full
-            // SuspendLambda codegen is tracked as Session 7+.
+            // SuspendLambda codegen is a follow-up.
             // Check the force flag FIRST, then AST flag, then body scan.
             let forced = module.force_suspend_lambda;
             if forced {
@@ -11994,7 +11994,7 @@ fn lower_expr(
                         invoke_scope.push((*sym, local));
                     }
                 }
-                // Session 28: for SuspendLambda, the CoroutineScope
+                // For SuspendLambda, the CoroutineScope
                 // receiver is accessible at runtime but doesn't need
                 // to be a MIR param (the SuspendLambda shell handles
                 // the invoke→create→invokeSuspend delegation). We just
@@ -12200,7 +12200,7 @@ fn lower_expr(
                 invoke_fn.return_ty = Ty::Unit;
             }
 
-            // ── Session 7 part 2: attach state machine for suspend lambdas ──
+            // ── Attach state machine for suspend lambdas ──
             //
             // The invoke body we just built contains every inner suspend
             // call in its MIR. Run the same extractor the named-suspend-
@@ -12211,9 +12211,9 @@ fn lower_expr(
             // `InputKt$fn$1` companion. The JVM backend reads this
             // marker from the invoke method to generate the real
             // `invokeSuspend(Object)Object` body, replacing the
-            // Session 7 part 1 `IllegalStateException` stub.
+            // `IllegalStateException` stub.
             //
-            // Scope (Session 7 part 2): we only support 0 or 1
+            // Currently we only support 0 or 1
             // suspension points. Multi-suspension, captures that span
             // suspend boundaries, and local-variable spilling inside
             // suspend lambdas are tracked as follow-ups.
@@ -12241,7 +12241,7 @@ fn lower_expr(
                         // emitter for zero-site suspend lambdas.
                     }
                     SuspendSitesResult::Found(sm) => {
-                        // Session 8: materialize one field per spill
+                        // Materialize one field per spill
                         // slot directly on the lambda class. The JVM
                         // backend's multi-suspend emitter addresses
                         // these via `getfield/putfield <lambda>.I$n:I`,
@@ -12347,7 +12347,7 @@ fn lower_expr(
                 + if has_lambda_recv { 1 } else { 0 };
             let iface_name = stdlib_function_interface(lambda_arity);
 
-            // SESSION 7: suspend lambdas extend SuspendLambda instead of
+            // Suspend lambdas extend SuspendLambda instead of
             // Object. Their `<init>(Continuation)V`, `invokeSuspend`,
             // `create`, `invoke(Continuation)`, and erased
             // `invoke(Object)` bridge methods are synthesized by the
@@ -12358,16 +12358,16 @@ fn lower_expr(
             // The MIR constructor we just built is replaced with a
             // `(Continuation)V` stub below (the real super-ctor wiring
             // lives inline in `emit_suspend_lambda_shell`). The
-            // `invoke_fn` is KEPT — as of Session 7 part 2 above we
+            // `invoke_fn` is KEPT — the state-machine attachment above
             // populated its `suspend_state_machine` marker so the
             // backend can emit the real CPS state-machine body on
-            // `invokeSuspend`. Session 7 part 1 previously discarded
-            // `invoke_fn` and emitted an `IllegalStateException` stub.
+            // `invokeSuspend` (replacing the earlier
+            // `IllegalStateException` stub).
             //
-            // Non-suspend lambdas keep the Session 3/4/5 `$Lambda$N`
+            // Non-suspend lambdas keep the `$Lambda$N`
             // shape (Function1-only, direct invoke) byte-stable.
             let (super_class, interfaces, final_init_fn) = if is_suspend_lambda {
-                // Session 11: suspend lambda constructor takes capture
+                // Suspend lambda constructor takes capture
                 // args BEFORE the Continuation param, matching kotlinc's
                 // `<init>(capture1, ..., captureN, Continuation)V`.
                 // Each capture is stored into its corresponding field on
@@ -12431,7 +12431,7 @@ fn lower_expr(
                 (None, vec![iface_name], init_fn)
             };
 
-            // Session 8: suspend lambdas with multi-suspension bodies
+            // Suspend lambdas with multi-suspension bodies
             // spill live locals to synthetic fields on themselves (the
             // lambda IS the continuation). The list we built above is
             // appended AFTER the real captures so field ordering is
@@ -12440,7 +12440,7 @@ fn lower_expr(
             let mut final_fields = capture_fields;
             final_fields.extend(lambda_extra_fields);
 
-            // Session 31: add p$0 field for CoroutineScope receiver on
+            // Add p$0 field for CoroutineScope receiver on
             // ALL suspend lambdas. The interface might be Function1 at
             // this point (patched to Function2 later by the builder handler).
             if is_suspend_lambda {
@@ -12477,7 +12477,7 @@ fn lower_expr(
             // For ref-boxed captures, pass the $Ref instance (which is now
             // the outer scope binding after we replaced it above).
             let ctor_args: Vec<LocalId> = if is_suspend_lambda {
-                // Session 11: suspend lambda's constructor is
+                // Suspend lambda's constructor is
                 // `(capture1, ..., captureN, Continuation)V`. Pass
                 // captured locals first, then null Continuation.
                 let mut args: Vec<LocalId> = free_vars
@@ -14107,7 +14107,7 @@ fn lower_class(
             })
             .unwrap_or(Ty::Unit);
 
-        // Session 28: suspend instance methods get the same CPS
+        // Suspend instance methods get the same CPS
         // transform as top-level suspend functions — return type
         // rewritten to Object, $completion param appended.
         let return_ty = if method.is_suspend {
@@ -14137,7 +14137,7 @@ fn lower_class(
             scope.push((p.name, id));
         }
 
-        // Session 28: suspend methods get a trailing $completion param.
+        // Suspend methods get a trailing $completion param.
         if method.is_suspend {
             let cont_ty = Ty::Class("kotlin/coroutines/Continuation".to_string());
             let cont_id = fb.new_local(cont_ty);
@@ -14262,7 +14262,7 @@ fn lower_class(
             });
         }
 
-        // Session 28: suspend methods — autobox primitive returns and
+        // Suspend methods — autobox primitive returns and
         // convert bare Return → return null (same as top-level suspend fns).
         if method.is_suspend {
             for block in &mut fb.mf.blocks {
@@ -14307,7 +14307,7 @@ fn lower_class(
             }
         }
 
-        // Session 28: extract state machine for suspend methods.
+        // Extract state machine for suspend methods.
         if method.is_suspend {
             let sm_result =
                 extract_suspend_state_machine(&fb.mf, module, &class_name, &method_name);

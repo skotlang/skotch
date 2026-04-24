@@ -5,7 +5,7 @@
 //! forward references defeat declarative writers like `binrw`.
 //!
 //! Lifted in spirit from `/opt/src/github/skotlang.old/crates/skotch-backend-jvm/`,
-//! with the following adjustments for PR #1:
+//! with the following adjustments:
 //!
 //! - Bumps `major_version` from 52 (Java 8) to 61 (Java 17).
 //! - Replaces the old `Intrinsic(PrintlnAny) + find_string_local`
@@ -19,7 +19,7 @@
 //! ## What we cannot yet emit
 //!
 //! Branches require a `StackMapTable` attribute (the verifier rejects
-//! branched methods without one in v51+). PR #1 fixtures avoid
+//! branched methods without one in v51+). The initial fixtures avoid
 //! branches, so we don't emit one. The lowering pass already errors
 //! on `if`-as-expression and string templates.
 

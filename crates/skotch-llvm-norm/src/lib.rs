@@ -26,7 +26,7 @@
 //! - All `define`s and `declare`s, sorted by name
 //! - All `@global` constants, sorted by name
 //! - The function bodies themselves (we *do not* alpha-rename SSA
-//!   registers in PR #4 — they're already deterministic in skotch's
+//!   registers — they're already deterministic in skotch's
 //!   output, and the diffs are easier to read with the original
 //!   names)
 //!

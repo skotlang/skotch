@@ -7,7 +7,7 @@
 //! library. We deferred that swap to a later PR for two reasons:
 //!
 //! 1. Chumsky 0.10 has a non-trivial learning curve and a fluid API; for
-//!    the ~10 fixture-driven productions PR #1 needs, a hand-rolled
+//!    the ~10 fixture-driven productions we started with, a hand-rolled
 //!    parser is faster to write and easier to read.
 //! 2. Hand-rolled keeps the dependency graph small while we're still
 //!    iterating on the AST shape (`skotch-syntax`). Once the AST stabilizes
@@ -20,7 +20,7 @@
 //!
 //! ## Newline handling
 //!
-//! Kotlin's grammar is newline-sensitive, but the PR #1 fixtures all
+//! Kotlin's grammar is newline-sensitive, but the initial fixtures all
 //! avoid newline-ambiguous constructs. The parser therefore treats
 //! `Newline` and `Semi` tokens as universal statement separators and
 //! skips them everywhere else. Future PRs that add fixtures like
@@ -1686,7 +1686,7 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let span = self.peek_span();
 
-        // Session 9: `suspend () -> T` function-type prefix. Consume
+        // `suspend () -> T` function-type prefix. Consume
         // the `suspend` keyword and remember it so the returned TypeRef
         // carries `is_suspend = true`. The `suspend` keyword only
         // applies when followed by a `(`, i.e. a function type.
