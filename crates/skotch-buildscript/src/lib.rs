@@ -50,6 +50,9 @@ pub struct ProjectModel {
     pub signing_config: Option<SigningConfig>,
     // Dependencies (for multi-module)
     pub project_deps: Vec<String>,
+    /// External Maven dependencies: `implementation("org.example:lib:1.0")`.
+    /// Each entry is a Maven coordinate string "group:artifact:version".
+    pub external_deps: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -483,11 +486,16 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             if self.peek() == TokenKind::RBrace || self.at_end() {
                 break;
             }
-            // Look for: implementation(project(":lib"))
+            // Look for: implementation(project(":lib")) or implementation("g:a:v")
             if self.peek() == TokenKind::Ident {
                 let span = self.bump();
                 let name = self.text(span).to_string();
-                if (name == "implementation" || name == "api") && self.peek() == TokenKind::LParen {
+                if (name == "implementation"
+                    || name == "api"
+                    || name == "compileOnly"
+                    || name == "runtimeOnly")
+                    && self.peek() == TokenKind::LParen
+                {
                     self.bump();
                     if self.peek() == TokenKind::Ident {
                         let inner = self.bump();
@@ -497,6 +505,11 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                                 self.project.project_deps.push(dep);
                             }
                             self.skip_past(TokenKind::RParen);
+                        }
+                    } else if let Some(coord) = self.try_consume_string() {
+                        // External Maven dependency: "group:artifact:version"
+                        if coord.contains(':') {
+                            self.project.external_deps.push(coord);
                         }
                     }
                     self.skip_past(TokenKind::RParen);
@@ -828,6 +841,10 @@ mod tests {
         let mut interner = Interner::new();
         let parsed = parse_buildfile(src, FileId(0), &mut interner);
         assert_eq!(parsed.project.project_deps, vec![":lib"]);
+        assert_eq!(
+            parsed.project.external_deps,
+            vec!["org.jetbrains.kotlin:kotlin-stdlib:2.0.0"]
+        );
     }
 
     #[test]

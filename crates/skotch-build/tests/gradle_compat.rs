@@ -269,6 +269,43 @@ fn hello_lib_runtime_output_matches() {
     let _ = std::fs::remove_dir_all(&skotch_tmp);
 }
 
+// ─── External dependency tests ──────────────────────────────────────────────
+
+#[test]
+fn with_deps_skotch_builds_and_runs() {
+    let tmp = make_temp("deps-skotch");
+    copy_dir_recursive(&fixture_dir("with-deps"), &tmp).unwrap();
+
+    let result = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(result.is_ok(), "with-deps build failed: {:?}", result.err());
+    let outcome = result.unwrap();
+
+    assert!(outcome.output_path.exists());
+    assert_eq!(
+        outcome.output_path.file_name().and_then(|n| n.to_str()),
+        Some("with-deps.jar"),
+    );
+
+    // FAT JAR should contain project class AND dependency classes.
+    let entries = jar_class_entries(&outcome.output_path);
+    assert!(entries.contains("MainKt.class"), "Missing project class");
+    assert!(
+        entries.iter().any(|e| e.contains("apache/commons/math3")),
+        "Missing Commons Math classes in fat JAR"
+    );
+
+    // JAR should run correctly with external dependency functions.
+    if let Ok(java) = which::which("java") {
+        let stdout = run_stdout(Command::new(&java).arg("-jar").arg(&outcome.output_path));
+        assert_eq!(stdout.as_deref(), Some("GCD of 12 and 8: 4\n5! = 120\n"),);
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 // ─── Multi-module tests ─────────────────────────────────────────────────────
 
 #[test]

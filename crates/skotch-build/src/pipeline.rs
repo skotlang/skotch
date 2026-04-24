@@ -93,6 +93,22 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         });
     }
 
+    // ── Resolve external Maven dependencies ────────────────────────────
+    let resolved_jars = resolve_external_deps(&project, &project_dir)?;
+    if !resolved_jars.is_empty() {
+        // Add resolved JARs to CLASSPATH so classinfo can find external classes.
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let mut cp = std::env::var("CLASSPATH").unwrap_or_default();
+        for jar in &resolved_jars {
+            if !cp.is_empty() {
+                cp.push_str(sep);
+            }
+            cp.push_str(&jar.to_string_lossy());
+        }
+        std::env::set_var("CLASSPATH", &cp);
+        eprintln!("  {} dependencies resolved", resolved_jars.len());
+    }
+
     // Discover sources.
     let src_dir = project_dir.join("src/main/kotlin");
     let src_files =
@@ -158,7 +174,13 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
 
     // Backend dispatch.
     match target {
-        BuildTarget::Jvm => build_jvm_classes(&project, &project_dir, &all_classes, &interner),
+        BuildTarget::Jvm => build_jvm_classes(
+            &project,
+            &project_dir,
+            &all_classes,
+            &interner,
+            &resolved_jars,
+        ),
         BuildTarget::Android => {
             // For Android, merge MIR modules (DEX needs a single module).
             let mut module = MirModule::default();
@@ -179,6 +201,7 @@ fn build_jvm_classes(
     project_dir: &Path,
     classes: &[(String, Vec<u8>)],
     _interner: &Interner,
+    dep_jars: &[PathBuf],
 ) -> Result<BuildOutcome> {
     // Write individual .class files in parallel (Gradle-compatible layout).
     let classes_dir = project_dir.join("build/classes/kotlin/main");
@@ -222,8 +245,13 @@ fn build_jvm_classes(
             .unwrap_or("app")
     });
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
-    skotch_jar::write_jar(&jar_path, &main_class, classes)
-        .with_context(|| format!("writing {}", jar_path.display()))?;
+    if dep_jars.is_empty() {
+        skotch_jar::write_jar(&jar_path, &main_class, classes)
+            .with_context(|| format!("writing {}", jar_path.display()))?;
+    } else {
+        skotch_jar::write_fat_jar(&jar_path, &main_class, classes, dep_jars)
+            .with_context(|| format!("writing fat JAR {}", jar_path.display()))?;
+    }
 
     eprintln!("BUILD SUCCESS: {}", jar_path.display());
 
@@ -688,6 +716,31 @@ fn build_multi_module(
         target: BuildTarget::Jvm,
         output_path: jar_path,
     })
+}
+
+/// Resolve external Maven dependencies declared in `build.gradle.kts`.
+/// Downloads JARs (with transitive deps) from Maven Central, caches them
+/// in `~/.skotch/cache/maven/`, and returns the list of local JAR paths.
+fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<Vec<PathBuf>> {
+    if project.external_deps.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let coords: Vec<skotch_tape::MavenCoord> = project
+        .external_deps
+        .iter()
+        .filter_map(|s| skotch_tape::MavenCoord::parse(s))
+        .collect();
+
+    if coords.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let repos = vec!["https://repo1.maven.org/maven2".to_string()];
+    let resolved = skotch_tape::resolve(&coords, &repos, false)
+        .with_context(|| "resolving Maven dependencies")?;
+
+    Ok(resolved.jars)
 }
 
 /// Derive the JVM wrapper class name from a file path: `Hello.kt` → `HelloKt`.

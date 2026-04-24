@@ -174,6 +174,36 @@ fn download_artifact(
         match client.get(&url).send() {
             Ok(resp) if resp.status().is_success() => {
                 let bytes = resp.bytes().with_context(|| format!("reading {url}"))?;
+
+                // Verify SHA-1 checksum if available.
+                let sha1_url = format!("{url}.sha1");
+                if let Ok(sha1_resp) = client.get(&sha1_url).send() {
+                    if sha1_resp.status().is_success() {
+                        if let Ok(expected_sha1) = sha1_resp.text() {
+                            let expected = expected_sha1
+                                .split_whitespace()
+                                .next()
+                                .unwrap_or("")
+                                .to_lowercase();
+                            if expected.len() == 40 {
+                                let mut hasher = sha1_smol::Sha1::new();
+                                hasher.update(&bytes);
+                                let actual = hasher
+                                    .digest()
+                                    .bytes()
+                                    .iter()
+                                    .map(|b| format!("{b:02x}"))
+                                    .collect::<String>();
+                                if actual != expected {
+                                    anyhow::bail!(
+                                        "SHA-1 mismatch for {filename}: expected {expected}, got {actual}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if let Some(parent) = cached.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
