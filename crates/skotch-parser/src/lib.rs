@@ -728,8 +728,8 @@ impl<'a> Parser<'a> {
                 if self.peek_kind() == TokenKind::RBrace || self.peek_kind() == TokenKind::Eof {
                     break;
                 }
-                // Skip annotations before class members.
-                self.skip_annotations();
+                // Parse annotations before class members.
+                let member_annotations = self.parse_annotations();
                 // Capture modifier keywords before members.
                 let mut mem_override = false;
                 let mut mem_open = false;
@@ -768,6 +768,7 @@ impl<'a> Parser<'a> {
                         f.is_open = mem_open;
                         f.is_abstract = mem_abstract;
                         f.is_suspend = mem_suspend;
+                        f.annotations = member_annotations.clone();
                         methods.push(f);
                     }
                     TokenKind::KwVal | TokenKind::KwVar => {

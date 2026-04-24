@@ -420,3 +420,27 @@ fn multi_lib_incremental_rebuild() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn with_tests_skotch_runs_junit() {
+    let tmp = make_temp("with-tests");
+    copy_dir_recursive(&fixture_dir("with-tests"), &tmp).unwrap();
+
+    let result = skotch_build::run_tests(&skotch_build::TestOptions {
+        project_dir: tmp.clone(),
+    })
+    .expect("skotch test should succeed");
+
+    assert!(result.success, "test run should report success");
+    assert_eq!(result.tests_found, 3, "should find 3 tests");
+    assert_eq!(result.tests_passed, 3, "all 3 tests should pass");
+    assert_eq!(result.tests_failed, 0, "no tests should fail");
+
+    // JUnit XML report should exist.
+    assert!(
+        result.xml_report_path.is_some(),
+        "should produce JUnit XML report"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}

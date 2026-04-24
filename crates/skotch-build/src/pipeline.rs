@@ -744,7 +744,7 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
 }
 
 /// Derive the JVM wrapper class name from a file path: `Hello.kt` → `HelloKt`.
-fn wrapper_class_for(path: &Path) -> String {
+pub(crate) fn wrapper_class_for(path: &Path) -> String {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Main");
     let mut c = stem.chars();
     match c.next() {

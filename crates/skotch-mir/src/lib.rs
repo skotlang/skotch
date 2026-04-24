@@ -736,6 +736,11 @@ pub struct MirModule {
     /// Skipped during serialization since it's only needed at lowering time.
     #[serde(skip)]
     pub import_map: rustc_hash::FxHashMap<String, String>,
+    /// Static method imports: method name → (class_jvm_path, method_name).
+    /// E.g. `import org.junit.jupiter.api.Assertions.assertTrue` maps
+    /// `"assertTrue" → ("org/junit/jupiter/api/Assertions", "assertTrue")`.
+    #[serde(skip)]
+    pub static_method_imports: rustc_hash::FxHashMap<String, (String, String)>,
     /// Cross-file function declarations from the same compilation unit.
     /// Populated during multi-file lowering. Maps function name →
     /// (owner_class, descriptor, return_ty). Skipped during serialization.

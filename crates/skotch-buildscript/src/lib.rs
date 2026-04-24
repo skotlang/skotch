@@ -53,6 +53,24 @@ pub struct ProjectModel {
     /// External Maven dependencies: `implementation("org.example:lib:1.0")`.
     /// Each entry is a Maven coordinate string "group:artifact:version".
     pub external_deps: Vec<String>,
+    /// Test dependencies: `testImplementation("org.junit.jupiter:...")`.
+    pub test_deps: Vec<String>,
+    /// Test framework: detected from `tasks.test { useJUnitPlatform() }`.
+    pub test_framework: TestFramework,
+    /// Custom test source directories from `sourceSets { test { ... } }`.
+    pub test_source_dirs: Vec<String>,
+}
+
+/// Which test framework the project uses.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TestFramework {
+    /// No explicit test configuration found.
+    #[default]
+    None,
+    /// `tasks.test { useJUnitPlatform() }` — JUnit 5 via Platform Launcher.
+    JUnitPlatform,
+    /// `tasks.test { useJUnit() }` — JUnit 4.
+    JUnit4,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -231,8 +249,11 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             "dependencies" => self.parse_dependencies_block(),
             "application" => self.parse_application_block(),
             "android" => self.parse_android_block(),
-            "kotlin" | "java" | "tasks" | "sourceSets" | "allprojects" | "subprojects"
-            | "buildscript" => self.skip_brace_block(),
+            "tasks" => self.parse_tasks_block(),
+            "sourceSets" => self.parse_source_sets_block(),
+            "kotlin" | "java" | "allprojects" | "subprojects" | "buildscript" => {
+                self.skip_brace_block()
+            }
             _ => {
                 self.skip_to_newline();
                 true
@@ -476,6 +497,156 @@ impl<'src, 'lf> Walker<'src, 'lf> {
         true
     }
 
+    /// Parse `tasks { test { useJUnitPlatform() } }` or `tasks.test { useJUnitPlatform() }`.
+    fn parse_tasks_block(&mut self) -> bool {
+        // Handle `tasks.test { ... }` (dot access).
+        if self.peek() == TokenKind::Dot {
+            self.bump();
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let task_name = self.text(span).to_string();
+                if task_name == "test" {
+                    return self.parse_test_task_block();
+                }
+            }
+            return self.skip_brace_block();
+        }
+        // Handle `tasks { test { ... } }` (nested block).
+        if self.peek() != TokenKind::LBrace {
+            return self.skip_to_newline_ret();
+        }
+        self.bump();
+        loop {
+            self.skip_newlines();
+            if self.peek() == TokenKind::RBrace || self.at_end() {
+                break;
+            }
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let name = self.text(span).to_string();
+                if name == "test" {
+                    self.parse_test_task_block();
+                } else {
+                    self.skip_brace_block();
+                }
+            } else {
+                self.bump();
+            }
+            self.skip_to_newline();
+        }
+        if self.peek() == TokenKind::RBrace {
+            self.bump();
+        }
+        true
+    }
+
+    /// Parse the body of `test { useJUnitPlatform() }`.
+    fn parse_test_task_block(&mut self) -> bool {
+        if self.peek() != TokenKind::LBrace {
+            return self.skip_to_newline_ret();
+        }
+        self.bump();
+        loop {
+            self.skip_newlines();
+            if self.peek() == TokenKind::RBrace || self.at_end() {
+                break;
+            }
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let name = self.text(span).to_string();
+                match name.as_str() {
+                    "useJUnitPlatform" => {
+                        self.project.test_framework = TestFramework::JUnitPlatform;
+                        // Consume optional `()`.
+                        if self.peek() == TokenKind::LParen {
+                            self.skip_past(TokenKind::RParen);
+                        }
+                    }
+                    "useJUnit" => {
+                        self.project.test_framework = TestFramework::JUnit4;
+                        if self.peek() == TokenKind::LParen {
+                            self.skip_past(TokenKind::RParen);
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                self.bump();
+            }
+            self.skip_to_newline();
+        }
+        if self.peek() == TokenKind::RBrace {
+            self.bump();
+        }
+        true
+    }
+
+    /// Parse `sourceSets { test { kotlin.srcDir("path") } }`.
+    fn parse_source_sets_block(&mut self) -> bool {
+        if self.peek() != TokenKind::LBrace {
+            return self.skip_to_newline_ret();
+        }
+        self.bump();
+        loop {
+            self.skip_newlines();
+            if self.peek() == TokenKind::RBrace || self.at_end() {
+                break;
+            }
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let set_name = self.text(span).to_string();
+                if set_name == "test" && self.peek() == TokenKind::LBrace {
+                    self.bump();
+                    // Inside test { ... }, look for kotlin.srcDir("path").
+                    loop {
+                        self.skip_newlines();
+                        if self.peek() == TokenKind::RBrace || self.at_end() {
+                            break;
+                        }
+                        if self.peek() == TokenKind::Ident {
+                            let inner = self.bump();
+                            if self.text(inner) == "kotlin" && self.peek() == TokenKind::Dot {
+                                self.bump(); // consume '.'
+                                if self.peek() == TokenKind::Ident {
+                                    let method = self.bump();
+                                    if self.text(method) == "srcDir"
+                                        && self.peek() == TokenKind::LParen
+                                    {
+                                        self.bump();
+                                        if let Some(dir) = self.try_consume_string() {
+                                            self.project.test_source_dirs.push(dir);
+                                        }
+                                        self.skip_past(TokenKind::RParen);
+                                    }
+                                }
+                            }
+                        } else {
+                            self.bump();
+                        }
+                        self.skip_to_newline();
+                    }
+                    if self.peek() == TokenKind::RBrace {
+                        self.bump();
+                    }
+                } else {
+                    self.skip_brace_block();
+                }
+            } else {
+                self.bump();
+            }
+            self.skip_to_newline();
+        }
+        if self.peek() == TokenKind::RBrace {
+            self.bump();
+        }
+        true
+    }
+
+    fn skip_to_newline_ret(&mut self) -> bool {
+        self.skip_to_newline();
+        true
+    }
+
     fn parse_dependencies_block(&mut self) -> bool {
         if self.peek() != TokenKind::LBrace {
             return false;
@@ -486,16 +657,21 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             if self.peek() == TokenKind::RBrace || self.at_end() {
                 break;
             }
-            // Look for: implementation(project(":lib")) or implementation("g:a:v")
+            // Look for dependency declarations:
+            //   implementation(project(":lib")) or implementation("g:a:v")
+            //   testImplementation("org.junit.jupiter:...")
             if self.peek() == TokenKind::Ident {
                 let span = self.bump();
                 let name = self.text(span).to_string();
-                if (name == "implementation"
-                    || name == "api"
-                    || name == "compileOnly"
-                    || name == "runtimeOnly")
-                    && self.peek() == TokenKind::LParen
-                {
+                let is_main_dep = matches!(
+                    name.as_str(),
+                    "implementation" | "api" | "compileOnly" | "runtimeOnly"
+                );
+                let is_test_dep = matches!(
+                    name.as_str(),
+                    "testImplementation" | "testRuntimeOnly" | "testCompileOnly"
+                );
+                if (is_main_dep || is_test_dep) && self.peek() == TokenKind::LParen {
                     self.bump();
                     if self.peek() == TokenKind::Ident {
                         let inner = self.bump();
@@ -507,9 +683,12 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                             self.skip_past(TokenKind::RParen);
                         }
                     } else if let Some(coord) = self.try_consume_string() {
-                        // External Maven dependency: "group:artifact:version"
                         if coord.contains(':') {
-                            self.project.external_deps.push(coord);
+                            if is_test_dep {
+                                self.project.test_deps.push(coord);
+                            } else {
+                                self.project.external_deps.push(coord);
+                            }
                         }
                     }
                     self.skip_past(TokenKind::RParen);
@@ -968,5 +1147,83 @@ mod tests {
         assert!(!parsed.project.is_android);
         assert!(!parsed.project.is_kotlin);
         assert!(!parsed.project.is_compose);
+    }
+
+    #[test]
+    fn parse_test_deps() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            dependencies {
+                implementation("org.example:lib:1.0")
+                testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+                testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.external_deps, vec!["org.example:lib:1.0"]);
+        assert_eq!(
+            parsed.project.test_deps,
+            vec![
+                "org.junit.jupiter:junit-jupiter:5.10.0",
+                "org.junit.platform:junit-platform-launcher",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_use_junit_platform() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            tasks.test {
+                useJUnitPlatform()
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.test_framework, TestFramework::JUnitPlatform);
+    }
+
+    #[test]
+    fn parse_use_junit_platform_nested() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            tasks {
+                test {
+                    useJUnitPlatform()
+                }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.test_framework, TestFramework::JUnitPlatform);
+    }
+
+    #[test]
+    fn parse_test_source_dirs() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            sourceSets {
+                test {
+                    kotlin.srcDir("src/integrationTest/kotlin")
+                }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(
+            parsed.project.test_source_dirs,
+            vec!["src/integrationTest/kotlin"]
+        );
+    }
+
+    #[test]
+    fn parse_test_framework_default() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.test_framework, TestFramework::None);
     }
 }

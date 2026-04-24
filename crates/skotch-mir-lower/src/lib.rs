@@ -34,6 +34,73 @@ use skotch_syntax::{BinOp, ConstructorParam, Decl, Expr, FunDecl, KtFile, Stmt, 
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+// ── Shared class registry ───────────────────────────────────────────────
+//
+// A single global registry of ClassInfo objects, populated from JDK jmods,
+// Kotlin stdlib, and dependency JARs on the CLASSPATH. Both static and
+// instance method lookups share this registry.
+
+static CLASS_REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> =
+    Mutex::new(None);
+
+fn with_registry<R>(
+    f: impl FnOnce(&mut HashMap<String, skotch_classinfo::ClassInfo>) -> R,
+) -> Option<R> {
+    let mut guard = CLASS_REGISTRY.lock().ok()?;
+    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+    Some(f(reg))
+}
+
+/// Pre-load classes from dependency JARs into the shared registry.
+/// Call this before compilation so that external methods are resolvable.
+pub fn preload_registry_jars(jars: &[std::path::PathBuf]) {
+    let scanned = skotch_classinfo::scan_jars(jars);
+    if let Ok(mut guard) = CLASS_REGISTRY.lock() {
+        let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+        for (k, v) in scanned {
+            reg.entry(k).or_insert(v);
+        }
+    }
+}
+
+/// Check if a name is a static method on a given class (by JVM path).
+/// Used to detect static method imports like `import ...Assertions.assertTrue`.
+pub fn is_static_method_on_class(class_jvm_path: &str, method_name: &str) -> bool {
+    ensure_class_loaded(class_jvm_path);
+    with_registry(|reg| {
+        reg.get(class_jvm_path)
+            .map(|ci| {
+                ci.methods
+                    .iter()
+                    .any(|m| m.name == method_name && m.is_static() && m.is_public())
+            })
+            .unwrap_or(false)
+    })
+    .unwrap_or(false)
+}
+
+/// Ensure a class is loaded into the registry (by JVM path).
+fn ensure_class_loaded(class_name: &str) {
+    let needs_load = with_registry(|reg| !reg.contains_key(class_name)).unwrap_or(true);
+    if needs_load {
+        let jvm_path = if class_name.contains('/') {
+            class_name.to_string()
+        } else {
+            format!("java/lang/{class_name}")
+        };
+        if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
+            if let Ok(mut guard) = CLASS_REGISTRY.lock() {
+                if let Some(reg) = guard.as_mut() {
+                    reg.insert(class_name.to_string(), info);
+                }
+            }
+        }
+    }
+}
+
 /// Convert a `Ty` to its JVM descriptor string fragment (for building
 /// method descriptors in the MIR lowerer).
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
@@ -146,12 +213,25 @@ fn stdlib_function_interface(arity: usize) -> String {
 fn lower_annotations(
     annotations: &[skotch_syntax::Annotation],
     interner: &Interner,
+    import_map: Option<&FxHashMap<String, String>>,
 ) -> Vec<skotch_mir::MirAnnotation> {
     annotations
         .iter()
         .map(|a| {
             let name = interner.resolve(a.name);
-            let descriptor = skotch_stdlib_registry::annotation_descriptor(name);
+            // First try the well-known annotation registry (JvmStatic, etc.).
+            let mut descriptor = skotch_stdlib_registry::annotation_descriptor(name);
+            // If the registry returned a simple-name descriptor (no package),
+            // try to resolve via the file's import_map. E.g. `import
+            // org.junit.jupiter.api.Test` maps "Test" → "org/junit/jupiter/api/Test",
+            // giving descriptor "Lorg/junit/jupiter/api/Test;".
+            if !descriptor.contains('/') {
+                if let Some(map) = import_map {
+                    if let Some(jvm_path) = map.get(name) {
+                        descriptor = format!("L{jvm_path};");
+                    }
+                }
+            }
             let args: Vec<skotch_mir::MirAnnotationArg> = a
                 .args
                 .iter()
@@ -315,7 +395,7 @@ pub fn lower_file(
             let placeholder_params: Vec<LocalId> =
                 (0..placeholder_param_count as u32).map(LocalId).collect();
             let placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
-            let fn_annotations = lower_annotations(&f.annotations, interner);
+            let fn_annotations = lower_annotations(&f.annotations, interner, None);
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -697,6 +777,25 @@ pub fn lower_file(
                 segments.last().unwrap().to_string()
             };
             let jvm_path = segments.join("/");
+
+            // Check if this is a static method import (e.g. Assertions.assertTrue).
+            // If the last segment is a static method on the class formed by the
+            // rest of the segments, store it as a static method import.
+            if segments.len() >= 2 {
+                let method_name = *segments.last().unwrap();
+                let class_segments = &segments[..segments.len() - 1];
+                let class_path = class_segments.join("/");
+                if is_static_method_on_class(&class_path, method_name) {
+                    module
+                        .static_method_imports
+                        .insert(key.clone(), (class_path.clone(), method_name.to_string()));
+                    // Also add the class to import_map so annotations etc. resolve.
+                    let class_simple = class_segments.last().unwrap().to_string();
+                    import_map.entry(class_simple).or_insert(class_path);
+                    continue;
+                }
+            }
+
             import_map.insert(key, jvm_path);
         }
     }
@@ -911,9 +1010,14 @@ pub fn lower_file(
             let prefix = segments.join("/");
 
             // Collect the set of simple (un-prefixed) user class names
-            // so we can rewrite internal references.
-            let user_classes: rustc_hash::FxHashSet<String> =
-                module.classes.iter().map(|c| c.name.clone()).collect();
+            // so we can rewrite internal references. Exclude cross-file
+            // stubs — they already have the correct fully-qualified name.
+            let user_classes: rustc_hash::FxHashSet<String> = module
+                .classes
+                .iter()
+                .filter(|c| !c.is_cross_file_stub)
+                .map(|c| c.name.clone())
+                .collect();
 
             // 1. Prefix the wrapper class.
             module.wrapper_class = format!("{prefix}/{}", module.wrapper_class);
@@ -8408,11 +8512,19 @@ fn lower_expr(
                 _ => None,
             };
             if let Some(jvm_class) = exception_class {
-                let descriptor = if arg_locals.len() == 1 {
-                    "(Ljava/lang/String;)V" // Exception(message)
-                } else {
-                    "()V" // Exception()
-                };
+                // Use ClasspathIndex to find the correct constructor overload.
+                let arg_types: Vec<Ty> = arg_locals
+                    .iter()
+                    .map(|l| fb.mf.locals[l.0 as usize].clone())
+                    .collect();
+                let descriptor = lookup_constructor(jvm_class, arg_locals.len(), &arg_types)
+                    .unwrap_or_else(|| {
+                        if arg_locals.is_empty() {
+                            "()V".to_string()
+                        } else {
+                            "(Ljava/lang/String;)V".to_string()
+                        }
+                    });
                 let dest = fb.new_local(Ty::Class(jvm_class.to_string()));
                 fb.push_stmt(MStmt::Assign {
                     dest,
@@ -9339,6 +9451,37 @@ fn lower_expr(
                         method_name: callee_str.to_string(),
                         descriptor: desc,
                     }
+                } else if let Some((class_path, method_name)) =
+                    module.static_method_imports.get(callee_str).cloned()
+                {
+                    // Static method import: e.g. `assertTrue(...)` →
+                    // `Assertions.assertTrue(...)` via
+                    // `import org.junit.jupiter.api.Assertions.assertTrue`.
+                    let arg_types: Vec<Ty> = arg_locals
+                        .iter()
+                        .map(|l| fb.mf.locals[l.0 as usize].clone())
+                        .collect();
+                    if let Some((_cls, _meth, descriptor, _ret)) = lookup_java_static_typed(
+                        &class_path,
+                        &method_name,
+                        arg_locals.len(),
+                        &arg_types,
+                    ) {
+                        CallKind::StaticJava {
+                            class_name: class_path,
+                            method_name,
+                            descriptor,
+                        }
+                    } else {
+                        diags.push(Diagnostic::error(
+                            *span,
+                            format!(
+                                "static method `{}` not found on class `{}`",
+                                method_name, class_path
+                            ),
+                        ));
+                        return None;
+                    }
                 } else {
                     diags.push(Diagnostic::error(
                         *span,
@@ -9379,10 +9522,16 @@ fn lower_expr(
                     // cross_file_fns or infer from descriptor.
                     if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name) {
                         ret_ty.clone()
-                    } else if descriptor.ends_with(")V") {
-                        Ty::Unit
                     } else {
-                        Ty::Any
+                        match skotch_classinfo::return_type_from_descriptor(descriptor) {
+                            "Unit" => Ty::Unit,
+                            "Boolean" => Ty::Bool,
+                            "Int" => Ty::Int,
+                            "Long" => Ty::Long,
+                            "Double" => Ty::Double,
+                            "String" => Ty::String,
+                            _ => Ty::Any,
+                        }
                     }
                 }
                 _ => Ty::Unit,
@@ -12428,26 +12577,26 @@ fn lower_template_part(
 }
 
 /// Look up a Java static method by class name and method name.
-/// First tries the real JDK class file registry, then falls back to
-/// the hardcoded table for environments without a JDK.
 fn lookup_java_static(
     class_name: &str,
     method_name: &str,
     arg_count: usize,
 ) -> Option<(String, String, String, Ty)> {
-    // If the name is already a JVM internal path (contains '/'), use it directly.
-    if class_name.contains('/') {
-        return lookup_java_static_from_jdk(class_name, method_name, arg_count);
-    }
-    // If it's a dot-qualified name like "java.lang.System", convert to JVM
-    // path "java/lang/System" and look up by full path.
-    if class_name.contains('.') {
-        let jvm_path = class_name.replace('.', "/");
-        return lookup_java_static_from_jdk(&jvm_path, method_name, arg_count);
-    }
-    // Simple name like "System" — look up in registry (which maps simple
-    // names to pre-loaded classes from java.lang.* and kotlin.*).
-    lookup_java_static_from_jdk(class_name, method_name, arg_count)
+    lookup_java_static_typed(class_name, method_name, arg_count, &[])
+}
+
+fn lookup_java_static_typed(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+    arg_types: &[Ty],
+) -> Option<(String, String, String, Ty)> {
+    let resolved = if class_name.contains('.') {
+        class_name.replace('.', "/")
+    } else {
+        class_name.to_string()
+    };
+    lookup_java_static_with_types(&resolved, method_name, arg_count, arg_types)
 }
 
 /// Look up an instance (non-static) method on a JVM class.
@@ -12492,51 +12641,143 @@ fn count_descriptor_params(desc: &str) -> usize {
     count
 }
 
-fn lookup_java_static_from_jdk(
+/// Look up a static method with type-aware overload resolution.
+/// `arg_types` is a hint for picking the best overload when multiple
+/// methods match the same name and parameter count.
+fn lookup_java_static_with_types(
     class_name: &str,
     method_name: &str,
     arg_count: usize,
+    arg_types: &[Ty],
 ) -> Option<(String, String, String, Ty)> {
-    use std::collections::HashMap;
-    use std::sync::Mutex;
+    ensure_class_loaded(class_name);
 
-    static REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> = Mutex::new(None);
+    with_registry(|reg| {
+        let class_info = reg.get(class_name)?;
+        let candidates: Vec<&skotch_classinfo::MethodInfo> = class_info
+            .methods
+            .iter()
+            .filter(|m| {
+                m.name == method_name
+                    && m.is_static()
+                    && m.is_public()
+                    && count_descriptor_params(&m.descriptor) == arg_count
+            })
+            .collect();
 
-    let mut guard = REGISTRY.lock().ok()?;
-    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
-
-    // Try to find the class in the registry. If not found, try to load it.
-    if !reg.contains_key(class_name) {
-        // Map simple name → JVM path for common packages.
-        let jvm_path = if class_name.contains('/') {
-            class_name.to_string()
+        let method = if candidates.len() <= 1 {
+            candidates.into_iter().next()
         } else {
-            format!("java/lang/{class_name}")
+            // Multiple overloads — pick the best match using arg types.
+            pick_best_overload(&candidates, arg_types)
         };
-        if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
-            reg.insert(class_name.to_string(), info);
-        }
-    }
 
-    let class_info = reg.get(class_name)?;
-    // First try: match by name AND parameter count.
-    let method = class_info
-        .methods
-        .iter()
-        .find(|m| {
-            m.name == method_name
-                && m.is_static()
-                && m.is_public()
-                && count_descriptor_params(&m.descriptor) == arg_count
-        })
-        // Fallback: just match by name.
-        .or_else(|| {
+        // Fallback: just match by name if no count match.
+        let method = method.or_else(|| {
             class_info
                 .methods
                 .iter()
                 .find(|m| m.name == method_name && m.is_static() && m.is_public())
         })?;
 
+        Some(make_lookup_result(&class_info.name, method))
+    })?
+}
+
+/// Like `lookup_java_static_from_jdk` but for instance methods (not static).
+fn lookup_java_instance_from_jdk(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+) -> Option<(String, String, String, Ty)> {
+    lookup_java_instance_with_types(class_name, method_name, arg_count, &[])
+}
+
+fn lookup_java_instance_with_types(
+    class_name: &str,
+    method_name: &str,
+    arg_count: usize,
+    arg_types: &[Ty],
+) -> Option<(String, String, String, Ty)> {
+    ensure_class_loaded(class_name);
+
+    with_registry(|reg| {
+        // Walk the superclass chain to find the method.
+        let mut search_class = Some(class_name.to_string());
+        while let Some(ref cname) = search_class {
+            if !reg.contains_key(cname.as_str()) {
+                let jvm_path = if cname.contains('/') {
+                    cname.clone()
+                } else {
+                    format!("java/lang/{cname}")
+                };
+                if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
+                    reg.insert(cname.clone(), info);
+                } else {
+                    break;
+                }
+            }
+            if let Some(ci) = reg.get(cname.as_str()) {
+                let candidates: Vec<&skotch_classinfo::MethodInfo> = ci
+                    .methods
+                    .iter()
+                    .filter(|m| {
+                        m.name == method_name
+                            && !m.is_static()
+                            && m.is_public()
+                            && count_descriptor_params(&m.descriptor) == arg_count
+                    })
+                    .collect();
+
+                let method = if candidates.len() <= 1 {
+                    candidates.into_iter().next()
+                } else {
+                    pick_best_overload(&candidates, arg_types)
+                };
+                let method = method.or_else(|| {
+                    ci.methods
+                        .iter()
+                        .find(|m| m.name == method_name && !m.is_static() && m.is_public())
+                });
+                if let Some(m) = method {
+                    return Some(make_lookup_result(&ci.name, m));
+                }
+                search_class = ci.super_class.clone();
+            } else {
+                break;
+            }
+        }
+        None
+    })?
+}
+
+/// Look up a constructor on a JVM class with type-aware overload resolution.
+pub fn lookup_constructor(class_name: &str, arg_count: usize, arg_types: &[Ty]) -> Option<String> {
+    ensure_class_loaded(class_name);
+    with_registry(|reg| {
+        let ci = reg.get(class_name)?;
+        let candidates: Vec<&skotch_classinfo::MethodInfo> = ci
+            .methods
+            .iter()
+            .filter(|m| {
+                m.name == "<init>"
+                    && m.is_public()
+                    && count_descriptor_params(&m.descriptor) == arg_count
+            })
+            .collect();
+        let method = if candidates.len() <= 1 {
+            candidates.into_iter().next()
+        } else {
+            pick_best_overload(&candidates, arg_types)
+        };
+        method.map(|m| m.descriptor.clone())
+    })?
+}
+
+fn make_lookup_result(
+    class_name: &str,
+    method: &skotch_classinfo::MethodInfo,
+) -> (String, String, String, Ty) {
     let return_ty = match skotch_classinfo::return_type_from_descriptor(&method.descriptor) {
         "Unit" => Ty::Unit,
         "Boolean" => Ty::Bool,
@@ -12546,100 +12787,119 @@ fn lookup_java_static_from_jdk(
         "String" => Ty::String,
         _ => Ty::Any,
     };
-
-    Some((
-        class_info.name.clone(),
+    (
+        class_name.to_string(),
         method.name.clone(),
         method.descriptor.clone(),
         return_ty,
-    ))
+    )
 }
 
-/// Like `lookup_java_static_from_jdk` but for instance methods (not static).
-fn lookup_java_instance_from_jdk(
-    class_name: &str,
-    method_name: &str,
-    arg_count: usize,
-) -> Option<(String, String, String, Ty)> {
-    use std::collections::HashMap;
-    use std::sync::Mutex;
+/// Pick the best overload from multiple candidates using argument types.
+///
+/// Scoring: each parameter gets a score based on type compatibility:
+/// - Exact match (Int→I, String→Ljava/lang/String;, Bool→Z): 3
+/// - Compatible (any→Ljava/lang/Object;): 1
+/// - Mismatch (String→I): 0
+/// Best total score wins. Ties prefer the overload with Object params
+/// (most general).
+fn pick_best_overload<'a>(
+    candidates: &[&'a skotch_classinfo::MethodInfo],
+    arg_types: &[Ty],
+) -> Option<&'a skotch_classinfo::MethodInfo> {
+    if candidates.is_empty() {
+        return None;
+    }
+    if arg_types.is_empty() {
+        // No type info — prefer the most general overload (all Object params).
+        let best = candidates
+            .iter()
+            .max_by_key(|m| generality_score(&m.descriptor));
+        return best.copied();
+    }
+    let best = candidates
+        .iter()
+        .max_by_key(|m| overload_score(&m.descriptor, arg_types));
+    best.copied()
+}
 
-    static REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> = Mutex::new(None);
-
-    let mut guard = REGISTRY.lock().ok()?;
-    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
-
-    if !reg.contains_key(class_name) {
-        let jvm_path = if class_name.contains('/') {
-            class_name.to_string()
-        } else {
-            format!("java/lang/{class_name}")
+/// Score how well a descriptor matches the given argument types.
+fn overload_score(descriptor: &str, arg_types: &[Ty]) -> i32 {
+    let params = parse_descriptor_param_types(descriptor);
+    let mut score = 0i32;
+    for (i, param_jvm) in params.iter().enumerate() {
+        let arg_ty = arg_types.get(i);
+        score += match (arg_ty, param_jvm.as_str()) {
+            (Some(Ty::Int), "I") => 3,
+            (Some(Ty::Long), "J") => 3,
+            (Some(Ty::Double), "D") | (Some(Ty::Double), "F") => 3,
+            (Some(Ty::Bool), "Z") => 3,
+            (Some(Ty::String), "Ljava/lang/String;") => 3,
+            (Some(Ty::String), "Ljava/lang/Object;") => 2,
+            (Some(Ty::Int), "Ljava/lang/Object;") => 1, // autobox
+            (Some(Ty::Long), "Ljava/lang/Object;") => 1,
+            (Some(Ty::Bool), "Ljava/lang/Object;") => 1,
+            (Some(Ty::Double), "Ljava/lang/Object;") => 1,
+            (_, p) if p == "Ljava/lang/Object;" => 1, // Object accepts anything
+            _ => 0,
         };
-        if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
-            reg.insert(class_name.to_string(), info);
+    }
+    score
+}
+
+/// Score how "general" a descriptor is (higher = more Object params).
+fn generality_score(descriptor: &str) -> i32 {
+    let params = parse_descriptor_param_types(descriptor);
+    params
+        .iter()
+        .map(|p| if p == "Ljava/lang/Object;" { 1 } else { 0 })
+        .sum()
+}
+
+/// Parse a JVM descriptor into its parameter type strings.
+/// E.g. "(ILjava/lang/String;Z)V" → ["I", "Ljava/lang/String;", "Z"]
+fn parse_descriptor_param_types(desc: &str) -> Vec<String> {
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut params = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => {
+                params.push(c.to_string());
+            }
+            'L' => {
+                let mut s = String::from("L");
+                for sc in chars.by_ref() {
+                    s.push(sc);
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                params.push(s);
+            }
+            '[' => {
+                let mut s = String::from("[");
+                // Consume the element type
+                if let Some(&next) = chars.peek() {
+                    if next == 'L' {
+                        chars.next();
+                        s.push('L');
+                        for sc in chars.by_ref() {
+                            s.push(sc);
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        s.push(chars.next().unwrap_or('I'));
+                    }
+                }
+                params.push(s);
+            }
+            _ => {}
         }
     }
-
-    // Walk the superclass chain to find the method. This handles
-    // cases like Exception.getMessage() where getMessage is declared
-    // on Throwable, not Exception itself.
-    let mut search_class = Some(class_name.to_string());
-    let mut found_method: Option<(String, String, String)> = None; // (class, name, desc)
-    while let Some(ref cname) = search_class {
-        // Ensure this class is loaded.
-        if !reg.contains_key(cname.as_str()) {
-            let jvm_path = if cname.contains('/') {
-                cname.clone()
-            } else {
-                format!("java/lang/{cname}")
-            };
-            if let Ok(info) = skotch_classinfo::load_jdk_class(&jvm_path) {
-                reg.insert(cname.clone(), info);
-            } else {
-                break;
-            }
-        }
-        if let Some(ci) = reg.get(cname.as_str()) {
-            let m = ci
-                .methods
-                .iter()
-                .find(|m| {
-                    m.name == method_name
-                        && !m.is_static()
-                        && m.is_public()
-                        && count_descriptor_params(&m.descriptor) == arg_count
-                })
-                .or_else(|| {
-                    ci.methods
-                        .iter()
-                        .find(|m| m.name == method_name && !m.is_static() && m.is_public())
-                });
-            if let Some(method) = m {
-                found_method = Some((
-                    ci.name.clone(),
-                    method.name.clone(),
-                    method.descriptor.clone(),
-                ));
-                break;
-            }
-            search_class = ci.super_class.clone();
-        } else {
-            break;
-        }
-    }
-    let (found_class, method_name_found, descriptor) = found_method?;
-
-    let return_ty = match skotch_classinfo::return_type_from_descriptor(&descriptor) {
-        "Unit" => Ty::Unit,
-        "Boolean" => Ty::Bool,
-        "Int" => Ty::Int,
-        "Long" => Ty::Long,
-        "Double" => Ty::Double,
-        "String" => Ty::String,
-        _ => Ty::Any,
-    };
-
-    Some((found_class, method_name_found, descriptor, return_ty))
+    params
 }
 
 /// Try to lower a method call as a Java static call. Returns Some(dest_local) if successful.
@@ -12668,10 +12928,8 @@ fn try_java_static_call(
         .get(&class_name)
         .cloned()
         .unwrap_or_else(|| class_name.clone());
-    let (jvm_class, jvm_method, descriptor, return_ty) =
-        lookup_java_static(&resolved_class, &method_str, args.len())?;
 
-    // Lower arguments.
+    // Lower arguments first so we can use their types for overload resolution.
     let mut arg_locals = Vec::new();
     for a in args {
         let id = lower_expr(
@@ -12687,6 +12945,13 @@ fn try_java_static_call(
         )?;
         arg_locals.push(id);
     }
+    let arg_types: Vec<Ty> = arg_locals
+        .iter()
+        .map(|l| fb.mf.locals[l.0 as usize].clone())
+        .collect();
+
+    let (jvm_class, jvm_method, descriptor, return_ty) =
+        lookup_java_static_typed(&resolved_class, &method_str, args.len(), &arg_types)?;
 
     let dest = fb.new_local(return_ty);
     fb.push_stmt(MStmt::Assign {
@@ -14031,10 +14296,9 @@ fn lower_class(
 
         let mut finished = fb.finish();
         finished.is_abstract = method.is_abstract;
+        finished.annotations =
+            lower_annotations(&method.annotations, interner, Some(&module.import_map));
         // Infer return type from body if not explicitly annotated.
-        // Expression-body methods (= expr) set ReturnValue as the
-        // terminator, and the returned local's type is the actual
-        // return type.
         if !method.is_suspend && finished.return_ty == Ty::Unit {
             if let Some(last_block) = finished.blocks.last() {
                 if let Terminator::ReturnValue(ret_local) = &last_block.terminator {
@@ -14222,7 +14486,8 @@ fn lower_class(
 
         let mut finished = fb.finish();
         // Propagate annotations from the companion method (e.g., @JvmStatic).
-        finished.annotations = lower_annotations(&method.annotations, interner);
+        finished.annotations =
+            lower_annotations(&method.annotations, interner, Some(&module.import_map));
         module.add_function(finished);
     }
 

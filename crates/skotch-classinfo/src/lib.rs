@@ -399,6 +399,43 @@ fn load_class_from_jar(jar_path: &Path, entry_path: &str) -> io::Result<ClassInf
     parse_class(&bytes)
 }
 
+/// Scan all `.class` entries in a list of JARs and return a map of
+/// JVM class name → ClassInfo.
+pub fn scan_jars(jars: &[PathBuf]) -> HashMap<String, ClassInfo> {
+    let mut map = HashMap::new();
+    for jar_path in jars {
+        if !jar_path.exists() {
+            continue;
+        }
+        let file = match std::fs::File::open(jar_path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let mut archive = match zip::ZipArchive::new(file) {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let name = entry.name().to_string();
+            if !name.ends_with(".class") || name.contains("module-info") {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            if entry.read_to_end(&mut bytes).is_err() {
+                continue;
+            }
+            if let Ok(info) = parse_class(&bytes) {
+                map.insert(info.name.clone(), info);
+            }
+        }
+    }
+    map
+}
+
 /// Build a class registry from the JDK for commonly-used java.lang classes.
 pub fn build_jdk_registry() -> HashMap<String, ClassInfo> {
     let mut reg = HashMap::new();

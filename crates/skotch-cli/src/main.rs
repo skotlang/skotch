@@ -112,8 +112,15 @@ enum Command {
     /// Used by editors (VS Code, Neovim, etc.) for real-time diagnostics,
     /// completions, hover, and go-to-definition.
     Lsp,
-    /// Run tests (lands in a later PR).
-    Test,
+    /// Run tests via JUnit Platform Console Launcher.
+    ///
+    /// Compiles test sources, resolves JUnit dependencies, and runs
+    /// tests discovered from `src/test/kotlin/` (or custom sourceSets).
+    Test {
+        /// Project directory (default: current directory).
+        #[arg(short = 'C', long = "project-dir", value_name = "DIR")]
+        project_dir: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -257,8 +264,17 @@ fn main() -> Result<()> {
                 .expect("failed to create tokio runtime")
                 .block_on(skotch_lsp::run_server());
         }
-        Command::Test => {
-            eprintln!("`skotch test` is not yet implemented.");
+        Command::Test { project_dir } => {
+            let project_dir = project_dir
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            let result = skotch_build::run_tests(&skotch_build::TestOptions { project_dir })?;
+            eprintln!(
+                "\n  {} tests, {} passed, {} failed",
+                result.tests_found, result.tests_passed, result.tests_failed
+            );
+            if !result.success {
+                std::process::exit(1);
+            }
         }
     }
     Ok(())

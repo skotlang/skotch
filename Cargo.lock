@@ -2208,6 +2208,7 @@ dependencies = [
  "skotch-jar",
  "skotch-lexer",
  "skotch-mir",
+ "skotch-mir-lower",
  "skotch-parser",
  "skotch-resolve",
  "skotch-span",

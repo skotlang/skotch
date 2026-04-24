@@ -31,8 +31,8 @@ blake3             = { workspace = true }
 skotch-db          = { workspace = true }
 skotch-tape        = { workspace = true }
 skotch-classinfo   = { workspace = true }
+skotch-mir-lower   = { workspace = true }
+which              = { workspace = true }
 
 [dev-dependencies]
-which            = { workspace = true }
 zip              = { workspace = true }
-skotch-classinfo = { workspace = true }
