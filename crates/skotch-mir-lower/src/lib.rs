@@ -3583,7 +3583,7 @@ fn lower_stmt(
                                 other => Ty::Class(other.to_string()),
                             }
                         })
-                        .unwrap_or(Ty::Any);
+                        .unwrap_or(Ty::Error);
                     let exc_local = fb.new_local(exc_ty);
                     scope.push((*param_sym, exc_local));
                     // Placeholder assignment — the JVM backend will emit
@@ -3772,7 +3772,7 @@ fn lower_stmt(
                     .find(|c| c.name == class_name)
                     .and_then(|c| c.fields.get(i))
                     .map(|f| f.ty.clone())
-                    .unwrap_or(Ty::Any);
+                    .unwrap_or(Ty::Error);
                 let result = fb.new_local(field_ty);
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
@@ -3958,7 +3958,7 @@ fn lower_expr(
                             .find(|c| &c.name == cls)
                             .and_then(|c| c.fields.first())
                             .map(|f| f.ty.clone())
-                            .unwrap_or(Ty::Any);
+                            .unwrap_or(Ty::Error);
                         let dest = fb.new_local(elem_ty);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -9159,7 +9159,7 @@ fn lower_expr(
                             .locals
                             .get(ci)
                             .cloned()
-                            .unwrap_or(Ty::Any);
+                            .unwrap_or(Ty::Error);
                         // Look for a $capture$ entry in scope.
                         let found = scope.iter().rev().find(|(sym, _)| {
                             let n = interner.resolve(*sym);
@@ -13651,7 +13651,7 @@ fn lower_class(
                 .ty
                 .as_ref()
                 .map(|tr| resolve_type(interner.resolve(tr.name), module))
-                .unwrap_or(Ty::Any);
+                .unwrap_or(Ty::Error);
 
             // Add a $initialized boolean field.
             let init_field_name = format!("{}$initialized", field_name);
@@ -14057,7 +14057,7 @@ fn lower_class(
                 .ty
                 .as_ref()
                 .map(|tr| resolve_type(interner.resolve(tr.name), module))
-                .unwrap_or(Ty::Any);
+                .unwrap_or(Ty::Error);
             let fn_idx = module.functions.len() + mir_methods.len();
             let mut fb = FnBuilder::new(fn_idx, getter_name, return_ty);
             let this_local = fb.new_local(Ty::Class(class_name.clone()));
@@ -14106,7 +14106,7 @@ fn lower_class(
                 .ty
                 .as_ref()
                 .map(|tr| resolve_type(interner.resolve(tr.name), module))
-                .unwrap_or(Ty::Any);
+                .unwrap_or(Ty::Error);
             let fn_idx = module.functions.len() + mir_methods.len();
             let mut fb = FnBuilder::new(fn_idx, setter_name, Ty::Unit);
             let this_local = fb.new_local(Ty::Class(class_name.clone()));
@@ -14140,7 +14140,7 @@ fn lower_class(
                 .ty
                 .as_ref()
                 .map(|tr| resolve_type(interner.resolve(tr.name), module))
-                .unwrap_or(Ty::Any);
+                .unwrap_or(Ty::Error);
             let backing_local = fb.new_local(backing_ty);
             fb.push_stmt(MStmt::Assign {
                 dest: backing_local,
@@ -14235,7 +14235,7 @@ fn lower_class(
             .ty
             .as_ref()
             .map(|tr| resolve_type(interner.resolve(tr.name), module))
-            .unwrap_or(Ty::Any);
+            .unwrap_or(Ty::Error);
         // Add as a field on the class.
         fields.push(MirField {
             name: prop_name.clone(),

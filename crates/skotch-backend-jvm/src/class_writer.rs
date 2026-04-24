@@ -4588,9 +4588,11 @@ fn emit_post_resume_store(
 /// drop the post-resume Object (Unit/Nothing/Any callees).
 fn checkcast_class_for_return_ty(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Unit | Ty::Nothing | Ty::Error => None,
-        // Ty::Any: store as Object (no checkcast needed, but DO store)
-        Ty::Any => Some("java/lang/Object".to_string()),
+        Ty::Unit | Ty::Nothing => None,
+        // Ty::Any and Ty::Error: store as Object (no checkcast needed, but DO store).
+        // Ty::Error is treated as Object for code emission to avoid corrupting
+        // the operand stack — the error was already reported during type checking.
+        Ty::Any | Ty::Error => Some("java/lang/Object".to_string()),
         Ty::String => Some("java/lang/String".to_string()),
         Ty::Bool => Some("java/lang/Boolean".to_string()),
         Ty::Byte => Some("java/lang/Byte".to_string()),
@@ -6767,7 +6769,9 @@ fn jvm_type(ty: &Ty) -> &'static str {
         // the verifier accepts null returns.  Nullable primitives box
         // (Integer?, Long?, etc.) and are also Object.
         Ty::Nullable(_) => "Ljava/lang/Object;",
-        Ty::Error => "V",
+        // Ty::Error is treated as Object reference for code emission so
+        // the JVM backend doesn't corrupt the stack for unresolved types.
+        Ty::Error => "Ljava/lang/Object;",
     }
 }
 
