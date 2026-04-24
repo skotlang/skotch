@@ -70,7 +70,8 @@ fn run_stdout(cmd: &mut Command) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    Some(String::from_utf8_lossy(&output.stdout).to_string())
+    // Normalize \r\n → \n for Windows compatibility.
+    Some(String::from_utf8_lossy(&output.stdout).replace('\r', ""))
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
