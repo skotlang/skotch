@@ -1,0 +1,4 @@
+name = "566-interface-delegation"
+status = "supported"
+features = ["interface-delegation", "by", "override", "forwarding"]
+expected_output = "[LOG] [PREFIX] hello\nINFO\n"

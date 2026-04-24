@@ -345,8 +345,12 @@ pub enum Stmt {
         span: Span,
     },
     /// `for (name in collection) { body }` — collection iteration.
+    /// When `destructure_names` is `Some`, the loop variable is destructured:
+    /// `for ((a, b) in collection)` desugars to `component1()`, `component2()`, etc.
     ForIn {
         var_name: Symbol,
+        /// If present, destructure the loop element into these names.
+        destructure_names: Option<Vec<Symbol>>,
         iterable: Expr,
         body: Block,
         span: Span,

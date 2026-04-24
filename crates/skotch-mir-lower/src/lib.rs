@@ -3075,6 +3075,7 @@ fn lower_stmt(
         }
         Stmt::ForIn {
             var_name,
+            destructure_names,
             iterable,
             body,
             ..
@@ -3149,7 +3150,27 @@ fn lower_stmt(
                         index: idx_var,
                     },
                 });
-                scope.push((*var_name, element));
+                if let Some(names) = destructure_names {
+                    // Destructure the element via componentN() calls.
+                    for (i, dn) in names.iter().enumerate() {
+                        let method_name = format!("component{}", i + 1);
+                        let comp = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: comp,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "kotlin/Pair".to_string(),
+                                    method_name: method_name.clone(),
+                                    descriptor: "()Ljava/lang/Object;".to_string(),
+                                },
+                                args: vec![element],
+                            },
+                        });
+                        scope.push((*dn, comp));
+                    }
+                } else {
+                    scope.push((*var_name, element));
+                }
 
                 let lctx = Some((cond_block, exit_block));
                 for s in &body.stmts {
@@ -3188,21 +3209,53 @@ fn lower_stmt(
 
                 fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
             } else {
+                // Check if we're iterating a Map — need entrySet().iterator()
+                // instead of just .iterator().
+                let is_map = matches!(&collection_ty, Ty::Class(cn)
+                    if cn.contains("Map"));
+
                 // Collection iteration via iterator()
                 //   val iter = collection.iterator()
                 //   while (iter.hasNext()) { val x = iter.next(); body }
                 let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
-                fb.push_stmt(MStmt::Assign {
-                    dest: iter_local,
-                    value: Rvalue::Call {
-                        kind: CallKind::VirtualJava {
-                            class_name: "java/lang/Iterable".to_string(),
-                            method_name: "iterator".to_string(),
-                            descriptor: "()Ljava/util/Iterator;".to_string(),
+                if is_map && destructure_names.is_some() {
+                    // Map destructuring: map.entrySet().iterator()
+                    let entry_set = fb.new_local(Ty::Class("java/util/Set".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: entry_set,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/Map".to_string(),
+                                method_name: "entrySet".to_string(),
+                                descriptor: "()Ljava/util/Set;".to_string(),
+                            },
+                            args: vec![collection_local],
                         },
-                        args: vec![collection_local],
-                    },
-                });
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest: iter_local,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/Set".to_string(),
+                                method_name: "iterator".to_string(),
+                                descriptor: "()Ljava/util/Iterator;".to_string(),
+                            },
+                            args: vec![entry_set],
+                        },
+                    });
+                } else {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: iter_local,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/Iterable".to_string(),
+                                method_name: "iterator".to_string(),
+                                descriptor: "()Ljava/util/Iterator;".to_string(),
+                            },
+                            args: vec![collection_local],
+                        },
+                    });
+                }
 
                 let cond_block = fb.new_block();
                 let body_block = fb.new_block();
@@ -3245,7 +3298,63 @@ fn lower_stmt(
                         args: vec![iter_local],
                     },
                 });
-                scope.push((*var_name, element));
+                if let Some(names) = destructure_names {
+                    if is_map {
+                        // Map.Entry destructuring: checkcast + getKey()/getValue()
+                        let entry = fb.new_local(Ty::Class("java/util/Map$Entry".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: entry,
+                            value: Rvalue::CheckCast {
+                                obj: element,
+                                target_class: "java/util/Map$Entry".to_string(),
+                            },
+                        });
+                        for (i, dn) in names.iter().enumerate() {
+                            let method_name = if i == 0 { "getKey" } else { "getValue" };
+                            let comp = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: comp,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "java/util/Map$Entry".to_string(),
+                                        method_name: method_name.to_string(),
+                                        descriptor: "()Ljava/lang/Object;".to_string(),
+                                    },
+                                    args: vec![entry],
+                                },
+                            });
+                            scope.push((*dn, comp));
+                        }
+                    } else {
+                        // Pair/data class destructuring: checkcast + componentN()
+                        let pair = fb.new_local(Ty::Class("kotlin/Pair".to_string()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: pair,
+                            value: Rvalue::CheckCast {
+                                obj: element,
+                                target_class: "kotlin/Pair".to_string(),
+                            },
+                        });
+                        for (i, dn) in names.iter().enumerate() {
+                            let method_name = format!("component{}", i + 1);
+                            let comp = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: comp,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "kotlin/Pair".to_string(),
+                                        method_name,
+                                        descriptor: "()Ljava/lang/Object;".to_string(),
+                                    },
+                                    args: vec![pair],
+                                },
+                            });
+                            scope.push((*dn, comp));
+                        }
+                    }
+                } else {
+                    scope.push((*var_name, element));
+                }
 
                 let lctx = Some((cond_block, exit_block));
                 for s in &body.stmts {
@@ -5282,6 +5391,129 @@ fn lower_expr(
                     }
                 }
 
+                // ── `.use { block }` — try-with-resources ──────────
+                // Simplified desugaring (no exception handler — just inline
+                // the lambda body and call close() afterward):
+                //   val result = block(resource)
+                //   resource.close()
+                //   result
+                // Full exception-safe version would need try-finally, but
+                // this covers the common case and avoids StackMapTable
+                // complexity for exception handlers.
+                if method_name_str == "use" && args.len() == 1 {
+                    let lambda_local = all_args.last().copied().unwrap();
+                    let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
+                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$"))
+                        || matches!(lambda_ty, Ty::Any);
+                    if is_lambda {
+                        // Invoke the lambda with the resource as argument.
+                        let invoke_class = if let Ty::Class(ref cn) = lambda_ty {
+                            cn.clone()
+                        } else {
+                            "java/lang/Object".to_string()
+                        };
+                        let invoke_ret = if let Ty::Class(ref cn) = lambda_ty {
+                            module
+                                .classes
+                                .iter()
+                                .find(|c| &c.name == cn)
+                                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                                .map(|m| m.return_ty.clone())
+                                .unwrap_or(Ty::Any)
+                        } else {
+                            Ty::Any
+                        };
+
+                        // Check if the lambda takes a parameter (Function1)
+                        // or is parameterless (Function0).
+                        let lambda_param_count = if let Ty::Class(ref cn) = lambda_ty {
+                            module
+                                .classes
+                                .iter()
+                                .find(|c| &c.name == cn)
+                                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                                .map(|m| m.params.len().saturating_sub(1)) // subtract `this`
+                                .unwrap_or(0)
+                        } else {
+                            0
+                        };
+
+                        let call_args = if lambda_param_count > 0 {
+                            // Function1: invoke(receiver)
+                            let recv_arg = {
+                                let recv_arg_ty = fb.mf.locals[recv_local.0 as usize].clone();
+                                if matches!(recv_arg_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool)
+                                {
+                                    mir_autobox(fb, recv_local, &recv_arg_ty)
+                                } else if matches!(recv_arg_ty, Ty::Any) {
+                                    recv_local
+                                } else {
+                                    let widened = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: widened,
+                                        value: Rvalue::Local(recv_local),
+                                    });
+                                    widened
+                                }
+                            };
+                            vec![lambda_local, recv_arg]
+                        } else {
+                            // Function0: invoke() — no receiver arg
+                            vec![lambda_local]
+                        };
+                        let call_result = fb.new_local(invoke_ret);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: call_result,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: invoke_class,
+                                    method_name: "invoke".to_string(),
+                                },
+                                args: call_args,
+                            },
+                        });
+
+                        // Call resource.close() after the lambda.
+                        // Use the receiver's actual class for dispatch.
+                        let close_class = match &recv_ty {
+                            Ty::Class(cn) => cn.clone(),
+                            _ => "java/lang/AutoCloseable".to_string(),
+                        };
+                        // Check if close() is on the receiver's own class
+                        // (user-defined) or needs to go through an interface.
+                        let has_own_close = module.classes.iter().any(|c| {
+                            c.name == close_class && c.methods.iter().any(|m| m.name == "close")
+                        });
+                        let close_result = fb.new_local(Ty::Unit);
+                        if has_own_close {
+                            fb.push_stmt(MStmt::Assign {
+                                dest: close_result,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: close_class,
+                                        method_name: "close".to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                        } else {
+                            fb.push_stmt(MStmt::Assign {
+                                dest: close_result,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: "java/lang/AutoCloseable".to_string(),
+                                        method_name: "close".to_string(),
+                                        descriptor: "()V".to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                        }
+
+                        return Some(call_result);
+                    }
+                }
+
                 // ── `.forEach { }` on ArrayList/List collections ──────
                 if method_name_str == "forEach"
                     && args.len() == 1
@@ -5759,8 +5991,15 @@ fn lower_expr(
                                 value: Rvalue::Const(MirConst::Null),
                             });
                             all_args = vec![
-                                receiver, separator, null_cs, null_cs2, zero,
-                                null_cs3, null_fn, bitmask, null_marker,
+                                receiver,
+                                separator,
+                                null_cs,
+                                null_cs2,
+                                zero,
+                                null_cs3,
+                                null_fn,
+                                bitmask,
+                                null_marker,
                             ];
                         }
                         let dest = fb.new_local(ret_ty);

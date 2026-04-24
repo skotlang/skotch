@@ -1,0 +1,4 @@
+name = "567-destructure-for-map"
+status = "supported"
+features = ["destructuring", "for-in", "map", "entrySet"]
+expected_output = "a=1\nb=2\nc=3\n"

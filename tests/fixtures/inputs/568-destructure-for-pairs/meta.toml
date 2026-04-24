@@ -1,0 +1,4 @@
+name = "568-destructure-for-pairs"
+status = "supported"
+features = ["destructuring", "for-in", "pairs", "componentN"]
+expected_output = "x: 10\ny: 20\n"

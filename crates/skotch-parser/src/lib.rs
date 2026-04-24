@@ -2300,17 +2300,53 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         self.expect(TokenKind::LParen, "'(' after 'for'");
         self.skip_trivia();
-        // Parse: varName in start..end  OR  varName in collection
-        let var_name_idx = self.pos;
-        let var_span = self.peek_span();
-        let var_name = if self.peek_kind() == TokenKind::Ident {
-            self.bump();
-            self.intern_ident_at(var_name_idx)
+
+        // Check for destructuring pattern: `for ((a, b) in collection)`
+        let mut destructure_names: Option<Vec<Symbol>> = None;
+        let var_name;
+
+        if self.peek_kind() == TokenKind::LParen {
+            // Destructuring pattern.
+            self.bump(); // consume inner `(`
+            self.skip_trivia();
+            let mut names = Vec::new();
+            loop {
+                let idx = self.pos;
+                let sp = self.peek_span();
+                if self.peek_kind() == TokenKind::Ident {
+                    self.bump();
+                    names.push(self.intern_ident_at(idx));
+                } else {
+                    self.diags
+                        .push(Diagnostic::error(sp, "expected destructuring name"));
+                    names.push(self.interner.intern("_"));
+                }
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Comma {
+                    self.bump();
+                    self.skip_trivia();
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RParen, "')' after destructuring pattern");
+            self.skip_trivia();
+            // Use the first name as the synthetic composite variable name.
+            var_name = self.interner.intern("__destructure_elem__");
+            destructure_names = Some(names);
         } else {
-            self.diags
-                .push(Diagnostic::error(var_span, "expected loop variable name"));
-            self.interner.intern("_")
-        };
+            // Parse: varName in start..end  OR  varName in collection
+            let var_name_idx = self.pos;
+            let var_span = self.peek_span();
+            var_name = if self.peek_kind() == TokenKind::Ident {
+                self.bump();
+                self.intern_ident_at(var_name_idx)
+            } else {
+                self.diags
+                    .push(Diagnostic::error(var_span, "expected loop variable name"));
+                self.interner.intern("_")
+            };
+        }
         self.skip_trivia();
         self.expect(TokenKind::KwIn, "'in' after loop variable");
         self.skip_trivia();
@@ -2404,6 +2440,7 @@ impl<'a> Parser<'a> {
             let span = start.merge(body.span);
             Stmt::ForIn {
                 var_name,
+                destructure_names,
                 iterable: range_start,
                 body,
                 span,

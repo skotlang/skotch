@@ -334,14 +334,24 @@ impl<'a> Resolver<'a> {
             }
             Stmt::ForIn {
                 var_name,
+                destructure_names,
                 iterable,
                 body,
                 ..
             } => {
                 self.resolve_expr(fn_idx, iterable, scope, rf);
-                let local_idx = rf.locals.len() as u32;
-                rf.locals.push(*var_name);
-                scope.push((*var_name, DefId::Local(fn_idx, local_idx)));
+                if let Some(names) = destructure_names {
+                    // Register each destructured name as a local.
+                    for dn in names {
+                        let local_idx = rf.locals.len() as u32;
+                        rf.locals.push(*dn);
+                        scope.push((*dn, DefId::Local(fn_idx, local_idx)));
+                    }
+                } else {
+                    let local_idx = rf.locals.len() as u32;
+                    rf.locals.push(*var_name);
+                    scope.push((*var_name, DefId::Local(fn_idx, local_idx)));
+                }
                 for s in &body.stmts {
                     self.resolve_stmt(fn_idx, s, scope, rf);
                 }

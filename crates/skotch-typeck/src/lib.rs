@@ -801,6 +801,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 Stmt::ForIn {
                     var_name,
+                    destructure_names,
                     iterable,
                     body,
                     ..
@@ -816,8 +817,16 @@ impl<'a> TypeChecker<'a> {
                         // Generic collections erase to Any on JVM.
                         _ => Ty::Any,
                     };
-                    local_tys.push(elem_ty.clone());
-                    scope.push((*var_name, elem_ty));
+                    if let Some(names) = destructure_names {
+                        // Each destructured component is typed as Any (erased).
+                        for dn in names {
+                            local_tys.push(Ty::Any);
+                            scope.push((*dn, Ty::Any));
+                        }
+                    } else {
+                        local_tys.push(elem_ty.clone());
+                        scope.push((*var_name, elem_ty));
+                    }
                     self.check_block(body, scope, local_tys);
                 }
             }
