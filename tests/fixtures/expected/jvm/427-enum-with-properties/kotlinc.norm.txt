@@ -1,0 +1,27 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 getstatic Field(Planet.EARTH:LPlanet;)
+    0003 invokevirtual Method(Planet.getMass:()D)
+    0006 op_0x47
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 op_0x26
+    0011 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0014 ldc "MARS"
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 op_0x5F
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 getstatic Field(Planet.JUPITER:LPlanet;)
+    0026 invokevirtual Method(Planet.getMass:()D)
+    0029 op_0x47
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 op_0x26
+    0034 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0037 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

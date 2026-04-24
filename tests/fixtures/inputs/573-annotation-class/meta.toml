@@ -1,0 +1,4 @@
+name = "573-annotation-class"
+status = "supported"
+features = ["annotation-class", "custom-annotation"]
+expected_output = "Hello!\n"

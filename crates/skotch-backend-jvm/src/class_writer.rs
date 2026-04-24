@@ -52,6 +52,112 @@ struct CmpBranchTarget {
     block_idx: usize,
 }
 
+/// Encode a `RuntimeVisibleAnnotations` attribute into `out`.
+/// Returns the number of annotation attributes written (0 or 1).
+fn encode_annotation_attributes(
+    annotations: &[skotch_mir::MirAnnotation],
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+) -> u16 {
+    // Filter to RUNTIME-retention annotations only.
+    let runtime_annots: Vec<_> = annotations
+        .iter()
+        .filter(|a| a.retention == skotch_mir::AnnotationRetention::Runtime)
+        .collect();
+    if runtime_annots.is_empty() {
+        return 0;
+    }
+    let attr_name = cp.utf8("RuntimeVisibleAnnotations");
+    let mut body = Vec::new();
+    body.write_u16::<BigEndian>(runtime_annots.len() as u16).unwrap();
+    for annot in &runtime_annots {
+        let type_idx = cp.utf8(&annot.descriptor);
+        body.write_u16::<BigEndian>(type_idx).unwrap();
+        body.write_u16::<BigEndian>(annot.args.len() as u16).unwrap();
+        for arg in &annot.args {
+            let name_idx = cp.utf8(&arg.name);
+            body.write_u16::<BigEndian>(name_idx).unwrap();
+            encode_annotation_value(&arg.value, cp, &mut body);
+        }
+    }
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(body.len() as u32).unwrap();
+    out.write_all(&body).unwrap();
+    1
+}
+
+/// Encode a single annotation element_value.
+fn encode_annotation_value(
+    value: &skotch_mir::MirAnnotationValue,
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+) {
+    match value {
+        skotch_mir::MirAnnotationValue::String(s) => {
+            out.push(b's'); // tag: String
+            let idx = cp.utf8(s);
+            out.write_u16::<BigEndian>(idx).unwrap();
+        }
+        skotch_mir::MirAnnotationValue::Int(v) => {
+            out.push(b'I'); // tag: int
+            let idx = cp.integer(*v);
+            out.write_u16::<BigEndian>(idx).unwrap();
+        }
+        skotch_mir::MirAnnotationValue::Bool(v) => {
+            out.push(b'Z'); // tag: boolean
+            let idx = cp.integer(if *v { 1 } else { 0 });
+            out.write_u16::<BigEndian>(idx).unwrap();
+        }
+        skotch_mir::MirAnnotationValue::Class(desc) => {
+            out.push(b'c'); // tag: class
+            let idx = cp.utf8(desc);
+            out.write_u16::<BigEndian>(idx).unwrap();
+        }
+        skotch_mir::MirAnnotationValue::Enum(type_desc, const_name) => {
+            out.push(b'e'); // tag: enum
+            let type_idx = cp.utf8(type_desc);
+            let name_idx = cp.utf8(const_name);
+            out.write_u16::<BigEndian>(type_idx).unwrap();
+            out.write_u16::<BigEndian>(name_idx).unwrap();
+        }
+        skotch_mir::MirAnnotationValue::Array(items) => {
+            out.push(b'['); // tag: array
+            out.write_u16::<BigEndian>(items.len() as u16).unwrap();
+            for item in items {
+                encode_annotation_value(item, cp, out);
+            }
+        }
+    }
+}
+
+/// Append annotation attributes to a method that was already assembled.
+/// The method bytes have the format: access(u16) name(u16) desc(u16)
+/// attrs_count(u16) [attr_data...]. This function increments attrs_count
+/// and appends a RuntimeVisibleAnnotations attribute if the function has
+/// runtime-retention annotations.
+fn append_method_annotations(
+    method_bytes: &mut Vec<u8>,
+    func: &MirFunction,
+    cp: &mut ConstantPool,
+) {
+    let runtime_annots: Vec<_> = func
+        .annotations
+        .iter()
+        .filter(|a| a.retention == skotch_mir::AnnotationRetention::Runtime)
+        .collect();
+    if runtime_annots.is_empty() {
+        return;
+    }
+    // The attributes_count is at offset 6 (after access u16 + name u16 + desc u16).
+    let current_count =
+        u16::from_be_bytes([method_bytes[6], method_bytes[7]]);
+    let new_count = current_count + 1;
+    method_bytes[6] = (new_count >> 8) as u8;
+    method_bytes[7] = (new_count & 0xFF) as u8;
+    // Append the annotation attribute.
+    encode_annotation_attributes(&func.annotations, cp, method_bytes);
+}
+
 /// Compile a [`MirModule`] to one (or more) `(internal_name, bytes)`
 /// pairs ready to write to disk.
 pub fn compile_module(module: &MirModule, _interner: &Interner) -> Vec<(String, Vec<u8>)> {
@@ -94,7 +200,8 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         if func.is_abstract {
             continue;
         }
-        let blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
+        let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
+        append_method_annotations(&mut blob, func, &mut cp);
         method_blobs.push(blob);
     }
 
@@ -327,7 +434,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     }
     if !effective_suspend_lambda {
         for method in &class.methods {
-            let blob = emit_user_method(
+            let mut blob = emit_user_method(
                 method,
                 module,
                 &class.name,
@@ -336,6 +443,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 code2,
                 false,
             );
+            append_method_annotations(&mut blob, method, &mut cp2);
             method_blobs2.push(blob);
         }
     }

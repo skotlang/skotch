@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 op_0xBA
+    0001 nop
+    0002 iload_0
+    0003 nop
+    0004 nop
+    0005 astore_0
+    0006 aload_0
+    0007 iconst_5
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0016 checkcast Class(java/lang/Number)
+    0019 invokevirtual Method(java/lang/Number.intValue:()I)
+    0022 istore_1
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 iload_1
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 aload_0
+    0031 bipush 21
+    0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0036 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0041 checkcast Class(java/lang/Number)
+    0044 invokevirtual Method(java/lang/Number.intValue:()I)
+    0047 istore_1
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 iload_1
+    0052 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0055 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 iconst_2
+    0002 imul
+    0003 op_0xAC
+class_attr    BootstrapMethods (12 bytes)

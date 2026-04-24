@@ -1,0 +1,38 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=6
+    0000 new Class(DbConn)
+    0003 dup
+    0004 invokespecial Method(DbConn.<init>:()V)
+    0007 astore 1
+    0009 aload 1
+    0011 checkcast Class(DbConn)
+    0014 astore 2
+    0016 aload 2
+    0018 checkcast Class(DbConn)
+    0021 astore 3
+    0023 new Class(InputKt$Lambda$1)
+    0026 dup
+    0027 aload 2
+    0029 invokespecial Method(InputKt$Lambda$1.<init>:(LDbConn;)V)
+    0032 astore 4
+    0034 aload 4
+    0036 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0039 pop
+    0040 aload 3
+    0042 invokevirtual Method(DbConn.close:()V)
+    0045 ldc "done"
+    0047 astore 5
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 aload 5
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0057 return
+method        process (LDbConn;)Ljava/lang/String; 0x0009
+  code        max_stack=1 max_locals=2
+    0000 ldc "processed"
+    0002 astore 1
+    0004 aload 1
+    0006 areturn

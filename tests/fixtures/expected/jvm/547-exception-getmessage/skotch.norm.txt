@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        divide (II)I 0x0009
-  code        max_stack=3 max_locals=11
+  code        max_stack=3 max_locals=10
     0000 iload 1
     0002 istore 2
     0004 iconst_0
@@ -18,7 +18,7 @@ method        divide (II)I 0x0009
     0018 iconst_1
     0019 istore 4
     0021 iload 4
-    0023 ifeq 48
+    0023 ifeq 44
     0026 ldc "Division by zero"
     0028 astore 5
     0030 new Class(java/lang/IllegalArgumentException)
@@ -26,20 +26,19 @@ method        divide (II)I 0x0009
     0034 aload 5
     0036 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
     0039 astore 6
-    0041 aload 7
-    0043 astore 7
-    0045 goto 51
-    0048 goto 51
-    0051 iload 0
+    0041 aload 6
+    0043 athrow
+    0044 goto 47
+    0047 iload 0
+    0049 istore 7
+    0051 iload 1
     0053 istore 8
-    0055 iload 1
-    0057 istore 9
-    0059 iload 8
-    0061 iload 9
-    0063 idiv
-    0064 istore 10
-    0066 iload 10
-    0068 op_0xAC
+    0055 iload 7
+    0057 iload 8
+    0059 idiv
+    0060 istore 9
+    0062 iload 9
+    0064 op_0xAC
     sub_attr  StackMapTable (49 bytes)
 method        main ([Ljava/lang/String;)V 0x0009
   code        max_stack=2 max_locals=10

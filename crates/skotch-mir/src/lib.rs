@@ -36,6 +36,54 @@ fn is_zero_usize(v: &usize) -> bool {
     *v == 0
 }
 
+// ── Annotations ─────────────────────────────────────────────────────────────
+
+/// An annotation carried through MIR for JVM emission.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MirAnnotation {
+    /// Fully-qualified JVM type descriptor, e.g. "Lkotlin/jvm/JvmStatic;".
+    pub descriptor: String,
+    /// Element-value pairs for annotation arguments.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<MirAnnotationArg>,
+    /// Retention policy. Only RUNTIME annotations are emitted to .class.
+    #[serde(default)]
+    pub retention: AnnotationRetention,
+}
+
+/// A single annotation argument (element-value pair).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MirAnnotationArg {
+    pub name: String,
+    pub value: MirAnnotationValue,
+}
+
+/// Annotation argument value types matching JVM element_value spec.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MirAnnotationValue {
+    String(String),
+    Int(i32),
+    Bool(bool),
+    /// Class reference: "Ljava/lang/String;"
+    Class(String),
+    /// Enum constant: (type_descriptor, constant_name)
+    Enum(String, String),
+    /// Array of values.
+    Array(Vec<MirAnnotationValue>),
+}
+
+/// Annotation retention policy.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AnnotationRetention {
+    /// Discarded after compilation. Not emitted to .class.
+    Source,
+    /// Stored in .class but not available at runtime via reflection.
+    Binary,
+    /// Stored in .class and available at runtime via reflection.
+    #[default]
+    Runtime,
+}
+
 /// Identifier for a virtual local inside a function. Locals are dense:
 /// 0..N for parameters and `val`/`var` declarations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -336,6 +384,9 @@ pub struct MirFunction {
     /// are rejected at lowering time until Session 4 lands.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suspend_state_machine: Option<SuspendStateMachine>,
+    /// Annotations on this function (emitted as RuntimeVisibleAnnotations).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<MirAnnotation>,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either
@@ -634,6 +685,9 @@ pub struct MirClass {
     /// as a class file by backends (the real class comes from another file).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_cross_file_stub: bool,
+    /// Annotations on this class (emitted as RuntimeVisibleAnnotations).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<MirAnnotation>,
 }
 
 /// A field in a MIR class.

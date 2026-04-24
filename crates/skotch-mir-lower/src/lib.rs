@@ -142,6 +142,91 @@ fn stdlib_function_interface(arity: usize) -> String {
 }
 
 /// Check if a method call on a receiver type is a Kotlin stdlib
+/// Convert AST annotations to MIR annotations.
+fn lower_annotations(
+    annotations: &[skotch_syntax::Annotation],
+    interner: &Interner,
+) -> Vec<skotch_mir::MirAnnotation> {
+    annotations
+        .iter()
+        .map(|a| {
+            let name = interner.resolve(a.name);
+            // Map well-known annotation names to JVM descriptors.
+            let descriptor = match name {
+                "JvmStatic" => "Lkotlin/jvm/JvmStatic;".to_string(),
+                "JvmField" => "Lkotlin/jvm/JvmField;".to_string(),
+                "JvmOverloads" => "Lkotlin/jvm/JvmOverloads;".to_string(),
+                "JvmName" => "Lkotlin/jvm/JvmName;".to_string(),
+                "Suppress" => "Lkotlin/Suppress;".to_string(),
+                "Deprecated" => "Lkotlin/Deprecated;".to_string(),
+                "Composable" => "Landroidx/compose/runtime/Composable;".to_string(),
+                "Preview" => "Landroidx/compose/ui/tooling/preview/Preview;".to_string(),
+                "OptIn" => "Lkotlin/OptIn;".to_string(),
+                "Throws" => "Lkotlin/Throws;".to_string(),
+                "Transient" => "Lkotlin/jvm/Transient;".to_string(),
+                "Volatile" => "Lkotlin/jvm/Volatile;".to_string(),
+                "Strictfp" => "Lkotlin/jvm/Strictfp;".to_string(),
+                "Synchronized" => "Lkotlin/jvm/Synchronized;".to_string(),
+                _ => format!("L{name};"),
+            };
+            let args: Vec<skotch_mir::MirAnnotationArg> = a
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let arg_name = format!("value{i}");
+                    let value = match arg {
+                        skotch_syntax::AnnotationArg::StringLit(s) => {
+                            skotch_mir::MirAnnotationValue::String(s.clone())
+                        }
+                        skotch_syntax::AnnotationArg::IntLit(v) => {
+                            skotch_mir::MirAnnotationValue::Int(*v as i32)
+                        }
+                        skotch_syntax::AnnotationArg::BoolLit(v) => {
+                            skotch_mir::MirAnnotationValue::Bool(*v)
+                        }
+                        skotch_syntax::AnnotationArg::Ident(sym) => {
+                            skotch_mir::MirAnnotationValue::String(
+                                interner.resolve(*sym).to_string(),
+                            )
+                        }
+                        skotch_syntax::AnnotationArg::QualifiedName(parts) => {
+                            let joined: Vec<&str> =
+                                parts.iter().map(|s| interner.resolve(*s)).collect();
+                            skotch_mir::MirAnnotationValue::String(joined.join("."))
+                        }
+                        skotch_syntax::AnnotationArg::Array(items) => {
+                            let arr: Vec<skotch_mir::MirAnnotationValue> = items
+                                .iter()
+                                .map(|item| match item {
+                                    skotch_syntax::AnnotationArg::StringLit(s) => {
+                                        skotch_mir::MirAnnotationValue::String(s.clone())
+                                    }
+                                    _ => skotch_mir::MirAnnotationValue::String(String::new()),
+                                })
+                                .collect();
+                            skotch_mir::MirAnnotationValue::Array(arr)
+                        }
+                    };
+                    skotch_mir::MirAnnotationArg {
+                        name: if a.args.len() == 1 {
+                            "value".to_string()
+                        } else {
+                            arg_name
+                        },
+                        value,
+                    }
+                })
+                .collect();
+            skotch_mir::MirAnnotation {
+                descriptor,
+                args,
+                retention: skotch_mir::AnnotationRetention::Runtime,
+            }
+        })
+        .collect()
+}
+
 /// extension function compiled as a static method in a `*Kt` facade
 /// class. Returns `(facade_class, method_name, descriptor, return_ty)`.
 fn stdlib_extension(
@@ -441,6 +526,7 @@ pub fn lower_file(
             let placeholder_params: Vec<LocalId> =
                 (0..placeholder_param_count as u32).map(LocalId).collect();
             let placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
+            let fn_annotations = lower_annotations(&f.annotations, interner);
             module.functions.push(MirFunction {
                 id,
                 name: name_str,
@@ -458,6 +544,7 @@ pub fn lower_file(
                 is_suspend: f.is_suspend,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: fn_annotations,
             });
             fn_pass1_idx += 1;
         }
@@ -494,6 +581,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -543,6 +631,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
             stub.params.push(p_cont);
@@ -574,6 +663,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
             stub.params.push(p_ctx);
@@ -609,6 +699,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -642,6 +733,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -675,6 +767,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -710,6 +803,7 @@ pub fn lower_file(
                 is_suspend: true,
                 suspend_original_return_ty: Some(Ty::Nullable(Box::new(Ty::Any))),
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -883,6 +977,7 @@ pub fn lower_file(
                         is_suspend: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
+                        annotations: Vec::new(),
                     }
                 };
                 let methods: Vec<MirFunction> = ext_class
@@ -904,6 +999,7 @@ pub fn lower_file(
                     secondary_constructors: Vec::new(),
                     is_suspend_lambda: false,
                     is_cross_file_stub: true,
+                    annotations: Vec::new(),
                 });
             }
         }
@@ -1210,6 +1306,7 @@ fn build_continuation_class(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
     let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
@@ -1252,6 +1349,7 @@ fn build_continuation_class(
         // same marker the top-level `run` function carries so the
         // JVM backend knows to substitute its canonical emitter.
         suspend_state_machine: Some(sm.clone()),
+        annotations: Vec::new(),
     };
     let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
     let result_param = invoke.new_local(Ty::Any);
@@ -1298,6 +1396,7 @@ fn build_continuation_class(
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
         is_cross_file_stub: false,
+        annotations: Vec::new(),
     }
 }
 
@@ -1750,6 +1849,7 @@ impl FnBuilder {
             is_suspend: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
+            annotations: Vec::new(),
         };
         FnBuilder {
             mf,
@@ -2619,12 +2719,14 @@ fn lower_function(
         let saved_names = module.functions[fn_idx].param_names.clone();
         let saved_vararg = module.functions[fn_idx].vararg_index;
         let saved_suspend = module.functions[fn_idx].is_suspend;
+        let saved_annotations = module.functions[fn_idx].annotations.clone();
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
         module.functions[fn_idx].param_names = saved_names;
         module.functions[fn_idx].vararg_index = saved_vararg;
         module.functions[fn_idx].is_suspend = saved_suspend;
+        module.functions[fn_idx].annotations = saved_annotations;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -2646,6 +2748,7 @@ fn lower_function(
             is_suspend: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
+            annotations: Vec::new(),
         };
     }
 }
@@ -3528,6 +3631,7 @@ fn lower_stmt(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -6980,6 +7084,7 @@ fn lower_expr(
                             is_abstract: false,
                             is_suspend: false,
                             visibility: skotch_syntax::Visibility::Public,
+                            annotations: Vec::new(),
                             span: *lspan,
                         };
                         // If the SAM method returns non-Unit, set return type.
@@ -11694,6 +11799,7 @@ fn lower_expr(
                     is_suspend: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
+                    annotations: Vec::new(),
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -11732,6 +11838,7 @@ fn lower_expr(
                     secondary_constructors: Vec::new(),
                     is_suspend_lambda: false,
         is_cross_file_stub: false,
+                    annotations: Vec::new(),
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -11805,10 +11912,12 @@ fn lower_expr(
                     is_suspend: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
+                    annotations: Vec::new(),
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
                 is_cross_file_stub: false,
+                annotations: Vec::new(),
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -12168,6 +12277,7 @@ fn lower_expr(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -12263,6 +12373,7 @@ fn lower_expr(
                     is_suspend: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
+                    annotations: Vec::new(),
                 };
                 let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
                 susp_init.params.push(susp_this);
@@ -12330,6 +12441,7 @@ fn lower_expr(
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
                 is_cross_file_stub: false,
+                annotations: Vec::new(),
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -12488,6 +12600,7 @@ fn lower_expr(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -12517,6 +12630,7 @@ fn lower_expr(
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
         is_cross_file_stub: false,
+                annotations: Vec::new(),
             });
 
             // Instantiate.
@@ -12938,6 +13052,7 @@ fn lower_enum(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -12999,6 +13114,7 @@ fn lower_enum(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -13161,6 +13277,7 @@ fn lower_enum(
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
         is_cross_file_stub: false,
+        annotations: Vec::new(),
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -13416,6 +13533,7 @@ fn lower_object(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -13546,6 +13664,7 @@ fn lower_class(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -13762,6 +13881,7 @@ fn lower_class(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             }
         })
         .collect();
@@ -13784,6 +13904,7 @@ fn lower_class(
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
         is_cross_file_stub: false,
+        annotations: Vec::new(),
     });
 
     // Lower methods.
@@ -14369,7 +14490,10 @@ fn lower_class(
             );
         }
 
-        module.add_function(fb.finish());
+        let mut finished = fb.finish();
+        // Propagate annotations from the companion method (e.g., @JvmStatic).
+        finished.annotations = lower_annotations(&method.annotations, interner);
+        module.add_function(finished);
     }
 
     // Lower companion object properties as static fields.
@@ -14901,6 +15025,7 @@ fn lower_class(
             is_suspend: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
+            annotations: Vec::new(),
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -15125,6 +15250,7 @@ fn lower_class(
         secondary_constructors: mir_secondary_ctors,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
+        annotations: Vec::new(),
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -15213,6 +15339,7 @@ fn lower_interface(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -15243,6 +15370,7 @@ fn lower_interface(
         is_suspend: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
+        annotations: Vec::new(),
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -15258,6 +15386,7 @@ fn lower_interface(
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
         is_cross_file_stub: false,
+        annotations: Vec::new(),
     });
 
     // Lower method bodies for default methods (non-abstract).
@@ -15292,6 +15421,7 @@ fn lower_interface(
                 is_suspend: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
+                annotations: Vec::new(),
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);
