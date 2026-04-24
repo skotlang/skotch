@@ -151,24 +151,7 @@ fn lower_annotations(
         .iter()
         .map(|a| {
             let name = interner.resolve(a.name);
-            // Map well-known annotation names to JVM descriptors.
-            let descriptor = match name {
-                "JvmStatic" => "Lkotlin/jvm/JvmStatic;".to_string(),
-                "JvmField" => "Lkotlin/jvm/JvmField;".to_string(),
-                "JvmOverloads" => "Lkotlin/jvm/JvmOverloads;".to_string(),
-                "JvmName" => "Lkotlin/jvm/JvmName;".to_string(),
-                "Suppress" => "Lkotlin/Suppress;".to_string(),
-                "Deprecated" => "Lkotlin/Deprecated;".to_string(),
-                "Composable" => "Landroidx/compose/runtime/Composable;".to_string(),
-                "Preview" => "Landroidx/compose/ui/tooling/preview/Preview;".to_string(),
-                "OptIn" => "Lkotlin/OptIn;".to_string(),
-                "Throws" => "Lkotlin/Throws;".to_string(),
-                "Transient" => "Lkotlin/jvm/Transient;".to_string(),
-                "Volatile" => "Lkotlin/jvm/Volatile;".to_string(),
-                "Strictfp" => "Lkotlin/jvm/Strictfp;".to_string(),
-                "Synchronized" => "Lkotlin/jvm/Synchronized;".to_string(),
-                _ => format!("L{name};"),
-            };
+            let descriptor = skotch_stdlib_registry::annotation_descriptor(name);
             let args: Vec<skotch_mir::MirAnnotationArg> = a
                 .args
                 .iter()
@@ -227,219 +210,19 @@ fn lower_annotations(
         .collect()
 }
 
-/// extension function compiled as a static method in a `*Kt` facade
-/// class. Returns `(facade_class, method_name, descriptor, return_ty)`.
+/// Look up a Kotlin extension function compiled as a static method in
+/// a `*Kt` facade class. Data is in the `skotch-stdlib-registry` crate.
 fn stdlib_extension(
     receiver_ty: &str,
     method: &str,
 ) -> Option<(&'static str, &'static str, &'static str, Ty)> {
-    match (receiver_ty, method) {
-        // ── kotlin.ranges — rangeTo: handled as ConstructorJava below ──
-
-        // ── kotlin.collections — Iterable/Collection/List extensions ──
-        (_, "map") => Some((
-            "kotlin/collections/CollectionsKt",
-            "map",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "filter") => Some((
-            "kotlin/collections/CollectionsKt",
-            "filter",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "filterNot") => Some((
-            "kotlin/collections/CollectionsKt",
-            "filterNot",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "flatMap") => Some((
-            "kotlin/collections/CollectionsKt",
-            "flatMap",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "fold") => Some((
-            "kotlin/collections/CollectionsKt",
-            "fold",
-            "(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;",
-            Ty::Any,
-        )),
-        (_, "any") => Some((
-            "kotlin/collections/CollectionsKt",
-            "any",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
-            Ty::Bool,
-        )),
-        (_, "all") => Some((
-            "kotlin/collections/CollectionsKt",
-            "all",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
-            Ty::Bool,
-        )),
-        (_, "none") => Some((
-            "kotlin/collections/CollectionsKt",
-            "none",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
-            Ty::Bool,
-        )),
-        (_, "first") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "first",
-                "(Ljava/util/List;)Ljava/lang/Object;",
-                Ty::Any,
-            ))
-        }
-        (_, "last") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
-            "kotlin/collections/CollectionsKt",
-            "last",
-            "(Ljava/util/List;)Ljava/lang/Object;",
-            Ty::Any,
-        )),
-        (_, "firstOrNull") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "firstOrNull",
-                "(Ljava/util/List;)Ljava/lang/Object;",
-                Ty::Any,
-            ))
-        }
-        (_, "count") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "count",
-                "(Ljava/lang/Iterable;)I",
-                Ty::Int,
-            ))
-        }
-        (_, "sortedBy") => Some((
-            "kotlin/collections/CollectionsKt",
-            "sortedBy",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "reversed") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "reversed",
-                "(Ljava/lang/Iterable;)Ljava/util/List;",
-                Ty::Class("java/util/List".into()),
-            ))
-        }
-        (_, "distinct") => Some((
-            "kotlin/collections/CollectionsKt",
-            "distinct",
-            "(Ljava/lang/Iterable;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "take") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
-            "kotlin/collections/CollectionsKt",
-            "take",
-            "(Ljava/lang/Iterable;I)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "drop") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
-            "kotlin/collections/CollectionsKt",
-            "drop",
-            "(Ljava/lang/Iterable;I)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "associateWith") => Some((
-            "kotlin/collections/CollectionsKt",
-            "associateWith",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
-            Ty::Class("java/util/Map".into()),
-        )),
-        (_, "associateBy") => Some((
-            "kotlin/collections/CollectionsKt",
-            "associateBy",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
-            Ty::Class("java/util/Map".into()),
-        )),
-        (_, "groupBy") => Some((
-            "kotlin/collections/CollectionsKt",
-            "groupBy",
-            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
-            Ty::Class("java/util/Map".into()),
-        )),
-        (_, "flatten") => Some((
-            "kotlin/collections/CollectionsKt",
-            "flatten",
-            "(Ljava/lang/Iterable;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "zip") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => Some((
-            "kotlin/collections/CollectionsKt",
-            "zip",
-            "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        (_, "toList") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "toList",
-                "(Ljava/lang/Iterable;)Ljava/util/List;",
-                Ty::Class("java/util/List".into()),
-            ))
-        }
-        (_, "toSet") if receiver_ty.contains("List") || receiver_ty.contains("Iterable") => {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "toSet",
-                "(Ljava/lang/Iterable;)Ljava/util/Set;",
-                Ty::Class("java/util/Set".into()),
-            ))
-        }
-        (_, "toMutableList")
-            if receiver_ty.contains("List") || receiver_ty.contains("Iterable") =>
-        {
-            Some((
-                "kotlin/collections/CollectionsKt",
-                "toMutableList",
-                "(Ljava/lang/Iterable;)Ljava/util/List;",
-                Ty::Class("java/util/List".into()),
-            ))
-        }
-        // ── Map extension functions via CollectionsKt / MapsKt ──
-        // ── Map extension functions via MapsKt ──
-        (_, "forEach") if receiver_ty.contains("Map") => Some((
-            "kotlin/collections/MapsKt",
-            "forEach",
-            "(Ljava/util/Map;Lkotlin/jvm/functions/Function2;)V",
-            Ty::Unit,
-        )),
-        (_, "toList") if receiver_ty.contains("Map") => Some((
-            "kotlin/collections/MapsKt",
-            "toList",
-            "(Ljava/util/Map;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        // ── joinToString — uses $default for default params ──
-        (_, "joinToString") => Some((
-            "kotlin/collections/CollectionsKt",
-            "joinToString$default",
-            "(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;",
-            Ty::Class("java/lang/String".into()),
-        )),
-        // ── String stdlib extension functions (kotlin.text) ──
-        ("java/lang/String", "lines") => Some((
-            "kotlin/text/StringsKt",
-            "lines",
-            "(Ljava/lang/CharSequence;)Ljava/util/List;",
-            Ty::Class("java/util/List".into()),
-        )),
-        ("java/lang/String", "reversed") => Some((
-            "kotlin/text/StringsKt",
-            "reversed",
-            "(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
-            Ty::Any, // CharSequence, not String — use Any so println uses Object overload
-        )),
-        _ => None,
-    }
+    skotch_stdlib_registry::lookup_stdlib_extension(receiver_ty, method)
+        .map(|ext| (ext.facade_class, ext.jvm_method, ext.descriptor, (ext.return_ty)()))
 }
+
+// The old hardcoded match table (~200 lines) has been replaced by the
+// data-driven registry in `skotch-stdlib-registry::STDLIB_EXTENSIONS`.
+// To add new stdlib extension mappings, add entries to that crate's table.
 
 /// Lower a parsed/resolved/typed file to MIR.
 pub fn lower_file(
@@ -880,21 +663,8 @@ pub fn lower_file(
     // Maps simple class names → JVM class paths from import statements.
     // Also includes default java.lang.* imports (Kotlin implicitly imports java.lang.*).
     let mut import_map: FxHashMap<String, String> = FxHashMap::default();
-    // Default java.lang.* imports
-    for name in &[
-        "System",
-        "Math",
-        "Integer",
-        "Long",
-        "Double",
-        "Boolean",
-        "String",
-        "Thread",
-        "Runtime",
-        "Object",
-        "Class",
-        "Comparable",
-    ] {
+    // Default java.lang.* imports (from registry).
+    for name in skotch_stdlib_registry::DEFAULT_IMPORTS {
         import_map.insert(name.to_string(), format!("java/lang/{name}"));
     }
     // Process explicit imports
@@ -6263,88 +6033,16 @@ fn lower_expr(
                 // that share the same argument count. These cases can't be
                 // resolved by class-file lookup alone without full type
                 // inference on the argument expressions.
+                // String method overload disambiguation (from registry).
                 let overload_override: Option<(&str, &str, &str, Ty)> =
-                    match (&recv_ty, method_name_str.as_str(), args.len()) {
-                        // String methods with CharSequence vs char overloads
-                        (Ty::String, "replace", 2) => Some((
-                            "java/lang/String",
-                            "replace",
-                            "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
-                            Ty::String,
-                        )),
-                        (Ty::String, "matches", 1) => Some((
-                            "java/lang/String",
-                            "matches",
-                            "(Ljava/lang/String;)Z",
-                            Ty::Bool,
-                        )),
-                        (Ty::String, "contains", 1) => Some((
-                            "java/lang/String",
-                            "contains",
-                            "(Ljava/lang/CharSequence;)Z",
-                            Ty::Bool,
-                        )),
-                        (Ty::String, "indexOf", 1) => Some((
-                            "java/lang/String",
-                            "indexOf",
-                            "(Ljava/lang/String;)I",
-                            Ty::Int,
-                        )),
-                        (Ty::String, "lastIndexOf", 1) => Some((
-                            "java/lang/String",
-                            "lastIndexOf",
-                            "(Ljava/lang/String;)I",
-                            Ty::Int,
-                        )),
-                        (Ty::String, "startsWith", 1) => Some((
-                            "java/lang/String",
-                            "startsWith",
-                            "(Ljava/lang/String;)Z",
-                            Ty::Bool,
-                        )),
-                        (Ty::String, "endsWith", 1) => Some((
-                            "java/lang/String",
-                            "endsWith",
-                            "(Ljava/lang/String;)Z",
-                            Ty::Bool,
-                        )),
-                        (Ty::String, "substring", 2) => Some((
-                            "java/lang/String",
-                            "substring",
-                            "(II)Ljava/lang/String;",
-                            Ty::String,
-                        )),
-                        (Ty::String, "substring", 1) => Some((
-                            "java/lang/String",
-                            "substring",
-                            "(I)Ljava/lang/String;",
-                            Ty::String,
-                        )),
-                        (Ty::String, "split", 1) => Some((
-                            "java/lang/String",
-                            "split",
-                            "(Ljava/lang/String;)[Ljava/lang/String;",
-                            Ty::Any, // returns String[] which maps to Object
-                        )),
-                        (Ty::String, "trim", 0) => Some((
-                            "java/lang/String",
-                            "trim",
-                            "()Ljava/lang/String;",
-                            Ty::String,
-                        )),
-                        (Ty::String, "toByteArray", 0) => {
-                            Some(("java/lang/String", "getBytes", "()[B", Ty::Any))
-                        }
-                        (Ty::String, "toCharArray", 0) => {
-                            Some(("java/lang/String", "toCharArray", "()[C", Ty::Any))
-                        }
-                        (Ty::String, "repeat", 1) => Some((
-                            "java/lang/String",
-                            "repeat",
-                            "(I)Ljava/lang/String;",
-                            Ty::String,
-                        )),
-                        _ => None,
+                    if matches!(&recv_ty, Ty::String) {
+                        skotch_stdlib_registry::lookup_string_overload(
+                            &method_name_str,
+                            args.len(),
+                        )
+                        .map(|o| (o.jvm_class, o.jvm_method, o.descriptor, (o.return_ty)()))
+                    } else {
+                        None
                     };
                 if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = overload_override {
                     let is_instance =

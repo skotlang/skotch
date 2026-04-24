@@ -9,8 +9,9 @@ description = "JVM .class file emitter (target: Java 17 / class file v61)"
 skotch-mir         = { workspace = true }
 skotch-types       = { workspace = true }
 skotch-intern      = { workspace = true }
-skotch-config      = { workspace = true }
-skotch-diagnostics = { workspace = true }
+skotch-config          = { workspace = true }
+skotch-diagnostics     = { workspace = true }
+skotch-stdlib-registry = { workspace = true }
 byteorder        = { workspace = true }
 rustc-hash       = { workspace = true }
 

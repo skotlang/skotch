@@ -3406,13 +3406,7 @@ fn emit_multi_suspend_state_machine_method(
             $code.write_u16::<BigEndian>(fr_label).unwrap();
             emit_load_ref_slot($code, cont_slot);
             let is_iface = $site.is_virtual
-                && matches!(
-                    $site.callee_class.as_str(),
-                    "kotlinx/coroutines/Deferred"
-                        | "kotlinx/coroutines/Job"
-                        | "kotlin/jvm/functions/Function1"
-                        | "kotlin/jvm/functions/Function2"
-                );
+                && skotch_stdlib_registry::is_jvm_interface(&$site.callee_class);
             if $site.is_virtual {
                 if is_iface {
                     $code.push(0xB9);
@@ -3506,13 +3500,7 @@ fn emit_multi_suspend_state_machine_method(
                 code.write_u16::<BigEndian>(fr_label).unwrap();
                 emit_load_ref_slot(&mut code, cont_slot);
                 if site.is_virtual {
-                    let is_iface = matches!(
-                        site.callee_class.as_str(),
-                        "kotlinx/coroutines/Deferred"
-                            | "kotlinx/coroutines/Job"
-                            | "kotlin/jvm/functions/Function1"
-                            | "kotlin/jvm/functions/Function2"
-                    );
+                    let is_iface = skotch_stdlib_registry::is_jvm_interface(&site.callee_class);
                     if is_iface {
                         code.push(0xB9);
                         code.write_u16::<BigEndian>(callee_refs[case_i]).unwrap();
@@ -4657,7 +4645,7 @@ fn emit_mir_segment(
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
-                    let is_iface = class_name.starts_with("kotlin/jvm/functions/Function");
+                    let is_iface = skotch_stdlib_registry::is_jvm_interface(class_name);
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, &descriptor);
                         code.push(0xB9); // invokeinterface
@@ -4764,21 +4752,7 @@ fn emit_mir_segment(
                         }
                     }
                     // Check if target is an interface for invokeinterface.
-                    let is_iface = matches!(
-                        class_name.as_str(),
-                        "kotlinx/coroutines/Deferred"
-                            | "kotlinx/coroutines/Job"
-                            | "java/util/Map$Entry"
-                            | "java/util/Iterator"
-                            | "java/util/Set"
-                            | "java/util/Map"
-                            | "java/lang/Iterable"
-                            | "java/util/List"
-                            | "java/util/Collection"
-                            | "java/lang/Comparable"
-                            | "java/lang/AutoCloseable"
-                            | "java/io/Closeable"
-                    ) || class_name.starts_with("kotlin/jvm/functions/Function");
+                    let is_iface = skotch_stdlib_registry::is_jvm_interface(class_name);
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
                         code.push(0xB9); // invokeinterface
@@ -6279,13 +6253,7 @@ fn emit_lambda_multi_suspend_body(
                 $code.push(0xB5); // putfield label
                 $code.write_u16::<BigEndian>(fr_label).unwrap();
                 let is_iface = $site.is_virtual
-                    && matches!(
-                        $site.callee_class.as_str(),
-                        "kotlinx/coroutines/Deferred"
-                            | "kotlinx/coroutines/Job"
-                            | "kotlin/jvm/functions/Function1"
-                            | "kotlin/jvm/functions/Function2"
-                    );
+                    && skotch_stdlib_registry::is_jvm_interface(&$site.callee_class);
                 if $site.is_virtual {
                     if is_iface {
                         $code.push(0xB9);
@@ -8133,24 +8101,7 @@ fn walk_block(
                         }
                     }
                     // Well-known JDK/Kotlin interfaces require invokeinterface.
-                    let is_jdk_interface = matches!(
-                        class_name.as_str(),
-                        "java/util/Iterator"
-                            | "java/util/List"
-                            | "java/util/Collection"
-                            | "java/util/Set"
-                            | "java/util/Map"
-                            | "java/util/Map$Entry"
-                            | "java/lang/Iterable"
-                            | "java/lang/Comparable"
-                            | "java/lang/CharSequence"
-                            | "java/lang/Runnable"
-                            | "java/lang/AutoCloseable"
-                            | "java/io/Closeable"
-                            | "kotlinx/coroutines/Deferred"
-                            | "kotlinx/coroutines/Job"
-                    ) || class_name
-                        .starts_with("kotlin/jvm/functions/Function");
+                    let is_jdk_interface = skotch_stdlib_registry::is_jvm_interface(class_name);
                     if is_jdk_interface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
                         code.push(0xB9); // invokeinterface

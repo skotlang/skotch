@@ -2132,6 +2132,7 @@ dependencies = [
  "skotch-parser",
  "skotch-resolve",
  "skotch-span",
+ "skotch-stdlib-registry",
  "skotch-syntax",
  "skotch-typeck",
  "skotch-types",
@@ -2405,6 +2406,7 @@ dependencies = [
  "skotch-parser",
  "skotch-resolve",
  "skotch-span",
+ "skotch-stdlib-registry",
  "skotch-syntax",
  "skotch-typeck",
  "skotch-types",
@@ -2475,6 +2477,13 @@ name = "skotch-span"
 version = "0.13.0"
 dependencies = [
  "rustc-hash",
+]
+
+[[package]]
+name = "skotch-stdlib-registry"
+version = "0.13.0"
+dependencies = [
+ "skotch-types",
 ]
 
 [[package]]

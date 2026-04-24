@@ -1,0 +1,10 @@
+[package]
+name        = "skotch-stdlib-registry"
+description = "Data-driven registry of Kotlin stdlib and JVM platform mappings"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-types = { workspace = true }

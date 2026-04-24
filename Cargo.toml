@@ -16,6 +16,7 @@ members = [
     "crates/skotch-resolve",
     "crates/skotch-types",
     "crates/skotch-typeck",
+    "crates/skotch-stdlib-registry",
 
     # Layer 3 — IRs
     "crates/skotch-hir",
@@ -147,6 +148,7 @@ skotch-lexer           = { path = "crates/skotch-lexer" }
 skotch-parser          = { path = "crates/skotch-parser" }
 skotch-resolve         = { path = "crates/skotch-resolve" }
 skotch-types           = { path = "crates/skotch-types" }
+skotch-stdlib-registry = { path = "crates/skotch-stdlib-registry" }
 skotch-typeck          = { path = "crates/skotch-typeck" }
 skotch-hir             = { path = "crates/skotch-hir" }
 skotch-mir             = { path = "crates/skotch-mir" }
