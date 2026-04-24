@@ -383,7 +383,7 @@ impl<'a> TypeChecker<'a> {
                 .ty
                 .as_ref()
                 .map(|tr| self.resolve_type_ref(tr))
-                .unwrap_or(Ty::Any);
+                .unwrap_or(Ty::Error);
             fields.push(FieldSig {
                 name: self.interner.resolve(prop.name).to_string(),
                 ty,
@@ -553,7 +553,7 @@ impl<'a> TypeChecker<'a> {
     fn signature_for_fun(&mut self, f: &FunDecl) -> Signature {
         let mut params: Vec<Ty> = Vec::new();
         if let Some(recv) = &f.receiver_ty {
-            params.push(self.type_ref(recv).unwrap_or(Ty::Any));
+            params.push(self.type_ref(recv).unwrap_or(Ty::Error));
         }
         for p in &f.params {
             let ty = self.type_ref(&p.ty).unwrap_or(Ty::Error);
