@@ -673,6 +673,15 @@ pub struct MirModule {
     /// Skipped during serialization since it's only needed at lowering time.
     #[serde(skip)]
     pub import_map: rustc_hash::FxHashMap<String, String>,
+    /// Cross-file function declarations from the same compilation unit.
+    /// Populated during multi-file lowering. Maps function name →
+    /// (owner_class, descriptor, return_ty). Skipped during serialization.
+    #[serde(skip)]
+    pub cross_file_fns: rustc_hash::FxHashMap<String, (String, String, skotch_types::Ty)>,
+    /// Cross-file class declarations. Maps simple class name →
+    /// (jvm_name, kind_str, is_data_class). Used for constructor calls.
+    #[serde(skip)]
+    pub cross_file_classes: rustc_hash::FxHashMap<String, (String, String, bool)>,
 }
 
 impl MirModule {

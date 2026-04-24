@@ -1169,7 +1169,7 @@ milestones:
 
   - version: "0.13.0"
     title: "Multi-File Compilation, Packages, and Imports"
-    status: planned
+    status: complete
     depends_on: ["0.12.0"]
     description: >
       Import statements, package declarations, multi-file compilation
@@ -1177,7 +1177,7 @@ milestones:
       downstream — real projects are never single-file.
 
     features:
-      - name: "Import statements (landed)"
+      - name: "Import statements"
         completed: true
         description: >
           import java.util.ArrayList, import java.util.Collections —
@@ -1185,43 +1185,93 @@ milestones:
           (simple name → JVM internal path), and used to resolve bare
           class constructors (e.g., ArrayList()) and static method calls
           (e.g., Collections.sort()). Default java.lang.* imports included.
-          Star imports recognized but not enumerated. Import-as aliases
-          deferred. See fixtures 519-import-java-class, 520-package-declaration.
 
-      - name: "Package declarations (landed)"
+      - name: "Package declarations"
         completed: true
         description: >
           package com.example.app — emitted class has FQ name
           com/example/app/MainKt. Package prefix applied to wrapper class
-          and all user-defined classes. Already implemented in MIR lowerer.
-          See fixture 520-package-declaration.
+          and all user-defined classes.
 
       - name: "Multi-file compilation (same package)"
+        completed: true
         description: >
-          Compile multiple .kt files. Two-pass: first pass collects all
-          top-level declarations (classes, functions, vals); second pass
-          resolves cross-file references. Uses existing salsa-based
-          parallel pipeline in skotch-build.
+          Two-phase "Gather then Lower" pipeline. Phase 1 parses all .kt
+          files and builds a PackageSymbolTable of all top-level declarations
+          (functions, vals, classes). Phase 2 compiles each file independently
+          with cross-file visibility — cross-file calls emit CallKind::StaticJava
+          (invokestatic OtherFileKt.method), matching kotlinc behavior exactly.
+          No FuncId remapping needed. Supports circular references between files.
+          Each file produces its own MirModule. Test fixtures: multi-file-basic,
+          multi-file-circular, multi-file-class.
+
+      - name: "Cross-file class constructors"
+        completed: true
+        description: >
+          File A defines `data class Point(val x: Int, val y: Int)`, file B
+          creates `Point(3, 4)`. Class names registered in cross_file_classes
+          on MirModule, resolved via the existing constructor resolution path.
 
       - name: "Multi-module compilation"
+        completed: true
         description: >
-          Compile module A, then module B that depends on A. Module A's
-          output directory or JAR is on B's classpath. Module boundaries
-          enforce `internal` visibility.
+          Compile modules in dependency order per settings.gradle.kts. Each
+          module uses the two-phase pipeline internally. Multi-module build
+          already tested via pipeline.rs build_multi_module().
+
+    risks:
+      - description: "Circular references between files in the same package"
+        mitigation: "Two-pass: collect all declarations first, then resolve"
+
+  # v0.13.5 — Multi-File Future Work
+  - version: "0.13.5"
+    title: "Multi-File Polish and Incremental Compilation"
+    status: planned
+    depends_on: ["0.13.0"]
+    description: >
+      Follow-up improvements to multi-file compilation: Salsa incremental
+      rebuild, visibility enforcement, star imports, Kotlin metadata, and
+      parallel Phase 2 compilation.
+
+    features:
+      - name: "Salsa incremental compilation"
+        description: >
+          Re-enable Salsa with a gather_declarations tracked function. Only
+          recompile files whose dependencies' exports changed. Currently the
+          build pipeline bypasses Salsa and compiles sequentially.
+
+      - name: "Visibility enforcement"
+        description: >
+          internal members visible only within module; private top-level
+          declarations visible only within file. Currently all declarations
+          are visible everywhere.
+
+      - name: "Star imports across user files"
+        description: >
+          import com.example.* enumerates all user classes and functions in
+          that package. Currently star imports are recognized but not expanded
+          for user-defined declarations.
+
+      - name: "Import aliases"
+        description: >
+          import com.example.Foo as Bar — allows renaming imports. Parser
+          already handles the syntax; resolver and lowerer need to map aliases.
 
       - name: "Kotlin metadata emission"
         description: >
           @Metadata annotation on generated classes with protobuf payload.
           Required for kotlinc-compiled code to interop with skotch output.
 
-      - name: "Internal visibility enforcement"
-        description: "internal members visible within module, hidden outside."
+      - name: "Parallel Phase 2 compilation"
+        description: >
+          Use rayon to compile files in parallel during Phase 2. Requires
+          per-file interner or Arc<Mutex<Interner>> to avoid contention.
 
-    risks:
-      - description: "Circular references between files in the same package"
-        mitigation: "Two-pass: collect all declarations first, then resolve"
-      - description: "This blocks the entire build system pipeline"
-        mitigation: "Prioritize — start this before v0.12 is fully complete"
+      - name: "LSP cross-file features"
+        description: >
+          Share PackageSymbolTable across LSP document analyses for
+          go-to-definition/hover across files. Currently each document
+          is analyzed in isolation.
 
 # ============================================================================
 # v0.14.0 — Annotations and Java Interop

@@ -8724,9 +8724,9 @@ mod tests {
         let mut diags = skotch_diagnostics::Diagnostics::new();
         let lf = lex(FileId(0), src, &mut diags);
         let ast = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&ast, &mut interner, &mut diags);
-        let t = type_check(&ast, &r, &mut interner, &mut diags);
-        let m = lower_file(&ast, &r, &t, &mut interner, &mut diags, "HelloKt");
+        let r = resolve_file(&ast, &mut interner, &mut diags, None);
+        let t = type_check(&ast, &r, &mut interner, &mut diags, None);
+        let m = lower_file(&ast, &r, &t, &mut interner, &mut diags, "HelloKt", None);
         let bytes = compile_module(&m, &interner);
         (bytes, diags)
     }

@@ -69,7 +69,8 @@ pub fn compile_file<'db>(db: &'db dyn salsa::Database, file: SourceFile) -> Comp
     let mut sm = skotch_span::SourceMap::new();
     let file_id = sm.add(std::path::PathBuf::from(path), text.to_string());
 
-    let module = skotch_driver::compile_source(text, file_id, wrapper, &mut interner, &mut diags);
+    let module =
+        skotch_driver::compile_source(text, file_id, wrapper, &mut interner, &mut diags, None);
 
     let has_errors = diags.has_errors();
     let mir_json = serde_json::to_string(&module).unwrap_or_default();

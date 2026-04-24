@@ -71,8 +71,8 @@ impl SkotchLanguageServer {
         let lexed = lex(file_id, &source, &mut diags);
         let tokens = lexed.tokens.clone();
         let ast = parse_file(&lexed, &mut interner, &mut diags);
-        let resolved = resolve_file(&ast, &mut interner, &mut diags);
-        let typed = type_check(&ast, &resolved, &mut interner, &mut diags);
+        let resolved = resolve_file(&ast, &mut interner, &mut diags, None);
+        let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
 
         let lsp_diags = to_lsp_diagnostics(&diags, &sm);
 
@@ -305,7 +305,7 @@ fn build_semantic_tokens(
                     DefId::Param(_, _) => Some(6),      // parameter
                     DefId::Local(_, _) => Some(5),      // variable
                     DefId::TopLevelVal(_) => Some(5),   // variable
-                    DefId::PossibleExternal(_) => Some(7), // type/class
+                    DefId::PossibleExternal(_) | DefId::ExternalPackage(_) => Some(7), // type/class
                     DefId::Error => None,
                 }
             } else {
@@ -538,7 +538,7 @@ fn hover_for_def(
                 None
             }
         }
-        DefId::PossibleExternal(sym) => {
+        DefId::PossibleExternal(sym) | DefId::ExternalPackage(sym) => {
             let name = interner.resolve(sym);
             Some(format!("(external) {name}"))
         }
@@ -610,7 +610,10 @@ fn definition_for_def(
             }
             None
         }
-        DefId::PrintlnIntrinsic | DefId::PossibleExternal(_) | DefId::Error => None,
+        DefId::PrintlnIntrinsic
+        | DefId::PossibleExternal(_)
+        | DefId::ExternalPackage(_)
+        | DefId::Error => None,
     }
 }
 
@@ -979,8 +982,8 @@ mod tests {
         let lexed = lex(file_id, src, &mut diags);
         let tokens = lexed.tokens.clone();
         let ast = parse_file(&lexed, &mut interner, &mut diags);
-        let resolved = resolve_file(&ast, &mut interner, &mut diags);
-        let typed = type_check(&ast, &resolved, &mut interner, &mut diags);
+        let resolved = resolve_file(&ast, &mut interner, &mut diags, None);
+        let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
         DocumentState {
             source: src.to_string(),
             version: 1,

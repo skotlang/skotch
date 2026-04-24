@@ -29,7 +29,7 @@ use skotch_mir::{
     MirConst, MirField, MirFunction, MirModule, Rvalue, SpillKind, SpillSlot, Stmt as MStmt,
     SuspendCallSite, SuspendStateMachine, Terminator,
 };
-use skotch_resolve::ResolvedFile;
+use skotch_resolve::{ExternalClassKind, PackageSymbolTable, ResolvedFile};
 use skotch_syntax::{BinOp, ConstructorParam, Decl, Expr, FunDecl, KtFile, Stmt, TypeRef, ValDecl};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
@@ -364,6 +364,7 @@ pub fn lower_file(
     interner: &mut Interner,
     diags: &mut Diagnostics,
     wrapper_class: &str,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> MirModule {
     let mut module = MirModule {
         wrapper_class: wrapper_class.to_string(),
@@ -808,6 +809,41 @@ pub fn lower_file(
     }
 
     module.import_map = import_map;
+
+    // Register cross-file declarations so they're accessible from lower_expr.
+    if let Some(pkg) = package_symbols {
+        // Classes → import_map (for type resolution) + cross_file_classes
+        // (for constructor calls).
+        for (name, ext_class) in &pkg.classes {
+            if !module.import_map.contains_key(name) {
+                module
+                    .import_map
+                    .insert(name.clone(), ext_class.jvm_name.clone());
+            }
+            let is_data = matches!(ext_class.kind, ExternalClassKind::DataClass);
+            module.cross_file_classes.insert(
+                name.clone(),
+                (
+                    ext_class.jvm_name.clone(),
+                    format!("{:?}", ext_class.kind),
+                    is_data,
+                ),
+            );
+        }
+        // Functions → cross_file_fns so bare calls resolve.
+        for (name, decls) in &pkg.functions {
+            if let Some(ext) = decls.first() {
+                module.cross_file_fns.insert(
+                    name.clone(),
+                    (
+                        ext.owner_class.clone(),
+                        ext.descriptor.clone(),
+                        ext.return_ty.clone(),
+                    ),
+                );
+            }
+        }
+    }
 
     // ── Register a synthetic $Callable interface so all lambda classes
     //    can share a common dispatch target for invokevirtual. ────────
@@ -7066,6 +7102,44 @@ fn lower_expr(
                 }
             }
 
+            // ─── Cross-file class constructor ─────────────────────────
+            // If the callee matches a cross-file user class (registered via
+            // PackageSymbolTable), emit NewInstance + Constructor.
+            if let Some((jvm_class, _, _)) = module
+                .cross_file_classes
+                .get(&callee_str.to_string())
+                .cloned()
+            {
+                let mut arg_locals = Vec::new();
+                for a in args {
+                    let id = lower_expr(
+                        &a.expr,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )?;
+                    arg_locals.push(id);
+                }
+                let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::NewInstance(jvm_class.clone()),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::Constructor(jvm_class),
+                        args: arg_locals,
+                    },
+                });
+                return Some(dest);
+            }
+
             // ─── Special form: println(<string template>) ───────────
             if interner.resolve(callee_name) == "println"
                 && args.len() == 1
@@ -9353,6 +9427,15 @@ fn lower_expr(
                 }
                 if let Some((k, _)) = resolved {
                     k
+                } else if let Some((owner, desc, _ret_ty)) =
+                    module.cross_file_fns.get(callee_str).cloned()
+                {
+                    // Cross-file function call.
+                    CallKind::StaticJava {
+                        class_name: owner,
+                        method_name: callee_str.to_string(),
+                        descriptor: desc,
+                    }
                 } else {
                     diags.push(Diagnostic::error(
                         *span,
@@ -9383,6 +9466,21 @@ fn lower_expr(
                         }
                     }
                     ret
+                }
+                CallKind::StaticJava {
+                    ref method_name,
+                    ref descriptor,
+                    ..
+                } => {
+                    // For cross-file calls, look up return type from
+                    // cross_file_fns or infer from descriptor.
+                    if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name) {
+                        ret_ty.clone()
+                    } else if descriptor.ends_with(")V") {
+                        Ty::Unit
+                    } else {
+                        Ty::Any
+                    }
                 }
                 _ => Ty::Unit,
             };
@@ -15166,9 +15264,9 @@ mod tests {
         let mut diags = Diagnostics::new();
         let lf = lex(FileId(0), src, &mut diags);
         let f = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&f, &mut interner, &mut diags);
-        let t = type_check(&f, &r, &mut interner, &mut diags);
-        let m = lower_file(&f, &r, &t, &mut interner, &mut diags, "HelloKt");
+        let r = resolve_file(&f, &mut interner, &mut diags, None);
+        let t = type_check(&f, &r, &mut interner, &mut diags, None);
+        let m = lower_file(&f, &r, &t, &mut interner, &mut diags, "HelloKt", None);
         (m, diags)
     }
 

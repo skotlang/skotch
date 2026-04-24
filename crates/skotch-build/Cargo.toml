@@ -15,6 +15,10 @@ skotch-apk         = { workspace = true }
 skotch-mir         = { workspace = true }
 skotch-intern      = { workspace = true }
 skotch-span        = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-parser      = { workspace = true }
+skotch-resolve     = { workspace = true }
 skotch-diagnostics = { workspace = true }
 skotch-config      = { workspace = true }
 skotch-backend-jvm = { workspace = true }
