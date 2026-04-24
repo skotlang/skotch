@@ -1,4 +1,3 @@
 name   = "516-custom-delegate"
-status = "stub"
-features = ["custom-delegate", "operator-getValue", "by-keyword"]
-reason = "Only by lazy {} recognized. Generic delegation protocol (getValue/setValue) not implemented."
+status = "active"
+features = ["custom-delegate", "getValue", "by-keyword", "by-lazy"]

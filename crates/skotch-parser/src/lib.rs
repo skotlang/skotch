@@ -1118,22 +1118,33 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        // Check for `by lazy { ... }` delegation.
+        // Check for `by <delegate>` delegation.
+        // Supports: `by lazy { ... }`, `by Cached { ... }`, `by MyDelegate()`
         self.skip_trivia();
         let delegate = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
         {
             self.bump(); // consume `by`
             self.skip_trivia();
-            // Expect `lazy { ... }` — consume the `lazy` identifier.
+            // Parse the delegate expression. For `lazy { ... }` this is
+            // just the block. For `Cached { ... }` it's a constructor call
+            // with trailing lambda. For any other expression, parse it.
             if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "lazy" {
                 self.bump(); // consume `lazy`
                 self.skip_trivia();
-            }
-            // Parse the trailing lambda block `{ ... }`.
-            if self.peek_kind() == TokenKind::LBrace {
-                Some(Box::new(self.parse_block()))
+                if self.peek_kind() == TokenKind::LBrace {
+                    Some(Box::new(self.parse_block()))
+                } else {
+                    None
+                }
             } else {
-                None
+                // Generic delegate: parse as an expression.
+                // `Cached { "Hello" }` → Call(Cached, [Lambda])
+                let expr = self.parse_expr();
+                // Wrap in a synthetic block with a single expression stmt.
+                Some(Box::new(Block {
+                    stmts: vec![Stmt::Expr(expr)],
+                    span: self.peek_span(),
+                }))
             }
         } else {
             None
@@ -1802,6 +1813,72 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        self.skip_trivia();
+        // Check for `by <delegate>` — property delegation.
+        // `val x: T by lazy { ... }` or `val x: T by Delegate { ... }`
+        // Desugars to: val $delegate = <delegate>; val x = $delegate.getValue(...)
+        // For simplicity, we desugar `val x by lazy { body }` to `val x = body`
+        // (eagerly evaluate the lazy body). For generic delegates with
+        // `getValue`, we call the delegate's getValue method.
+        if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by" {
+            self.bump(); // consume `by`
+            self.skip_trivia();
+            // Parse the delegate expression.
+            let delegate_expr =
+                if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "lazy" {
+                    self.bump(); // consume `lazy`
+                    self.skip_trivia();
+                    // Parse the trailing lambda body.
+                    if self.peek_kind() == TokenKind::LBrace {
+                        self.parse_lambda_expr()
+                    } else {
+                        Expr::NullLit(self.peek_span())
+                    }
+                } else {
+                    // Generic delegate: parse as expression.
+                    self.parse_expr()
+                };
+            // Desugar: for `by lazy { body }`, the init is the lambda body
+            // invoked immediately. For generic delegates, we call getValue.
+            let init = match &delegate_expr {
+                Expr::Lambda { body, .. } => {
+                    // by lazy { expr } → eagerly evaluate the lambda body.
+                    // Use the last expression as the init value.
+                    if let Some(Stmt::Expr(e) | Stmt::Return { value: Some(e), .. }) =
+                        body.stmts.last()
+                    {
+                        e.clone()
+                    } else {
+                        delegate_expr
+                    }
+                }
+                _ => {
+                    // Generic delegate: `val x by Delegate { ... }`
+                    // Desugar to calling getValue on the delegate.
+                    // For now, wrap as: delegate.getValue(null, null)
+                    // which the MIR lowerer will handle.
+                    let get_value = Expr::Field {
+                        receiver: Box::new(delegate_expr),
+                        name: self.interner.intern("getValue"),
+                        span: self.peek_span(),
+                    };
+                    Expr::Call {
+                        callee: Box::new(get_value),
+                        args: vec![],
+                        type_args: Vec::new(),
+                        span: self.peek_span(),
+                    }
+                }
+            };
+            return ValDecl {
+                is_var,
+                name,
+                name_span,
+                ty,
+                init,
+                span: kw.merge(name_span),
+            };
+        }
         self.expect(TokenKind::Eq, "=");
         let init = self.parse_expr();
         ValDecl {

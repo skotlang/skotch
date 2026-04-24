@@ -1,0 +1,63 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 op_0xBA
+    0001 nop
+    0002 aload 0
+    0004 nop
+    0005 invokestatic Method(kotlin/LazyKt.lazy:(Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;)
+    0008 astore_0
+    0009 aload_0
+    0010 invokestatic Method(InputKt.main$lambda$1:(Lkotlin/Lazy;)Ljava/lang/String;)
+    0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0016 op_0x5F
+    0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0020 op_0xBA
+    0021 nop
+    0022 op_0x37
+    0023 nop
+    0024 nop
+    0025 invokestatic Method(kotlin/LazyKt.lazy:(Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;)
+    0028 astore_1
+    0029 aload_1
+    0030 invokestatic Method(InputKt.main$lambda$3:(Lkotlin/Lazy;)I)
+    0033 istore_2
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 iload_2
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 ()Ljava/lang/String; 0x001A
+  code        max_stack=1 max_locals=0
+    0000 ldc "Hello, World!"
+    0002 areturn
+method        main$lambda$1 (Lkotlin/Lazy;)Ljava/lang/String; 0x001A
+  code        max_stack=1 max_locals=2
+    0000 aload_0
+    0001 astore_1
+    0002 aload_1
+    0003 invokeinterface InterfaceMethod(kotlin/Lazy.getValue:()Ljava/lang/Object;)
+    0008 checkcast Class(java/lang/String)
+    0011 areturn
+  attr        Signature (2 bytes)
+method        main$lambda$2 ()I 0x001A
+  code        max_stack=1 max_locals=0
+    0000 bipush 42
+    0002 op_0xAC
+method        main$lambda$3 (Lkotlin/Lazy;)I 0x001A
+  code        max_stack=1 max_locals=2
+    0000 aload_0
+    0001 astore_1
+    0002 aload_1
+    0003 invokeinterface InterfaceMethod(kotlin/Lazy.getValue:()Ljava/lang/Object;)
+    0008 checkcast Class(java/lang/Number)
+    0011 invokevirtual Method(java/lang/Number.intValue:()I)
+    0014 op_0xAC
+  attr        Signature (2 bytes)
+class_attr    BootstrapMethods (22 bytes)

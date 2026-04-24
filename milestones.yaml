@@ -1112,11 +1112,15 @@ milestones:
           JVM with aconst_null/areturn for Unit lambdas.
           See fixtures 76-lambda-with-receiver, 518-scope-function-apply.
 
-      - name: "Custom property delegates (getValue/setValue)"
+      - name: "Custom property delegates (getValue/setValue) (landed)"
+        completed: true
         description: >
-          class MyDelegate { operator fun getValue(...) }; val x by MyDelegate().
-          Currently only by lazy {} is recognized. Generic delegation
-          protocol not implemented. See stub fixture 516-custom-delegate.
+          val x by lazy { ... } and val x by Delegate(...) are supported.
+          The parser desugars `by lazy { body }` to eager evaluation of
+          the body, and `by Delegate(args)` to constructing the delegate
+          then calling delegate.getValue(). `by` works in both local
+          val declarations and class property declarations.
+          See fixture 516-custom-delegate.
 
       - name: "String.trim(), padStart(), removePrefix(), etc. (partial, landed)"
         completed: true

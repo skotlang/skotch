@@ -35,7 +35,7 @@ invokes is `clang`, for the native target's link step.
 
 > **Status:** JVM, DEX, klib, LLVM IR, and native targets are shipping.
 > Build orchestration, REPL, JAR packaging, and unsigned APK assembly are
-> implemented. 504 language-feature fixtures validated across 5 targets.
+> implemented. 509 language-feature fixtures validated across 5 targets.
 
 ## Installation
 
