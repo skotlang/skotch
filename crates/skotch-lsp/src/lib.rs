@@ -22,7 +22,7 @@ use skotch_diagnostics::Diagnostics;
 use skotch_intern::{Interner, Symbol};
 use skotch_lexer::lex;
 use skotch_parser::parse_file;
-use skotch_resolve::{resolve_file, DefId, ResolvedFile};
+use skotch_resolve::{gather_declarations, resolve_file, DefId, PackageSymbolTable, ResolvedFile};
 use skotch_span::{FileId, SourceMap, Span};
 use skotch_syntax::ast::KtFile;
 use skotch_syntax::token::{Token, TokenKind};
@@ -59,6 +59,35 @@ impl SkotchLanguageServer {
         }
     }
 
+    /// Build a cross-file symbol table from all open documents.
+    /// This enables go-to-definition and error-free references across files.
+    fn build_cross_file_symbols(&self) -> Option<PackageSymbolTable> {
+        let entries: Vec<_> = self.documents.iter().collect();
+        if entries.len() <= 1 {
+            return None; // No cross-file resolution needed for single files.
+        }
+        // Build a temporary interner for the gather pass.
+        let mut interner = Interner::new();
+        let mut sm = SourceMap::new();
+        let file_data: Vec<(FileId, KtFile, String)> = entries
+            .iter()
+            .map(|entry| {
+                let doc = entry.value();
+                let fid = sm.add(PathBuf::from("lsp"), doc.source.clone());
+                let mut diags = Diagnostics::new();
+                let lexed = lex(fid, &doc.source, &mut diags);
+                let ast = parse_file(&lexed, &mut interner, &mut diags);
+                let wrapper = uri_to_wrapper(entry.key());
+                (fid, ast, wrapper)
+            })
+            .collect();
+        let refs: Vec<(FileId, &KtFile, &str)> = file_data
+            .iter()
+            .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+            .collect();
+        Some(gather_declarations(&refs, &interner))
+    }
+
     /// Run the full front-end pipeline and cache the results.
     fn analyze(&self, uri: &Url, source: String, version: i32) -> Vec<Diagnostic> {
         let path = uri_to_path(uri);
@@ -68,11 +97,14 @@ impl SkotchLanguageServer {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
 
+        // Build cross-file symbol table from all open documents.
+        let pkg_symbols = self.build_cross_file_symbols();
+
         let lexed = lex(file_id, &source, &mut diags);
         let tokens = lexed.tokens.clone();
         let ast = parse_file(&lexed, &mut interner, &mut diags);
-        let resolved = resolve_file(&ast, &mut interner, &mut diags, None);
-        let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
+        let resolved = resolve_file(&ast, &mut interner, &mut diags, pkg_symbols.as_ref());
+        let typed = type_check(&ast, &resolved, &mut interner, &mut diags, pkg_symbols.as_ref());
 
         let lsp_diags = to_lsp_diagnostics(&diags, &sm);
 
@@ -98,6 +130,20 @@ impl SkotchLanguageServer {
 fn uri_to_path(uri: &Url) -> PathBuf {
     uri.to_file_path()
         .unwrap_or_else(|_| PathBuf::from(uri.path()))
+}
+
+/// Derive the JVM wrapper class name from a URI: `Hello.kt` → `HelloKt`.
+fn uri_to_wrapper(uri: &Url) -> String {
+    let path = uri_to_path(uri);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Main");
+    let mut c = stem.chars();
+    match c.next() {
+        Some(first) => format!("{}{}Kt", first.to_ascii_uppercase(), c.as_str()),
+        None => "MainKt".to_string(),
+    }
 }
 
 fn to_lsp_diagnostics(diags: &Diagnostics, sm: &SourceMap) -> Vec<Diagnostic> {

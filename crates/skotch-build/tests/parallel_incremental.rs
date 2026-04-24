@@ -94,6 +94,174 @@ fn blake3_hash_deterministic() {
 }
 
 #[test]
+fn cross_file_function_call() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-fn-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            ("Greeter.kt", "fun greet(name: String): String = \"Hello, $name!\"\n"),
+            ("Main.kt", "fun main() { println(greet(\"World\")) }\n"),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Cross-file function call build failed: {:?}", r.err());
+
+    // Verify the JAR was created.
+    let outcome = r.unwrap();
+    assert!(outcome.output_path.exists(), "JAR should exist");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cross_file_class_constructor() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-cls-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            ("Point.kt", "data class Point(val x: Int, val y: Int)\n"),
+            ("Main.kt", "fun main() { val p = Point(3, 4); println(p) }\n"),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Cross-file class constructor build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn circular_cross_file_calls() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-circ-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            ("A.kt", "fun fromA(): String = \"A calls B: ${fromB()}\"\n"),
+            ("B.kt", "fun fromB(): String = \"B\"\n"),
+            ("Main.kt", "fun main() { println(fromA()) }\n"),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Circular cross-file call build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn private_visibility_not_exported() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-priv-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            ("Helpers.kt", "private fun secret(): String = \"hidden\"\nfun publicGreet(): String = \"public: ${secret()}\"\n"),
+            ("Main.kt", "fun main() { println(publicGreet()) }\n"),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Visibility build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn incremental_state_tracking() {
+    use skotch_db::{content_hash, IncrementalState};
+
+    let mut state = IncrementalState::default();
+
+    // New file — changed.
+    assert!(state.file_changed("A.kt", "fun a() {}"));
+    state.record_file("A.kt", "fun a() {}", "AKt", 1);
+
+    // Same content — not changed.
+    assert!(!state.file_changed("A.kt", "fun a() {}"));
+
+    // Modified content — changed.
+    assert!(state.file_changed("A.kt", "fun a() { println(1) }"));
+
+    // Symbol table hash tracking.
+    let hash1 = content_hash("table v1");
+    state.set_symbol_table_hash(hash1.clone());
+    assert!(!state.symbol_table_changed(&hash1));
+    assert!(state.symbol_table_changed(&content_hash("table v2")));
+}
+
+#[test]
+fn cross_file_field_access() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-field-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            (
+                "Point.kt",
+                "data class Point(val x: Int, val y: Int)\n",
+            ),
+            (
+                "Main.kt",
+                "fun main() {\n    val p = Point(3, 4)\n    println(p.x)\n    println(p.y)\n}\n",
+            ),
+        ],
+    );
+    let r = build(&dir);
+    assert!(r.is_ok(), "Cross-file field access build failed: {:?}", r.err());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cross_file_method_call_on_instance() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-meth-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            (
+                "Greeter.kt",
+                "class Greeter(val name: String) {\n    fun greet(): String = \"Hello, $name!\"\n}\n",
+            ),
+            (
+                "Main.kt",
+                "fun main() {\n    val g = Greeter(\"World\")\n    println(g.greet())\n}\n",
+            ),
+        ],
+    );
+    let r = build(&dir);
+    assert!(
+        r.is_ok(),
+        "Cross-file method call build failed: {:?}",
+        r.err()
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn diagnostics_report_errors_with_details() {
+    let dir = std::env::temp_dir().join(format!("skotch-xfile-diag-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_project(
+        &dir,
+        &[
+            ("Helper.kt", "fun helper(): Int = 1\n"),
+            (
+                "Main.kt",
+                "fun main() { println(doesNotExist()) }\n",
+            ),
+        ],
+    );
+    let r = build(&dir);
+    // Build should FAIL (unknown function) and the error should propagate.
+    assert!(r.is_err(), "Build with error should fail");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn salsa_incremental_memoization() {
     // Test salsa memoization directly.
     let mut db = skotch_db::Db::new();

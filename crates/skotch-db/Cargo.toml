@@ -9,6 +9,7 @@ description = "Salsa-based incremental compilation database for skotch"
 salsa              = { workspace = true }
 blake3             = { workspace = true }
 rayon              = { workspace = true }
+rustc-hash         = { workspace = true }
 serde              = { workspace = true }
 serde_json         = { workspace = true }
 skotch-span        = { workspace = true }

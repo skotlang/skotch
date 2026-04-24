@@ -49,6 +49,8 @@ pub struct ImportDecl {
     pub path: Vec<Symbol>,
     /// True for `import foo.bar.*` (star import).
     pub is_wildcard: bool,
+    /// Import alias: `import com.example.Foo as Bar` → alias = Some("Bar").
+    pub alias: Option<Symbol>,
     pub span: Span,
 }
 
@@ -181,6 +183,7 @@ pub struct ValDecl {
     pub name_span: Span,
     pub ty: Option<TypeRef>,
     pub init: Expr,
+    pub visibility: Visibility,
     pub span: Span,
 }
 
@@ -219,6 +222,7 @@ pub struct ClassDecl {
     pub nested_classes: Vec<ClassDecl>,
     /// `inner class` flag — inner classes hold a reference to the outer instance.
     pub is_inner: bool,
+    pub visibility: Visibility,
     pub span: Span,
 }
 
