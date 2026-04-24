@@ -29,7 +29,7 @@
 
 /// Surface type after the typeck pass.
 ///
-/// PR #1 supports a tiny set; the remaining variants are placeholders
+/// Currently a small set; the remaining variants are placeholders
 /// the parser/typeck can produce when they encounter unsupported syntax,
 /// so error recovery doesn't blow up.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -90,7 +90,7 @@ pub enum Ty {
 }
 
 impl Ty {
-    /// Is `self` assignable to `other`? PR #1 only needs the trivial
+    /// Is `self` assignable to `other`? Currently only needs the trivial
     /// reflexive case plus `Int → Any` and `String → Any`.
     pub fn assignable_to(&self, other: &Ty) -> bool {
         if self == other {

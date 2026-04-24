@@ -2,8 +2,8 @@
 //!
 //! DEX uses unsigned LEB128 (`uleb128`) for sizes, indexes, and
 //! method/field offsets in `class_data_item`s. Signed LEB128
-//! (`sleb128`) is used in encoded values and debug info; PR #3
-//! doesn't emit either of those, but the encoder is here for
+//! (`sleb128`) is used in encoded values and debug info; we don't
+//! currently emit either of those, but the encoder is here for
 //! completeness.
 
 /// Encode `value` as uleb128 and append the bytes to `out`.

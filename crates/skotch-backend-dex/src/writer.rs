@@ -167,7 +167,7 @@ pub fn write_dex(module: &MirModule) -> Vec<u8> {
     let protos_count = final_idx.protos.len();
     let fields_count = final_idx.fields.len();
     let methods_count = final_idx.methods.len();
-    let classes_count = 1; // PR #3: one class per module.
+    let classes_count = 1; // One class per module (the wrapper class).
 
     let string_ids_off = HEADER_SIZE;
     let type_ids_off = string_ids_off + strings_count * 4;

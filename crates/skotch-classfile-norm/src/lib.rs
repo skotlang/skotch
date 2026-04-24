@@ -16,7 +16,7 @@
 //! a *symbolic* form (so `ldc #15` becomes `ldc "Hello, world!"`),
 //! sorts methods by `name+descriptor`, and strips the noisy
 //! attributes listed below. The result is a text blob that should
-//! match between skotch and kotlinc for the PR #1 fixtures.
+//! match between skotch and kotlinc for the supported fixtures.
 //!
 //! ## Equivalence relaxations
 //!
@@ -34,8 +34,8 @@
 //!
 //! ## Out of scope (for now)
 //!
-//! - StackMapTable normalization (PR #1 has no branches; PR #1.5 will
-//!   tackle this when fixture 07 graduates).
+//! - StackMapTable normalization (the initial fixtures have no branches;
+//!   this will be tackled when fixture 07 graduates).
 //! - InnerClasses, EnclosingMethod, NestHost, NestMembers, PermittedSubclasses
 //!   — punted until skotch can produce them.
 
@@ -222,7 +222,7 @@ impl<'a> ClassParser<'a> {
                     let len = self.cur.read_u16::<BigEndian>().map_err(e)? as usize;
                     let mut buf = vec![0u8; len];
                     self.cur.read_exact(&mut buf).map_err(e)?;
-                    // Modified UTF-8 vs UTF-8: skotch's PR #1 only emits
+                    // Modified UTF-8 vs UTF-8: skotch currently only emits
                     // ASCII strings, so a lossy conversion is fine for
                     // the fixtures we ship.
                     CpEntry::Utf8(String::from_utf8_lossy(&buf).into_owned())

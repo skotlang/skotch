@@ -1,7 +1,7 @@
 //! Name resolution for the Kotlin subset skotch accepts.
 //!
 //! Walks a [`KtFile`] AST, builds a flat scope tree, and resolves
-//! identifier references to [`DefId`]s. PR #1 supports only:
+//! identifier references to [`DefId`]s. Currently supports:
 //!
 //! - top-level `fun` declarations as static methods
 //! - top-level `val` declarations as static final fields
@@ -1055,7 +1055,7 @@ impl<'a> Resolver<'a> {
             Expr::Field { receiver, .. } => self.resolve_expr_in_top(receiver, refs),
             Expr::When { .. } => {} // not supported in top-level initializers
             Expr::If { .. } => {
-                // PR #1 doesn't lower if-expressions inside top-level
+                // We don't yet lower if-expressions inside top-level
                 // initializers; we'd need to materialize a <clinit>
                 // basic block. Punt with a clear diagnostic.
                 self.diags.push(Diagnostic::error(

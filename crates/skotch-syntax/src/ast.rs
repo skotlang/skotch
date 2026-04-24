@@ -3,13 +3,13 @@
 //! Trees are simple `Box`-based, not `rowan`. Rowan would give us a
 //! lossless syntax tree (whitespace + comments preserved) which is
 //! valuable for an LSP, but it adds substantial boilerplate before the
-//! parser produces its first node. Box-trees suffice for the PR #1
+//! parser produces its first node. Box-trees suffice for the current
 //! goal of "compile to .class". When the LSP becomes a goal we'll
 //! revisit.
 //!
 //! ## Coverage
 //!
-//! Only the syntax exercised by the PR #1 fixtures (01–10) is modeled
+//! Only the syntax exercised by the initial fixtures (01–10) is modeled
 //! here. Future fixtures (classes, when, lambdas, generics, ...) will
 //! grow this file. The parser already accepts and rejects shapes more
 //! liberally than this AST encodes — see `skotch-parser` — so we can
@@ -86,7 +86,7 @@ pub struct ImportDecl {
 }
 
 /// A top-level declaration. Class/object/etc. live as `Unsupported` for
-/// PR #1 — the parser collects them so it can produce a useful diagnostic
+/// now — the parser collects them so it can produce a useful diagnostic
 /// rather than a syntax error.
 #[derive(Clone, Debug)]
 pub enum Decl {
@@ -438,7 +438,7 @@ pub enum Stmt {
     },
 }
 
-/// Expressions exercised by PR #1 fixtures.
+/// Expressions exercised by the current fixtures.
 #[derive(Clone, Debug)]
 pub enum Expr {
     IntLit(i64, Span),
@@ -553,7 +553,7 @@ pub enum Expr {
         /// compile to a `kotlin/coroutines/jvm/internal/SuspendLambda`
         /// subclass instead of a regular `$Lambda$N` class.
         ///
-        /// **Session 6 scope:** flag is carried through the AST and MIR
+        /// **Current scope:** flag is carried through the AST and MIR
         /// but full SuspendLambda codegen (SuspendLambda superclass,
         /// invokeSuspend state machine, create/invoke/bridge methods)
         /// is not yet emitted. Lambdas with suspend bodies currently

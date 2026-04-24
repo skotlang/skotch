@@ -145,7 +145,7 @@ fn skotch_norm_matches_committed_skotch_norm() {
     }
 }
 
-/// Session 3 of the coroutine transform: a single-suspension-
+/// Single-suspension-point coroutine transform: a single-suspension-
 /// point `suspend fun` must be lowered to a state machine with
 /// the shape kotlinc emits — specifically a dispatcher prelude
 /// that reuses or creates a synthetic `ContinuationImpl`
@@ -224,7 +224,7 @@ fn suspend_state_machine_shape_matches_kotlinc() {
     }
 }
 
-/// Session 4 of the coroutine transform: a suspend function with
+/// Multi-suspension-point coroutine transform: a suspend function with
 /// two suspension points and locals live across both of them must
 /// be lowered to a 3-arm state machine with per-live-local spill
 /// fields (`I$0`, `I$1`, …) on the synthetic continuation class.
@@ -295,7 +295,7 @@ fn suspend_multi_point_shape_matches_kotlinc() {
     );
 
     // 6) When kotlinc's reference is available, verify both compilers
-    //    agree on the pivotal shape landmarks of Session 4. We
+    //    agree on the pivotal shape landmarks. We
     //    deliberately allow the Boxing.boxInt / Integer.valueOf
     //    divergence (functionally identical) and don't pin exact
     //    offsets — just that the structural anchors are present on
@@ -329,7 +329,7 @@ fn suspend_multi_point_shape_matches_kotlinc() {
     }
 }
 
-/// Session 2 of the coroutine transform: every `suspend fun` must
+/// CPS signature transform: every `suspend fun` must
 /// acquire a trailing `$completion: Continuation` parameter and
 /// return `java.lang.Object`, matching kotlinc's CPS signature
 /// half. We verify the descriptor byte-for-byte against the
@@ -390,7 +390,7 @@ fn suspend_fun_descriptor_matches_kotlinc() {
     );
 }
 
-/// Session 7 part 2 of the coroutine transform: a lambda whose body
+/// Suspend lambda transform: a lambda whose body
 /// calls a suspend function must be lowered to a class that extends
 /// `kotlin/coroutines/jvm/internal/SuspendLambda`, implements
 /// `Function1` (arity bumped by one to account for the trailing
@@ -491,7 +491,7 @@ fn suspend_lambda_shell_shape() {
         "suspend lambda <init> should invokespecial SuspendLambda.<init>(I,Continuation)V"
     );
     // 5) The invokeSuspend body is now a real CPS state machine
-    //    (Session 7 part 2). Verify the key moves by their string
+    //    (suspend lambda codegen). Verify the key moves by their string
     //    shape in the normalizer output.
     let expected_sm_fragments = [
         // Setup: fetch $SUSPENDED, stash in slot 2, read label off this.
@@ -555,7 +555,7 @@ fn suspend_lambda_shell_shape() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Session 8 of the coroutine transform: a suspend lambda with TWO
+/// Multi-suspension suspend lambda: a suspend lambda with TWO
 /// suspension points and primitive-typed local variables (`x`, `y`)
 /// that cross the suspend boundaries. kotlinc emits spill fields
 /// (`I$0`, `I$1`) directly on the lambda class (the lambda IS the
@@ -701,7 +701,7 @@ fn suspend_lambda_multi_suspend_shape() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Session 9 of the coroutine transform: suspend lambdas wired at
+/// Runtime-wired suspend lambdas: suspend lambdas wired at
 /// runtime. Verifies the structural shape of:
 ///
 /// 1. `runIt(block: suspend () -> String)` — a suspend function that

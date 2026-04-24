@@ -20,12 +20,12 @@
 //! `N` is the number of MIR locals that are not parameters and not
 //! `Ty::Unit` (Unit-typed call results don't need a register). `P` is
 //! the number of MIR parameters. `S` is the maximum scratch needed by
-//! any single instruction in the function — for PR #3 that's `1` if
+//! any single instruction in the function — currently that's `1` if
 //! the function makes a `println` call (to hold `System.out`),
 //! otherwise `0`.
 //!
 //! All MIR registers are at most 16 (v0..v15) so the small
-//! `format 35c` invoke instructions suffice. PR #3 fixtures stay
+//! `format 35c` invoke instructions suffice. The current fixtures stay
 //! comfortably under that limit.
 //!
 //! ## Two-pass emission
@@ -281,7 +281,7 @@ pub fn apply_remap(code: &mut MethodCode, remap: &Remap) {
         };
         assert!(
             new_idx < 0x1_0000,
-            "PR #3 only supports indices that fit in 16 bits (got {new_idx})"
+            "DEX backend only supports indices that fit in 16 bits (got {new_idx})"
         );
         code.insns[patch.insn_offset] = new_idx as u16;
     }

@@ -1,7 +1,7 @@
-//! Sugar-free typed IR. **Placeholder for PR #1.**
+//! Sugar-free typed IR. **Placeholder.**
 //!
 //! In the original architectural plan, HIR sits between the type
-//! checker's `TypedFile` and `MIR`. For PR #1 we collapse the two
+//! checker's `TypedFile` and `MIR`. Currently we collapse the two
 //! lowerings: `skotch-mir-lower` consumes the AST + `ResolvedFile` +
 //! `TypedFile` directly and produces MIR. HIR is therefore unused
 //! today but the crate exists so that:

@@ -26,7 +26,7 @@
 //! ## Out of scope (for now)
 //!
 //! Per-instruction disassembly. We just record `insns_size` per
-//! method. PR #3.5 will add a real instruction decoder so the diffs
+//! method. A future pass will add a real instruction decoder so the diffs
 //! catch lowering changes.
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -239,7 +239,7 @@ fn read_class_data(
     let mut cursor = off + n1 + n2 + n3 + n4;
 
     // Skip encoded_field entries: 2 uleb128s each (field_idx_diff,
-    // access_flags). PR #3 doesn't emit any.
+    // access_flags). The DEX backend doesn't emit any yet.
     for _ in 0..(static_fields_size + instance_fields_size) {
         let (_, a) = read_uleb128(&bytes[cursor..])?;
         cursor += a;

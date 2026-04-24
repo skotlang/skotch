@@ -311,7 +311,7 @@ fn gen_one_jvm(
             eprintln!("  kotlinc failed; skipping reference for {}", f.dir_name);
         } else {
             // Find the produced .class file. When `kotlinc` emits
-            // multiple classes (e.g. Session 3 coroutines, where
+            // multiple classes (e.g. coroutines, where
             // the wrapper class is accompanied by a synthetic
             // `$run$1` continuation), prefer a top-level
             // wrapper-shaped name — one whose stem ends with `Kt`

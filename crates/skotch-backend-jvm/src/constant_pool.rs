@@ -2,9 +2,8 @@
 //!
 //! Per JVMS chapter 4 the constant pool is **1-indexed**: index 0 is
 //! reserved as a sentinel. `Long` and `Double` entries take *two*
-//! consecutive slots (the second one is unusable). For PR #1 we never
-//! emit either, but the slot-counting logic is in place so future PRs
-//! can.
+//! consecutive slots (the second one is unusable). The slot-counting
+//! logic is already in place for when these types are needed.
 //!
 //! Entries are deduplicated by structural key — emitting the same
 //! `Utf8`/`Class`/`Methodref` twice yields the same index. This isn't

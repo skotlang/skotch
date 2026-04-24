@@ -12,7 +12,7 @@
 //! watermark in lockstep so the resulting `Code` attribute can record
 //! `max_stack` correctly. Locals are assigned JVM slots on first use.
 //!
-//! Branch-free methods do not need a `StackMapTable`; PR #1 fixtures
+//! Branch-free methods do not need a `StackMapTable`; simple fixtures
 //! avoid branches, so we don't emit one.
 
 use crate::constant_pool::ConstantPool;
@@ -194,7 +194,7 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // side effect, and the methods reference its indices.
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
     for func in &module.functions {
-        // Session 10: skip abstract stub functions (e.g. the synthetic
+        // Skip abstract stub functions (e.g. the synthetic
         // `delay` entry used only so the state machine extractor can
         // recognize external suspend calls). These are never called at
         // runtime — the real implementations live in library JARs.
@@ -371,7 +371,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let sf_val2 = cp2.utf8(&format!("{}.kt", class.name));
     // Pre-register field entries.
     let mut field_infos = Vec::new();
-    // Session 10: suspend lambdas need a `label:I` field for the
+    // Suspend lambdas need a `label:I` field for the
     // state machine dispatcher. kotlinc declares it on the concrete
     // lambda class (it's not inherited from SuspendLambda).
     if effective_suspend_lambda {
@@ -400,8 +400,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         // `class.methods[0]`) because its `suspend_state_machine`
         // marker carries the info `emit_suspend_lambda_shell` needs
         // to emit the real CPS state-machine body inside
-        // `invokeSuspend(Object)Object`. Session 7 part 1 emitted a
-        // throwing stub for `invokeSuspend`; part 2 replaced it with
+        // `invokeSuspend(Object)Object`. The initial implementation emitted a
+        // throwing stub for `invokeSuspend`; a follow-up replaced it with
         // a proper tableswitch-based dispatcher on `this`.
         for blob in emit_suspend_lambda_shell(class, module, &mut cp2, code2) {
             method_blobs2.push(blob);
@@ -498,8 +498,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
 ///    `SuspendLambda.<init>(arity, completion)` with the lambda
 ///    arity and the completion continuation.
 /// 2. `invokeSuspend(Object)Object` — the state-machine body.
-///    Session 7 part 1 stubbed this to throw; Session 7 part 2
-///    (this file) transfers the lambda body in as a real CPS state
+///    Initially stubbed to throw; a follow-up
+///    transfers the lambda body in as a real CPS state
 ///    machine when the MIR invoke method carries a
 ///    `suspend_state_machine` marker. See
 ///    [`emit_suspend_lambda_invoke_suspend_body`]. Capture-free
@@ -531,14 +531,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
 /// ## LIMITATIONS (tracked for follow-ups)
 ///
 /// - Only 0 or 1 suspension points are supported. Multi-suspension
-///   bodies would need the full Session 4-style spill/restore
+///   bodies would need the full spill/restore
 ///   logic against `this`'s fields — a future pass.
 /// - Captures are not yet supported in suspend lambdas. Any `free_vars`
 ///   the MIR lowerer collected end up as fields on the class but no
 ///   constructor path stores user-supplied capture values; only
 ///   capture-free lambdas compile correctly today.
 /// - Non-trivial segment bodies between suspend calls (BinOp,
-///   autobox, etc.) are not exercised yet; Session 7 part 3+ will
+///   autobox, etc.) are not exercised yet; follow-ups will
 ///   add support by wiring through the existing
 ///   `emit_mir_segment` path.
 #[allow(clippy::vec_init_then_push)]
@@ -549,7 +549,7 @@ fn emit_suspend_lambda_shell(
     code_attr_name_idx: u16,
 ) -> Vec<Vec<u8>> {
     // Arity is derived from the single `kotlin/jvm/functions/FunctionN`
-    // interface we put on the class (Session 6 lowering guarantees at
+    // interface we put on the class (the MIR lowering guarantees at
     // most one). Default to 1 so callers that forget to populate
     // `interfaces` still produce a legal classfile.
     let arity: i32 = class
@@ -567,7 +567,7 @@ fn emit_suspend_lambda_shell(
         .cloned()
         .unwrap_or_else(|| "kotlin/jvm/functions/Function1".to_string());
 
-    // Session 11: identify capture fields. The MIR constructor's
+    // Identify capture fields. The MIR constructor's
     // params are [this, capture1, ..., captureN, Continuation].
     // Extract capture info from the constructor params (indices 1..len-1).
     let ctor_params = &class.constructor.params;
@@ -633,7 +633,7 @@ fn emit_suspend_lambda_shell(
 
     // ── 1. <init>(captures..., Continuation)V ─────────────────────────
     //
-    // Session 11: captures are stored BEFORE the super-ctor call,
+    // Captures are stored BEFORE the super-ctor call,
     // matching kotlinc's bytecode layout:
     //   aload_0; aload_1; putfield $capture1   (for each capture)
     //   aload_0; iconst_<arity>; aload_N;      (N = n_captures + 1)
@@ -729,7 +729,7 @@ fn emit_suspend_lambda_shell(
 
     // ── 2. invokeSuspend(Object)Object ──────────────────────────────
     //
-    // Session 7 part 2: transfer the lambda body into invokeSuspend
+    // Transfer the lambda body into invokeSuspend
     // as a proper CPS state machine. The MIR lowerer put a
     // `SuspendStateMachine` marker on the lambda's invoke method when
     // the body contains any suspend call — we dispatch on that to
@@ -761,7 +761,7 @@ fn emit_suspend_lambda_shell(
 
     // ── 3. create — arity-dependent ────────────────────────────────
     //
-    // Session 11: create() must propagate captures from `this` to the
+    // create() must propagate captures from `this` to the
     // new instance by loading each capture field and passing it to the
     // constructor before the Continuation arg.
     //
@@ -838,7 +838,7 @@ fn emit_suspend_lambda_shell(
         code.push(0x2C); // aload_2 (Continuation is slot 2, Object is slot 1)
         code.push(0xB7); // invokespecial <self>.<init>(captures..., Continuation)V
         code.write_u16::<BigEndian>(mr_self_init).unwrap();
-        // Session 31: store the CoroutineScope (arg 1) on the new
+        // Store the CoroutineScope (arg 1) on the new
         // instance so invokeSuspend can use it for structured concurrency.
         code.push(0x59); // dup (keep the new instance on stack)
         code.push(0x2B); // aload_1 (scope param)
@@ -1046,8 +1046,7 @@ fn emit_user_method(
     code_attr_name_idx: u16,
     is_init: bool,
 ) -> Vec<u8> {
-    // Session 3 of the coroutine transform: the synthetic
-    // continuation class's `invokeSuspend(Object)` body is a
+    // The synthetic continuation class's `invokeSuspend(Object)` body is a
     // fixed three-step recipe (stash `$result`, set the label's
     // high bit with `ior MIN_VALUE`, re-invoke the owning
     // suspend function). It isn't expressible in three-address
@@ -1058,7 +1057,7 @@ fn emit_user_method(
             return emit_invoke_suspend_method(sm, class_name, cp, code_attr_name_idx);
         }
     }
-    // Session 28: suspend instance methods. If this method has a
+    // Suspend instance methods. If this method has a
     // SuspendStateMachine marker, delegate to the multi-suspend emitter
     // but with an instance-method wrapper that:
     //  (a) uses ACC_PUBLIC (no STATIC)
@@ -1716,7 +1715,7 @@ fn emit_method(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
-    // Session 3 of the coroutine transform. If the MIR lowerer
+    // Coroutine transform. If the MIR lowerer
     // marked this `suspend fun` with a state-machine descriptor,
     // bypass the normal MIR walker and emit the canonical
     // dispatcher + tableswitch pattern kotlinc produces. The
@@ -2399,8 +2398,8 @@ fn emit_suspend_state_machine_method(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
-    // Session 4: if the MIR lowerer populated per-site spill info,
-    // route to the multi-suspension emitter. Session 3's single-
+    // If the MIR lowerer populated per-site spill info,
+    // route to the multi-suspension emitter. The single-
     // suspension shape (empty `sites`) still uses the original
     // hand-rolled body below so the committed 391 golden bytes
     // stay byte-stable.
@@ -2485,7 +2484,7 @@ fn emit_single_suspend_state_machine_method(
     // Resume-path literal (the `return "done"` tail). The MIR
     // lowerer pre-resolves the `MirConst::String(StringId)` to
     // its text so the JVM backend can intern it directly into
-    // its own constant pool. Session 4 will generalize to
+    // its own constant pool. Future work will generalize to
     // expression-valued tails.
     let resume_str_idx = cp.string(&sm.resume_return_text);
 
@@ -2845,7 +2844,7 @@ fn emit_single_suspend_state_machine_method(
     method
 }
 
-/// Session 4: emit the dispatcher + N-way tableswitch for a
+/// Emit the dispatcher + N-way tableswitch for a
 /// suspend function with two or more suspension points (or one
 /// suspension point with a non-trivial post-resume tail).
 ///
@@ -2884,7 +2883,7 @@ fn emit_single_suspend_state_machine_method(
 ///
 /// Segments between suspend calls are emitted from the MIR body
 /// via [`emit_mir_segment`], which supports the narrow subset
-/// Session 4 targets (const loads, `Rvalue::Local` aliasing,
+/// the segment emitter targets (const loads, `Rvalue::Local` aliasing,
 /// integer arithmetic, and autobox `Call`s on the return path).
 #[allow(clippy::too_many_lines)]
 fn emit_multi_suspend_state_machine_method(
@@ -2992,8 +2991,8 @@ fn emit_multi_suspend_state_machine_method(
     //    (it holds Unit / Any from `yield_()` — we only store into
     //    it because the MIR tracks the call's result, we never
     //    actually load from it).
-    // Session 29: walk ALL blocks for slot allocation (not just one).
-    // Session 31: multi-block when suspend sites span different blocks,
+    // Walk ALL blocks for slot allocation (not just one).
+    // Multi-block when suspend sites span different blocks,
     // OR when non-site blocks have executable statements.
     let is_multi_block = {
         let first = sm.sites[0].block_idx;
@@ -3017,7 +3016,7 @@ fn emit_multi_suspend_state_machine_method(
                     touched.push(*rhs);
                 }
                 Rvalue::Call { args, .. } => touched.extend_from_slice(args),
-                // Session 11: GetField receiver needs a slot (typically
+                // GetField receiver needs a slot (typically
                 // `this` for capture-field loads in suspend lambdas).
                 Rvalue::GetField { receiver, .. } => touched.push(*receiver),
                 _ => {}
@@ -3101,10 +3100,10 @@ fn emit_multi_suspend_state_machine_method(
         .iter()
         .map(|s| cp.fieldref(&sm.continuation_class, &s.name, s.kind.descriptor()))
         .collect();
-    // Per-site callee methodrefs. Session 5: the descriptor now
+    // Per-site callee methodrefs. The descriptor now
     // includes the user-supplied argument types ahead of the
-    // trailing `Continuation`. For no-arg callees (Session 3/4
-    // yield_()-style) `arg_tys` is empty, yielding the legacy
+    // trailing `Continuation`. For no-arg callees (yield_()-style)
+    // `arg_tys` is empty, yielding the legacy
     // `(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;` shape.
     //
     // For virtual calls (`is_virtual`), the receiver is NOT part of
@@ -3128,7 +3127,7 @@ fn emit_multi_suspend_state_machine_method(
                 desc.push_str(&jvm_type_string(ty));
             }
             desc.push_str("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;");
-            // Session 28: is_virtual means the call is a VirtualJava
+            // is_virtual means the call is a VirtualJava
             // dispatch, but only known interfaces use invokeinterface.
             // User classes use invokevirtual (methodref).
             let is_interface = site.is_virtual
@@ -3200,7 +3199,7 @@ fn emit_multi_suspend_state_machine_method(
     code.write_u16::<BigEndian>(mr_suspended).unwrap();
     emit_store_ref_slot(&mut code, suspended_slot);
 
-    // Session 31: for multi-block state machines, initialise every
+    // For multi-block state machines, initialise every
     // non-plumbing local slot so that StackMapTable frames at branch
     // targets within case 0 see properly-typed locals (not Top).
     // Without this, the verifier rejects iload/aload on locals that
@@ -3345,7 +3344,7 @@ fn emit_multi_suspend_state_machine_method(
     let single_block_idx = sm.sites[0].block_idx as usize;
     let block = &func.blocks[single_block_idx];
 
-    // Session 29: multi-block branch target offsets for StackMapTable.
+    // Multi-block branch target offsets for StackMapTable.
     let mut mb_branch_targets: Vec<usize> = Vec::new();
     let mut mb_cmp_targets: Vec<(usize, bool)> = Vec::new();
 
@@ -3456,12 +3455,12 @@ fn emit_multi_suspend_state_machine_method(
             // L_RESUME_i sits here — both incoming edges (fallthrough
             // and the prior if_acmpne) have stack=[Object].
             post_acmpne_resume_offsets[case_i - 1] = code.len();
-            // Session 5: if the previous suspend call returned a
+            // If the previous suspend call returned a
             // user-visible value, downcast the Object to the callee's
             // declared type and store it in the result local so the
             // remaining segment code can read from there. Unit/Any
             // returns skip the checkcast and just drop the stack
-            // top, matching the Session 3/4 shape byte-for-byte.
+            // top, matching the single-suspension shape byte-for-byte.
             emit_post_resume_store(&mut code, cp, prev_site, func, &local_slot);
         } else {
             // Case 0: no restore, no prior result to rebalance; just
@@ -3472,7 +3471,7 @@ fn emit_multi_suspend_state_machine_method(
         }
 
         if !is_multi_block {
-            // ── Single-block case emission (original Session 4 path) ──
+            // ── Single-block case emission ──
             if case_i < n_cases - 1 {
                 let seg_start = if case_i == 0 {
                     0
@@ -3493,7 +3492,7 @@ fn emit_multi_suspend_state_machine_method(
                 let site = &sm.sites[case_i];
                 for (ai, arg) in site.args.iter().enumerate() {
                     emit_load_mir_local(&mut code, func, &local_slot, *arg);
-                    // Session 31: checkcast receiver for virtual suspend calls.
+                    // Checkcast receiver for virtual suspend calls.
                     if ai == 0 && site.is_virtual {
                         let rc = cp.class(&site.callee_class);
                         code.push(0xC0);
@@ -3568,7 +3567,7 @@ fn emit_multi_suspend_state_machine_method(
                 }
             }
         } else {
-            // ── Session 29: Multi-block case emission ──────────────
+            // ── Multi-block case emission ──────────────
             //
             // Case 0: emit ALL blocks with inline suspend calls.
             // Cases 1..N: each is a resume tail for one suspend site.
@@ -4130,7 +4129,7 @@ fn emit_multi_suspend_state_machine_method(
     let tableswitch_entry_locals: Vec<VTi> = {
         let mut v = vec![VTi::Top; suspended_slot as usize + 1];
         fill_param_vtis(&mut v);
-        // Session 31: for multi-block, all locals are initialized before
+        // For multi-block, all locals are initialized before
         // the tableswitch. Fill in their types so StackMapTable frames
         // at branch targets within case 0 reflect the initialized state.
         if is_multi_block {
@@ -4179,7 +4178,7 @@ fn emit_multi_suspend_state_machine_method(
     // has executed for case (i+1). The stack has the dup'd yield_
     // result (or the aload'd $result from the fallthrough) on top.
     for (i, &post_off) in post_acmpne_resume_offsets.iter().enumerate() {
-        // Session 31: loop resume cases may add extra post_acmpne entries
+        // Loop resume cases may add extra post_acmpne entries
         // beyond the original site count. Use the last live_at_resume
         // entry as a fallback for these extra entries.
         let empty_live: Vec<LocalId> = Vec::new();
@@ -4194,7 +4193,7 @@ fn emit_multi_suspend_state_machine_method(
             stack: vec![VTi::Object(cls_object)],
         });
     }
-    // Session 29: add frames for multi-block branch targets.
+    // Add frames for multi-block branch targets.
     for &tgt_off in &mb_branch_targets {
         frames.push(FrameTgt {
             offset: tgt_off,
@@ -4202,7 +4201,7 @@ fn emit_multi_suspend_state_machine_method(
             stack: Vec::new(),
         });
     }
-    // Session 30: add frames for comparison pattern internal targets.
+    // Add frames for comparison pattern internal targets.
     for &(tgt_off, has_int_stack) in &mb_cmp_targets {
         frames.push(FrameTgt {
             offset: tgt_off,
@@ -4334,18 +4333,18 @@ fn emit_multi_suspend_state_machine_method(
 }
 
 /// Emit the bytecode for a contiguous range of MIR statements in a
-/// single block. Supports only the narrow Rvalue shapes Session 4
-/// targets:
+/// single block. Supports only the narrow Rvalue shapes the segment
+/// emitter targets:
 ///
 /// - `Rvalue::Const` for int/long/double/bool/null/string literals
 /// - `Rvalue::Local` aliasing (val foo = bar)
 /// - `Rvalue::BinOp` for int/long/double arithmetic
 /// - `Rvalue::Call` with `CallKind::StaticJava` (e.g. the
-///   `Integer.valueOf` autobox the Session 2 rewrite inserts ahead
+///   `Integer.valueOf` autobox the MIR rewrite inserts ahead
 ///   of `ReturnValue`) — arg locals are loaded in order and the
 ///   result is stored into `dest`.
 ///
-/// Anything else panics with a clear "Session 5 scope" message so
+/// Anything else panics with a clear message so
 /// callers discover unsupported shapes immediately rather than
 /// Scan a bytecode range for comparison patterns (if_icmpXX / iconst_0 /
 /// goto / iconst_1) and return the internal branch target offsets.
@@ -4497,7 +4496,7 @@ fn emit_mir_segment(
                         code.push(0xB8);
                         code.write_u16::<BigEndian>(m).unwrap();
                     } else if matches!(lhs_ty, Ty::String) {
-                        // Session 26: after coroutine resume, the JVM type
+                        // After coroutine resume, the JVM type
                         // of this local may be Object (from null init)
                         // even though MIR says String.  Emit checkcast so
                         // the verifier accepts String.concat(String) below.
@@ -4508,7 +4507,7 @@ fn emit_mir_segment(
                     let rhs_ty = &func.locals[rhs.0 as usize];
                     emit_load_mir_local(code, func, local_slot, *rhs);
                     if matches!(rhs_ty, Ty::String) {
-                        // Session 26: checkcast for same reason as lhs.
+                        // Checkcast for same reason as lhs.
                         let ci = cp.class("java/lang/String");
                         code.push(0xC0); // checkcast
                         code.write_u16::<BigEndian>(ci).unwrap();
@@ -4548,7 +4547,7 @@ fn emit_mir_segment(
                         MBinOp::MulD => 0x6B,
                         MBinOp::DivD => 0x6F,
                         MBinOp::ModD => 0x73,
-                        // Session 30: comparison BinOps emit the
+                        // Comparison BinOps emit the
                         // if_icmpXX / iconst_0 / goto / iconst_1 pattern.
                         MBinOp::CmpEq | MBinOp::CmpNe | MBinOp::CmpLt
                         | MBinOp::CmpGt | MBinOp::CmpLe | MBinOp::CmpGe => {
@@ -4607,7 +4606,7 @@ fn emit_mir_segment(
                     emit_store_mir_local(code, func, local_slot, *dest);
                     }
                 }
-                // Session 9: Constructor calls appear in suspend
+                // Constructor calls appear in suspend
                 // function segments when a lambda is instantiated
                 // before a suspend call (e.g. `runIt { ... }`).
                 CallKind::Constructor(class_name) => {
@@ -4631,7 +4630,7 @@ fn emit_mir_segment(
                     // Constructor returns void; dest still holds the
                     // (now initialized) reference. No store needed.
                 }
-                // Session 9: Virtual/interface calls on FunctionN
+                // Virtual/interface calls on FunctionN
                 // appear when a suspend-typed callable parameter is
                 // invoked (e.g. `block()` inside `runIt`).
                 CallKind::Virtual {
@@ -4672,7 +4671,7 @@ fn emit_mir_segment(
                     }
                     emit_store_mir_local(code, func, local_slot, *dest);
                 }
-                // Session 10: println/print inside suspend lambda bodies.
+                // println/print inside suspend lambda bodies.
                 CallKind::Println => {
                     let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
                     code.push(0xB2); // getstatic System.out
@@ -4681,7 +4680,7 @@ fn emit_mir_segment(
                     if let Some(&a) = args.first() {
                         emit_load_mir_local(code, func, local_slot, a);
                         let arg_ty = &func.locals[a.0 as usize];
-                        // Session 26: after coroutine resume, String-typed
+                        // After coroutine resume, String-typed
                         // locals have JVM type Object.  Emit checkcast so
                         // the verifier accepts println(String).
                         if matches!(arg_ty, Ty::String) {
@@ -4717,7 +4716,7 @@ fn emit_mir_segment(
                     if let Some(&a) = args.first() {
                         emit_load_mir_local(code, func, local_slot, a);
                         let arg_ty = &func.locals[a.0 as usize];
-                        // Session 26: same checkcast fix for print().
+                        // Same checkcast fix for print().
                         if matches!(arg_ty, Ty::String) {
                             let ci = cp.class("java/lang/String");
                             code.push(0xC0); // checkcast
@@ -4736,7 +4735,7 @@ fn emit_mir_segment(
                         code.write_u16::<BigEndian>(mr).unwrap();
                     }
                 }
-                // Session 12: VirtualJava calls (e.g. Deferred.await)
+                // VirtualJava calls (e.g. Deferred.await)
                 // appear in suspend lambda bodies.
                 CallKind::VirtualJava {
                     class_name,
@@ -4745,7 +4744,7 @@ fn emit_mir_segment(
                 } => {
                     for (i, a) in args.iter().enumerate() {
                         emit_load_mir_local(code, func, local_slot, *a);
-                        // Session 21: checkcast receiver if MIR type is
+                        // Checkcast receiver if MIR type is
                         // Any/Object but the target class is specific.
                         if i == 0
                             && class_name != "java/lang/Object"
@@ -4808,7 +4807,7 @@ fn emit_mir_segment(
                     for a in args {
                         emit_load_mir_local(code, func, local_slot, *a);
                         let arg_ty = &func.locals[a.0 as usize];
-                        // Session 26: after coroutine resume, String-typed
+                        // After coroutine resume, String-typed
                         // locals have JVM type Object.  Emit checkcast so
                         // the verifier accepts append(String).
                         if matches!(arg_ty, Ty::String) {
@@ -4846,7 +4845,7 @@ fn emit_mir_segment(
                     // panicking, so the rest of the segment can still emit.
                 }
             },
-            // Session 9: NewInstance appears in suspend function
+            // NewInstance appears in suspend function
             // segments when a lambda class is instantiated before
             // a suspend call.
             Rvalue::NewInstance(class_name) => {
@@ -4860,7 +4859,7 @@ fn emit_mir_segment(
                 // pointing at the (now initialized) object.
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
-            // Session 11: GetField appears in suspend lambda bodies
+            // GetField appears in suspend lambda bodies
             // when captured variables are loaded from `this` fields.
             // Pattern: aload receiver; getfield class.field; store dest.
             Rvalue::GetField {
@@ -4875,7 +4874,7 @@ fn emit_mir_segment(
                 code.write_u16::<BigEndian>(fr).unwrap();
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
-            // Session 12: GetStaticField for getstatic (e.g. GlobalScope.INSTANCE).
+            // GetStaticField for getstatic (e.g. GlobalScope.INSTANCE).
             Rvalue::GetStaticField {
                 class_name,
                 field_name,
@@ -4886,7 +4885,7 @@ fn emit_mir_segment(
                 code.write_u16::<BigEndian>(fr).unwrap();
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
-            // Session 12: CheckCast appears when lambda is cast to Function2.
+            // CheckCast appears when lambda is cast to Function2.
             Rvalue::CheckCast { obj, target_class } => {
                 emit_load_mir_local(code, func, local_slot, *obj);
                 let ci = cp.class(target_class);
@@ -4895,7 +4894,7 @@ fn emit_mir_segment(
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
             other => panic!(
-                "Session 4 scope: suspend body may only contain \
+                "emit_mir_segment: suspend body may only contain \
                  Const/Local/BinOp/StaticJava/NewInstance/Constructor/GetField/GetStaticField/CheckCast; saw {:?}",
                 other
             ),
@@ -4903,9 +4902,9 @@ fn emit_mir_segment(
     }
 }
 
-/// Emit a `const` load for the narrow `MirConst` kinds the Session 4/5
+/// Emit a `const` load for the narrow `MirConst` kinds the
 /// segment emitter needs. Delegates to the existing int/double const
-/// primitives where possible. Session 5 adds `MirConst::String`
+/// primitives where possible. Also handles `MirConst::String`
 /// support so suspend-call arguments can be literal strings.
 fn emit_const(
     code: &mut Vec<u8>,
@@ -4963,7 +4962,7 @@ fn emit_const(
         MirConst::Null => code.push(0x01),
         MirConst::Unit => {}
         MirConst::String(sid) => {
-            // Session 5: resolve the string pool id to text and
+            // Resolve the string pool id to text and
             // intern into the constant pool. Use `ldc_w` for
             // >u8::MAX indices so large pools still encode.
             let s = module.lookup_string(*sid);
@@ -5028,7 +5027,7 @@ fn emit_store_mir_local(
     code.push(slot);
 }
 
-/// Session 5: emit the post-resume sequence that consumes the
+/// Emit the post-resume sequence that consumes the
 /// `[Object]` value left on the stack by the dispatcher's
 /// `dup; if_acmpne` pair (or, in the fallthrough path, by
 /// `throwOnFailure($result); aload $result`) and stores the
@@ -5038,7 +5037,7 @@ fn emit_store_mir_local(
 /// Object — there's no user-visible value to bind. Otherwise we
 /// `checkcast <class>` and `astore` into the MIR local the caller
 /// assigned to the call's dest. That local is `Ty::Any`-typed
-/// (Session 2 rewrote the suspend fun's return to `Object`), so the
+/// (the MIR lowerer rewrote the suspend fun's return to `Object`), so the
 /// astore is always a plain reference store.
 fn emit_post_resume_store(
     code: &mut Vec<u8>,
@@ -5212,7 +5211,7 @@ fn emit_invoke_suspend_method(
     // kotlinc pushes 0/null for each user param — the state machine
     // ignores these on resume (it uses spilled values from fields).
     if sm.is_instance_method {
-        // Session 28: for instance methods, the first "user param" is
+        // For instance methods, the first "user param" is
         // the receiver (`this`). Load it from the continuation's L$0
         // field so invokevirtual has a non-null receiver.
         if !sm.spill_layout.is_empty() {
@@ -5257,7 +5256,7 @@ fn emit_invoke_suspend_method(
     code.push(0xC0); // checkcast Continuation
     code.write_u16::<BigEndian>(cls_cont).unwrap();
     if sm.is_instance_method {
-        // Session 28: instance method — use invokevirtual.
+        // Instance method — use invokevirtual.
         // Build the instance descriptor: skip `this` from outer_user_param_tys.
         let mut inst_desc = String::from("(");
         for ty in sm.outer_user_param_tys.iter().skip(1) {
@@ -5295,10 +5294,10 @@ fn emit_invoke_suspend_method(
     method
 }
 
-/// Session 7 part 2: emit the state-machine body of a suspend
+/// Emit the state-machine body of a suspend
 /// lambda's `invokeSuspend(Object)Object` method.
 ///
-/// Structurally this mirrors the Session 3 single-suspension
+/// Structurally this mirrors the single-suspension
 /// emitter ([`emit_single_suspend_state_machine_method`]) for
 /// named suspend functions, but specialized for the lambda case
 /// where **the lambda class IS the continuation**:
@@ -5319,7 +5318,7 @@ fn emit_invoke_suspend_method(
 /// `SuspendLambda implements Continuation` makes it redundant,
 /// and we match for shape parity.
 ///
-/// Scope (Session 7 part 2):
+/// Scope:
 /// * **Zero suspension points.** The state machine marker is
 ///   `None`; we emit a trivial `throwOnFailure($result); <tail>;
 ///   areturn`. Used by bodies like `{ "hello" }` with no inner
@@ -5327,7 +5326,7 @@ fn emit_invoke_suspend_method(
 ///   the AST flagged it).
 /// * **One suspension point.** The marker is `Some(sm)` with
 ///   `sm.sites.is_empty()` and `sm.resume_return_text` set — the
-///   Session 3-equivalent shape, the only multi-suspension-safe
+///   the single-suspension-equivalent shape, the only multi-suspension-safe
 ///   path the lambda-side MIR lowerer produces today. The emitted
 ///   body runs the canonical setup → tableswitch(0,1) → case-0
 ///   (spill-less since there are no captures yet) → case-1 resume
@@ -5335,8 +5334,8 @@ fn emit_invoke_suspend_method(
 /// * **Anything richer** (multiple suspend calls, captured locals
 ///   that cross a suspension, non-literal tails) falls through to
 ///   a stub that throws `IllegalStateException` — the same
-///   placeholder Session 7 part 1 emitted. Follow-up sessions
-///   graduate each shape in turn.
+///   placeholder the stub emitter produced. Follow-up work
+///   graduates each shape in turn.
 fn emit_suspend_lambda_invoke_suspend_body(
     class: &skotch_mir::MirClass,
     invoke_mir: Option<&MirFunction>,
@@ -5351,9 +5350,9 @@ fn emit_suspend_lambda_invoke_suspend_body(
 
     // Dispatch on the state machine shape.
     //
-    // * Session 7 (part 2): `sites.is_empty()` + `resume_return_text`
+    // * `sites.is_empty()` + `resume_return_text`
     //   is the single-suspension, literal-tail fast path.
-    // * Session 8 (this file): `!sites.is_empty()` → multi-suspension
+    // * `!sites.is_empty()` → multi-suspension
     //   body emitted directly on the lambda with spill fields living
     //   on `this`.
     // * No marker at all → zero-suspension body.
@@ -5431,7 +5430,7 @@ fn emit_suspend_lambda_invoke_suspend_body(
 /// `invokeSuspend` body.
 enum LambdaBodyShape {
     /// Exactly one suspension point with a literal-string tail —
-    /// the Session 7 part 2 scope. Emit the full setup →
+    /// the single-suspension scope. Emit the full setup →
     /// tableswitch → case-0 → case-1 → default pattern on `this`.
     OneSuspend {
         /// Literal text the lambda returns on resume (e.g.
@@ -5450,15 +5449,15 @@ enum LambdaBodyShape {
         /// Literal text the body returns.
         resume_tail: String,
     },
-    /// Session 8: two or more suspension points with local-variable
+    /// Two or more suspension points with local-variable
     /// spilling onto the lambda class itself (no separate
     /// continuation class). The full body — segments + spills + the
     /// autoboxed final tail — lives on the lambda's `invokeSuspend`.
     MultiSuspend,
     /// Shape outside the current scope (captures across suspensions,
     /// branches around suspend sites, …). Emit a stub that throws —
-    /// matches the Session 7 part 1 behaviour for these cases until
-    /// follow-up sessions extend coverage.
+    /// matches the stub behaviour for these cases until
+    /// follow-up work extends coverage.
     Unsupported,
 }
 
@@ -5664,8 +5663,8 @@ fn emit_lambda_one_suspend_body(
     // the style used by our named-suspend-fun emitters. Kotlinc uses
     // compact `append`/`same`/`same_locals_1_stack_item` frames for
     // smaller bytecode, but the verifier accepts full frames just as
-    // well and we don't need byte-parity with kotlinc here (Session 7
-    // part 2 does not have a committed kotlinc golden).
+    // well and we don't need byte-parity with kotlinc here (no
+    // committed kotlinc golden for the lambda path).
     //
     // Frame targets in ascending order:
     //   * case 0 (offset 32): locals = [this, $result, $SUSPENDED]
@@ -5752,7 +5751,7 @@ fn emit_lambda_one_suspend_body(
     method
 }
 
-/// Session 8: emit the multi-suspension `invokeSuspend` body directly
+/// Emit the multi-suspension `invokeSuspend` body directly
 /// on the lambda class. Mirrors [`emit_multi_suspend_state_machine_method`]
 /// but with three key specializations:
 ///
@@ -5839,9 +5838,9 @@ fn emit_lambda_multi_suspend_body(
     }
 
     // 2. Second pass: every MIR local touched by any Assign/terminator
-    //    in any block gets a slot. Session 30: walk ALL blocks for
+    //    in any block gets a slot. Walk ALL blocks for
     //    multi-block support.
-    // Session 31: multi-block when suspend sites span different blocks,
+    // Multi-block when suspend sites span different blocks,
     // OR when non-site blocks have executable statements (e.g. loop
     // condition blocks, entry blocks with setup code).
     let is_multi_block = {
@@ -5868,7 +5867,7 @@ fn emit_lambda_multi_suspend_body(
                     touched.push(*rhs);
                 }
                 Rvalue::Call { args, .. } => touched.extend_from_slice(args),
-                // Session 11: GetField receiver needs a slot (typically
+                // GetField receiver needs a slot (typically
                 // `this` for capture-field loads in suspend lambdas).
                 Rvalue::GetField { receiver, .. } => touched.push(*receiver),
                 _ => {}
@@ -5940,7 +5939,7 @@ fn emit_lambda_multi_suspend_body(
         .collect();
     // Per-site callee methodrefs. Currently every site's descriptor
     // is `(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;` (no
-    // user args in the Session 8 scope), but we build from
+    // user args in the lambda scope), but we build from
     // `arg_tys` for forward compatibility.
     //
     // For virtual calls (`is_virtual`), the receiver is NOT part of
@@ -5977,7 +5976,7 @@ fn emit_lambda_multi_suspend_body(
         })
         .collect();
 
-    // Session 11: pre-register CP class entries for ref-typed spill
+    // Pre-register CP class entries for ref-typed spill
     // locals that need a checkcast after restore (e.g. String captured
     // from an outer scope, spilled as Object via L$0, then restored
     // and consumed by println(String)). Build a map: MIR local →
@@ -6138,7 +6137,7 @@ fn emit_lambda_multi_suspend_body(
             code.push(0xB4);
             code.write_u16::<BigEndian>(spill_fieldrefs[ls.slot as usize])
                 .unwrap();
-            // Session 11: for ref-typed spills, emit a checkcast to
+            // For ref-typed spills, emit a checkcast to
             // the MIR local's actual type so that downstream bytecode
             // (e.g. println(String)) passes verification. The spill
             // field is typed as Object; the checkcast narrows it.
@@ -6214,7 +6213,7 @@ fn emit_lambda_multi_suspend_body(
     //     <segment N — the real return tail, autoboxed by the MIR lowerer>
     //     <emit terminator>
     //
-    // Session 30: multi-block branch target offsets for StackMapTable.
+    // Multi-block branch target offsets for StackMapTable.
     let mut mb_branch_targets: Vec<usize> = Vec::new();
     let mut mb_cmp_targets: Vec<(usize, bool)> = Vec::new();
     //   default:
@@ -6247,7 +6246,7 @@ fn emit_lambda_multi_suspend_body(
             emit_load_ref_slot(&mut code, result_slot);
             post_acmpne_resume_offsets[case_i - 1] = code.len();
             // Post-resume: bind the suspend-call's result if needed.
-            // Reuses the Session 5 helper — for Unit callees it just
+            // Reuses the post-resume helper — for Unit callees it just
             // pops the Object.
             emit_post_resume_store(&mut code, cp, prev_site, invoke_mir, &local_slot);
         } else {
@@ -6257,7 +6256,7 @@ fn emit_lambda_multi_suspend_body(
             code.write_u16::<BigEndian>(mr_throw_on_failure).unwrap();
         }
 
-        // ── Session 30: unified single/multi-block case emission ──
+        // ── Unified single/multi-block case emission ──
         //
         // Helper macro: emit inline suspend call sequence for lambdas.
         // Returns the patch offset for if_acmpne.
@@ -6316,7 +6315,7 @@ fn emit_lambda_multi_suspend_body(
         let fr_unit = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
 
         if !is_multi_block {
-            // ── Single-block path (original Session 8) ──
+            // ── Single-block path ──
             if case_i < n_cases - 1 {
                 let seg_start = if case_i == 0 {
                     0
@@ -6368,7 +6367,7 @@ fn emit_lambda_multi_suspend_body(
                 }
             }
         } else {
-            // ── Session 30: Multi-block path ──
+            // ── Multi-block path ──
             if case_i == 0 {
                 // Case 0: emit ALL blocks with inline suspend calls.
                 struct MBPatch {
@@ -6879,7 +6878,7 @@ fn emit_lambda_multi_suspend_body(
                 };
             }
         }
-        // Session 26: do NOT narrow spill-restored locals to their
+        // Do NOT narrow spill-restored locals to their
         // precise types (String, Deferred, etc.). The preamble
         // initializes all ref slots to null (Object), and the verifier
         // checks that the frame type is assignable FROM the actual
@@ -6931,7 +6930,7 @@ fn emit_lambda_multi_suspend_body(
             stack: vec![VTi::Object(cls_object)],
         });
     }
-    // Session 30: multi-block branch target frames.
+    // Multi-block branch target frames.
     for &tgt_off in &mb_branch_targets {
         frames.push(FrameTgt {
             offset: tgt_off,
@@ -7130,11 +7129,11 @@ fn emit_lambda_zero_suspend_body(
     )
 }
 
-/// Emit the Session 7 part 1 placeholder `invokeSuspend` — throws
+/// Emit the placeholder `invokeSuspend` — throws
 /// `IllegalStateException("invokeSuspend not yet implemented")`.
-/// Used when the lambda body is outside the Session 7 part 2
+/// Used when the lambda body is outside the currently
 /// supported shapes (multi-suspension, captures across suspensions,
-/// non-literal tails, …). Successive sessions replace each
+/// non-literal tails, ...). Successive improvements replace each
 /// fallback with a real emitter.
 fn emit_lambda_invoke_suspend_stub(
     cp: &mut ConstantPool,
@@ -7149,7 +7148,7 @@ fn emit_lambda_invoke_suspend_stub(
         "<init>",
         "(Ljava/lang/String;)V",
     );
-    let str_ise_msg = cp.string("invokeSuspend not yet implemented (Session 7 part 2 scope)");
+    let str_ise_msg = cp.string("invokeSuspend not yet implemented");
 
     let mut code: Vec<u8> = Vec::new();
     code.push(0xBB); // new
