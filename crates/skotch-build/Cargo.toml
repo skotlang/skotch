@@ -23,6 +23,7 @@ skotch-diagnostics = { workspace = true }
 skotch-config      = { workspace = true }
 skotch-backend-jvm = { workspace = true }
 skotch-backend-dex = { workspace = true }
+rustc-hash         = { workspace = true }
 anyhow             = { workspace = true }
 walkdir            = { workspace = true }
 rayon              = { workspace = true }

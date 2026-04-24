@@ -470,3 +470,145 @@ fn salsa_new_function_visible_cross_file() {
     assert!(!r2[0].1, "Lib ok");
     assert!(!r2[1].1, "Main should see new helper2()");
 }
+
+// ─── Multi-module build tests ───────────────────────────────────────────────
+
+type ModuleDef<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a [&'a str]);
+
+fn create_multi_module_project(dir: &Path, modules: &[ModuleDef<'_>]) {
+    fs::create_dir_all(dir).unwrap();
+    let mut settings = String::from("rootProject.name = \"test-multi\"\n");
+    let module_names: Vec<&str> = modules.iter().map(|(n, _, _)| *n).collect();
+    settings.push_str(&format!(
+        "include({})\n",
+        module_names
+            .iter()
+            .map(|n| format!("\":{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    fs::write(dir.join("settings.gradle.kts"), &settings).unwrap();
+
+    for (name, files, deps) in modules {
+        let mod_dir = dir.join(name);
+        let src_dir = mod_dir.join("src/main/kotlin");
+        fs::create_dir_all(&src_dir).unwrap();
+
+        let mut build = String::from("plugins { kotlin(\"jvm\") }\n");
+        if !deps.is_empty() {
+            build.push_str("dependencies {\n");
+            for dep in *deps {
+                build.push_str(&format!("    implementation(project(\":{dep}\"))\n"));
+            }
+            build.push_str("}\n");
+        }
+        fs::write(mod_dir.join("build.gradle.kts"), &build).unwrap();
+
+        for (fname, content) in *files {
+            fs::write(src_dir.join(fname), content).unwrap();
+        }
+    }
+}
+
+#[test]
+fn multi_module_basic_build() {
+    let dir = std::env::temp_dir().join(format!("skotch-mm-basic-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_multi_module_project(
+        &dir,
+        &[
+            ("lib", &[("Lib.kt", "fun helper(): Int = 42\n")], &[]),
+            (
+                "app",
+                &[("Main.kt", "fun main() { println(helper()) }\n")],
+                &["lib"],
+            ),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Multi-module build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_module_cross_module_calls() {
+    let dir = std::env::temp_dir().join(format!("skotch-mm-xmod-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_multi_module_project(
+        &dir,
+        &[
+            (
+                "lib",
+                &[(
+                    "Greeter.kt",
+                    "fun greet(name: String): String = \"Hi, $name!\"\n",
+                )],
+                &[],
+            ),
+            (
+                "app",
+                &[("Main.kt", "fun main() { println(greet(\"Alice\")) }\n")],
+                &["lib"],
+            ),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Cross-module call build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_module_independent_modules_no_deps() {
+    // Two independent modules (no deps between them) + an app that depends on both.
+    let dir = std::env::temp_dir().join(format!("skotch-mm-indep-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_multi_module_project(
+        &dir,
+        &[
+            ("lib_a", &[("A.kt", "fun fromA(): Int = 1\n")], &[]),
+            ("lib_b", &[("B.kt", "fun fromB(): Int = 2\n")], &[]),
+            (
+                "app",
+                &[("Main.kt", "fun main() { println(fromA() + fromB()) }\n")],
+                &["lib_a", "lib_b"],
+            ),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Independent modules build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_module_chain_dependency() {
+    // Chain: core → util → app (app depends on util, util depends on core).
+    let dir = std::env::temp_dir().join(format!("skotch-mm-chain-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    create_multi_module_project(
+        &dir,
+        &[
+            ("core", &[("Core.kt", "fun coreVal(): Int = 10\n")], &[]),
+            (
+                "util",
+                &[("Util.kt", "fun utilVal(): Int = coreVal() + 5\n")],
+                &["core"],
+            ),
+            (
+                "app",
+                &[("Main.kt", "fun main() { println(utilVal()) }\n")],
+                &["util"],
+            ),
+        ],
+    );
+
+    let r = build(&dir);
+    assert!(r.is_ok(), "Chain dependency build failed: {:?}", r.err());
+
+    let _ = fs::remove_dir_all(&dir);
+}

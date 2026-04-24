@@ -2193,6 +2193,7 @@ dependencies = [
  "anyhow",
  "blake3",
  "rayon",
+ "rustc-hash",
  "skotch-apk",
  "skotch-axml",
  "skotch-backend-dex",

@@ -267,3 +267,118 @@ fn hello_lib_runtime_output_matches() {
     let _ = std::fs::remove_dir_all(&gradle_tmp);
     let _ = std::fs::remove_dir_all(&skotch_tmp);
 }
+
+// ─── Multi-module tests ─────────────────────────────────────────────────────
+
+#[test]
+fn multi_lib_skotch_builds_and_runs() {
+    let tmp = make_temp("multi-skotch");
+    copy_dir_recursive(&fixture_dir("multi-lib"), &tmp).unwrap();
+
+    let result = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(
+        result.is_ok(),
+        "multi-module build failed: {:?}",
+        result.err()
+    );
+    let outcome = result.unwrap();
+
+    // JAR should be at build/libs/multi-lib.jar.
+    assert_eq!(
+        outcome.output_path.file_name().and_then(|n| n.to_str()),
+        Some("multi-lib.jar"),
+    );
+
+    // JAR should contain classes from BOTH modules.
+    let entries = jar_class_entries(&outcome.output_path);
+    assert!(
+        entries.contains("MainKt.class"),
+        "Missing MainKt.class from app module"
+    );
+    assert!(
+        entries.contains("GreeterKt.class"),
+        "Missing GreeterKt.class from lib module"
+    );
+    assert!(
+        entries.contains("MathUtilsKt.class"),
+        "Missing MathUtilsKt.class from lib module"
+    );
+
+    // Cross-module calls should work at runtime.
+    if let Ok(java) = which::which("java") {
+        let stdout = run_stdout(Command::new(&java).arg("-jar").arg(&outcome.output_path));
+        assert_eq!(
+            stdout.as_deref(),
+            Some("Hello, World!\n5\n"),
+            "Multi-module JAR should produce correct cross-module output"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn multi_lib_cross_module_function_calls() {
+    let tmp = make_temp("multi-xmod");
+    copy_dir_recursive(&fixture_dir("multi-lib"), &tmp).unwrap();
+
+    let result = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(result.is_ok(), "build failed: {:?}", result.err());
+
+    if let Ok(java) = which::which("java") {
+        let jar = result.unwrap().output_path;
+        let stdout = run_stdout(Command::new(&java).arg("-jar").arg(&jar))
+            .expect("JAR should run successfully");
+        assert!(
+            stdout.contains("Hello, World!"),
+            "Cross-module greet() failed"
+        );
+        assert!(stdout.contains('5'), "Cross-module add() failed");
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn multi_lib_dependency_order_correct() {
+    let tmp = make_temp("multi-order");
+    copy_dir_recursive(&fixture_dir("multi-lib"), &tmp).unwrap();
+
+    let result = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(
+        result.is_ok(),
+        "Dependency-ordered build should succeed: {:?}",
+        result.err()
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn multi_lib_incremental_rebuild() {
+    let tmp = make_temp("multi-incr");
+    copy_dir_recursive(&fixture_dir("multi-lib"), &tmp).unwrap();
+
+    let r1 = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(r1.is_ok());
+
+    let r2 = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(r2.is_ok(), "Incremental rebuild should succeed");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
