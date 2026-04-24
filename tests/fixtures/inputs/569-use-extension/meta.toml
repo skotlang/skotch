@@ -1,0 +1,4 @@
+name = "569-use-extension"
+status = "supported"
+features = ["use", "try-with-resources", "close", "lambda"]
+expected_output = "working\nprocessed\nclosed\ndone\n"

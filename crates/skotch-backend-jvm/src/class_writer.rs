@@ -1086,13 +1086,15 @@ fn emit_user_method(
                 continue;
             }
             match &blk.terminator {
-                Terminator::Goto(t) => {
-                    if !reachable[*t as usize] {
-                        reachable[*t as usize] = true;
-                        changed = true;
-                    }
+                Terminator::Goto(t) if !reachable[*t as usize] => {
+                    reachable[*t as usize] = true;
+                    changed = true;
                 }
-                Terminator::Branch { then_block, else_block, .. } => {
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
                     if !reachable[*then_block as usize] {
                         reachable[*then_block as usize] = true;
                         changed = true;
@@ -1106,11 +1108,11 @@ fn emit_user_method(
             }
         }
         for eh in &func.exception_handlers {
-            if reachable[eh.try_start_block as usize] {
-                if !reachable[eh.handler_block as usize] {
-                    reachable[eh.handler_block as usize] = true;
-                    changed = true;
-                }
+            if reachable[eh.try_start_block as usize]
+                && !reachable[eh.handler_block as usize]
+            {
+                reachable[eh.handler_block as usize] = true;
+                changed = true;
             }
         }
         if !changed {
@@ -1691,13 +1693,15 @@ fn emit_method(
                 continue;
             }
             match &blk.terminator {
-                Terminator::Goto(t) => {
-                    if !reachable[*t as usize] {
-                        reachable[*t as usize] = true;
-                        changed = true;
-                    }
+                Terminator::Goto(t) if !reachable[*t as usize] => {
+                    reachable[*t as usize] = true;
+                    changed = true;
                 }
-                Terminator::Branch { then_block, else_block, .. } => {
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
                     if !reachable[*then_block as usize] {
                         reachable[*then_block as usize] = true;
                         changed = true;
@@ -1711,11 +1715,11 @@ fn emit_method(
             }
         }
         for eh in &func.exception_handlers {
-            if reachable[eh.try_start_block as usize] {
-                if !reachable[eh.handler_block as usize] {
-                    reachable[eh.handler_block as usize] = true;
-                    changed = true;
-                }
+            if reachable[eh.try_start_block as usize]
+                && !reachable[eh.handler_block as usize]
+            {
+                reachable[eh.handler_block as usize] = true;
+                changed = true;
             }
         }
         if !changed {
@@ -4654,7 +4658,18 @@ fn emit_mir_segment(
                     // Check if target is an interface for invokeinterface.
                     let is_iface = matches!(
                         class_name.as_str(),
-                        "kotlinx/coroutines/Deferred" | "kotlinx/coroutines/Job"
+                        "kotlinx/coroutines/Deferred"
+                            | "kotlinx/coroutines/Job"
+                            | "java/util/Map$Entry"
+                            | "java/util/Iterator"
+                            | "java/util/Set"
+                            | "java/util/Map"
+                            | "java/lang/Iterable"
+                            | "java/util/List"
+                            | "java/util/Collection"
+                            | "java/lang/Comparable"
+                            | "java/lang/AutoCloseable"
+                            | "java/io/Closeable"
                     ) || class_name.starts_with("kotlin/jvm/functions/Function");
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
@@ -8017,10 +8032,13 @@ fn walk_block(
                             | "java/util/Collection"
                             | "java/util/Set"
                             | "java/util/Map"
+                            | "java/util/Map$Entry"
                             | "java/lang/Iterable"
                             | "java/lang/Comparable"
                             | "java/lang/CharSequence"
                             | "java/lang/Runnable"
+                            | "java/lang/AutoCloseable"
+                            | "java/io/Closeable"
                             | "kotlinx/coroutines/Deferred"
                             | "kotlinx/coroutines/Job"
                     ) || class_name
