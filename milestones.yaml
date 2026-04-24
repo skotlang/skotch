@@ -949,7 +949,7 @@ milestones:
 
   - version: "0.12.5"
     title: "Correctness Hardening"
-    status: planned
+    status: completed
     depends_on: ["0.12.0"]
     description: >
       Fix correctness gaps in completed milestones. Covers: safe/unsafe
@@ -1169,7 +1169,7 @@ milestones:
 
   - version: "0.13.0"
     title: "Multi-File Compilation, Packages, and Imports"
-    status: complete
+    status: completed
     depends_on: ["0.12.0"]
     description: >
       Import statements, package declarations, multi-file compilation
@@ -1226,7 +1226,7 @@ milestones:
   # v0.13.5 — Multi-File Polish and Incremental Compilation
   - version: "0.13.5"
     title: "Multi-File Polish and Incremental Compilation"
-    status: complete
+    status: completed
     depends_on: ["0.13.0"]
     description: >
       Parallel compilation via rayon, content-hash-based incremental rebuild
@@ -1315,7 +1315,7 @@ milestones:
 
   - version: "0.14.0"
     title: "Annotations and Java Interop"
-    status: complete
+    status: completed
     depends_on: ["0.13.0"]
     description: >
       Annotation retention and runtime emission, @JvmStatic/@JvmField,
@@ -1409,7 +1409,7 @@ milestones:
 
   - version: "0.15.0"
     title: "Stdlib Completeness and Inline Functions"
-    status: complete
+    status: completed
     depends_on: ["0.14.0"]
     description: >
       Inline function modifier support, value class parsing, smart cast
@@ -1479,61 +1479,6 @@ milestones:
     risks:
       - description: "Full inline body inlining requires MIR block copying"
         mitigation: "Reified inlining works now; complex inlining is v0.16"
-
-# ============================================================================
-# FUTURE ENHANCEMENTS (not scheduled — opportunistic improvements)
-# ============================================================================
-
-  - version: "future"
-    title: "Dynamic Stdlib Registry from Classfile Scanning"
-    status: planned
-    depends_on: ["0.15.0"]
-    description: >
-      Replace the static stdlib-registry tables with runtime classfile
-      scanning. Currently skotch-stdlib-registry contains ~140 static
-      entries mapping Kotlin stdlib functions, annotations, and JVM
-      interfaces. Most of this data is discoverable from kotlin-stdlib.jar
-      and the JDK at build time.
-
-    features:
-      - name: "JVM interface detection from ACC_INTERFACE flag"
-        description: >
-          Instead of a hardcoded list of interface class names, check the
-          ACC_INTERFACE (0x0200) bit in classfile access_flags when deciding
-          between invokevirtual and invokeinterface. skotch-classinfo
-          already parses access_flags. This eliminates the JVM_INTERFACES
-          static list entirely.
-
-      - name: "Stdlib extension discovery from facade class scanning"
-        description: >
-          Scan kotlin-stdlib.jar for all *Kt facade classes (CollectionsKt,
-          MapsKt, StringsKt, etc.). Extract public static methods whose
-          first parameter is the receiver type. Auto-build the extension
-          function table from method signatures. This eliminates the
-          STDLIB_EXTENSIONS static table and automatically supports new
-          stdlib functions across Kotlin versions without code changes.
-
-      - name: "Type-aware overload resolution"
-        description: >
-          Replace the STRING_OVERLOADS disambiguation table with proper
-          type-aware method resolution. When multiple JVM methods share the
-          same name, use the caller's argument types to select the correct
-          overload. skotch-classinfo already provides all overloads for a
-          class. This subsumes the static overload table.
-
-      - name: "Cached registry with content-addressed invalidation"
-        description: >
-          On first skotch build, scan kotlin-stdlib.jar + JDK jmods and
-          build the registry tables from classfile metadata. Cache the
-          result in ~/.skotch/cache/stdlib-registry-{blake3-hash}.json.
-          Invalidate when the JAR or JDK changes. Fall back to the static
-          tables if scanning fails (e.g., no kotlin-stdlib on PATH).
-
-    risks:
-      - description: "Scanning kotlin-stdlib.jar adds ~50ms to cold builds"
-        mitigation: "Cache aggressively; only rescan when JAR hash changes"
-      - description: "Some Kotlin conventions are not discoverable from classfiles alone"
-        mitigation: "Keep static fallback tables for edge cases (e.g., joinToString $default pattern)"
 
 # ============================================================================
 # BUILD SYSTEM, BSP, AND ANDROID TOOLING (v0.20–v0.40)
@@ -1845,3 +1790,58 @@ milestones:
     # - Gradle task execution (only DSL parsing)
     # - KSP (Kotlin Symbol Processing) for code generation
     # - kapt (annotation processing via javac stubs)
+
+# ============================================================================
+# FUTURE ENHANCEMENTS (not scheduled — opportunistic improvements)
+# ============================================================================
+
+  - version: "future"
+    title: "Dynamic Stdlib Registry from Classfile Scanning"
+    status: planned
+    depends_on: ["0.15.0"]
+    description: >
+      Replace the static stdlib-registry tables with runtime classfile
+      scanning. Currently skotch-stdlib-registry contains ~140 static
+      entries mapping Kotlin stdlib functions, annotations, and JVM
+      interfaces. Most of this data is discoverable from kotlin-stdlib.jar
+      and the JDK at build time.
+
+    features:
+      - name: "JVM interface detection from ACC_INTERFACE flag"
+        description: >
+          Instead of a hardcoded list of interface class names, check the
+          ACC_INTERFACE (0x0200) bit in classfile access_flags when deciding
+          between invokevirtual and invokeinterface. skotch-classinfo
+          already parses access_flags. This eliminates the JVM_INTERFACES
+          static list entirely.
+
+      - name: "Stdlib extension discovery from facade class scanning"
+        description: >
+          Scan kotlin-stdlib.jar for all *Kt facade classes (CollectionsKt,
+          MapsKt, StringsKt, etc.). Extract public static methods whose
+          first parameter is the receiver type. Auto-build the extension
+          function table from method signatures. This eliminates the
+          STDLIB_EXTENSIONS static table and automatically supports new
+          stdlib functions across Kotlin versions without code changes.
+
+      - name: "Type-aware overload resolution"
+        description: >
+          Replace the STRING_OVERLOADS disambiguation table with proper
+          type-aware method resolution. When multiple JVM methods share the
+          same name, use the caller's argument types to select the correct
+          overload. skotch-classinfo already provides all overloads for a
+          class. This subsumes the static overload table.
+
+      - name: "Cached registry with content-addressed invalidation"
+        description: >
+          On first skotch build, scan kotlin-stdlib.jar + JDK jmods and
+          build the registry tables from classfile metadata. Cache the
+          result in ~/.skotch/cache/stdlib-registry-{blake3-hash}.json.
+          Invalidate when the JAR or JDK changes. Fall back to the static
+          tables if scanning fails (e.g., no kotlin-stdlib on PATH).
+
+    risks:
+      - description: "Scanning kotlin-stdlib.jar adds ~50ms to cold builds"
+        mitigation: "Cache aggressively; only rescan when JAR hash changes"
+      - description: "Some Kotlin conventions are not discoverable from classfiles alone"
+        mitigation: "Keep static fallback tables for edge cases (e.g., joinToString $default pattern)"
