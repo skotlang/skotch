@@ -31,6 +31,8 @@
 use serde::{Deserialize, Serialize};
 use skotch_types::Ty;
 
+pub mod validate;
+
 fn is_zero_usize(v: &usize) -> bool {
     *v == 0
 }

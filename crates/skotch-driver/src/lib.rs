@@ -76,7 +76,7 @@ pub fn compile_source(
     let ast = parse_file(&lexed, interner, diags);
     let resolved = resolve_file(&ast, interner, diags, package_symbols);
     let typed = type_check(&ast, &resolved, interner, diags, package_symbols);
-    lower_file(
+    let mir = lower_file(
         &ast,
         &resolved,
         &typed,
@@ -84,7 +84,9 @@ pub fn compile_source(
         diags,
         wrapper_class,
         package_symbols,
-    )
+    );
+    validate_mir(&mir, diags);
+    mir
 }
 
 /// Compile a pre-parsed AST to a [`MirModule`]. Used by the build pipeline
@@ -98,7 +100,7 @@ pub fn compile_ast(
 ) -> skotch_mir::MirModule {
     let resolved = resolve_file(ast, interner, diags, package_symbols);
     let typed = type_check(ast, &resolved, interner, diags, package_symbols);
-    lower_file(
+    let mir = lower_file(
         ast,
         &resolved,
         &typed,
@@ -106,7 +108,20 @@ pub fn compile_ast(
         diags,
         wrapper_class,
         package_symbols,
-    )
+    );
+    validate_mir(&mir, diags);
+    mir
+}
+
+/// Run the MIR validation pass and report errors as diagnostics.
+fn validate_mir(mir: &skotch_mir::MirModule, diags: &mut Diagnostics) {
+    let errors = skotch_mir::validate::validate_module(mir);
+    for e in &errors {
+        diags.push(skotch_diagnostics::Diagnostic::error(
+            skotch_span::Span::empty(skotch_span::FileId(0)),
+            e.to_string(),
+        ));
+    }
 }
 
 /// Options accepted by [`emit`].
