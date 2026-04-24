@@ -899,7 +899,9 @@ pub fn lower_file(
                 let pkg_prefix = segments.join("/");
                 for (name, ext_class) in &pkg.classes {
                     if ext_class.jvm_name.starts_with(&pkg_prefix) {
-                        import_map.entry(name.clone()).or_insert_with(|| ext_class.jvm_name.clone());
+                        import_map
+                            .entry(name.clone())
+                            .or_insert_with(|| ext_class.jvm_name.clone());
                     }
                 }
             }
@@ -942,7 +944,7 @@ pub fn lower_file(
             // already exist (the class might be defined in this file too).
             let already_exists = module.classes.iter().any(|c| c.name == ext_class.jvm_name);
             if !already_exists {
-                use skotch_mir::{MirClass, MirField, MirFunction, BasicBlock, Terminator, FuncId};
+                use skotch_mir::{BasicBlock, FuncId, MirClass, MirField, MirFunction, Terminator};
                 let fields: Vec<MirField> = ext_class
                     .fields
                     .iter()
@@ -11837,7 +11839,7 @@ fn lower_expr(
                     constructor: ref_init,
                     secondary_constructors: Vec::new(),
                     is_suspend_lambda: false,
-        is_cross_file_stub: false,
+                    is_cross_file_stub: false,
                     annotations: Vec::new(),
                 });
 
@@ -12629,7 +12631,7 @@ fn lower_expr(
                 constructor: init_fn,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
-        is_cross_file_stub: false,
+                is_cross_file_stub: false,
                 annotations: Vec::new(),
             });
 

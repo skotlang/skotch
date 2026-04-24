@@ -168,8 +168,7 @@ impl<'a> Parser<'a> {
                 // Consume StringStart, collect StringChunk content, consume StringEnd.
                 self.bump(); // consume StringStart
                 let mut content = String::new();
-                while self.peek_kind() != TokenKind::StringEnd
-                    && self.peek_kind() != TokenKind::Eof
+                while self.peek_kind() != TokenKind::StringEnd && self.peek_kind() != TokenKind::Eof
                 {
                     let idx = self.pos;
                     self.bump();
@@ -550,8 +549,10 @@ impl<'a> Parser<'a> {
                 end_span = span;
                 Some(self.intern_ident_at(idx))
             } else {
-                self.diags
-                    .push(Diagnostic::error(self.peek_span(), "expected alias name after 'as'"));
+                self.diags.push(Diagnostic::error(
+                    self.peek_span(),
+                    "expected alias name after 'as'",
+                ));
                 None
             }
         } else {
@@ -864,7 +865,7 @@ impl<'a> Parser<'a> {
             init_blocks,
             secondary_constructors,
             nested_classes,
-            is_inner: false, // set by caller for `inner class`
+            is_inner: false,                   // set by caller for `inner class`
             visibility: Visibility::default(), // set by caller
             annotations: Vec::new(),
             span: kw.merge(name_span),

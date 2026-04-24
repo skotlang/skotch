@@ -69,11 +69,13 @@ fn encode_annotation_attributes(
     }
     let attr_name = cp.utf8("RuntimeVisibleAnnotations");
     let mut body = Vec::new();
-    body.write_u16::<BigEndian>(runtime_annots.len() as u16).unwrap();
+    body.write_u16::<BigEndian>(runtime_annots.len() as u16)
+        .unwrap();
     for annot in &runtime_annots {
         let type_idx = cp.utf8(&annot.descriptor);
         body.write_u16::<BigEndian>(type_idx).unwrap();
-        body.write_u16::<BigEndian>(annot.args.len() as u16).unwrap();
+        body.write_u16::<BigEndian>(annot.args.len() as u16)
+            .unwrap();
         for arg in &annot.args {
             let name_idx = cp.utf8(&arg.name);
             body.write_u16::<BigEndian>(name_idx).unwrap();
@@ -149,8 +151,7 @@ fn append_method_annotations(
         return;
     }
     // The attributes_count is at offset 6 (after access u16 + name u16 + desc u16).
-    let current_count =
-        u16::from_be_bytes([method_bytes[6], method_bytes[7]]);
+    let current_count = u16::from_be_bytes([method_bytes[6], method_bytes[7]]);
     let new_count = current_count + 1;
     method_bytes[6] = (new_count >> 8) as u8;
     method_bytes[7] = (new_count & 0xFF) as u8;

@@ -116,8 +116,7 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         .collect();
 
     // Run the incremental pipeline: gather → symbol table → compile.
-    let (results, _table_input) =
-        db.compile_all_incremental(&salsa_files, None);
+    let (results, _table_input) = db.compile_all_incremental(&salsa_files, None);
 
     // Collect results and check for errors.
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();

@@ -321,8 +321,11 @@ pub fn gather_declarations(
                         .iter()
                         .map(|m| {
                             let mname = interner.resolve(m.name).to_string();
-                            let ptys: Vec<Ty> =
-                                m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
+                            let ptys: Vec<Ty> = m
+                                .params
+                                .iter()
+                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
@@ -331,9 +334,10 @@ pub fn gather_declarations(
                             (mname, ptys, rty)
                         })
                         .collect();
-                    let super_class = c.parent_class.as_ref().map(|sc| {
-                        interner.resolve(sc.name).to_string()
-                    });
+                    let super_class = c
+                        .parent_class
+                        .as_ref()
+                        .map(|sc| interner.resolve(sc.name).to_string());
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
@@ -349,12 +353,24 @@ pub fn gather_declarations(
                 }
                 Decl::Object(o) => {
                     let name = interner.resolve(o.name).to_string();
-                    let methods: Vec<(String, Vec<Ty>, Ty)> = o.methods.iter().map(|m| {
-                        let mname = interner.resolve(m.name).to_string();
-                        let ptys: Vec<Ty> = m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
-                        let rty = m.return_ty.as_ref().map(|tr| type_ref_to_ty(tr, interner)).unwrap_or(Ty::Unit);
-                        (mname, ptys, rty)
-                    }).collect();
+                    let methods: Vec<(String, Vec<Ty>, Ty)> = o
+                        .methods
+                        .iter()
+                        .map(|m| {
+                            let mname = interner.resolve(m.name).to_string();
+                            let ptys: Vec<Ty> = m
+                                .params
+                                .iter()
+                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .collect();
+                            let rty = m
+                                .return_ty
+                                .as_ref()
+                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .unwrap_or(Ty::Unit);
+                            (mname, ptys, rty)
+                        })
+                        .collect();
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
@@ -385,12 +401,24 @@ pub fn gather_declarations(
                 }
                 Decl::Interface(iface) => {
                     let name = interner.resolve(iface.name).to_string();
-                    let methods: Vec<(String, Vec<Ty>, Ty)> = iface.methods.iter().map(|m| {
-                        let mname = interner.resolve(m.name).to_string();
-                        let ptys: Vec<Ty> = m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
-                        let rty = m.return_ty.as_ref().map(|tr| type_ref_to_ty(tr, interner)).unwrap_or(Ty::Unit);
-                        (mname, ptys, rty)
-                    }).collect();
+                    let methods: Vec<(String, Vec<Ty>, Ty)> = iface
+                        .methods
+                        .iter()
+                        .map(|m| {
+                            let mname = interner.resolve(m.name).to_string();
+                            let ptys: Vec<Ty> = m
+                                .params
+                                .iter()
+                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .collect();
+                            let rty = m
+                                .return_ty
+                                .as_ref()
+                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .unwrap_or(Ty::Unit);
+                            (mname, ptys, rty)
+                        })
+                        .collect();
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
