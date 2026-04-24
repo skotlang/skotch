@@ -2198,6 +2198,7 @@ dependencies = [
  "skotch-backend-dex",
  "skotch-backend-jvm",
  "skotch-buildscript",
+ "skotch-classinfo",
  "skotch-config",
  "skotch-db",
  "skotch-diagnostics",
@@ -2211,6 +2212,8 @@ dependencies = [
  "skotch-span",
  "skotch-syntax",
  "walkdir",
+ "which",
+ "zip",
 ]
 
 [[package]]

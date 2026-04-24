@@ -43,12 +43,15 @@ pub struct BuildOutcome {
 
 pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
     // Check for settings.gradle.kts to detect multi-module projects.
+    // Also capture rootProject.name for JAR naming even in single-module case.
+    let mut root_project_name: Option<String> = None;
     if let Some(settings_path) = find_settings_file(&opts.project_dir) {
         let settings_dir = settings_path.parent().unwrap().to_path_buf();
         let settings_text = std::fs::read_to_string(&settings_path)?;
         let mut interner = Interner::new();
         let sm_file = skotch_span::FileId(0);
         let parsed = parse_settings(&settings_text, sm_file, &mut interner);
+        root_project_name = parsed.settings.root_project_name.clone();
         if !parsed.settings.included_modules.is_empty() {
             return build_multi_module(&settings_dir, &parsed.settings, opts);
         }
@@ -79,6 +82,16 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         project.target = Some(t);
     }
     let target = project.target.clone().unwrap_or(BuildTarget::Jvm);
+
+    // Set project name: rootProject.name > directory name > "app".
+    if project.project_name.is_none() {
+        project.project_name = root_project_name.or_else(|| {
+            project_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+        });
+    }
 
     // Discover sources.
     let src_dir = project_dir.join("src/main/kotlin");
@@ -167,8 +180,8 @@ fn build_jvm_classes(
     classes: &[(String, Vec<u8>)],
     _interner: &Interner,
 ) -> Result<BuildOutcome> {
-    // Write individual .class files in parallel.
-    let classes_dir = project_dir.join("build/classes");
+    // Write individual .class files in parallel (Gradle-compatible layout).
+    let classes_dir = project_dir.join("build/classes/kotlin/main");
     std::fs::create_dir_all(&classes_dir)
         .with_context(|| format!("creating {}", classes_dir.display()))?;
     classes.par_iter().for_each(|(name, bytes)| {
@@ -198,14 +211,16 @@ fn build_jvm_classes(
         .or_else(|| classes.first().map(|(n, _)| n.clone()))
         .unwrap_or_else(|| "Main".to_string());
 
-    // Build a runnable JAR.
-    let jar_dir = project_dir.join("build");
+    // Build a runnable JAR (Gradle-compatible: build/libs/{project-name}.jar).
+    let jar_dir = project_dir.join("build/libs");
     std::fs::create_dir_all(&jar_dir).ok();
-    let jar_name = project
-        .group
-        .as_deref()
-        .and_then(|g| g.rsplit('.').next())
-        .unwrap_or("app");
+    let jar_name = project.project_name.as_deref().unwrap_or_else(|| {
+        project
+            .group
+            .as_deref()
+            .and_then(|g| g.rsplit('.').next())
+            .unwrap_or("app")
+    });
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
     skotch_jar::write_jar(&jar_path, &main_class, classes)
         .with_context(|| format!("writing {}", jar_path.display()))?;
@@ -229,20 +244,17 @@ fn build_jvm(
     let classes = skotch_backend_jvm::compile_module(module, interner);
 
     // Write individual .class files in parallel.
-    let classes_dir = project_dir.join("build/classes");
+    let classes_dir = project_dir.join("build/classes/kotlin/main");
     std::fs::create_dir_all(&classes_dir)
         .with_context(|| format!("creating {}", classes_dir.display()))?;
     classes.par_iter().for_each(|(name, bytes)| {
         let path = classes_dir.join(format!("{name}.class"));
-        // When a package prefix is present, `name` contains `/` separators
-        // (e.g. `com/example/Greeter`), so create intermediate directories.
         if let Some(p) = path.parent() {
             let _ = std::fs::create_dir_all(p);
         }
         let _ = std::fs::write(&path, bytes);
     });
 
-    // Determine main class: prefer MainKt, then any *Kt class.
     let main_class = project
         .main_class
         .clone()
@@ -261,14 +273,15 @@ fn build_jvm(
         .or_else(|| classes.first().map(|(n, _)| n.clone()))
         .unwrap_or_else(|| "Main".to_string());
 
-    // Build a runnable JAR.
-    let jar_dir = project_dir.join("build");
+    let jar_dir = project_dir.join("build/libs");
     std::fs::create_dir_all(&jar_dir).ok();
-    let jar_name = project
-        .group
-        .as_deref()
-        .and_then(|g| g.rsplit('.').next())
-        .unwrap_or("app");
+    let jar_name = project.project_name.as_deref().unwrap_or_else(|| {
+        project
+            .group
+            .as_deref()
+            .and_then(|g| g.rsplit('.').next())
+            .unwrap_or("app")
+    });
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
     skotch_jar::write_jar(&jar_path, &main_class, &classes)
         .with_context(|| format!("writing {}", jar_path.display()))?;
@@ -456,10 +469,11 @@ fn build_multi_module(
         })
         .unwrap_or_else(|| "MainKt".to_string());
 
-    // Package as JAR.
-    let build_dir = root_dir.join("build");
-    std::fs::create_dir_all(&build_dir).ok();
-    let jar_path = build_dir.join("app.jar");
+    // Package as JAR (Gradle-compatible: build/libs/{project-name}.jar).
+    let jar_dir = root_dir.join("build/libs");
+    std::fs::create_dir_all(&jar_dir).ok();
+    let jar_name = settings.root_project_name.as_deref().unwrap_or("app");
+    let jar_path = jar_dir.join(format!("{jar_name}.jar"));
     skotch_jar::write_jar(&jar_path, &main_class, &all_classes)?;
 
     eprintln!("BUILD SUCCESS: {}", jar_path.display());

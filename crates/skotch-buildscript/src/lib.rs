@@ -28,6 +28,9 @@ pub enum BuildTarget {
 
 #[derive(Clone, Debug, Default)]
 pub struct ProjectModel {
+    /// Project name from `rootProject.name` in settings.gradle.kts,
+    /// or derived from the project directory name. Used for JAR naming.
+    pub project_name: Option<String>,
     pub group: Option<String>,
     pub version: Option<String>,
     pub target: Option<BuildTarget>,

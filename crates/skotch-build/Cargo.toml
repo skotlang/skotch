@@ -28,3 +28,8 @@ walkdir            = { workspace = true }
 rayon              = { workspace = true }
 blake3             = { workspace = true }
 skotch-db          = { workspace = true }
+
+[dev-dependencies]
+which            = { workspace = true }
+zip              = { workspace = true }
+skotch-classinfo = { workspace = true }
