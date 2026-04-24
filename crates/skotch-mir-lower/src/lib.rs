@@ -216,8 +216,14 @@ fn stdlib_extension(
     receiver_ty: &str,
     method: &str,
 ) -> Option<(&'static str, &'static str, &'static str, Ty)> {
-    skotch_stdlib_registry::lookup_stdlib_extension(receiver_ty, method)
-        .map(|ext| (ext.facade_class, ext.jvm_method, ext.descriptor, (ext.return_ty)()))
+    skotch_stdlib_registry::lookup_stdlib_extension(receiver_ty, method).map(|ext| {
+        (
+            ext.facade_class,
+            ext.jvm_method,
+            ext.descriptor,
+            (ext.return_ty)(),
+        )
+    })
 }
 
 // The old hardcoded match table (~200 lines) has been replaced by the
@@ -6036,11 +6042,8 @@ fn lower_expr(
                 // String method overload disambiguation (from registry).
                 let overload_override: Option<(&str, &str, &str, Ty)> =
                     if matches!(&recv_ty, Ty::String) {
-                        skotch_stdlib_registry::lookup_string_overload(
-                            &method_name_str,
-                            args.len(),
-                        )
-                        .map(|o| (o.jvm_class, o.jvm_method, o.descriptor, (o.return_ty)()))
+                        skotch_stdlib_registry::lookup_string_overload(&method_name_str, args.len())
+                            .map(|o| (o.jvm_class, o.jvm_method, o.descriptor, (o.return_ty)()))
                     } else {
                         None
                     };

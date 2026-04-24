@@ -18,6 +18,45 @@
 //! | [`JVM_INTERFACES`] | Class names that require `invokeinterface` |
 //! | [`PRINTLN_DISPATCH`] | Type → `PrintStream.println` descriptor |
 //! | [`WELL_KNOWN_CLASSES`] | Kotlin name → JVM internal name |
+//!
+//! ## Future: dynamic registry from classfile scanning
+//!
+//! These tables are currently static. Most of this data could instead be
+//! discovered at build time by scanning `kotlin-stdlib.jar` and the JDK:
+//!
+//! - **JVM interfaces** (`JVM_INTERFACES`): The `ACC_INTERFACE` flag
+//!   (0x0200) in each classfile's `access_flags` tells us whether a class
+//!   is an interface. `skotch-classinfo` already parses these flags.
+//!   Replacing the static list with a runtime `access_flags` check would
+//!   make this table unnecessary.
+//!
+//! - **Stdlib extension functions** (`STDLIB_EXTENSIONS`): The facade
+//!   classes (`CollectionsKt`, `MapsKt`, `StringsKt`) are in
+//!   `kotlin-stdlib.jar` with full method signatures. Scanning every `*Kt`
+//!   class for public static methods whose first parameter is the receiver
+//!   type would auto-populate this table — no hardcoding needed.
+//!
+//! - **String overloads** (`STRING_OVERLOADS`): Already partially dynamic
+//!   via `skotch-classinfo::load_jdk_class("java/lang/String")`. The
+//!   static table is only needed because the current overload resolver
+//!   can't disambiguate by argument type. With type-aware resolution,
+//!   this table would shrink to zero.
+//!
+//! - **Annotation descriptors** (`ANNOTATION_DESCRIPTORS`): Derivable
+//!   from import statements + package conventions. `@JvmStatic` in a file
+//!   with `import kotlin.jvm.JvmStatic` resolves to `Lkotlin/jvm/JvmStatic;`
+//!   via the import map. The static table is a fallback for unimported
+//!   annotations.
+//!
+//! The practical migration path:
+//! 1. On first `skotch build`, scan `kotlin-stdlib.jar` + JDK jmods
+//! 2. Build the extension/interface/overload tables from classfile metadata
+//! 3. Cache the result in `~/.skotch/cache/stdlib-registry-{hash}.json`
+//! 4. Fall back to the static tables if the JAR is unavailable
+//!
+//! This would eliminate version-coupling (the static tables assume a
+//! specific Kotlin stdlib version) and automatically support new stdlib
+//! functions without code changes.
 
 use skotch_types::Ty;
 
@@ -95,11 +134,9 @@ pub fn lookup_stdlib_extension(
     receiver_ty: &str,
     method: &str,
 ) -> Option<&'static StdlibExtension> {
-    STDLIB_EXTENSIONS.iter().find(|e| {
-        e.method == method
-            && (e.receiver.is_empty()
-                || receiver_ty.contains(e.receiver))
-    })
+    STDLIB_EXTENSIONS
+        .iter()
+        .find(|e| e.method == method && (e.receiver.is_empty() || receiver_ty.contains(e.receiver)))
 }
 
 // ─── 2. Annotation descriptors ──────────────────────────────────────────────
@@ -135,8 +172,18 @@ pub fn annotation_descriptor(name: &str) -> String {
 
 /// Classes implicitly imported from `java.lang.*` in every Kotlin file.
 pub static DEFAULT_IMPORTS: &[&str] = &[
-    "System", "Math", "Integer", "Long", "Double", "Boolean", "String",
-    "Thread", "Runtime", "Object", "Class", "Comparable",
+    "System",
+    "Math",
+    "Integer",
+    "Long",
+    "Double",
+    "Boolean",
+    "String",
+    "Thread",
+    "Runtime",
+    "Object",
+    "Class",
+    "Comparable",
 ];
 
 // ─── 4. String method overloads ─────────────────────────────────────────────
@@ -152,20 +199,118 @@ pub struct StringOverload {
 }
 
 pub static STRING_OVERLOADS: &[StringOverload] = &[
-    StringOverload { method: "replace", arg_count: 2, jvm_class: "java/lang/String", jvm_method: "replace", descriptor: "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;", return_ty: || Ty::String },
-    StringOverload { method: "matches", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "matches", descriptor: "(Ljava/lang/String;)Z", return_ty: || Ty::Bool },
-    StringOverload { method: "contains", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "contains", descriptor: "(Ljava/lang/CharSequence;)Z", return_ty: || Ty::Bool },
-    StringOverload { method: "indexOf", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "indexOf", descriptor: "(Ljava/lang/String;)I", return_ty: || Ty::Int },
-    StringOverload { method: "lastIndexOf", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "lastIndexOf", descriptor: "(Ljava/lang/String;)I", return_ty: || Ty::Int },
-    StringOverload { method: "startsWith", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "startsWith", descriptor: "(Ljava/lang/String;)Z", return_ty: || Ty::Bool },
-    StringOverload { method: "endsWith", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "endsWith", descriptor: "(Ljava/lang/String;)Z", return_ty: || Ty::Bool },
-    StringOverload { method: "substring", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "substring", descriptor: "(I)Ljava/lang/String;", return_ty: || Ty::String },
-    StringOverload { method: "substring", arg_count: 2, jvm_class: "java/lang/String", jvm_method: "substring", descriptor: "(II)Ljava/lang/String;", return_ty: || Ty::String },
-    StringOverload { method: "split", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "split", descriptor: "(Ljava/lang/String;)[Ljava/lang/String;", return_ty: || Ty::Any },
-    StringOverload { method: "trim", arg_count: 0, jvm_class: "java/lang/String", jvm_method: "trim", descriptor: "()Ljava/lang/String;", return_ty: || Ty::String },
-    StringOverload { method: "toByteArray", arg_count: 0, jvm_class: "java/lang/String", jvm_method: "getBytes", descriptor: "()[B", return_ty: || Ty::ByteArray },
-    StringOverload { method: "toCharArray", arg_count: 0, jvm_class: "java/lang/String", jvm_method: "toCharArray", descriptor: "()[C", return_ty: || Ty::Any },
-    StringOverload { method: "repeat", arg_count: 1, jvm_class: "java/lang/String", jvm_method: "repeat", descriptor: "(I)Ljava/lang/String;", return_ty: || Ty::String },
+    StringOverload {
+        method: "replace",
+        arg_count: 2,
+        jvm_class: "java/lang/String",
+        jvm_method: "replace",
+        descriptor: "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
+        return_ty: || Ty::String,
+    },
+    StringOverload {
+        method: "matches",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "matches",
+        descriptor: "(Ljava/lang/String;)Z",
+        return_ty: || Ty::Bool,
+    },
+    StringOverload {
+        method: "contains",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "contains",
+        descriptor: "(Ljava/lang/CharSequence;)Z",
+        return_ty: || Ty::Bool,
+    },
+    StringOverload {
+        method: "indexOf",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "indexOf",
+        descriptor: "(Ljava/lang/String;)I",
+        return_ty: || Ty::Int,
+    },
+    StringOverload {
+        method: "lastIndexOf",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "lastIndexOf",
+        descriptor: "(Ljava/lang/String;)I",
+        return_ty: || Ty::Int,
+    },
+    StringOverload {
+        method: "startsWith",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "startsWith",
+        descriptor: "(Ljava/lang/String;)Z",
+        return_ty: || Ty::Bool,
+    },
+    StringOverload {
+        method: "endsWith",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "endsWith",
+        descriptor: "(Ljava/lang/String;)Z",
+        return_ty: || Ty::Bool,
+    },
+    StringOverload {
+        method: "substring",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "substring",
+        descriptor: "(I)Ljava/lang/String;",
+        return_ty: || Ty::String,
+    },
+    StringOverload {
+        method: "substring",
+        arg_count: 2,
+        jvm_class: "java/lang/String",
+        jvm_method: "substring",
+        descriptor: "(II)Ljava/lang/String;",
+        return_ty: || Ty::String,
+    },
+    StringOverload {
+        method: "split",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "split",
+        descriptor: "(Ljava/lang/String;)[Ljava/lang/String;",
+        return_ty: || Ty::Any,
+    },
+    StringOverload {
+        method: "trim",
+        arg_count: 0,
+        jvm_class: "java/lang/String",
+        jvm_method: "trim",
+        descriptor: "()Ljava/lang/String;",
+        return_ty: || Ty::String,
+    },
+    StringOverload {
+        method: "toByteArray",
+        arg_count: 0,
+        jvm_class: "java/lang/String",
+        jvm_method: "getBytes",
+        descriptor: "()[B",
+        return_ty: || Ty::ByteArray,
+    },
+    StringOverload {
+        method: "toCharArray",
+        arg_count: 0,
+        jvm_class: "java/lang/String",
+        jvm_method: "toCharArray",
+        descriptor: "()[C",
+        return_ty: || Ty::Any,
+    },
+    StringOverload {
+        method: "repeat",
+        arg_count: 1,
+        jvm_class: "java/lang/String",
+        jvm_method: "repeat",
+        descriptor: "(I)Ljava/lang/String;",
+        return_ty: || Ty::String,
+    },
 ];
 
 /// Look up a String method overload by name and argument count.
@@ -187,19 +332,97 @@ pub struct MathFunction {
 }
 
 pub static MATH_FUNCTIONS: &[MathFunction] = &[
-    MathFunction { name: "maxOf", arg_count: 2, jvm_method: "max", descriptor: "(II)I", return_ty: || Ty::Int },
-    MathFunction { name: "minOf", arg_count: 2, jvm_method: "min", descriptor: "(II)I", return_ty: || Ty::Int },
-    MathFunction { name: "sqrt", arg_count: 1, jvm_method: "sqrt", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "ceil", arg_count: 1, jvm_method: "ceil", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "floor", arg_count: 1, jvm_method: "floor", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "round", arg_count: 1, jvm_method: "round", descriptor: "(D)J", return_ty: || Ty::Long },
-    MathFunction { name: "pow", arg_count: 2, jvm_method: "pow", descriptor: "(DD)D", return_ty: || Ty::Double },
-    MathFunction { name: "sin", arg_count: 1, jvm_method: "sin", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "cos", arg_count: 1, jvm_method: "cos", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "tan", arg_count: 1, jvm_method: "tan", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "log", arg_count: 1, jvm_method: "log", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "log10", arg_count: 1, jvm_method: "log10", descriptor: "(D)D", return_ty: || Ty::Double },
-    MathFunction { name: "exp", arg_count: 1, jvm_method: "exp", descriptor: "(D)D", return_ty: || Ty::Double },
+    MathFunction {
+        name: "maxOf",
+        arg_count: 2,
+        jvm_method: "max",
+        descriptor: "(II)I",
+        return_ty: || Ty::Int,
+    },
+    MathFunction {
+        name: "minOf",
+        arg_count: 2,
+        jvm_method: "min",
+        descriptor: "(II)I",
+        return_ty: || Ty::Int,
+    },
+    MathFunction {
+        name: "sqrt",
+        arg_count: 1,
+        jvm_method: "sqrt",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "ceil",
+        arg_count: 1,
+        jvm_method: "ceil",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "floor",
+        arg_count: 1,
+        jvm_method: "floor",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "round",
+        arg_count: 1,
+        jvm_method: "round",
+        descriptor: "(D)J",
+        return_ty: || Ty::Long,
+    },
+    MathFunction {
+        name: "pow",
+        arg_count: 2,
+        jvm_method: "pow",
+        descriptor: "(DD)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "sin",
+        arg_count: 1,
+        jvm_method: "sin",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "cos",
+        arg_count: 1,
+        jvm_method: "cos",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "tan",
+        arg_count: 1,
+        jvm_method: "tan",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "log",
+        arg_count: 1,
+        jvm_method: "log",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "log10",
+        arg_count: 1,
+        jvm_method: "log10",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
+    MathFunction {
+        name: "exp",
+        arg_count: 1,
+        jvm_method: "exp",
+        descriptor: "(D)D",
+        return_ty: || Ty::Double,
+    },
 ];
 
 /// Look up a math function by name and argument count.
@@ -221,14 +444,46 @@ pub struct AutoboxRule {
 /// Look up the autoboxing call for a primitive type.
 pub fn autobox_info(ty: &Ty) -> Option<AutoboxRule> {
     match ty {
-        Ty::Int => Some(AutoboxRule { jvm_class: "java/lang/Integer", method: "valueOf", descriptor: "(I)Ljava/lang/Integer;" }),
-        Ty::Long => Some(AutoboxRule { jvm_class: "java/lang/Long", method: "valueOf", descriptor: "(J)Ljava/lang/Long;" }),
-        Ty::Double => Some(AutoboxRule { jvm_class: "java/lang/Double", method: "valueOf", descriptor: "(D)Ljava/lang/Double;" }),
-        Ty::Bool => Some(AutoboxRule { jvm_class: "java/lang/Boolean", method: "valueOf", descriptor: "(Z)Ljava/lang/Boolean;" }),
-        Ty::Char => Some(AutoboxRule { jvm_class: "java/lang/Character", method: "valueOf", descriptor: "(C)Ljava/lang/Character;" }),
-        Ty::Byte => Some(AutoboxRule { jvm_class: "java/lang/Byte", method: "valueOf", descriptor: "(B)Ljava/lang/Byte;" }),
-        Ty::Short => Some(AutoboxRule { jvm_class: "java/lang/Short", method: "valueOf", descriptor: "(S)Ljava/lang/Short;" }),
-        Ty::Float => Some(AutoboxRule { jvm_class: "java/lang/Float", method: "valueOf", descriptor: "(F)Ljava/lang/Float;" }),
+        Ty::Int => Some(AutoboxRule {
+            jvm_class: "java/lang/Integer",
+            method: "valueOf",
+            descriptor: "(I)Ljava/lang/Integer;",
+        }),
+        Ty::Long => Some(AutoboxRule {
+            jvm_class: "java/lang/Long",
+            method: "valueOf",
+            descriptor: "(J)Ljava/lang/Long;",
+        }),
+        Ty::Double => Some(AutoboxRule {
+            jvm_class: "java/lang/Double",
+            method: "valueOf",
+            descriptor: "(D)Ljava/lang/Double;",
+        }),
+        Ty::Bool => Some(AutoboxRule {
+            jvm_class: "java/lang/Boolean",
+            method: "valueOf",
+            descriptor: "(Z)Ljava/lang/Boolean;",
+        }),
+        Ty::Char => Some(AutoboxRule {
+            jvm_class: "java/lang/Character",
+            method: "valueOf",
+            descriptor: "(C)Ljava/lang/Character;",
+        }),
+        Ty::Byte => Some(AutoboxRule {
+            jvm_class: "java/lang/Byte",
+            method: "valueOf",
+            descriptor: "(B)Ljava/lang/Byte;",
+        }),
+        Ty::Short => Some(AutoboxRule {
+            jvm_class: "java/lang/Short",
+            method: "valueOf",
+            descriptor: "(S)Ljava/lang/Short;",
+        }),
+        Ty::Float => Some(AutoboxRule {
+            jvm_class: "java/lang/Float",
+            method: "valueOf",
+            descriptor: "(F)Ljava/lang/Float;",
+        }),
         _ => None,
     }
 }
@@ -255,8 +510,7 @@ pub static JVM_INTERFACES: &[&str] = &[
 
 /// Check if a class name requires `invokeinterface` dispatch.
 pub fn is_jvm_interface(class_name: &str) -> bool {
-    JVM_INTERFACES.contains(&class_name)
-        || class_name.starts_with("kotlin/jvm/functions/Function")
+    JVM_INTERFACES.contains(&class_name) || class_name.starts_with("kotlin/jvm/functions/Function")
 }
 
 // ─── 8. println/print dispatch ──────────────────────────────────────────────
@@ -341,10 +595,7 @@ mod tests {
 
     #[test]
     fn annotation_known() {
-        assert_eq!(
-            annotation_descriptor("JvmStatic"),
-            "Lkotlin/jvm/JvmStatic;"
-        );
+        assert_eq!(annotation_descriptor("JvmStatic"), "Lkotlin/jvm/JvmStatic;");
     }
 
     #[test]

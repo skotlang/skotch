@@ -1,0 +1,32 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=3 max_locals=7
+    0000 ldc "secret123"
+    0002 astore 1
+    0004 new Class(Password)
+    0007 dup
+    0008 aload 1
+    0010 invokespecial Method(Password.<init>:(Ljava/lang/String;)V)
+    0013 astore 2
+    0015 aload 2
+    0017 checkcast Class(Password)
+    0020 astore 3
+    0022 aload 3
+    0024 checkcast Class(Password)
+    0027 astore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 aload 3
+    0039 checkcast Class(Password)
+    0042 astore 5
+    0044 aload 5
+    0046 getfield Field(Password.value:Ljava/lang/String;)
+    0049 astore 6
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 aload 6
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0059 return
