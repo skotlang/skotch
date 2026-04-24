@@ -1,0 +1,52 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        guard (I)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=1
+    0000 iload_0
+    0001 op_0x9B
+    0002 nop
+    0003 iconst_5
+    0004 iload_0
+    0005 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0008 areturn
+    0009 new Class(java/lang/IllegalArgumentException)
+    0012 dup
+    0013 ldc "negative"
+    0015 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0018 athrow
+    sub_attr  StackMapTable (3 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iconst_5
+    0001 invokestatic Method(InputKt.safe:(I)I)
+    0004 istore_0
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 iload_0
+    0009 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0012 bipush 42
+    0014 invokestatic Method(InputKt.guard:(I)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 op_0x5F
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        safe (I)I 0x0019
+  code        max_stack=3 max_locals=1
+    0000 iload_0
+    0001 op_0x9C
+    0002 nop
+    0003 op_0x0D
+    0004 new Class(java/lang/IllegalArgumentException)
+    0007 dup
+    0008 ldc "neg"
+    0010 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0013 athrow
+    0014 iload_0
+    0015 op_0xAC
+    sub_attr  StackMapTable (3 bytes)

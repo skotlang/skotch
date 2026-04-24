@@ -1,0 +1,89 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        guard (I)Ljava/lang/String; 0x0009
+  code        max_stack=4 max_locals=8
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_0
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 op_0xA2
+    0012 nop
+    0013 iconst_4
+    0014 iconst_0
+    0015 goto 19
+    0018 iconst_1
+    0019 istore 3
+    0021 iload 3
+    0023 ifeq 40
+    0026 iload 0
+    0028 istore 4
+    0030 iload 4
+    0032 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
+    0035 astore 5
+    0037 aload 5
+    0039 areturn
+    0040 ldc "negative"
+    0042 astore 6
+    0044 new Class(java/lang/IllegalArgumentException)
+    0047 dup
+    0048 aload 6
+    0050 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0053 astore 7
+    0055 aload 7
+    0057 athrow
+    sub_attr  StackMapTable (34 bytes)
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=2 max_locals=5
+    0000 iconst_5
+    0001 istore 1
+    0003 iload 1
+    0005 invokestatic Method(InputKt.safe:(I)I)
+    0008 istore 2
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload 2
+    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0018 bipush 42
+    0020 istore 3
+    0022 iload 3
+    0024 invokestatic Method(InputKt.guard:(I)Ljava/lang/String;)
+    0027 astore 4
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload 4
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0037 return
+method        safe (I)I 0x0009
+  code        max_stack=3 max_locals=7
+    0000 iload 0
+    0002 istore 1
+    0004 iconst_0
+    0005 istore 2
+    0007 iload 1
+    0009 iload 2
+    0011 op_0xA1
+    0012 nop
+    0013 iconst_4
+    0014 iconst_0
+    0015 goto 19
+    0018 iconst_1
+    0019 istore 3
+    0021 iload 3
+    0023 ifeq 44
+    0026 ldc "neg"
+    0028 astore 4
+    0030 new Class(java/lang/IllegalArgumentException)
+    0033 dup
+    0034 aload 4
+    0036 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0039 astore 5
+    0041 aload 5
+    0043 athrow
+    0044 goto 47
+    0047 iload 0
+    0049 istore 6
+    0051 iload 6
+    0053 op_0xAC
+    sub_attr  StackMapTable (45 bytes)

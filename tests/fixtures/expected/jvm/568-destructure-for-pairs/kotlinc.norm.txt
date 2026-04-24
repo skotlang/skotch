@@ -1,0 +1,65 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=5
+    0000 iconst_2
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_5
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 ldc "x"
+    0009 bipush 10
+    0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0014 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0017 op_0x53
+    0018 aload_1
+    0019 iconst_1
+    0020 ldc "y"
+    0022 bipush 20
+    0024 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0027 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
+    0030 op_0x53
+    0031 aload_1
+    0032 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0035 astore_0
+    0036 aload_0
+    0037 invokeinterface InterfaceMethod(java/util/List.iterator:()Ljava/util/Iterator;)
+    0042 astore_1
+    0043 aload_1
+    0044 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0049 ifeq 100
+    0052 aload_1
+    0053 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0058 checkcast Class(kotlin/Pair)
+    0061 astore_2
+    0062 aload_2
+    0063 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
+    0066 checkcast Class(java/lang/String)
+    0069 astore_3
+    0070 aload_2
+    0071 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
+    0074 checkcast Class(java/lang/Number)
+    0077 invokevirtual Method(java/lang/Number.intValue:()I)
+    0080 istore 4
+    0082 aload_3
+    0083 iload 4
+    0085 op_0xBA
+    0086 nop
+    0087 op_0x48
+    0088 nop
+    0089 nop
+    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0093 op_0x5F
+    0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0097 goto 43
+    0100 return
+    sub_attr  StackMapTable (12 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

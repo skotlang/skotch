@@ -1,0 +1,4 @@
+name = "574-jvm-static-companion"
+status = "supported"
+features = ["jvm-static", "companion-object", "annotation"]
+expected_output = "25\n"

@@ -1,0 +1,29 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 new Class(ConsoleLogger)
+    0003 dup
+    0004 invokespecial Method(ConsoleLogger.<init>:()V)
+    0007 astore_0
+    0008 new Class(PrefixLogger)
+    0011 dup
+    0012 aload_0
+    0013 checkcast Class(Logger)
+    0016 invokespecial Method(PrefixLogger.<init>:(LLogger;)V)
+    0019 astore_1
+    0020 aload_1
+    0021 ldc "hello"
+    0023 invokevirtual Method(PrefixLogger.log:(Ljava/lang/String;)V)
+    0026 aload_1
+    0027 invokevirtual Method(PrefixLogger.level:()Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 op_0x5F
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

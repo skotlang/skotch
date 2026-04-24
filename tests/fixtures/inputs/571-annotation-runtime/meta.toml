@@ -1,0 +1,4 @@
+name = "571-annotation-runtime"
+status = "supported"
+features = ["annotation", "deprecated", "runtime-retention"]
+expected_output = "Hello!\n"

@@ -105,42 +105,157 @@ impl<'a> Parser<'a> {
 
     /// Skip annotation(s) like `@Suppress("unused")`, `@JvmStatic`,
     /// `@field:JvmField`, etc. Annotations don't affect codegen yet.
-    fn skip_annotations(&mut self) {
+    /// Parse annotations and return them. Replaces the old skip_annotations.
+    fn parse_annotations(&mut self) -> Vec<skotch_syntax::Annotation> {
+        let mut annotations = Vec::new();
         while self.peek_kind() == TokenKind::At {
+            let start = self.peek_span();
             self.bump(); // consume '@'
-                         // Consume annotation name (identifier).
-            if self.peek_kind() == TokenKind::Ident {
-                self.bump();
-                // Handle use-site target: `@field:JvmField` — the colon
-                // followed by another ident.
-                if self.peek_kind() == TokenKind::Colon && self.peek_kind_at(1) == TokenKind::Ident
-                {
-                    self.bump(); // consume ':'
-                    self.bump(); // consume target ident
-                }
+
+            // Parse annotation name.
+            if self.peek_kind() != TokenKind::Ident {
+                self.skip_trivia();
+                continue;
             }
-            // Optionally consume parenthesized arguments.
+            let name_idx = self.pos;
+            self.bump();
+            let mut name = self.intern_ident_at(name_idx);
+            let mut target = None;
+
+            // Handle use-site target: `@field:JvmField` — colon + ident.
+            if self.peek_kind() == TokenKind::Colon && self.peek_kind_at(1) == TokenKind::Ident {
+                target = Some(name); // "field" is the target
+                self.bump(); // consume ':'
+                let actual_name_idx = self.pos;
+                self.bump(); // consume actual annotation name
+                name = self.intern_ident_at(actual_name_idx);
+            }
+
+            // Parse optional arguments.
+            let mut args = Vec::new();
             if self.peek_kind() == TokenKind::LParen {
                 self.bump(); // consume '('
-                let mut depth = 1u32;
-                while depth > 0 && self.peek_kind() != TokenKind::Eof {
-                    match self.peek_kind() {
-                        TokenKind::LParen => {
-                            depth += 1;
-                            self.bump();
-                        }
-                        TokenKind::RParen => {
-                            depth -= 1;
-                            self.bump();
-                        }
-                        _ => {
-                            self.bump();
-                        }
+                while self.peek_kind() != TokenKind::RParen && self.peek_kind() != TokenKind::Eof {
+                    self.skip_trivia();
+                    let arg = self.parse_annotation_arg();
+                    args.push(arg);
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Comma {
+                        self.bump();
                     }
                 }
+                if self.peek_kind() == TokenKind::RParen {
+                    self.bump();
+                }
             }
+
+            let end = self.peek_span();
+            annotations.push(skotch_syntax::Annotation {
+                name,
+                target,
+                args,
+                span: start.merge(end),
+            });
             self.skip_trivia();
         }
+        annotations
+    }
+
+    /// Parse a single annotation argument value.
+    fn parse_annotation_arg(&mut self) -> skotch_syntax::AnnotationArg {
+        match self.peek_kind() {
+            TokenKind::StringStart => {
+                // Consume StringStart, collect StringChunk content, consume StringEnd.
+                self.bump(); // consume StringStart
+                let mut content = String::new();
+                while self.peek_kind() != TokenKind::StringEnd
+                    && self.peek_kind() != TokenKind::Eof
+                {
+                    let idx = self.pos;
+                    self.bump();
+                    if let Some(TokenPayload::StringChunk(s)) = self.payload(idx) {
+                        content.push_str(s);
+                    }
+                }
+                if self.peek_kind() == TokenKind::StringEnd {
+                    self.bump();
+                }
+                skotch_syntax::AnnotationArg::StringLit(content)
+            }
+            TokenKind::IntLit => {
+                let idx = self.pos;
+                self.bump();
+                let v = match self.payload(idx) {
+                    Some(TokenPayload::Int(v)) => *v,
+                    _ => 0,
+                };
+                skotch_syntax::AnnotationArg::IntLit(v)
+            }
+            TokenKind::KwTrue => {
+                self.bump();
+                skotch_syntax::AnnotationArg::BoolLit(true)
+            }
+            TokenKind::KwFalse => {
+                self.bump();
+                skotch_syntax::AnnotationArg::BoolLit(false)
+            }
+            TokenKind::LBracket => {
+                self.bump(); // consume '['
+                let mut items = Vec::new();
+                while self.peek_kind() != TokenKind::RBracket && self.peek_kind() != TokenKind::Eof
+                {
+                    self.skip_trivia();
+                    items.push(self.parse_annotation_arg());
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Comma {
+                        self.bump();
+                    }
+                }
+                if self.peek_kind() == TokenKind::RBracket {
+                    self.bump();
+                }
+                skotch_syntax::AnnotationArg::Array(items)
+            }
+            TokenKind::Ident => {
+                // Could be a simple ident, a qualified name (Foo.BAR), or
+                // a named argument (name = value).
+                let idx = self.pos;
+                self.bump();
+                let sym = self.intern_ident_at(idx);
+
+                // Check for qualified name: `AnnotationTarget.CLASS`
+                if self.peek_kind() == TokenKind::Dot {
+                    let mut parts = vec![sym];
+                    while self.peek_kind() == TokenKind::Dot {
+                        self.bump(); // consume '.'
+                        if self.peek_kind() == TokenKind::Ident {
+                            let next_idx = self.pos;
+                            self.bump();
+                            parts.push(self.intern_ident_at(next_idx));
+                        }
+                    }
+                    skotch_syntax::AnnotationArg::QualifiedName(parts)
+                } else if self.peek_kind() == TokenKind::Eq {
+                    // Named argument: `name = "value"` — skip the name, parse value.
+                    self.bump(); // consume '='
+                    self.skip_trivia();
+                    self.parse_annotation_arg()
+                } else {
+                    skotch_syntax::AnnotationArg::Ident(sym)
+                }
+            }
+            _ => {
+                // Unknown argument — skip token.
+                self.bump();
+                skotch_syntax::AnnotationArg::StringLit(String::new())
+            }
+        }
+    }
+
+    /// Backward compatibility: skip annotations without capturing them.
+    /// Used in contexts where annotations are not needed (class members, etc).
+    fn skip_annotations(&mut self) {
+        let _ = self.parse_annotations();
     }
 
     /// Consume one token regardless of kind.
@@ -222,8 +337,8 @@ impl<'a> Parser<'a> {
             if self.peek_kind() == TokenKind::Eof {
                 break;
             }
-            // Skip annotations before declarations.
-            self.skip_annotations();
+            // Parse annotations before declarations.
+            let annotations = self.parse_annotations();
             // Skip modifier keywords that we recognize but don't enforce.
             let mut is_data = false;
             let mut is_enum = false;
@@ -231,7 +346,17 @@ impl<'a> Parser<'a> {
             let mut is_abstract = false;
             let mut is_sealed = false;
             let mut is_suspend = false;
+            let mut is_annotation_class = false;
             let mut visibility = Visibility::Public;
+            // Check for `annotation class` soft keyword.
+            if self.peek_kind() == TokenKind::Ident
+                && self.lexeme_str(self.pos) == "annotation"
+                && self.peek_kind_at(1) == TokenKind::KwClass
+            {
+                is_annotation_class = true;
+                self.bump(); // consume "annotation"
+                self.skip_trivia();
+            }
             while matches!(
                 self.peek_kind(),
                 TokenKind::KwConst
@@ -273,30 +398,46 @@ impl<'a> Parser<'a> {
                     f.is_abstract = is_abstract;
                     f.is_suspend = is_suspend;
                     f.visibility = visibility;
+                    f.annotations = annotations.clone();
                     decls.push(Decl::Fun(f));
                 }
                 TokenKind::KwVal | TokenKind::KwVar => {
-                    // Check for extension property: `val Type.name: ...`.
-                    // Look ahead: if we see `val IDENT DOT IDENT`, it's an
-                    // extension property. Desugar to an extension function.
                     if self.peek_kind_at(2) == TokenKind::Dot {
-                        let f = self.parse_extension_property();
+                        let mut f = self.parse_extension_property();
+                        f.annotations = annotations.clone();
                         decls.push(Decl::Fun(f));
                     } else {
                         let mut v = self.parse_val_decl();
                         v.visibility = visibility;
+                        v.annotations = annotations.clone();
                         decls.push(Decl::Val(v));
                     }
                 }
                 TokenKind::KwClass => {
                     if is_enum {
                         decls.push(Decl::Enum(self.parse_enum_decl()));
+                    } else if is_annotation_class {
+                        // `annotation class MyAnnotation(val msg: String)` →
+                        // parse as class, mark as abstract+interface in MIR.
+                        let mut cd = self.parse_class_decl();
+                        cd.is_abstract = true;
+                        cd.visibility = visibility;
+                        cd.annotations = annotations.clone();
+                        // Add a synthetic annotation to mark it as an annotation class.
+                        cd.annotations.push(skotch_syntax::Annotation {
+                            name: self.interner.intern("AnnotationClass"),
+                            target: None,
+                            args: Vec::new(),
+                            span: cd.span,
+                        });
+                        decls.push(Decl::Class(cd));
                     } else {
                         let mut cd = self.parse_class_decl();
                         cd.is_data = is_data;
-                        cd.is_open = is_open || is_sealed; // sealed classes are implicitly open
-                        cd.is_abstract = is_abstract || is_sealed; // sealed = abstract
+                        cd.is_open = is_open || is_sealed;
+                        cd.is_abstract = is_abstract || is_sealed;
                         cd.visibility = visibility;
+                        cd.annotations = annotations.clone();
                         decls.push(Decl::Class(cd));
                     }
                 }
@@ -725,6 +866,7 @@ impl<'a> Parser<'a> {
             nested_classes,
             is_inner: false, // set by caller for `inner class`
             visibility: Visibility::default(), // set by caller
+            annotations: Vec::new(),
             span: kw.merge(name_span),
         }
     }
@@ -1474,6 +1616,7 @@ impl<'a> Parser<'a> {
             is_abstract: false,
             is_suspend: false,
             visibility: Visibility::Public,
+            annotations: Vec::new(),
             span,
         }
     }
@@ -1808,6 +1951,7 @@ impl<'a> Parser<'a> {
             is_abstract: false,
             is_override: false,
             visibility: Visibility::Public,
+            annotations: Vec::new(),
             receiver_ty: Some(receiver_type),
         }
     }
@@ -1900,6 +2044,7 @@ impl<'a> Parser<'a> {
                 ty,
                 init,
                 visibility: Visibility::default(),
+                annotations: Vec::new(),
                 span: kw.merge(name_span),
             };
         }
@@ -1911,6 +2056,7 @@ impl<'a> Parser<'a> {
             name_span,
             ty,
             visibility: Visibility::default(),
+            annotations: Vec::new(),
             span: kw.merge(init.span()),
             init,
         }

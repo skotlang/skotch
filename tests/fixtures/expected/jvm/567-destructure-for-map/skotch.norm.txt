@@ -1,0 +1,123 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=4 max_locals=31
+    0000 ldc "a"
+    0002 astore 1
+    0004 iconst_1
+    0005 istore 2
+    0007 iload 2
+    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0012 astore 3
+    0014 new Class(kotlin/Pair)
+    0017 dup
+    0018 aload 1
+    0020 aload 3
+    0022 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0025 astore 4
+    0027 ldc "b"
+    0029 astore 5
+    0031 iconst_2
+    0032 istore 6
+    0034 iload 6
+    0036 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0039 astore 7
+    0041 new Class(kotlin/Pair)
+    0044 dup
+    0045 aload 5
+    0047 aload 7
+    0049 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0052 astore 8
+    0054 ldc "c"
+    0056 astore 9
+    0058 iconst_3
+    0059 istore 10
+    0061 iload 10
+    0063 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0066 astore 11
+    0068 new Class(kotlin/Pair)
+    0071 dup
+    0072 aload 9
+    0074 aload 11
+    0076 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0079 astore 12
+    0081 iconst_3
+    0082 istore 13
+    0084 iload 13
+    0086 op_0xBD
+    0087 nop
+    0088 ldc_w #14862
+    0091 iconst_0
+    0092 istore 15
+    0094 aload 14
+    0096 iload 15
+    0098 aload 4
+    0100 op_0x53
+    0101 iconst_1
+    0102 istore 16
+    0104 aload 14
+    0106 iload 16
+    0108 aload 8
+    0110 op_0x53
+    0111 iconst_2
+    0112 istore 17
+    0114 aload 14
+    0116 iload 17
+    0118 aload 12
+    0120 op_0x53
+    0121 aload 14
+    0123 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
+    0126 astore 18
+    0128 aload 18
+    0130 checkcast Class(java/util/Map)
+    0133 astore 19
+    0135 aload 19
+    0137 checkcast Class(java/util/Map)
+    0140 astore 20
+    0142 aload 20
+    0144 invokeinterface InterfaceMethod(java/util/Map.entrySet:()Ljava/util/Set;)
+    0149 astore 21
+    0151 aload 21
+    0153 invokeinterface InterfaceMethod(java/util/Set.iterator:()Ljava/util/Iterator;)
+    0158 astore 22
+    0160 goto 163
+    0163 aload 22
+    0165 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0170 istore 23
+    0172 iload 23
+    0174 ifeq 257
+    0177 aload 22
+    0179 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0184 astore 24
+    0186 aload 24
+    0188 checkcast Class(java/util/Map$Entry)
+    0191 astore 25
+    0193 aload 25
+    0195 invokeinterface InterfaceMethod(java/util/Map$Entry.getKey:()Ljava/lang/Object;)
+    0200 astore 26
+    0202 aload 25
+    0204 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
+    0209 astore 27
+    0211 aload 26
+    0213 astore 28
+    0215 ldc "="
+    0217 astore 29
+    0219 aload 27
+    0221 astore 30
+    0223 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0226 new Class(java/lang/StringBuilder)
+    0229 dup
+    0230 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0233 aload 28
+    0235 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0238 aload 29
+    0240 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0243 aload 30
+    0245 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0248 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0251 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0254 goto 163
+    0257 return
+    sub_attr  StackMapTable (123 bytes)

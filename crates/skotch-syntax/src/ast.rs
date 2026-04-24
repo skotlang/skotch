@@ -19,6 +19,37 @@
 use skotch_intern::Symbol;
 use skotch_span::{FileId, Span};
 
+// ── Annotations ─────────────────────────────────────────────────────────────
+
+/// A source-level annotation, e.g. `@JvmStatic`, `@Suppress("unused")`.
+#[derive(Clone, Debug)]
+pub struct Annotation {
+    /// The annotation type name (e.g., "JvmStatic", "Suppress").
+    pub name: Symbol,
+    /// Optional use-site target: `@field:JvmField` → target = Some("field").
+    pub target: Option<Symbol>,
+    /// Arguments: `@Suppress("unused")` → args = [StringLit("unused")].
+    pub args: Vec<AnnotationArg>,
+    pub span: Span,
+}
+
+/// An annotation argument value.
+#[derive(Clone, Debug)]
+pub enum AnnotationArg {
+    /// String literal: `"unused"`.
+    StringLit(String),
+    /// Integer literal: `42`.
+    IntLit(i64),
+    /// Boolean literal: `true` / `false`.
+    BoolLit(bool),
+    /// Enum value or class reference: `AnnotationTarget.CLASS`, `String::class`.
+    Ident(Symbol),
+    /// Qualified name: `AnnotationTarget.FUNCTION`.
+    QualifiedName(Vec<Symbol>),
+    /// Array literal: `[FOO, BAR]` or `arrayOf(FOO, BAR)`.
+    Array(Vec<AnnotationArg>),
+}
+
 /// Kotlin visibility modifier.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Visibility {
@@ -151,6 +182,8 @@ pub struct FunDecl {
     /// True when declared with the `suspend` modifier.
     pub is_suspend: bool,
     pub visibility: Visibility,
+    /// Annotations on this function.
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 
@@ -184,6 +217,8 @@ pub struct ValDecl {
     pub ty: Option<TypeRef>,
     pub init: Expr,
     pub visibility: Visibility,
+    /// Annotations on this val/var.
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 
@@ -223,6 +258,8 @@ pub struct ClassDecl {
     /// `inner class` flag — inner classes hold a reference to the outer instance.
     pub is_inner: bool,
     pub visibility: Visibility,
+    /// Annotations on this class.
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 

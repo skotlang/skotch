@@ -1,0 +1,4 @@
+name = "572-annotation-suppress"
+status = "supported"
+features = ["annotation", "suppress", "string-argument"]
+expected_output = "42\n"

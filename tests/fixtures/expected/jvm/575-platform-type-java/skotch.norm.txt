@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ([Ljava/lang/String;)V 0x0009
+  code        max_stack=5 max_locals=13
+    0000 invokestatic Method(java/lang/System.currentTimeMillis:()J)
+    0003 op_0x37
+    0004 aconst_null
+    0005 op_0x16
+    0006 aconst_null
+    0007 op_0x37
+    0008 iconst_0
+    0009 op_0x16
+    0010 iconst_0
+    0011 op_0x37
+    0012 iconst_2
+    0013 iconst_0
+    0014 istore 7
+    0016 iload 7
+    0018 op_0x85
+    0019 op_0x37
+    0020 iconst_5
+    0021 op_0x16
+    0022 iconst_2
+    0023 op_0x16
+    0024 iconst_5
+    0025 op_0x94
+    0026 op_0x9D
+    0027 nop
+    0028 iconst_4
+    0029 iconst_0
+    0030 goto 34
+    0033 iconst_1
+    0034 istore 10
+    0036 iload 10
+    0038 istore 11
+    0040 iload 11
+    0042 istore 12
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 iload 12
+    0049 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0052 return
+    sub_attr  StackMapTable (37 bytes)

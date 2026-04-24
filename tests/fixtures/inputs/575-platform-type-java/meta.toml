@@ -1,0 +1,4 @@
+name = "575-platform-type-java"
+status = "supported"
+features = ["platform-type", "java-interop", "system-currentTimeMillis"]
+expected_output = "true\n"
