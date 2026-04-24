@@ -88,90 +88,70 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         anyhow::bail!("no .kt sources found under {}", src_dir.display());
     }
 
-    // ── Two-phase multi-file compilation ──────────────────────────────
+    // ── Salsa-based incremental multi-file compilation ─────────────────
     //
-    // Phase 1 (Gather): Parse all files, build PackageSymbolTable.
-    // Phase 2 (Compile): Compile each file with cross-file visibility.
-    // Phase 3 (Backend): Write .class files in parallel, package JAR.
+    // The pipeline uses Salsa for memoized, demand-driven compilation:
+    //
+    //   Level 1: gather_exports(file) → FileExports  (per-file, memoized)
+    //   Aggregate: build SymbolTableInput from all FileExports
+    //   Level 2: compile_with_context(file, table) → CompileResult  (per-file, memoized)
+    //   Backend: write .class files in parallel via rayon
+    //
+    // Key incremental property: a body-only change (no signature change)
+    // produces identical FileExports, so the SymbolTableInput stays the
+    // same, and other files' compile_with_context calls return from cache.
 
-    let mut diags = Diagnostics::new();
+    let mut db = skotch_db::Db::new();
 
-    // Track which files changed for incremental logging.
-    let mut incr = skotch_db::IncrementalState::default();
-
-    // Phase 1: Parse all files (sequential — needs shared interner for gather).
-    let mut parsed_files: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
-    let mut changed_count = 0usize;
-    for path in &src_files {
-        let text =
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let path_str = path.to_string_lossy().to_string();
-        if incr.file_changed(&path_str, &text) {
-            changed_count += 1;
-        }
-        let file_id = sm.add(path.clone(), text.clone());
-        let lexed = lex(file_id, &text, &mut diags);
-        let ast = parse_file(&lexed, &mut interner, &mut diags);
-        let wrapper = wrapper_class_for(path);
-        incr.record_file(&path_str, &text, &wrapper, 0);
-        parsed_files.push((file_id, ast, wrapper));
-    }
-
-    // Build the PackageSymbolTable from all parsed files.
-    let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed_files
+    // Register all source files as Salsa inputs.
+    let salsa_files: Vec<skotch_db::SourceFile> = src_files
         .iter()
-        .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+        .map(|path| {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("reading {}", path.display()))
+                .unwrap_or_default();
+            let class_name = wrapper_class_for(path);
+            db.add_source(path.to_string_lossy().to_string(), text, class_name)
+        })
         .collect();
-    let pkg_symbols = gather_declarations(&refs, &interner);
 
-    // Compute symbol table hash for incremental tracking.
-    let sym_table_hash = skotch_db::content_hash(&format!("{:?}", pkg_symbols));
-    let _sym_table_changed = incr.symbol_table_changed(&sym_table_hash);
-    incr.set_symbol_table_hash(sym_table_hash);
+    // Run the incremental pipeline: gather → symbol table → compile.
+    let (results, _table_input) =
+        db.compile_all_incremental(&salsa_files, None);
 
-    eprintln!(
-        "  {} files, {} changed",
-        src_files.len(),
-        changed_count,
-    );
-
-    // Phase 2: Compile each file sequentially with cross-file visibility.
-    // Sequential compilation reuses Phase 1 ASTs and the shared interner,
-    // avoiding wasteful re-parsing. Diagnostics accumulate in the shared
-    // `diags` sink and are rendered with full source context at the end.
+    // Collect results and check for errors.
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
-    for (_file_id, ast, wrapper) in &parsed_files {
-        let mir = skotch_driver::compile_ast(
-            ast,
-            wrapper,
-            &mut interner,
-            &mut diags,
-            Some(&pkg_symbols),
-        );
-        let classes = skotch_backend_jvm::compile_module(&mir, &interner);
+    let mut error_count = 0;
+    let mut error_messages = Vec::new();
+    for (module, has_errors, diag_msgs) in &results {
+        if *has_errors {
+            error_count += 1;
+            if !diag_msgs.is_empty() {
+                error_messages.push(diag_msgs.as_str());
+            }
+        }
+        // Backend: compile MIR to class files.
+        let classes = skotch_backend_jvm::compile_module(module, &interner);
         all_classes.extend(classes);
     }
 
-    if diags.has_errors() {
-        eprint!("{}", render(&diags, &sm));
-        anyhow::bail!("compilation failed");
+    if error_count > 0 {
+        for msg in &error_messages {
+            eprintln!("{msg}");
+        }
+        anyhow::bail!("compilation failed with {error_count} file(s) containing errors");
     }
+
+    eprintln!("  {} files compiled", src_files.len());
 
     // Backend dispatch.
     match target {
         BuildTarget::Jvm => build_jvm_classes(&project, &project_dir, &all_classes, &interner),
         BuildTarget::Android => {
             // For Android, merge MIR modules (DEX needs a single module).
-            let mut module = skotch_mir::MirModule::default();
-            for (_file_id, ast, wrapper) in &parsed_files {
-                let mir = skotch_driver::compile_ast(
-                    ast,
-                    wrapper,
-                    &mut interner,
-                    &mut diags,
-                    Some(&pkg_symbols),
-                );
-                merge_modules(&mut module, mir);
+            let mut module = MirModule::default();
+            for (file_module, _, _) in &results {
+                merge_modules(&mut module, file_module.clone());
             }
             build_android(&project, &project_dir, &module)
         }

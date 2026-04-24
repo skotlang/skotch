@@ -2268,7 +2268,10 @@ dependencies = [
  "skotch-diagnostics",
  "skotch-driver",
  "skotch-intern",
+ "skotch-lexer",
  "skotch-mir",
+ "skotch-parser",
+ "skotch-resolve",
  "skotch-span",
 ]
 
@@ -2445,6 +2448,7 @@ name = "skotch-resolve"
 version = "0.13.0"
 dependencies = [
  "rustc-hash",
+ "serde",
  "skotch-diagnostics",
  "skotch-intern",
  "skotch-lexer",

@@ -13,6 +13,7 @@
 //! "not yet supported" diagnostic and an [`DefId::Error`] reference.
 
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_span::{FileId, Span};
@@ -88,18 +89,21 @@ pub struct ResolvedFile {
 /// Top-level declarations visible across files within a compilation unit.
 /// Built by [`gather_declarations`] from all parsed KtFiles before
 /// resolution, enabling cross-file function calls and class references.
-#[derive(Clone, Debug, Default)]
+///
+/// Uses `HashMap` (not `FxHashMap`) so the struct can be serialized/
+/// deserialized by serde for Salsa incremental compilation.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PackageSymbolTable {
     /// Top-level function: name → declaration metadata (may have overloads).
-    pub functions: FxHashMap<String, Vec<ExternalFunDecl>>,
+    pub functions: std::collections::HashMap<String, Vec<ExternalFunDecl>>,
     /// Top-level val: name → declaration metadata.
-    pub vals: FxHashMap<String, ExternalValDecl>,
+    pub vals: std::collections::HashMap<String, ExternalValDecl>,
     /// User-defined class/object/enum/interface: name → declaration metadata.
-    pub classes: FxHashMap<String, ExternalClassDecl>,
+    pub classes: std::collections::HashMap<String, ExternalClassDecl>,
 }
 
 /// Metadata for a top-level function from another file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalFunDecl {
     /// JVM internal name of the wrapper class, e.g. "com/example/GreeterKt".
     pub owner_class: String,
@@ -118,14 +122,14 @@ pub struct ExternalFunDecl {
 }
 
 /// Metadata for a top-level val from another file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalValDecl {
     pub owner_class: String,
     pub ty: Ty,
 }
 
 /// Metadata for a class/object/enum/interface from another file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalClassDecl {
     /// Fully-qualified JVM internal name, e.g. "com/example/Greeter".
     pub jvm_name: String,
@@ -142,7 +146,7 @@ pub struct ExternalClassDecl {
     pub is_abstract: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ExternalClassKind {
     Class,
     DataClass,

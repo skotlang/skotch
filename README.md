@@ -150,32 +150,49 @@ OtherFileKt.method(descriptor)` — exactly what `kotlinc` produces. No
 MIR merging or FuncId remapping needed.
 
 **Key design decisions:**
-- Phase 2 tasks get their own `Interner` + `Diagnostics` to avoid
-  contention. The `PackageSymbolTable` is shared immutably via `Arc`.
+- Cross-file class usage works via stub `MirClass` entries — the gather
+  pass collects field and method signatures from `ClassDecl`, which are
+  injected into the consumer's `module.classes` with `is_cross_file_stub:
+  true` so the JVM backend skips emitting them as class files.
 - Private declarations are excluded from the `PackageSymbolTable` at
   gather time (visibility enforcement).
-- Cross-file class constructors resolve via the `import_map` +
-  `cross_file_classes` mechanism on `MirModule`.
 - Import aliases (`import X as Y`) are resolved at the import_map level.
 - Star imports (`import pkg.*`) enumerate user classes from the
   `PackageSymbolTable`.
 
 ### Incremental compilation (salsa + blake3)
 
-The build pipeline uses [salsa](https://github.com/salsa-rs/salsa) for
-memoized, demand-driven compilation and **blake3** content hashing for
-change detection:
+The build pipeline uses [salsa](https://github.com/salsa-rs/salsa) (v0.26)
+for memoized, demand-driven compilation with a three-level dependency graph:
 
-- **Within-build memoization:** Salsa caches `compile_file` results.
-  Unchanged files return instantly from cache.
-- **Cross-build incrementalism:** `IncrementalState` tracks blake3
-  content hashes per file and a symbol table hash. When a file changes,
-  only that file is recompiled. When public signatures change, all
-  dependent files are recompiled.
-- **Parallel I/O:** `.class` file writing and JAR packaging use
-  `rayon::par_iter()`.
-- **LSP integration:** The LSP server builds a `PackageSymbolTable` from
-  all open documents, enabling cross-file diagnostics and hover info.
+```
+Level 1: gather_exports(db, file) → FileExports
+         Extracts top-level declaration signatures (names, types, descriptors).
+         Memoized per-file — body-only changes produce identical output.
+
+Aggregate: merge all FileExports → SymbolTableInput (JSON)
+           Detects when cross-file signatures change.
+
+Level 2: compile_with_context(db, file, table) → CompileResult
+         Full front-end pipeline with cross-file visibility.
+         Memoized per (file, table) — returns from cache when both are unchanged.
+```
+
+**The key incremental property:** When a developer changes a function *body*
+(e.g., fixes a bug in `greet()` without changing its signature), Level 1
+produces identical `FileExports` for that file. The aggregated
+`SymbolTableInput` stays the same. Therefore Level 2 is NOT re-invoked for
+any other file — only the changed file is recompiled. This is validated by
+the `salsa_incremental_body_change_skips_dependents` test.
+
+When a function *signature* changes (e.g., adding a parameter), Level 1
+produces different `FileExports`, the `SymbolTableInput` changes, and all
+files that use the symbol table are recompiled.
+
+**blake3** provides content hashing for the `IncrementalState` change tracker.
+**rayon** parallelizes Phase 3 (class file writing and JAR packaging).
+The **LSP server** builds a `PackageSymbolTable` from all open documents,
+enabling cross-file diagnostics and hover info.
 
 ### Crate dependency layers
 

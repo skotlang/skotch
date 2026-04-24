@@ -12,6 +12,7 @@ skotch-syntax      = { workspace = true }
 skotch-types       = { workspace = true }
 skotch-diagnostics = { workspace = true }
 rustc-hash       = { workspace = true }
+serde            = { workspace = true }
 
 [dev-dependencies]
 skotch-lexer  = { workspace = true }

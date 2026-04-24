@@ -14,6 +14,9 @@ serde              = { workspace = true }
 serde_json         = { workspace = true }
 skotch-span        = { workspace = true }
 skotch-intern      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-parser      = { workspace = true }
+skotch-resolve     = { workspace = true }
 skotch-diagnostics = { workspace = true }
 skotch-mir         = { workspace = true }
 skotch-driver      = { workspace = true }

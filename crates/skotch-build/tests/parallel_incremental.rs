@@ -263,7 +263,6 @@ fn diagnostics_report_errors_with_details() {
 
 #[test]
 fn salsa_incremental_memoization() {
-    // Test salsa memoization directly.
     let mut db = skotch_db::Db::new();
     let file = db.add_source(
         "Test.kt".into(),
@@ -281,4 +280,171 @@ fn salsa_incremental_memoization() {
     let r3 = skotch_db::compile_file(&db, file);
     let json3 = r3.mir_json(&db).to_string();
     assert_ne!(json1, json3, "Changed source → recompilation");
+}
+
+// ─── Salsa incremental multi-file tests ─────────────────────────────────────
+
+#[test]
+fn salsa_gather_exports_memoized() {
+    let db = skotch_db::Db::new();
+    let file = db.add_source(
+        "Lib.kt".into(),
+        "fun greet(): String = \"Hello\"\n".into(),
+        "LibKt".into(),
+    );
+    let e1 = skotch_db::gather_exports(&db, file);
+    let e2 = skotch_db::gather_exports(&db, file);
+    assert_eq!(
+        e1.exports_json(&db),
+        e2.exports_json(&db),
+        "Same input → same exports"
+    );
+}
+
+#[test]
+fn salsa_body_change_preserves_exports() {
+    let mut db = skotch_db::Db::new();
+    let file = db.add_source(
+        "Lib.kt".into(),
+        "fun greet(): String = \"Hello\"\n".into(),
+        "LibKt".into(),
+    );
+    let e1 = skotch_db::gather_exports(&db, file);
+    let json1 = e1.exports_json(&db).to_string();
+
+    db.update_source(file, "fun greet(): String = \"World\"\n".into());
+    let e2 = skotch_db::gather_exports(&db, file);
+    let json2 = e2.exports_json(&db).to_string();
+
+    assert_eq!(json1, json2, "Body-only change preserves exports");
+}
+
+#[test]
+fn salsa_signature_change_invalidates_exports() {
+    let mut db = skotch_db::Db::new();
+    let file = db.add_source(
+        "Lib.kt".into(),
+        "fun greet(): String = \"Hello\"\n".into(),
+        "LibKt".into(),
+    );
+    let e1 = skotch_db::gather_exports(&db, file);
+    let json1 = e1.exports_json(&db).to_string();
+
+    db.update_source(
+        file,
+        "fun greet(name: String): String = \"Hello, $name!\"\n".into(),
+    );
+    let e2 = skotch_db::gather_exports(&db, file);
+    let json2 = e2.exports_json(&db).to_string();
+
+    assert_ne!(json1, json2, "Signature change invalidates exports");
+}
+
+#[test]
+fn salsa_compile_with_cross_file_context() {
+    let mut db = skotch_db::Db::new();
+    let greeter = db.add_source(
+        "Greeter.kt".into(),
+        "fun greet(): String = \"Hello!\"\n".into(),
+        "GreeterKt".into(),
+    );
+    let main = db.add_source(
+        "Main.kt".into(),
+        "fun main() { println(greet()) }\n".into(),
+        "MainKt".into(),
+    );
+
+    let (results, _) = db.compile_all_incremental(&[greeter, main], None);
+    assert!(!results[1].1, "Main.kt should compile without errors");
+}
+
+#[test]
+fn salsa_incremental_body_change_skips_dependents() {
+    let mut db = skotch_db::Db::new();
+    let lib = db.add_source(
+        "Lib.kt".into(),
+        "fun helper(): Int = 1\n".into(),
+        "LibKt".into(),
+    );
+    let main = db.add_source(
+        "Main.kt".into(),
+        "fun main() { println(helper()) }\n".into(),
+        "MainKt".into(),
+    );
+
+    // First build.
+    let (r1, table) = db.compile_all_incremental(&[lib, main], None);
+    let main_json1 = r1[1].0.functions.len();
+    assert!(!r1[0].1, "Lib should compile ok");
+    assert!(!r1[1].1, "Main should compile ok");
+
+    // Change Lib's body only (not signature).
+    db.update_source(lib, "fun helper(): Int = 42\n".into());
+
+    // Second build.
+    let (r2, _) = db.compile_all_incremental(&[lib, main], Some(table));
+    let main_json2 = r2[1].0.functions.len();
+
+    // Main's MIR should be identical (memoized) because symbol table
+    // didn't change.
+    assert_eq!(
+        main_json1, main_json2,
+        "Body-only change should not recompile dependents"
+    );
+}
+
+#[test]
+fn salsa_incremental_signature_change_recompiles_dependents() {
+    let mut db = skotch_db::Db::new();
+    let lib = db.add_source(
+        "Lib.kt".into(),
+        "fun helper(): Int = 1\n".into(),
+        "LibKt".into(),
+    );
+    let main = db.add_source(
+        "Main.kt".into(),
+        "fun main() { println(helper()) }\n".into(),
+        "MainKt".into(),
+    );
+
+    let (r1, table) = db.compile_all_incremental(&[lib, main], None);
+    assert!(!r1[1].1);
+
+    // Add a new function (changes the symbol table).
+    db.update_source(lib, "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into());
+
+    let (r2, _) = db.compile_all_incremental(&[lib, main], Some(table));
+    // Both should still compile successfully.
+    assert!(!r2[0].1, "Lib should compile ok after change");
+    assert!(!r2[1].1, "Main should compile ok after change");
+}
+
+#[test]
+fn salsa_new_function_visible_cross_file() {
+    let mut db = skotch_db::Db::new();
+    let lib = db.add_source(
+        "Lib.kt".into(),
+        "fun helper(): Int = 1\n".into(),
+        "LibKt".into(),
+    );
+    let main = db.add_source(
+        "Main.kt".into(),
+        "fun main() { println(helper()) }\n".into(),
+        "MainKt".into(),
+    );
+
+    // First build succeeds.
+    let (r1, table) = db.compile_all_incremental(&[lib, main], None);
+    assert!(!r1[1].1);
+
+    // Add helper2() and update Main to call it.
+    db.update_source(lib, "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into());
+    db.update_source(
+        main,
+        "fun main() { println(helper()); println(helper2()) }\n".into(),
+    );
+
+    let (r2, _) = db.compile_all_incremental(&[lib, main], Some(table));
+    assert!(!r2[0].1, "Lib ok");
+    assert!(!r2[1].1, "Main should see new helper2()");
 }
