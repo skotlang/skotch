@@ -104,7 +104,13 @@ impl SkotchLanguageServer {
         let tokens = lexed.tokens.clone();
         let ast = parse_file(&lexed, &mut interner, &mut diags);
         let resolved = resolve_file(&ast, &mut interner, &mut diags, pkg_symbols.as_ref());
-        let typed = type_check(&ast, &resolved, &mut interner, &mut diags, pkg_symbols.as_ref());
+        let typed = type_check(
+            &ast,
+            &resolved,
+            &mut interner,
+            &mut diags,
+            pkg_symbols.as_ref(),
+        );
 
         let lsp_diags = to_lsp_diagnostics(&diags, &sm);
 
@@ -135,10 +141,7 @@ fn uri_to_path(uri: &Url) -> PathBuf {
 /// Derive the JVM wrapper class name from a URI: `Hello.kt` → `HelloKt`.
 fn uri_to_wrapper(uri: &Url) -> String {
     let path = uri_to_path(uri);
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Main");
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Main");
     let mut c = stem.chars();
     match c.next() {
         Some(first) => format!("{}{}Kt", first.to_ascii_uppercase(), c.as_str()),

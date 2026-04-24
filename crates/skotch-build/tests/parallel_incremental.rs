@@ -100,13 +100,20 @@ fn cross_file_function_call() {
     create_project(
         &dir,
         &[
-            ("Greeter.kt", "fun greet(name: String): String = \"Hello, $name!\"\n"),
+            (
+                "Greeter.kt",
+                "fun greet(name: String): String = \"Hello, $name!\"\n",
+            ),
             ("Main.kt", "fun main() { println(greet(\"World\")) }\n"),
         ],
     );
 
     let r = build(&dir);
-    assert!(r.is_ok(), "Cross-file function call build failed: {:?}", r.err());
+    assert!(
+        r.is_ok(),
+        "Cross-file function call build failed: {:?}",
+        r.err()
+    );
 
     // Verify the JAR was created.
     let outcome = r.unwrap();
@@ -123,12 +130,19 @@ fn cross_file_class_constructor() {
         &dir,
         &[
             ("Point.kt", "data class Point(val x: Int, val y: Int)\n"),
-            ("Main.kt", "fun main() { val p = Point(3, 4); println(p) }\n"),
+            (
+                "Main.kt",
+                "fun main() { val p = Point(3, 4); println(p) }\n",
+            ),
         ],
     );
 
     let r = build(&dir);
-    assert!(r.is_ok(), "Cross-file class constructor build failed: {:?}", r.err());
+    assert!(
+        r.is_ok(),
+        "Cross-file class constructor build failed: {:?}",
+        r.err()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -147,7 +161,11 @@ fn circular_cross_file_calls() {
     );
 
     let r = build(&dir);
-    assert!(r.is_ok(), "Circular cross-file call build failed: {:?}", r.err());
+    assert!(
+        r.is_ok(),
+        "Circular cross-file call build failed: {:?}",
+        r.err()
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -200,10 +218,7 @@ fn cross_file_field_access() {
     create_project(
         &dir,
         &[
-            (
-                "Point.kt",
-                "data class Point(val x: Int, val y: Int)\n",
-            ),
+            ("Point.kt", "data class Point(val x: Int, val y: Int)\n"),
             (
                 "Main.kt",
                 "fun main() {\n    val p = Point(3, 4)\n    println(p.x)\n    println(p.y)\n}\n",
@@ -211,7 +226,11 @@ fn cross_file_field_access() {
         ],
     );
     let r = build(&dir);
-    assert!(r.is_ok(), "Cross-file field access build failed: {:?}", r.err());
+    assert!(
+        r.is_ok(),
+        "Cross-file field access build failed: {:?}",
+        r.err()
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -249,10 +268,7 @@ fn diagnostics_report_errors_with_details() {
         &dir,
         &[
             ("Helper.kt", "fun helper(): Int = 1\n"),
-            (
-                "Main.kt",
-                "fun main() { println(doesNotExist()) }\n",
-            ),
+            ("Main.kt", "fun main() { println(doesNotExist()) }\n"),
         ],
     );
     let r = build(&dir);
@@ -411,7 +427,10 @@ fn salsa_incremental_signature_change_recompiles_dependents() {
     assert!(!r1[1].1);
 
     // Add a new function (changes the symbol table).
-    db.update_source(lib, "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into());
+    db.update_source(
+        lib,
+        "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into(),
+    );
 
     let (r2, _) = db.compile_all_incremental(&[lib, main], Some(table));
     // Both should still compile successfully.
@@ -438,7 +457,10 @@ fn salsa_new_function_visible_cross_file() {
     assert!(!r1[1].1);
 
     // Add helper2() and update Main to call it.
-    db.update_source(lib, "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into());
+    db.update_source(
+        lib,
+        "fun helper(): Int = 1\nfun helper2(): Int = 2\n".into(),
+    );
     db.update_source(
         main,
         "fun main() { println(helper()); println(helper2()) }\n".into(),

@@ -67,10 +67,7 @@ pub struct SymbolTableInput {
 /// signature) produces the same `exports_json`, so downstream steps
 /// that depend on the symbol table are NOT re-triggered.
 #[salsa::tracked]
-pub fn gather_exports<'db>(
-    db: &'db dyn salsa::Database,
-    file: SourceFile,
-) -> FileExports<'db> {
+pub fn gather_exports<'db>(db: &'db dyn salsa::Database, file: SourceFile) -> FileExports<'db> {
     let text = file.text(db);
     let wrapper = file.wrapper_class(db);
     let path = file.path(db);
@@ -156,10 +153,7 @@ pub fn compile_with_context<'db>(
 /// Compile a single file in isolation (no cross-file visibility). Used
 /// by `skotch emit` for single-file compilation and for backward compat.
 #[salsa::tracked]
-pub fn compile_file<'db>(
-    db: &'db dyn salsa::Database,
-    file: SourceFile,
-) -> CompileResult<'db> {
+pub fn compile_file<'db>(db: &'db dyn salsa::Database, file: SourceFile) -> CompileResult<'db> {
     let text = file.text(db);
     let path = file.path(db);
     let wrapper = file.wrapper_class(db);
@@ -491,8 +485,7 @@ mod tests {
             "MainKt".into(),
         );
 
-        let (results, _table) =
-            db.compile_all_incremental(&[greeter, main], None);
+        let (results, _table) = db.compile_all_incremental(&[greeter, main], None);
 
         // Main.kt should compile without errors because greet() is visible
         // from the symbol table.
@@ -518,19 +511,14 @@ mod tests {
         );
 
         // First build.
-        let (results1, table) =
-            db.compile_all_incremental(&[greeter, main], None);
+        let (results1, table) = db.compile_all_incremental(&[greeter, main], None);
         let main_mir1 = results1[1].0.functions.len();
 
         // Change Greeter's BODY only (not signature).
-        db.update_source(
-            greeter,
-            "fun greet(): String = \"World!\"\n".into(),
-        );
+        db.update_source(greeter, "fun greet(): String = \"World!\"\n".into());
 
         // Second build with same table input.
-        let (results2, _table2) =
-            db.compile_all_incremental(&[greeter, main], Some(table));
+        let (results2, _table2) = db.compile_all_incremental(&[greeter, main], Some(table));
         let main_mir2 = results2[1].0.functions.len();
 
         // Main.kt's MIR should be identical (memoized) because the
