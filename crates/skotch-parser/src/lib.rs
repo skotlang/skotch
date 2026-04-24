@@ -283,7 +283,8 @@ impl<'a> Parser<'a> {
                         let f = self.parse_extension_property();
                         decls.push(Decl::Fun(f));
                     } else {
-                        let v = self.parse_val_decl();
+                        let mut v = self.parse_val_decl();
+                        v.visibility = visibility;
                         decls.push(Decl::Val(v));
                     }
                 }
@@ -295,6 +296,7 @@ impl<'a> Parser<'a> {
                         cd.is_data = is_data;
                         cd.is_open = is_open || is_sealed; // sealed classes are implicitly open
                         cd.is_abstract = is_abstract || is_sealed; // sealed = abstract
+                        cd.visibility = visibility;
                         decls.push(Decl::Class(cd));
                     }
                 }
@@ -395,9 +397,29 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
+        // Check for import alias: `import com.example.Foo as Bar`
+        self.skip_trivia();
+        let alias = if self.peek_kind() == TokenKind::KwAs {
+            self.bump(); // consume `as`
+            self.skip_trivia();
+            if self.peek_kind() == TokenKind::Ident {
+                let idx = self.pos;
+                let span = self.peek_span();
+                self.bump();
+                end_span = span;
+                Some(self.intern_ident_at(idx))
+            } else {
+                self.diags
+                    .push(Diagnostic::error(self.peek_span(), "expected alias name after 'as'"));
+                None
+            }
+        } else {
+            None
+        };
         ImportDecl {
             path,
             is_wildcard,
+            alias,
             span: kw.merge(end_span),
         }
     }
@@ -702,6 +724,7 @@ impl<'a> Parser<'a> {
             secondary_constructors,
             nested_classes,
             is_inner: false, // set by caller for `inner class`
+            visibility: Visibility::default(), // set by caller
             span: kw.merge(name_span),
         }
     }
@@ -1876,6 +1899,7 @@ impl<'a> Parser<'a> {
                 name_span,
                 ty,
                 init,
+                visibility: Visibility::default(),
                 span: kw.merge(name_span),
             };
         }
@@ -1886,6 +1910,7 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             ty,
+            visibility: Visibility::default(),
             span: kw.merge(init.span()),
             init,
         }

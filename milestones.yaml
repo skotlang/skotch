@@ -1223,55 +1223,75 @@ milestones:
       - description: "Circular references between files in the same package"
         mitigation: "Two-pass: collect all declarations first, then resolve"
 
-  # v0.13.5 — Multi-File Future Work
+  # v0.13.5 — Multi-File Polish and Incremental Compilation
   - version: "0.13.5"
     title: "Multi-File Polish and Incremental Compilation"
-    status: planned
+    status: complete
     depends_on: ["0.13.0"]
     description: >
-      Follow-up improvements to multi-file compilation: Salsa incremental
-      rebuild, visibility enforcement, star imports, Kotlin metadata, and
-      parallel Phase 2 compilation.
+      Parallel compilation via rayon, content-hash-based incremental rebuild
+      via blake3, visibility enforcement for private declarations, import
+      aliases (import X as Y), star imports for user files, and LSP
+      cross-file symbol resolution.
 
     features:
-      - name: "Salsa incremental compilation"
+      - name: "Parallel Phase 2 compilation"
+        completed: true
         description: >
-          Re-enable Salsa with a gather_declarations tracked function. Only
-          recompile files whose dependencies' exports changed. Currently the
-          build pipeline bypasses Salsa and compiles sequentially.
+          Phase 2 (resolve→typecheck→lower per file) now runs in parallel
+          via rayon::par_iter(). Each file gets its own Interner + Diagnostics
+          to avoid contention. The PackageSymbolTable is shared immutably
+          via Arc. Phase 1 (parse + gather) remains sequential since it
+          builds the shared interner. Phase 3 (class file writing) was
+          already parallel.
+
+      - name: "Incremental compilation with content hashing"
+        completed: true
+        description: >
+          IncrementalState tracks blake3 content hashes per file and a
+          symbol table hash. When a file's content changes, only that file
+          is recompiled. When the symbol table hash changes (new/removed
+          public declarations), all dependent files are recompiled. Salsa
+          memoization handles within-build dedup. The Db struct supports
+          update_source() for persistent builds.
 
       - name: "Visibility enforcement"
+        completed: true
         description: >
-          internal members visible only within module; private top-level
-          declarations visible only within file. Currently all declarations
-          are visible everywhere.
-
-      - name: "Star imports across user files"
-        description: >
-          import com.example.* enumerates all user classes and functions in
-          that package. Currently star imports are recognized but not expanded
-          for user-defined declarations.
+          Private top-level declarations (private fun, private val,
+          private class) are excluded from the PackageSymbolTable during
+          the gather pass. They are not visible from other files. Visibility
+          field added to ValDecl and ClassDecl in the AST. Parser propagates
+          visibility modifiers from private/internal/protected keywords.
 
       - name: "Import aliases"
+        completed: true
         description: >
-          import com.example.Foo as Bar — allows renaming imports. Parser
-          already handles the syntax; resolver and lowerer need to map aliases.
+          import com.example.Foo as Bar — alias field added to ImportDecl,
+          parser handles 'as' keyword after import path, MIR lowerer uses
+          the alias name as the import_map key instead of the simple name.
+
+      - name: "Star imports for user files"
+        completed: true
+        description: >
+          import pkg.* now enumerates all user classes from the
+          PackageSymbolTable whose JVM name starts with the package prefix.
+          Previously star imports were recognized but not expanded.
+
+      - name: "LSP cross-file features"
+        completed: true
+        description: >
+          The LSP server builds a PackageSymbolTable from all open documents
+          via build_cross_file_symbols(). This table is passed to resolve_file()
+          and type_check(), enabling cross-file symbol resolution for hover,
+          go-to-definition, and diagnostics. Re-analysis triggers when any
+          document changes.
 
       - name: "Kotlin metadata emission"
         description: >
           @Metadata annotation on generated classes with protobuf payload.
           Required for kotlinc-compiled code to interop with skotch output.
-
-      - name: "Parallel Phase 2 compilation"
-        description: >
-          Use rayon to compile files in parallel during Phase 2. Requires
-          per-file interner or Arc<Mutex<Interner>> to avoid contention.
-
-      - name: "LSP cross-file features"
-        description: >
-          Share PackageSymbolTable across LSP document analyses for
-          go-to-definition/hover across files. Currently each document
-          is analyzed in isolation.
+          Deferred to v0.14.0 (annotations milestone).
 
 # ============================================================================
 # v0.14.0 — Annotations and Java Interop

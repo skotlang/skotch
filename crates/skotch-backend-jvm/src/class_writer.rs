@@ -59,8 +59,12 @@ pub fn compile_module(module: &MirModule, _interner: &Interner) -> Vec<(String, 
     // Wrapper class for top-level functions.
     let bytes = compile_class(&module.wrapper_class, module);
     result.push((module.wrapper_class.clone(), bytes));
-    // User-defined classes.
+    // User-defined classes (skip cross-file stubs — they're only for
+    // field/method resolution in the MIR lowerer, not for code emission).
     for class in &module.classes {
+        if class.is_cross_file_stub {
+            continue;
+        }
         let bytes = compile_user_class(class, module);
         result.push((class.name.clone(), bytes));
     }

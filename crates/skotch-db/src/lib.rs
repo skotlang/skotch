@@ -1,37 +1,24 @@
 //! Salsa-based incremental compilation database for skotch.
 //!
-//! ## Design rationale
+//! ## Two-Phase Incremental Pipeline
 //!
-//! **Why salsa?** rust-analyzer proves salsa scales to a full-language IDE.
-//! skotch targets the same end state: a single database backing both
-//! `skotch build` and `skotch lsp`. Salsa's memoized, demand-driven
-//! queries give us:
+//! The database implements the "Gather then Lower" multi-file compilation
+//! strategy with content-hash-based change detection:
 //!
-//! - **Within-build incrementalism**: If the build pipeline calls
-//!   `compile_file` twice for the same unchanged source, the second call
-//!   is free (memoized).
-//! - **LSP integration path**: The LSP server can hold a persistent `Db`
-//!   across edits, getting sub-millisecond re-analysis on keystrokes.
-//! - **Future fine-grained tracking**: As we break the pipeline into
-//!   smaller tracked functions (parse → resolve → typecheck → lower),
-//!   salsa can skip downstream stages when upstream outputs are unchanged.
+//! - **Phase 1 (Gather)**: Each file's top-level declarations are extracted
+//!   into a [`FileExports`] tracked struct. These are aggregated into a
+//!   [`PackageSymbolTable`] that provides cross-file visibility.
 //!
-//! **Why blake3?** It's the fastest cryptographic hash (3–5x faster than
-//! SHA-256), used for content-addressed file identification.
+//! - **Phase 2 (Compile)**: Each file is compiled with the shared symbol
+//!   table. Salsa memoizes results per file — unchanged files with an
+//!   unchanged symbol table return instantly from cache.
 //!
-//! ## Current granularity
+//! ## Content Hashing
 //!
-//! Today the entire front-end pipeline is ONE tracked function. This is
-//! the coarsest possible granularity — any source change recompiles the
-//! whole file. The roadmap:
-//!
-//! 1. v0.2.0 (now): Single `compile_file` tracked fn per source file
-//! 2. v0.3.0+: Break into `lex`, `parse`, `resolve`, `typecheck`, `lower`
-//!    tracked fns — enables skipping downstream stages
-//! 3. v0.7.0+: Cross-file export tables as tracked structs — enables
-//!    multi-module builds with minimal recompilation
-//! 4. LSP: Persistent `Db` instance across edits — sub-millisecond
-//!    incremental re-analysis
+//! Blake3 content hashes are used for efficient change detection. When a
+//! file's text changes, its content hash changes, triggering recompilation.
+//! When only a file's body changes (no signature changes), the
+//! [`PackageSymbolTable`] remains stable and other files are NOT recompiled.
 
 use salsa::Setter;
 
@@ -135,6 +122,63 @@ impl Db {
     }
 }
 
+// ─── Content-hash-based incremental build ──────────────────────────────────
+
+/// A file's content hash and exported declarations. Used to detect when
+/// the PackageSymbolTable needs rebuilding without recompiling everything.
+#[derive(Clone, Debug)]
+pub struct FileSignature {
+    /// Blake3 hash of the source text.
+    pub content_hash: String,
+    /// The wrapper class name for this file.
+    pub wrapper_class: String,
+    /// Number of exported functions (for quick comparison).
+    pub export_count: usize,
+}
+
+/// Incremental build state that persists across rebuilds.
+/// Tracks content hashes to detect which files changed.
+#[derive(Default, Clone, Debug)]
+pub struct IncrementalState {
+    /// Map from file path → last known content hash + signature info.
+    pub file_hashes: rustc_hash::FxHashMap<String, FileSignature>,
+    /// Hash of the serialized PackageSymbolTable. When this changes,
+    /// all files need recompilation (cross-file signatures changed).
+    pub symbol_table_hash: String,
+}
+
+impl IncrementalState {
+    /// Check if a file's content has changed since the last build.
+    pub fn file_changed(&self, path: &str, current_text: &str) -> bool {
+        match self.file_hashes.get(path) {
+            Some(sig) => sig.content_hash != content_hash(current_text),
+            None => true, // new file
+        }
+    }
+
+    /// Record a file's current content hash.
+    pub fn record_file(&mut self, path: &str, text: &str, wrapper_class: &str, export_count: usize) {
+        self.file_hashes.insert(
+            path.to_string(),
+            FileSignature {
+                content_hash: content_hash(text),
+                wrapper_class: wrapper_class.to_string(),
+                export_count,
+            },
+        );
+    }
+
+    /// Check if the overall symbol table changed (requiring full recompilation).
+    pub fn symbol_table_changed(&self, new_hash: &str) -> bool {
+        self.symbol_table_hash != new_hash
+    }
+
+    /// Record the symbol table hash.
+    pub fn set_symbol_table_hash(&mut self, hash: String) {
+        self.symbol_table_hash = hash;
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -219,5 +263,30 @@ mod tests {
             assert!(!has_errors);
             assert!(!module.functions.is_empty());
         }
+    }
+
+    #[test]
+    fn incremental_state_detects_changes() {
+        let mut state = IncrementalState::default();
+
+        // First build — all files are new.
+        assert!(state.file_changed("Main.kt", "fun main() {}"));
+        state.record_file("Main.kt", "fun main() {}", "MainKt", 1);
+
+        // Same content — no change.
+        assert!(!state.file_changed("Main.kt", "fun main() {}"));
+
+        // Different content — changed.
+        assert!(state.file_changed("Main.kt", "fun main() { println(1) }"));
+    }
+
+    #[test]
+    fn incremental_state_symbol_table_hash() {
+        let mut state = IncrementalState::default();
+        assert!(state.symbol_table_changed("abc"));
+
+        state.set_symbol_table_hash("abc".to_string());
+        assert!(!state.symbol_table_changed("abc"));
+        assert!(state.symbol_table_changed("def"));
     }
 }

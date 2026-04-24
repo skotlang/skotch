@@ -1,0 +1,4 @@
+name = "570-import-alias"
+status = "supported"
+features = ["import-alias", "as-keyword", "java-interop"]
+expected_output = "42\n20\n"

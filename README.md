@@ -120,81 +120,62 @@ emitters are stable.
 
 ## Architecture
 
-### Compilation pipeline
+### Multi-file compilation pipeline
 
-Every `.kt` source file flows through a layered pipeline. Each layer is a
-separate crate with no upward dependencies:
+The build pipeline uses a **two-phase "Gather then Lower"** architecture
+that enables parallel compilation with cross-file visibility:
 
-```mermaid
-graph TD
-    subgraph "Front-end (per file)"
-        A[".kt source"] -->|skotch-lexer| B["Token stream"]
-        B -->|skotch-parser| C["AST (KtFile)"]
-        C -->|skotch-resolve| D["Resolved AST"]
-        D -->|skotch-typeck| E["Typed AST + TypeEnv"]
-        E -->|skotch-mir-lower| F["MIR module"]
-    end
-
-    subgraph "Incremental DB (skotch-db)"
-        G["salsa::Database"] -->|memoizes| A
-        G -->|blake3 hash| H["content fingerprint"]
-    end
-
-    subgraph "Backends (pluggable)"
-        F -->|skotch-backend-jvm| I[".class (Java 17)"]
-        F -->|skotch-backend-dex| J[".dex (Dalvik v035)"]
-        F -->|skotch-backend-klib| K[".klib (serialized MIR)"]
-        K -->|skotch-backend-llvm| L[".ll (LLVM IR)"]
-        L -->|clang| M["native binary"]
-    end
-
-    subgraph "Packaging"
-        I -->|skotch-jar| N[".jar"]
-        J -->|skotch-apk| O[".apk"]
-        O -->|skotch-sign| P["signed APK"]
-    end
-
-    subgraph "Build orchestration"
-        Q["build.gradle.kts"] -->|skotch-buildscript| R["ProjectModel"]
-        R -->|skotch-build| S["discover sources"]
-        S --> G
-    end
 ```
+Phase 1 — GATHER (sequential)
+  for each .kt file:
+    lex → parse → extract top-level declarations
+  Build PackageSymbolTable from all files
+    (functions, vals, classes with JVM descriptors)
+
+Phase 2 — COMPILE (parallel via rayon)
+  for each .kt file (in parallel):
+    resolve(ast, pkg_symbols)     ← cross-file names visible
+    → typecheck(resolved)         ← cross-file signatures available
+    → lower(typed) → MirModule    ← cross-file calls → invokestatic
+
+Phase 3 — BACKEND (parallel via rayon)
+  for each MirModule (in parallel):
+    compile_module(mir) → .class files
+  Package into .jar
+```
+
+Each file produces its own `MirModule` with its own wrapper class (e.g.,
+`GreeterKt`, `MainKt`). Cross-file function calls emit `invokestatic
+OtherFileKt.method(descriptor)` — exactly what `kotlinc` produces. No
+MIR merging or FuncId remapping needed.
+
+**Key design decisions:**
+- Phase 2 tasks get their own `Interner` + `Diagnostics` to avoid
+  contention. The `PackageSymbolTable` is shared immutably via `Arc`.
+- Private declarations are excluded from the `PackageSymbolTable` at
+  gather time (visibility enforcement).
+- Cross-file class constructors resolve via the `import_map` +
+  `cross_file_classes` mechanism on `MirModule`.
+- Import aliases (`import X as Y`) are resolved at the import_map level.
+- Star imports (`import pkg.*`) enumerate user classes from the
+  `PackageSymbolTable`.
 
 ### Incremental compilation (salsa + blake3)
 
 The build pipeline uses [salsa](https://github.com/salsa-rs/salsa) for
-memoized, demand-driven compilation:
+memoized, demand-driven compilation and **blake3** content hashing for
+change detection:
 
-```mermaid
-sequenceDiagram
-    participant Build as skotch build
-    participant DB as salsa::Database
-    participant FE as Front-end
-    participant BE as Backend
-
-    Build->>DB: register SourceFile inputs
-    loop for each .kt file
-        Build->>DB: compile_file(file)
-        alt source unchanged (memoized)
-            DB-->>Build: cached MIR (instant)
-        else source changed
-            DB->>FE: lex → parse → resolve → typeck → MIR
-            FE-->>DB: MIR module (cached for next time)
-            DB-->>Build: fresh MIR
-        end
-    end
-    Build->>Build: merge MIR modules
-    Build->>BE: codegen (.class/.dex/.ll)
-    BE->>BE: write outputs (rayon parallel)
-```
-
-**blake3** provides content hashing for file fingerprinting. **rayon**
-parallelizes backend output (writing `.class` files, DEX encoding).
-
-The salsa database is the foundation for future LSP integration — the
-same `Db` instance can be held across edits, giving sub-millisecond
-incremental re-analysis.
+- **Within-build memoization:** Salsa caches `compile_file` results.
+  Unchanged files return instantly from cache.
+- **Cross-build incrementalism:** `IncrementalState` tracks blake3
+  content hashes per file and a symbol table hash. When a file changes,
+  only that file is recompiled. When public signatures change, all
+  dependent files are recompiled.
+- **Parallel I/O:** `.class` file writing and JAR packaging use
+  `rayon::par_iter()`.
+- **LSP integration:** The LSP server builds a `PackageSymbolTable` from
+  all open documents, enabling cross-file diagnostics and hover info.
 
 ### Crate dependency layers
 

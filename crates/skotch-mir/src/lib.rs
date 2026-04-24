@@ -629,6 +629,11 @@ pub struct MirClass {
     /// (Function1-only, direct invoke) byte-stable.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_suspend_lambda: bool,
+    /// True for stub entries from cross-file compilation. The stub provides
+    /// field/method metadata for the MIR lowerer but should NOT be emitted
+    /// as a class file by backends (the real class comes from another file).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_cross_file_stub: bool,
 }
 
 /// A field in a MIR class.

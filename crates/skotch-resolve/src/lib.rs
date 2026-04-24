@@ -17,7 +17,7 @@ use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
-    Block, Decl, Expr, FunDecl, KtFile, Param, Stmt, TemplatePart, TypeRef, ValDecl,
+    Block, Decl, Expr, FunDecl, KtFile, Param, Stmt, TemplatePart, TypeRef, ValDecl, Visibility,
 };
 use skotch_types::Ty;
 
@@ -130,6 +130,16 @@ pub struct ExternalClassDecl {
     /// Fully-qualified JVM internal name, e.g. "com/example/Greeter".
     pub jvm_name: String,
     pub kind: ExternalClassKind,
+    /// Constructor parameter fields (val/var in primary constructor).
+    pub fields: Vec<(String, Ty)>,
+    /// Method signatures: (name, param_tys, return_ty).
+    pub methods: Vec<(String, Vec<Ty>, Ty)>,
+    /// Superclass name (simple, not FQ).
+    pub super_class: Option<String>,
+    /// Whether the class is open.
+    pub is_open: bool,
+    /// Whether the class is abstract.
+    pub is_abstract: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -231,6 +241,10 @@ pub fn gather_declarations(
         for decl in &ast.decls {
             match decl {
                 Decl::Fun(f) => {
+                    // Private functions are file-scoped — not visible cross-file.
+                    if f.visibility == Visibility::Private {
+                        continue;
+                    }
                     let name = interner.resolve(f.name).to_string();
                     let descriptor = build_descriptor(
                         &f.params,
@@ -260,6 +274,9 @@ pub fn gather_declarations(
                     table.functions.entry(name).or_default().push(ext);
                 }
                 Decl::Val(v) => {
+                    if v.visibility == Visibility::Private {
+                        continue;
+                    }
                     let name = interner.resolve(v.name).to_string();
                     let ty =
                         v.ty.as_ref()
@@ -274,27 +291,76 @@ pub fn gather_declarations(
                     );
                 }
                 Decl::Class(c) => {
+                    if c.visibility == Visibility::Private {
+                        continue;
+                    }
                     let name = interner.resolve(c.name).to_string();
                     let kind = if c.is_data {
                         ExternalClassKind::DataClass
                     } else {
                         ExternalClassKind::Class
                     };
+                    // Collect constructor param fields (val/var).
+                    let fields: Vec<(String, Ty)> = c
+                        .constructor_params
+                        .iter()
+                        .filter(|p| p.is_val || p.is_var)
+                        .map(|p| {
+                            let fname = interner.resolve(p.name).to_string();
+                            let fty = type_ref_to_ty(&p.ty, interner);
+                            (fname, fty)
+                        })
+                        .collect();
+                    // Collect method signatures.
+                    let methods: Vec<(String, Vec<Ty>, Ty)> = c
+                        .methods
+                        .iter()
+                        .map(|m| {
+                            let mname = interner.resolve(m.name).to_string();
+                            let ptys: Vec<Ty> =
+                                m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
+                            let rty = m
+                                .return_ty
+                                .as_ref()
+                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .unwrap_or(Ty::Unit);
+                            (mname, ptys, rty)
+                        })
+                        .collect();
+                    let super_class = c.parent_class.as_ref().map(|sc| {
+                        interner.resolve(sc.name).to_string()
+                    });
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(c.name)),
                             kind,
+                            fields,
+                            methods,
+                            super_class,
+                            is_open: c.is_open,
+                            is_abstract: c.is_abstract,
                         },
                     );
                 }
                 Decl::Object(o) => {
                     let name = interner.resolve(o.name).to_string();
+                    let methods: Vec<(String, Vec<Ty>, Ty)> = o.methods.iter().map(|m| {
+                        let mname = interner.resolve(m.name).to_string();
+                        let ptys: Vec<Ty> = m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
+                        let rty = m.return_ty.as_ref().map(|tr| type_ref_to_ty(tr, interner)).unwrap_or(Ty::Unit);
+                        (mname, ptys, rty)
+                    }).collect();
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(o.name)),
                             kind: ExternalClassKind::Object,
+                            fields: Vec::new(),
+                            methods,
+                            super_class: None,
+                            is_open: false,
+                            is_abstract: false,
                         },
                     );
                 }
@@ -305,16 +371,32 @@ pub fn gather_declarations(
                         ExternalClassDecl {
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(e.name)),
                             kind: ExternalClassKind::Enum,
+                            fields: Vec::new(),
+                            methods: Vec::new(),
+                            super_class: None,
+                            is_open: false,
+                            is_abstract: false,
                         },
                     );
                 }
                 Decl::Interface(iface) => {
                     let name = interner.resolve(iface.name).to_string();
+                    let methods: Vec<(String, Vec<Ty>, Ty)> = iface.methods.iter().map(|m| {
+                        let mname = interner.resolve(m.name).to_string();
+                        let ptys: Vec<Ty> = m.params.iter().map(|p| type_ref_to_ty(&p.ty, interner)).collect();
+                        let rty = m.return_ty.as_ref().map(|tr| type_ref_to_ty(tr, interner)).unwrap_or(Ty::Unit);
+                        (mname, ptys, rty)
+                    }).collect();
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(iface.name)),
                             kind: ExternalClassKind::Interface,
+                            fields: Vec::new(),
+                            methods,
+                            super_class: None,
+                            is_open: false,
+                            is_abstract: true,
                         },
                     );
                 }

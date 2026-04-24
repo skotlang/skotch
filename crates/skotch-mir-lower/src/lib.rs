@@ -799,12 +799,25 @@ pub fn lower_file(
     for imp in &file.imports {
         let segments: Vec<&str> = imp.path.iter().map(|s| interner.resolve(*s)).collect();
         if imp.is_wildcard {
-            // `import foo.bar.*` — we can't enumerate classes, but store the package prefix
-            // for future classpath scanning. For now, no-op.
+            // Star imports: enumerate user classes/functions from
+            // PackageSymbolTable for the matching package prefix.
+            if let Some(pkg) = package_symbols {
+                let pkg_prefix = segments.join("/");
+                for (name, ext_class) in &pkg.classes {
+                    if ext_class.jvm_name.starts_with(&pkg_prefix) {
+                        import_map.entry(name.clone()).or_insert_with(|| ext_class.jvm_name.clone());
+                    }
+                }
+            }
         } else if !segments.is_empty() {
-            let simple_name = segments.last().unwrap().to_string();
+            // Use alias if present, otherwise use the simple name.
+            let key = if let Some(alias_sym) = imp.alias {
+                interner.resolve(alias_sym).to_string()
+            } else {
+                segments.last().unwrap().to_string()
+            };
             let jvm_path = segments.join("/");
-            import_map.insert(simple_name, jvm_path);
+            import_map.insert(key, jvm_path);
         }
     }
 
@@ -812,8 +825,9 @@ pub fn lower_file(
 
     // Register cross-file declarations so they're accessible from lower_expr.
     if let Some(pkg) = package_symbols {
-        // Classes → import_map (for type resolution) + cross_file_classes
-        // (for constructor calls).
+        // Classes → import_map + cross_file_classes + stub MirClass entries.
+        // The stub MirClass allows field access (`p.x`) and method dispatch
+        // (`g.greet()`) to work on cross-file class instances.
         for (name, ext_class) in &pkg.classes {
             if !module.import_map.contains_key(name) {
                 module
@@ -829,6 +843,69 @@ pub fn lower_file(
                     is_data,
                 ),
             );
+
+            // Only add a stub MirClass if one with this name doesn't
+            // already exist (the class might be defined in this file too).
+            let already_exists = module.classes.iter().any(|c| c.name == ext_class.jvm_name);
+            if !already_exists {
+                use skotch_mir::{MirClass, MirField, MirFunction, BasicBlock, Terminator, FuncId};
+                let fields: Vec<MirField> = ext_class
+                    .fields
+                    .iter()
+                    .map(|(fname, fty)| MirField {
+                        name: fname.clone(),
+                        ty: fty.clone(),
+                    })
+                    .collect();
+                let stub_fn = |mname: &str, param_tys: &[Ty], ret_ty: &Ty| -> MirFunction {
+                    let mut locals = vec![Ty::Class(ext_class.jvm_name.clone())];
+                    for pt in param_tys {
+                        locals.push(pt.clone());
+                    }
+                    let params: Vec<LocalId> = (0..locals.len() as u32).map(LocalId).collect();
+                    MirFunction {
+                        id: FuncId(0),
+                        name: mname.to_string(),
+                        params,
+                        locals,
+                        blocks: vec![BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::Return,
+                        }],
+                        return_ty: ret_ty.clone(),
+                        required_params: 0,
+                        param_names: Vec::new(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                    }
+                };
+                let methods: Vec<MirFunction> = ext_class
+                    .methods
+                    .iter()
+                    .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
+                    .collect();
+                let empty_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                module.classes.push(MirClass {
+                    name: ext_class.jvm_name.clone(),
+                    super_class: ext_class.super_class.clone(),
+                    is_open: ext_class.is_open,
+                    is_abstract: ext_class.is_abstract,
+                    is_interface: matches!(ext_class.kind, ExternalClassKind::Interface),
+                    interfaces: Vec::new(),
+                    fields,
+                    methods,
+                    constructor: empty_ctor,
+                    secondary_constructors: Vec::new(),
+                    is_suspend_lambda: false,
+                    is_cross_file_stub: true,
+                });
+            }
         }
         // Functions → cross_file_fns so bare calls resolve.
         for (name, decls) in &pkg.functions {
@@ -1220,6 +1297,7 @@ fn build_continuation_class(
         constructor: ctor,
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
+        is_cross_file_stub: false,
     }
 }
 
@@ -11653,6 +11731,7 @@ fn lower_expr(
                     constructor: ref_init,
                     secondary_constructors: Vec::new(),
                     is_suspend_lambda: false,
+        is_cross_file_stub: false,
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -11729,6 +11808,7 @@ fn lower_expr(
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
+                is_cross_file_stub: false,
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -12249,6 +12329,7 @@ fn lower_expr(
                 constructor: final_init_fn,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
+                is_cross_file_stub: false,
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -12435,6 +12516,7 @@ fn lower_expr(
                 constructor: init_fn,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
+        is_cross_file_stub: false,
             });
 
             // Instantiate.
@@ -13078,6 +13160,7 @@ fn lower_enum(
         constructor: init_fn,
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
+        is_cross_file_stub: false,
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -13700,6 +13783,7 @@ fn lower_class(
         constructor: init_fn.clone(),
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
+        is_cross_file_stub: false,
     });
 
     // Lower methods.
@@ -15040,6 +15124,7 @@ fn lower_class(
         constructor: init_fn,
         secondary_constructors: mir_secondary_ctors,
         is_suspend_lambda: false,
+        is_cross_file_stub: false,
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -15172,6 +15257,7 @@ fn lower_interface(
         constructor: dummy_init.clone(),
         secondary_constructors: Vec::new(),
         is_suspend_lambda: false,
+        is_cross_file_stub: false,
     });
 
     // Lower method bodies for default methods (non-abstract).

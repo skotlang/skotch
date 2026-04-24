@@ -1,10 +1,14 @@
-//! End-to-end build pipeline with salsa-based incremental + parallel compilation.
+//! End-to-end build pipeline with two-phase multi-file compilation.
 //!
-//! The pipeline uses a salsa [`skotch_db::Db`] for memoized, demand-driven
-//! compilation. Each source file is a salsa input; the front-end pipeline
-//! (lex → parse → resolve → typecheck → MIR) is a tracked function that
-//! salsa automatically caches. Files are compiled in parallel via rayon
-//! with cloned database handles.
+//! **Phase 1 (Gather)**: Parse all `.kt` files and build a
+//! [`PackageSymbolTable`] of all top-level declarations.
+//!
+//! **Phase 2 (Compile)**: Compile each file sequentially with the shared
+//! symbol table for cross-file visibility. Diagnostics accumulate in a
+//! shared sink and are rendered at the end.
+//!
+//! **Phase 3 (Backend)**: Write `.class` files in parallel via rayon and
+//! package into a JAR.
 
 use crate::discover::{discover_sources, find_build_file, find_settings_file};
 #[allow(unused_imports)]
@@ -86,23 +90,30 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
 
     // ── Two-phase multi-file compilation ──────────────────────────────
     //
-    // Phase 1: Parse all files and gather top-level declarations into a
-    //          shared PackageSymbolTable.
-    // Phase 2: Compile each file with cross-file visibility, producing
-    //          independent MirModules (no merging needed).
-    // Phase 3: Backend each MirModule into class files.
+    // Phase 1 (Gather): Parse all files, build PackageSymbolTable.
+    // Phase 2 (Compile): Compile each file with cross-file visibility.
+    // Phase 3 (Backend): Write .class files in parallel, package JAR.
 
     let mut diags = Diagnostics::new();
 
-    // Phase 1: Parse all files.
+    // Track which files changed for incremental logging.
+    let mut incr = skotch_db::IncrementalState::default();
+
+    // Phase 1: Parse all files (sequential — needs shared interner for gather).
     let mut parsed_files: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+    let mut changed_count = 0usize;
     for path in &src_files {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let path_str = path.to_string_lossy().to_string();
+        if incr.file_changed(&path_str, &text) {
+            changed_count += 1;
+        }
         let file_id = sm.add(path.clone(), text.clone());
         let lexed = lex(file_id, &text, &mut diags);
         let ast = parse_file(&lexed, &mut interner, &mut diags);
         let wrapper = wrapper_class_for(path);
+        incr.record_file(&path_str, &text, &wrapper, 0);
         parsed_files.push((file_id, ast, wrapper));
     }
 
@@ -113,11 +124,30 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         .collect();
     let pkg_symbols = gather_declarations(&refs, &interner);
 
-    // Phase 2: Compile each file with cross-file visibility.
+    // Compute symbol table hash for incremental tracking.
+    let sym_table_hash = skotch_db::content_hash(&format!("{:?}", pkg_symbols));
+    let _sym_table_changed = incr.symbol_table_changed(&sym_table_hash);
+    incr.set_symbol_table_hash(sym_table_hash);
+
+    eprintln!(
+        "  {} files, {} changed",
+        src_files.len(),
+        changed_count,
+    );
+
+    // Phase 2: Compile each file sequentially with cross-file visibility.
+    // Sequential compilation reuses Phase 1 ASTs and the shared interner,
+    // avoiding wasteful re-parsing. Diagnostics accumulate in the shared
+    // `diags` sink and are rendered with full source context at the end.
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
     for (_file_id, ast, wrapper) in &parsed_files {
-        let mir =
-            skotch_driver::compile_ast(ast, wrapper, &mut interner, &mut diags, Some(&pkg_symbols));
+        let mir = skotch_driver::compile_ast(
+            ast,
+            wrapper,
+            &mut interner,
+            &mut diags,
+            Some(&pkg_symbols),
+        );
         let classes = skotch_backend_jvm::compile_module(&mir, &interner);
         all_classes.extend(classes);
     }
