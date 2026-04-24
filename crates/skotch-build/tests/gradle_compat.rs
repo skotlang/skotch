@@ -88,10 +88,18 @@ fn hello_lib_skotch_builds_to_gradle_layout() {
     let outcome = result.unwrap();
 
     // JAR should be at build/libs/hello-lib.jar.
-    let jar_str = outcome.output_path.to_string_lossy();
+    // Use path components instead of string matching for Windows compat.
+    let jar_path = &outcome.output_path;
+    assert_eq!(
+        jar_path.file_name().and_then(|n| n.to_str()),
+        Some("hello-lib.jar"),
+        "JAR filename should be hello-lib.jar, got: {}",
+        jar_path.display()
+    );
     assert!(
-        jar_str.contains("build/libs/hello-lib.jar"),
-        "Expected build/libs/hello-lib.jar, got: {jar_str}"
+        jar_path.parent().map_or(false, |p| p.ends_with("build/libs")),
+        "JAR should be in build/libs/, got: {}",
+        jar_path.display()
     );
 
     // JAR should contain expected classes.
