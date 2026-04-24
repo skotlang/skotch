@@ -97,7 +97,7 @@ fn hello_lib_skotch_builds_to_gradle_layout() {
         jar_path.display()
     );
     assert!(
-        jar_path.parent().map_or(false, |p| p.ends_with("build/libs")),
+        jar_path.parent().is_some_and(|p| p.ends_with("build/libs")),
         "JAR should be in build/libs/, got: {}",
         jar_path.display()
     );
