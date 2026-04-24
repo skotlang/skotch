@@ -218,6 +218,7 @@ pub fn type_check(
     resolved: &ResolvedFile,
     interner: &mut Interner,
     diags: &mut Diagnostics,
+    _package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
 ) -> TypedFile {
     let mut tc = TypeChecker {
         interner,
@@ -1314,8 +1315,8 @@ mod tests {
         let mut diags = Diagnostics::new();
         let lf = lex(FileId(0), src, &mut diags);
         let file = parse_file(&lf, &mut interner, &mut diags);
-        let resolved = resolve_file(&file, &mut interner, &mut diags);
-        let typed = type_check(&file, &resolved, &mut interner, &mut diags);
+        let resolved = resolve_file(&file, &mut interner, &mut diags, None);
+        let typed = type_check(&file, &resolved, &mut interner, &mut diags, None);
         (typed, diags)
     }
 

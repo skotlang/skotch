@@ -61,18 +61,52 @@ impl Target {
 /// This is the shared front-end pipeline used by both `emit` (single-file)
 /// and `skotch-build` (project-level builds). Returns the MIR plus the
 /// interner so backends can look up strings.
+///
+/// When `package_symbols` is `Some`, cross-file declarations from the same
+/// compilation unit are visible during resolution and lowering.
 pub fn compile_source(
     source: &str,
     file_id: skotch_span::FileId,
     wrapper_class: &str,
     interner: &mut Interner,
     diags: &mut Diagnostics,
+    package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
 ) -> skotch_mir::MirModule {
     let lexed = lex(file_id, source, diags);
     let ast = parse_file(&lexed, interner, diags);
-    let resolved = resolve_file(&ast, interner, diags);
-    let typed = type_check(&ast, &resolved, interner, diags);
-    lower_file(&ast, &resolved, &typed, interner, diags, wrapper_class)
+    let resolved = resolve_file(&ast, interner, diags, package_symbols);
+    let typed = type_check(&ast, &resolved, interner, diags, package_symbols);
+    lower_file(
+        &ast,
+        &resolved,
+        &typed,
+        interner,
+        diags,
+        wrapper_class,
+        package_symbols,
+    )
+}
+
+/// Compile a pre-parsed AST to a [`MirModule`]. Used by the build pipeline
+/// which parses all files in Phase 1 (gather) and compiles in Phase 2.
+pub fn compile_ast(
+    ast: &skotch_syntax::KtFile,
+    wrapper_class: &str,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+    package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
+) -> skotch_mir::MirModule {
+    let resolved = resolve_file(ast, interner, diags, package_symbols);
+    let typed = type_check(ast, &resolved, interner, diags, package_symbols);
+    lower_file(
+        ast,
+        &resolved,
+        &typed,
+        interner,
+        diags,
+        wrapper_class,
+        package_symbols,
+    )
 }
 
 /// Options accepted by [`emit`].
@@ -111,11 +145,19 @@ fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
     let mut diags = Diagnostics::new();
     let lexed = lex(file_id, &source, &mut diags);
     let ast = parse_file(&lexed, &mut interner, &mut diags);
-    let resolved = resolve_file(&ast, &mut interner, &mut diags);
-    let typed = type_check(&ast, &resolved, &mut interner, &mut diags);
+    let resolved = resolve_file(&ast, &mut interner, &mut diags, None);
+    let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
 
     let wrapper = wrapper_class_for(&opts.input);
-    let mir = lower_file(&ast, &resolved, &typed, &mut interner, &mut diags, &wrapper);
+    let mir = lower_file(
+        &ast,
+        &resolved,
+        &typed,
+        &mut interner,
+        &mut diags,
+        &wrapper,
+        None,
+    );
 
     if diags.has_errors() {
         if print_diags {

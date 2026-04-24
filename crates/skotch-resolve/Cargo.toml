@@ -9,6 +9,7 @@ description = "Name resolution for Kotlin source"
 skotch-span        = { workspace = true }
 skotch-intern      = { workspace = true }
 skotch-syntax      = { workspace = true }
+skotch-types       = { workspace = true }
 skotch-diagnostics = { workspace = true }
 rustc-hash       = { workspace = true }
 

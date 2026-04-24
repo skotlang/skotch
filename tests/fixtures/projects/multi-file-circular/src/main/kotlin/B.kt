@@ -1,0 +1,1 @@
+fun fromB(): String = "B"

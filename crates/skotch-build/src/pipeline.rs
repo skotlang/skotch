@@ -7,13 +7,17 @@
 //! with cloned database handles.
 
 use crate::discover::{discover_sources, find_build_file, find_settings_file};
+#[allow(unused_imports)]
 use crate::merge::merge_modules;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use skotch_buildscript::{parse_buildfile, parse_settings, BuildTarget, ProjectModel};
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
+use skotch_lexer::lex;
 use skotch_mir::MirModule;
+use skotch_parser::parse_file;
+use skotch_resolve::gather_declarations;
 use skotch_span::SourceMap;
 use std::path::{Path, PathBuf};
 
@@ -80,55 +84,137 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         anyhow::bail!("no .kt sources found under {}", src_dir.display());
     }
 
-    // ── Salsa-based incremental + parallel compilation ────────────────
+    // ── Two-phase multi-file compilation ──────────────────────────────
     //
-    // Each source file is registered as a salsa input. The `compile_file`
-    // tracked function runs the full front-end pipeline and is memoized
-    // by salsa. On rebuild, only files whose text changed are recompiled.
-    // Files are compiled in parallel via rayon with cloned db handles.
-    let db = skotch_db::Db::new();
-    let salsa_files: Vec<skotch_db::SourceFile> = src_files
-        .iter()
-        .map(|path| {
-            let text = std::fs::read_to_string(path)
-                .with_context(|| format!("reading {}", path.display()))
-                .unwrap_or_default();
-            let class_name = wrapper_class_for(path);
-            db.add_source(path.to_string_lossy().to_string(), text, class_name)
-        })
-        .collect();
+    // Phase 1: Parse all files and gather top-level declarations into a
+    //          shared PackageSymbolTable.
+    // Phase 2: Compile each file with cross-file visibility, producing
+    //          independent MirModules (no merging needed).
+    // Phase 3: Backend each MirModule into class files.
 
-    // Compile all files in parallel via salsa + rayon.
-    let results = db.compile_all(&salsa_files);
+    let mut diags = Diagnostics::new();
 
-    // Merge MIR modules and check for errors.
-    let mut module = MirModule::default();
-    let mut error_count = 0;
-    for (file_module, has_errors) in results {
-        if has_errors {
-            error_count += 1;
-        }
-        merge_modules(&mut module, file_module);
+    // Phase 1: Parse all files.
+    let mut parsed_files: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+    for path in &src_files {
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let file_id = sm.add(path.clone(), text.clone());
+        let lexed = lex(file_id, &text, &mut diags);
+        let ast = parse_file(&lexed, &mut interner, &mut diags);
+        let wrapper = wrapper_class_for(path);
+        parsed_files.push((file_id, ast, wrapper));
     }
 
-    if error_count > 0 {
-        anyhow::bail!("compilation failed with {error_count} file(s) containing errors");
+    // Build the PackageSymbolTable from all parsed files.
+    let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed_files
+        .iter()
+        .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+        .collect();
+    let pkg_symbols = gather_declarations(&refs, &interner);
+
+    // Phase 2: Compile each file with cross-file visibility.
+    let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
+    for (_file_id, ast, wrapper) in &parsed_files {
+        let mir =
+            skotch_driver::compile_ast(ast, wrapper, &mut interner, &mut diags, Some(&pkg_symbols));
+        let classes = skotch_backend_jvm::compile_module(&mir, &interner);
+        all_classes.extend(classes);
+    }
+
+    if diags.has_errors() {
+        eprint!("{}", render(&diags, &sm));
+        anyhow::bail!("compilation failed");
     }
 
     // Backend dispatch.
     match target {
-        BuildTarget::Jvm => build_jvm(&project, &project_dir, &module, &interner),
-        BuildTarget::Android => build_android(&project, &project_dir, &module),
+        BuildTarget::Jvm => build_jvm_classes(&project, &project_dir, &all_classes, &interner),
+        BuildTarget::Android => {
+            // For Android, merge MIR modules (DEX needs a single module).
+            let mut module = skotch_mir::MirModule::default();
+            for (_file_id, ast, wrapper) in &parsed_files {
+                let mir = skotch_driver::compile_ast(
+                    ast,
+                    wrapper,
+                    &mut interner,
+                    &mut diags,
+                    Some(&pkg_symbols),
+                );
+                merge_modules(&mut module, mir);
+            }
+            build_android(&project, &project_dir, &module)
+        }
         BuildTarget::Native => {
             anyhow::bail!("native target not yet implemented for `skotch build`");
         }
     }
 }
 
+/// Build JVM output from pre-compiled class files (multi-file pipeline).
+fn build_jvm_classes(
+    project: &ProjectModel,
+    project_dir: &Path,
+    classes: &[(String, Vec<u8>)],
+    _interner: &Interner,
+) -> Result<BuildOutcome> {
+    // Write individual .class files in parallel.
+    let classes_dir = project_dir.join("build/classes");
+    std::fs::create_dir_all(&classes_dir)
+        .with_context(|| format!("creating {}", classes_dir.display()))?;
+    classes.par_iter().for_each(|(name, bytes)| {
+        let path = classes_dir.join(format!("{name}.class"));
+        if let Some(p) = path.parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
+        let _ = std::fs::write(&path, bytes);
+    });
+
+    // Determine main class: prefer MainKt, then any *Kt class.
+    let main_class = project
+        .main_class
+        .clone()
+        .or_else(|| {
+            classes
+                .iter()
+                .find(|(n, _)| n == "MainKt" || n.ends_with("/MainKt"))
+                .map(|(n, _)| n.clone())
+        })
+        .or_else(|| {
+            classes
+                .iter()
+                .find(|(n, _)| n.ends_with("Kt"))
+                .map(|(n, _)| n.clone())
+        })
+        .or_else(|| classes.first().map(|(n, _)| n.clone()))
+        .unwrap_or_else(|| "Main".to_string());
+
+    // Build a runnable JAR.
+    let jar_dir = project_dir.join("build");
+    std::fs::create_dir_all(&jar_dir).ok();
+    let jar_name = project
+        .group
+        .as_deref()
+        .and_then(|g| g.rsplit('.').next())
+        .unwrap_or("app");
+    let jar_path = jar_dir.join(format!("{jar_name}.jar"));
+    skotch_jar::write_jar(&jar_path, &main_class, classes)
+        .with_context(|| format!("writing {}", jar_path.display()))?;
+
+    eprintln!("BUILD SUCCESS: {}", jar_path.display());
+
+    Ok(BuildOutcome {
+        project: project.clone(),
+        target: BuildTarget::Jvm,
+        output_path: jar_path,
+    })
+}
+
+#[allow(dead_code)]
 fn build_jvm(
     project: &ProjectModel,
     project_dir: &Path,
-    module: &MirModule,
+    module: &skotch_mir::MirModule,
     interner: &Interner,
 ) -> Result<BuildOutcome> {
     let classes = skotch_backend_jvm::compile_module(module, interner);
@@ -147,10 +233,16 @@ fn build_jvm(
         let _ = std::fs::write(&path, bytes);
     });
 
-    // Determine main class.
+    // Determine main class: prefer MainKt, then any *Kt class.
     let main_class = project
         .main_class
         .clone()
+        .or_else(|| {
+            classes
+                .iter()
+                .find(|(n, _)| n == "MainKt" || n.ends_with("/MainKt"))
+                .map(|(n, _)| n.clone())
+        })
         .or_else(|| {
             classes
                 .iter()
@@ -296,22 +388,34 @@ fn build_multi_module(
             continue;
         }
 
-        let mut module_mir = MirModule::default();
+        // Phase 1: Parse all files in this module.
+        let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
         for path in &src_files {
             let text = std::fs::read_to_string(path)?;
             let file_id = sm.add(path.clone(), text.clone());
-            let class_name = wrapper_class_for(path);
-            let file_module = skotch_driver::compile_source(
-                &text,
-                file_id,
-                &class_name,
+            let lexed = lex(file_id, &text, &mut diags);
+            let ast = parse_file(&lexed, &mut interner, &mut diags);
+            let wrapper = wrapper_class_for(path);
+            parsed.push((file_id, ast, wrapper));
+        }
+        let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed
+            .iter()
+            .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+            .collect();
+        let pkg_syms = gather_declarations(&refs, &interner);
+
+        // Phase 2: Compile each file with cross-file visibility.
+        let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
+        for (_fid, ast, wrapper) in &parsed {
+            let mir = skotch_driver::compile_ast(
+                ast,
+                wrapper,
                 &mut interner,
                 &mut diags,
+                Some(&pkg_syms),
             );
-            merge_modules(&mut module_mir, file_module);
+            classes.extend(skotch_backend_jvm::compile_module(&mir, &interner));
         }
-
-        let classes = skotch_backend_jvm::compile_module(&module_mir, &interner);
         all_classes.extend(classes);
 
         // Track the "app" module (the one with a main class or the last one).

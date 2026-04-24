@@ -15,8 +15,11 @@
 use rustc_hash::FxHashMap;
 use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
-use skotch_span::Span;
-use skotch_syntax::{Block, Decl, Expr, FunDecl, KtFile, Param, Stmt, TemplatePart, ValDecl};
+use skotch_span::{FileId, Span};
+use skotch_syntax::{
+    Block, Decl, Expr, FunDecl, KtFile, Param, Stmt, TemplatePart, TypeRef, ValDecl,
+};
+use skotch_types::Ty;
 
 /// Stable identifier for any *defined* thing the resolver knows about.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -37,6 +40,10 @@ pub enum DefId {
     /// resolution against the Java class registry. Carries the Symbol
     /// so the name can be looked up later.
     PossibleExternal(Symbol),
+    /// Declaration from another file in the same package/module.
+    /// Deferred to MIR lowering, which has the PackageSymbolTable
+    /// with JVM class/descriptor details.
+    ExternalPackage(Symbol),
     /// Marker for an unresolved reference; the resolver has already
     /// emitted a diagnostic and downstream passes should stop.
     Error,
@@ -76,11 +83,259 @@ pub struct ResolvedFile {
     pub top_level: FxHashMap<Symbol, DefId>,
 }
 
+// ── Multi-file compilation support ──────────────────────────────────
+
+/// Top-level declarations visible across files within a compilation unit.
+/// Built by [`gather_declarations`] from all parsed KtFiles before
+/// resolution, enabling cross-file function calls and class references.
+#[derive(Clone, Debug, Default)]
+pub struct PackageSymbolTable {
+    /// Top-level function: name → declaration metadata (may have overloads).
+    pub functions: FxHashMap<String, Vec<ExternalFunDecl>>,
+    /// Top-level val: name → declaration metadata.
+    pub vals: FxHashMap<String, ExternalValDecl>,
+    /// User-defined class/object/enum/interface: name → declaration metadata.
+    pub classes: FxHashMap<String, ExternalClassDecl>,
+}
+
+/// Metadata for a top-level function from another file.
+#[derive(Clone, Debug)]
+pub struct ExternalFunDecl {
+    /// JVM internal name of the wrapper class, e.g. "com/example/GreeterKt".
+    pub owner_class: String,
+    /// JVM method descriptor, e.g. "(Ljava/lang/String;)I".
+    pub descriptor: String,
+    /// Return type for the typechecker.
+    pub return_ty: Ty,
+    /// Parameter types for the typechecker.
+    pub param_tys: Vec<Ty>,
+    /// Number of declared parameters (excluding receiver for extensions).
+    pub param_count: usize,
+    /// True if declared with `suspend`.
+    pub is_suspend: bool,
+    /// True if this is an extension function.
+    pub is_extension: bool,
+}
+
+/// Metadata for a top-level val from another file.
+#[derive(Clone, Debug)]
+pub struct ExternalValDecl {
+    pub owner_class: String,
+    pub ty: Ty,
+}
+
+/// Metadata for a class/object/enum/interface from another file.
+#[derive(Clone, Debug)]
+pub struct ExternalClassDecl {
+    /// Fully-qualified JVM internal name, e.g. "com/example/Greeter".
+    pub jvm_name: String,
+    pub kind: ExternalClassKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum ExternalClassKind {
+    Class,
+    DataClass,
+    Object,
+    Enum,
+    Interface,
+    SealedClass,
+}
+
+// ── Gather pass ─────────────────────────────────────────────────────
+
+/// Map an AST `TypeRef` name to a JVM type descriptor character/string.
+fn type_ref_to_descriptor(tr: &TypeRef, interner: &Interner) -> String {
+    let name = interner.resolve(tr.name);
+    if tr.nullable {
+        return "Ljava/lang/Object;".to_string();
+    }
+    match name {
+        "Int" => "I".to_string(),
+        "Long" => "J".to_string(),
+        "Double" => "D".to_string(),
+        "Float" => "F".to_string(),
+        "Boolean" => "Z".to_string(),
+        "Byte" => "B".to_string(),
+        "Short" => "S".to_string(),
+        "Char" => "C".to_string(),
+        "Unit" => "V".to_string(),
+        "String" => "Ljava/lang/String;".to_string(),
+        "IntArray" => "[I".to_string(),
+        "LongArray" => "[J".to_string(),
+        "DoubleArray" => "[D".to_string(),
+        "BooleanArray" => "[Z".to_string(),
+        "ByteArray" => "[B".to_string(),
+        _ => "Ljava/lang/Object;".to_string(),
+    }
+}
+
+/// Map an AST `TypeRef` to a `Ty` for the typechecker.
+fn type_ref_to_ty(tr: &TypeRef, interner: &Interner) -> Ty {
+    let name = interner.resolve(tr.name);
+    let base = skotch_types::ty_from_name(name).unwrap_or(Ty::Any);
+    if tr.nullable {
+        Ty::Nullable(Box::new(base))
+    } else {
+        base
+    }
+}
+
+/// Build a JVM method descriptor from function parameters and return type.
+fn build_descriptor(
+    params: &[Param],
+    return_ty: Option<&TypeRef>,
+    receiver_ty: Option<&TypeRef>,
+    interner: &Interner,
+) -> String {
+    let mut desc = String::from("(");
+    if let Some(recv) = receiver_ty {
+        desc.push_str(&type_ref_to_descriptor(recv, interner));
+    }
+    for p in params {
+        desc.push_str(&type_ref_to_descriptor(&p.ty, interner));
+    }
+    desc.push(')');
+    if let Some(ret) = return_ty {
+        desc.push_str(&type_ref_to_descriptor(ret, interner));
+    } else {
+        desc.push('V');
+    }
+    desc
+}
+
+/// Gather all top-level declarations from multiple parsed files into a
+/// shared [`PackageSymbolTable`]. This is Phase 1 of multi-file compilation.
+///
+/// Each entry in `files` is `(file_id, parsed_ast, wrapper_class_name)`.
+pub fn gather_declarations(
+    files: &[(FileId, &KtFile, &str)],
+    interner: &Interner,
+) -> PackageSymbolTable {
+    let mut table = PackageSymbolTable::default();
+
+    for (_file_id, ast, wrapper_class) in files {
+        // Compute package prefix for FQ JVM names.
+        let pkg_prefix = if let Some(ref pkg) = ast.package {
+            let segments: Vec<&str> = pkg.path.iter().map(|s| interner.resolve(*s)).collect();
+            if segments.is_empty() {
+                String::new()
+            } else {
+                format!("{}/", segments.join("/"))
+            }
+        } else {
+            String::new()
+        };
+        let fq_wrapper = format!("{pkg_prefix}{wrapper_class}");
+
+        for decl in &ast.decls {
+            match decl {
+                Decl::Fun(f) => {
+                    let name = interner.resolve(f.name).to_string();
+                    let descriptor = build_descriptor(
+                        &f.params,
+                        f.return_ty.as_ref(),
+                        f.receiver_ty.as_ref(),
+                        interner,
+                    );
+                    let return_ty = f
+                        .return_ty
+                        .as_ref()
+                        .map(|tr| type_ref_to_ty(tr, interner))
+                        .unwrap_or(Ty::Unit);
+                    let param_tys: Vec<Ty> = f
+                        .params
+                        .iter()
+                        .map(|p| type_ref_to_ty(&p.ty, interner))
+                        .collect();
+                    let ext = ExternalFunDecl {
+                        owner_class: fq_wrapper.clone(),
+                        descriptor,
+                        return_ty,
+                        param_count: f.params.len(),
+                        param_tys,
+                        is_suspend: f.is_suspend,
+                        is_extension: f.receiver_ty.is_some(),
+                    };
+                    table.functions.entry(name).or_default().push(ext);
+                }
+                Decl::Val(v) => {
+                    let name = interner.resolve(v.name).to_string();
+                    let ty =
+                        v.ty.as_ref()
+                            .map(|tr| type_ref_to_ty(tr, interner))
+                            .unwrap_or(Ty::Any);
+                    table.vals.insert(
+                        name,
+                        ExternalValDecl {
+                            owner_class: fq_wrapper.clone(),
+                            ty,
+                        },
+                    );
+                }
+                Decl::Class(c) => {
+                    let name = interner.resolve(c.name).to_string();
+                    let kind = if c.is_data {
+                        ExternalClassKind::DataClass
+                    } else {
+                        ExternalClassKind::Class
+                    };
+                    table.classes.insert(
+                        name,
+                        ExternalClassDecl {
+                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(c.name)),
+                            kind,
+                        },
+                    );
+                }
+                Decl::Object(o) => {
+                    let name = interner.resolve(o.name).to_string();
+                    table.classes.insert(
+                        name,
+                        ExternalClassDecl {
+                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(o.name)),
+                            kind: ExternalClassKind::Object,
+                        },
+                    );
+                }
+                Decl::Enum(e) => {
+                    let name = interner.resolve(e.name).to_string();
+                    table.classes.insert(
+                        name,
+                        ExternalClassDecl {
+                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(e.name)),
+                            kind: ExternalClassKind::Enum,
+                        },
+                    );
+                }
+                Decl::Interface(iface) => {
+                    let name = interner.resolve(iface.name).to_string();
+                    table.classes.insert(
+                        name,
+                        ExternalClassDecl {
+                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(iface.name)),
+                            kind: ExternalClassKind::Interface,
+                        },
+                    );
+                }
+                Decl::TypeAlias(_) | Decl::Unsupported { .. } => {}
+            }
+        }
+    }
+
+    table
+}
+
 /// Build a [`ResolvedFile`] from a parsed AST.
+///
+/// When `package_symbols` is `Some`, declarations from other files in the
+/// same compilation unit are registered as [`DefId::ExternalPackage`] so
+/// cross-file references resolve without error.
 pub fn resolve_file(
     file: &KtFile,
     interner: &mut Interner,
     diags: &mut Diagnostics,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> ResolvedFile {
     let mut r = Resolver {
         interner,
@@ -207,6 +462,33 @@ pub fn resolve_file(
                     .insert(iface.name, DefId::PossibleExternal(iface.name));
             }
             Decl::TypeAlias(_) | Decl::Unsupported { .. } => {}
+        }
+    }
+
+    // Register cross-file declarations from the PackageSymbolTable.
+    // Only add entries that don't conflict with local declarations
+    // (local declarations take priority).
+    if let Some(pkg) = package_symbols {
+        for name in pkg.functions.keys() {
+            let sym = r.interner.intern(name);
+            r.out
+                .top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
+        }
+        for name in pkg.vals.keys() {
+            let sym = r.interner.intern(name);
+            r.out
+                .top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
+        }
+        for name in pkg.classes.keys() {
+            let sym = r.interner.intern(name);
+            r.out
+                .top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
         }
     }
 
@@ -730,7 +1012,7 @@ mod tests {
         let mut diags = Diagnostics::new();
         let lf = lex(FileId(0), src, &mut diags);
         let file = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&file, &mut interner, &mut diags);
+        let r = resolve_file(&file, &mut interner, &mut diags, None);
         (r, diags, interner)
     }
 

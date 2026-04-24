@@ -2203,8 +2203,12 @@ dependencies = [
  "skotch-driver",
  "skotch-intern",
  "skotch-jar",
+ "skotch-lexer",
  "skotch-mir",
+ "skotch-parser",
+ "skotch-resolve",
  "skotch-span",
+ "skotch-syntax",
  "walkdir",
 ]
 
@@ -2446,6 +2450,7 @@ dependencies = [
  "skotch-parser",
  "skotch-span",
  "skotch-syntax",
+ "skotch-types",
 ]
 
 [[package]]
