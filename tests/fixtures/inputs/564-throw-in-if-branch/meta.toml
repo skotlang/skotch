@@ -1,0 +1,4 @@
+name = "564-throw-in-if-branch"
+status = "supported"
+features = ["throw", "if-expression", "guard-clause", "dead-code-elimination"]
+expected_output = "5\n42\n"

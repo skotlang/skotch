@@ -1,0 +1,4 @@
+name = "565-complex-string-template"
+status = "supported"
+features = ["string-template", "method-call-in-interpolation", "joinToString", "stdlib"]
+expected_output = "Count: 5\nGreeting: Hello, World!\nSum: 30, Product: 200\nItems: 1, 2, 3, 4, 5\nReversed: [5, 4, 3, 2, 1]\nFirst three: [1, 2, 3]\n"
