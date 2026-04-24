@@ -365,6 +365,10 @@ pub struct MirFunction {
     /// future work — see milestones.yaml v0.9.0.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_suspend: bool,
+    /// True for `inline fun` declarations. The function body should be
+    /// inlined at call sites rather than emitted as a separate method.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_inline: bool,
     /// Session 5: the Kotlin-source-level declared return type of a
     /// suspend function, captured before Session 2 rewrites
     /// `return_ty` to `Ty::Any`. Call sites need this to emit the

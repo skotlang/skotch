@@ -1,0 +1,4 @@
+name = "578-intersection-smart-cast"
+status = "supported"
+features = ["smart-cast", "is-check", "and-chain", "intersection"]
+expected_output = "long string: hello\nother\ninteger: 42\nother\n"

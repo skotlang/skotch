@@ -1,0 +1,4 @@
+name = "576-inline-function"
+status = "supported"
+features = ["inline", "reified", "type-check"]
+expected_output = "true\nfalse\n42\n"
