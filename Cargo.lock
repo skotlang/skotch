@@ -2212,6 +2212,7 @@ dependencies = [
  "skotch-resolve",
  "skotch-span",
  "skotch-syntax",
+ "skotch-tape",
  "walkdir",
  "which",
  "zip",
@@ -2507,6 +2508,7 @@ dependencies = [
  "indicatif",
  "reqwest",
  "roxmltree",
+ "sha1_smol",
 ]
 
 [[package]]

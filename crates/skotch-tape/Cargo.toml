@@ -11,3 +11,4 @@ directories  = { workspace = true }
 reqwest      = { workspace = true }
 roxmltree    = { workspace = true }
 indicatif    = { workspace = true }
+sha1_smol    = { workspace = true }
