@@ -12836,9 +12836,9 @@ fn overload_score(descriptor: &str, arg_types: &[Ty]) -> i32 {
             (Some(Ty::Double), "D") | (Some(Ty::Double), "F") => 3,
             (Some(Ty::Bool), "Z") => 3,
             (Some(Ty::String), "Ljava/lang/String;") => 3,
-            (Some(Ty::Int), "J") => 2,     // int widens to long (preferred)
+            (Some(Ty::Int), "J") => 2, // int widens to long (preferred)
             (Some(Ty::Int), "D") | (Some(Ty::Int), "F") => 1, // int widens to double/float (less preferred)
-            (Some(Ty::Long), "D") => 1,    // long widens to double
+            (Some(Ty::Long), "D") => 1,                       // long widens to double
             (Some(Ty::String), "Ljava/lang/Object;") => 2,
             (Some(Ty::Int), "Ljava/lang/Object;") => 1, // autobox
             (Some(Ty::Long), "Ljava/lang/Object;") => 1,
