@@ -15,7 +15,9 @@ use crate::discover::{discover_sources, find_build_file, find_settings_file};
 use crate::merge::merge_modules;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use skotch_buildscript::{parse_buildfile, parse_settings, BuildTarget, ProjectModel};
+use skotch_buildscript::{
+    parse_buildfile, parse_buildfile_with_catalog, parse_settings, BuildTarget, ProjectModel,
+};
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
 use skotch_lexer::lex;
@@ -75,7 +77,12 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
     let buildfile_text = std::fs::read_to_string(&buildfile)
         .with_context(|| format!("reading {}", buildfile.display()))?;
     let buildfile_id = sm.add(buildfile.clone(), buildfile_text.clone());
-    let parsed = parse_buildfile(&buildfile_text, buildfile_id, &mut interner);
+    let parsed = parse_buildfile_with_catalog(
+        &buildfile_text,
+        buildfile_id,
+        &mut interner,
+        Some(&project_dir),
+    );
 
     let mut project = parsed.project;
     if let Some(t) = opts.target_override.clone() {
@@ -113,12 +120,27 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
         eprintln!("  {} dependencies resolved", resolved_jars.len());
     }
 
-    // Discover sources.
-    let src_dir = project_dir.join("src/main/kotlin");
-    let src_files =
-        discover_sources(&src_dir).with_context(|| format!("scanning {}", src_dir.display()))?;
+    // Discover sources from configured directories or default.
+    let src_dirs: Vec<PathBuf> = if project.source_dirs.is_empty() {
+        vec![project_dir.join("src/main/kotlin")]
+    } else {
+        project
+            .source_dirs
+            .iter()
+            .map(|d| project_dir.join(d))
+            .collect()
+    };
+    let mut src_files = Vec::new();
+    for src_dir in &src_dirs {
+        src_files.extend(discover_sources(src_dir).unwrap_or_default());
+    }
     if src_files.is_empty() {
-        anyhow::bail!("no .kt sources found under {}", src_dir.display());
+        let dirs_str = src_dirs
+            .iter()
+            .map(|d| d.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        anyhow::bail!("no .kt sources found under {}", dirs_str);
     }
 
     // ── Salsa-based incremental multi-file compilation ─────────────────
@@ -238,6 +260,9 @@ fn build_jvm_classes(
         .or_else(|| classes.first().map(|(n, _)| n.clone()))
         .unwrap_or_else(|| "Main".to_string());
 
+    // Discover resource files from src/main/resources/.
+    let resources = discover_resources(&project_dir.join("src/main/resources"));
+
     // Build a runnable JAR (Gradle-compatible: build/libs/{project-name}.jar).
     let jar_dir = project_dir.join("build/libs");
     std::fs::create_dir_all(&jar_dir).ok();
@@ -250,10 +275,10 @@ fn build_jvm_classes(
     });
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
     if dep_jars.is_empty() {
-        skotch_jar::write_jar(&jar_path, &main_class, classes)
+        skotch_jar::write_jar(&jar_path, &main_class, classes, &resources)
             .with_context(|| format!("writing {}", jar_path.display()))?;
     } else {
-        skotch_jar::write_fat_jar(&jar_path, &main_class, classes, dep_jars)
+        skotch_jar::write_fat_jar(&jar_path, &main_class, classes, dep_jars, &resources)
             .with_context(|| format!("writing fat JAR {}", jar_path.display()))?;
     }
 
@@ -315,7 +340,7 @@ fn build_jvm(
             .unwrap_or("app")
     });
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
-    skotch_jar::write_jar(&jar_path, &main_class, &classes)
+    skotch_jar::write_jar(&jar_path, &main_class, &classes, &[])
         .with_context(|| format!("writing {}", jar_path.display()))?;
 
     eprintln!("BUILD SUCCESS: {}", jar_path.display());
@@ -710,7 +735,7 @@ fn build_multi_module(
     std::fs::create_dir_all(&jar_dir).ok();
     let jar_name = settings.root_project_name.as_deref().unwrap_or("app");
     let jar_path = jar_dir.join(format!("{jar_name}.jar"));
-    skotch_jar::write_jar(&jar_path, &main_class, &all_classes)?;
+    skotch_jar::write_jar(&jar_path, &main_class, &all_classes, &[])?;
 
     eprintln!("  {} modules, {} classes compiled", n, all_classes.len());
     eprintln!("BUILD SUCCESS: {}", jar_path.display());
@@ -725,6 +750,40 @@ fn build_multi_module(
 /// Resolve external Maven dependencies declared in `build.gradle.kts`.
 /// Downloads JARs (with transitive deps) from Maven Central, caches them
 /// in `~/.skotch/cache/maven/`, and returns the list of local JAR paths.
+/// Collect all files under a resources directory, returning
+/// `(jar_entry_path, contents)` pairs with paths relative to the root.
+fn discover_resources(root: &Path) -> Vec<(String, Vec<u8>)> {
+    if !root.is_dir() {
+        return Vec::new();
+    }
+    let mut resources = Vec::new();
+    for entry in walkdir::WalkDir::new(root)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() {
+            if let Ok(rel) = path.strip_prefix(root) {
+                // Use forward slashes for JAR entry paths.
+                let jar_path = rel.to_string_lossy().replace('\\', "/");
+                if let Ok(bytes) = std::fs::read(path) {
+                    resources.push((jar_path, bytes));
+                }
+            }
+        }
+    }
+    resources
+}
+
+/// Default repository URLs when none are configured in build.gradle.kts.
+fn default_repos() -> Vec<String> {
+    vec![
+        "https://repo1.maven.org/maven2".to_string(),
+        "https://dl.google.com/dl/android/maven2".to_string(),
+    ]
+}
+
 fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<Vec<PathBuf>> {
     if project.external_deps.is_empty() {
         return Ok(Vec::new());
@@ -740,7 +799,11 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
         return Ok(Vec::new());
     }
 
-    let repos = vec!["https://repo1.maven.org/maven2".to_string()];
+    let repos = if project.repositories.is_empty() {
+        default_repos()
+    } else {
+        project.repositories.clone()
+    };
     let resolved = skotch_tape::resolve(&coords, &repos, false)
         .with_context(|| "resolving Maven dependencies")?;
 

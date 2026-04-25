@@ -5,12 +5,13 @@ use std::path::Path;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
-/// Write a runnable JAR with the given main class and the given
-/// `(internal_name, bytes)` `.class` payloads.
+/// Write a runnable JAR with the given main class, `.class` payloads,
+/// and resource files.
 pub fn write_jar(
     output: &Path,
     main_class: &str,
     classes: &[(String, Vec<u8>)],
+    resources: &[(String, Vec<u8>)],
 ) -> std::io::Result<()> {
     let file = std::fs::File::create(output)?;
     let mut zip = zip::ZipWriter::new(file);
@@ -29,6 +30,11 @@ pub fn write_jar(
         zip.write_all(bytes)?;
     }
 
+    for (path, bytes) in resources {
+        zip.start_file(path, opts)?;
+        zip.write_all(bytes)?;
+    }
+
     zip.finish()?;
     Ok(())
 }
@@ -40,6 +46,7 @@ pub fn write_fat_jar(
     main_class: &str,
     classes: &[(String, Vec<u8>)],
     dep_jars: &[std::path::PathBuf],
+    resources: &[(String, Vec<u8>)],
 ) -> std::io::Result<()> {
     use std::collections::HashSet;
     use std::io::Read;
@@ -64,6 +71,14 @@ pub fn write_fat_jar(
         let entry_name = format!("{internal_name}.class");
         if written.insert(entry_name.clone()) {
             zip_out.start_file(&entry_name, opts)?;
+            zip_out.write_all(bytes)?;
+        }
+    }
+
+    // Write resource files.
+    for (path, bytes) in resources {
+        if written.insert(path.clone()) {
+            zip_out.start_file(path, opts)?;
             zip_out.write_all(bytes)?;
         }
     }

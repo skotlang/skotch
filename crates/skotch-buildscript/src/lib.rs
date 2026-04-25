@@ -59,6 +59,10 @@ pub struct ProjectModel {
     pub test_framework: TestFramework,
     /// Custom test source directories from `sourceSets { test { ... } }`.
     pub test_source_dirs: Vec<String>,
+    /// Custom main source directories from `sourceSets { main { ... } }`.
+    pub source_dirs: Vec<String>,
+    /// Maven repository URLs parsed from `repositories { ... }`.
+    pub repositories: Vec<String>,
 }
 
 /// Which test framework the project uses.
@@ -101,13 +105,72 @@ pub struct ParsedSettings {
 
 /// Parse a `build.gradle.kts` source string into a [`ProjectModel`].
 pub fn parse_buildfile(src: &str, file: FileId, _interner: &mut Interner) -> ParsedBuildFile {
+    parse_buildfile_with_catalog(src, file, _interner, None)
+}
+
+/// Parse a `build.gradle.kts` with optional version catalog resolution.
+/// If `project_dir` is given, looks for `gradle/libs.versions.toml` and
+/// resolves `libs.*` dependency references to Maven coordinates.
+pub fn parse_buildfile_with_catalog(
+    src: &str,
+    file: FileId,
+    _interner: &mut Interner,
+    project_dir: Option<&std::path::Path>,
+) -> ParsedBuildFile {
     let mut diags = Diagnostics::new();
     let lexed = skotch_lexer::lex(file, src, &mut diags);
     let mut walker = Walker::new(src, &lexed);
     walker.parse_build();
-    ParsedBuildFile {
-        project: walker.project,
-        diags,
+    let mut project = walker.project;
+
+    // Try to load version catalog if project_dir is given.
+    if let Some(dir) = project_dir {
+        let catalog_path = dir.join("gradle/libs.versions.toml");
+        if catalog_path.exists() {
+            if let Ok(catalog) = version_catalog::parse_version_catalog(&catalog_path) {
+                resolve_catalog_deps(&mut project, &catalog);
+            }
+        }
+    }
+
+    ParsedBuildFile { project, diags }
+}
+
+/// Resolve `libs.*` style dependency references using a version catalog.
+fn resolve_catalog_deps(project: &mut ProjectModel, catalog: &version_catalog::VersionCatalog) {
+    let resolve_list = |deps: &mut Vec<String>| {
+        for dep in deps.iter_mut() {
+            // If the dep looks like "libs.xxx.yyy", resolve via catalog.
+            if dep.starts_with("libs.") {
+                let key = dep.strip_prefix("libs.").unwrap();
+                // Gradle convention: dots in accessor path become dashes in
+                // the catalog key (e.g. libs.commons.math3 → commons-math3).
+                let catalog_key = key.replace('.', "-");
+                if let Some(lib) = catalog.libraries.get(&catalog_key) {
+                    *dep = lib.coordinate();
+                }
+            }
+        }
+    };
+    resolve_list(&mut project.external_deps);
+    resolve_list(&mut project.test_deps);
+
+    // Resolve plugin flags from catalog.
+    // If no plugins were detected via standard parsing, check catalog.
+    if !project.is_kotlin {
+        for plugin in catalog.plugins.values() {
+            match plugin.id.as_str() {
+                "org.jetbrains.kotlin.jvm" => project.is_kotlin = true,
+                "org.jetbrains.kotlin.android" | "org.jetbrains.kotlin.multiplatform" => {
+                    project.is_kotlin = true;
+                }
+                "com.android.application" | "com.android.library" => {
+                    project.is_android = true;
+                    project.is_kotlin = true;
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -245,7 +308,7 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             "plugins" => self.parse_plugins_block(),
             "group" => self.parse_string_assign("group"),
             "version" => self.parse_string_assign("version"),
-            "repositories" => self.skip_brace_block(),
+            "repositories" => self.parse_repositories_block(),
             "dependencies" => self.parse_dependencies_block(),
             "application" => self.parse_application_block(),
             "android" => self.parse_android_block(),
@@ -298,6 +361,15 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                             self.apply_plugin_id(&val);
                         }
                         self.skip_past(TokenKind::RParen);
+                    }
+                    "alias" if self.peek() == TokenKind::LParen => {
+                        // alias(libs.plugins.kotlin.jvm) — version catalog plugin ref.
+                        // The actual resolution happens post-parse via version catalog.
+                        // For now, just skip the parens.
+                        self.skip_past(TokenKind::RParen);
+                    }
+                    "`java-library`" | "java-library" => {
+                        // java-library plugin — common in library projects
                     }
                     "application" => { /* marker plugin; nothing to record */ }
                     _ => {}
@@ -595,9 +667,11 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             if self.peek() == TokenKind::Ident {
                 let span = self.bump();
                 let set_name = self.text(span).to_string();
-                if set_name == "test" && self.peek() == TokenKind::LBrace {
+                if (set_name == "test" || set_name == "main") && self.peek() == TokenKind::LBrace {
+                    let is_test = set_name == "test";
                     self.bump();
-                    // Inside test { ... }, look for kotlin.srcDir("path").
+                    // Inside test/main { ... }, look for kotlin.srcDir("path")
+                    // or kotlin.srcDirs("path1", "path2").
                     loop {
                         self.skip_newlines();
                         if self.peek() == TokenKind::RBrace || self.at_end() {
@@ -609,12 +683,26 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                                 self.bump(); // consume '.'
                                 if self.peek() == TokenKind::Ident {
                                     let method = self.bump();
-                                    if self.text(method) == "srcDir"
+                                    let method_name = self.text(method).to_string();
+                                    if (method_name == "srcDir" || method_name == "srcDirs")
                                         && self.peek() == TokenKind::LParen
                                     {
                                         self.bump();
-                                        if let Some(dir) = self.try_consume_string() {
-                                            self.project.test_source_dirs.push(dir);
+                                        // Consume all string args (srcDirs can have multiple).
+                                        loop {
+                                            if let Some(dir) = self.try_consume_string() {
+                                                let target = if is_test {
+                                                    &mut self.project.test_source_dirs
+                                                } else {
+                                                    &mut self.project.source_dirs
+                                                };
+                                                target.push(dir);
+                                            }
+                                            if self.peek() == TokenKind::Comma {
+                                                self.bump();
+                                            } else {
+                                                break;
+                                            }
                                         }
                                         self.skip_past(TokenKind::RParen);
                                     }
@@ -647,6 +735,98 @@ impl<'src, 'lf> Walker<'src, 'lf> {
         true
     }
 
+    /// Parse `repositories { mavenCentral(); google(); maven("url") }`.
+    fn parse_repositories_block(&mut self) -> bool {
+        if self.peek() != TokenKind::LBrace {
+            return self.skip_to_newline_ret();
+        }
+        self.bump();
+        loop {
+            self.skip_newlines();
+            if self.peek() == TokenKind::RBrace || self.at_end() {
+                break;
+            }
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let name = self.text(span).to_string();
+                match name.as_str() {
+                    "mavenCentral" => {
+                        // mavenCentral() — skip parens
+                        if self.peek() == TokenKind::LParen {
+                            self.skip_past(TokenKind::RParen);
+                        }
+                        self.project
+                            .repositories
+                            .push("https://repo1.maven.org/maven2".to_string());
+                    }
+                    "google" => {
+                        if self.peek() == TokenKind::LParen {
+                            self.skip_past(TokenKind::RParen);
+                        }
+                        self.project
+                            .repositories
+                            .push("https://dl.google.com/dl/android/maven2".to_string());
+                    }
+                    "maven" => {
+                        // maven("url") or maven { url = "..." } or maven { url = uri("...") }
+                        if self.peek() == TokenKind::LParen {
+                            self.bump();
+                            if let Some(url) = self.try_consume_string() {
+                                self.project.repositories.push(url);
+                            }
+                            self.skip_past(TokenKind::RParen);
+                        } else if self.peek() == TokenKind::LBrace {
+                            self.bump();
+                            // Look for url = "..." or url = uri("...")
+                            loop {
+                                self.skip_newlines();
+                                if self.peek() == TokenKind::RBrace || self.at_end() {
+                                    break;
+                                }
+                                if self.peek() == TokenKind::Ident {
+                                    let inner = self.bump();
+                                    if self.text(inner) == "url" {
+                                        // skip '=' or `.set(`
+                                        if self.peek() == TokenKind::Eq {
+                                            self.bump();
+                                        }
+                                        // url = "https://..." or url = uri("https://...")
+                                        if let Some(url) = self.try_consume_string() {
+                                            self.project.repositories.push(url);
+                                        } else if self.peek() == TokenKind::Ident {
+                                            let fn_span = self.bump();
+                                            if self.text(fn_span) == "uri"
+                                                && self.peek() == TokenKind::LParen
+                                            {
+                                                self.bump();
+                                                if let Some(url) = self.try_consume_string() {
+                                                    self.project.repositories.push(url);
+                                                }
+                                                self.skip_past(TokenKind::RParen);
+                                            }
+                                        }
+                                    }
+                                }
+                                self.skip_to_newline();
+                            }
+                            if self.peek() == TokenKind::RBrace {
+                                self.bump();
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                self.bump();
+            }
+            self.skip_to_newline();
+        }
+        if self.peek() == TokenKind::RBrace {
+            self.bump();
+        }
+        true
+    }
+
     fn parse_dependencies_block(&mut self) -> bool {
         if self.peek() != TokenKind::LBrace {
             return false;
@@ -675,10 +855,41 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                     self.bump();
                     if self.peek() == TokenKind::Ident {
                         let inner = self.bump();
-                        if self.text(inner) == "project" && self.peek() == TokenKind::LParen {
+                        let inner_text = self.text(inner).to_string();
+                        if inner_text == "project" && self.peek() == TokenKind::LParen {
                             self.bump();
                             if let Some(dep) = self.try_consume_string() {
                                 self.project.project_deps.push(dep);
+                            }
+                            self.skip_past(TokenKind::RParen);
+                        } else if inner_text == "libs" {
+                            // Version catalog reference: libs.commons.math3
+                            let mut path = String::from("libs");
+                            while self.peek() == TokenKind::Dot {
+                                self.bump();
+                                if self.peek() == TokenKind::Ident {
+                                    let seg = self.bump();
+                                    path.push('.');
+                                    path.push_str(self.text(seg));
+                                }
+                            }
+                            // Store as "libs.xxx" — resolved post-parse via catalog.
+                            let target = if is_test_dep {
+                                &mut self.project.test_deps
+                            } else {
+                                &mut self.project.external_deps
+                            };
+                            target.push(path);
+                        } else if inner_text == "kotlin" && self.peek() == TokenKind::LParen {
+                            // kotlin("stdlib") → org.jetbrains.kotlin:kotlin-stdlib
+                            self.bump();
+                            if let Some(module) = self.try_consume_string() {
+                                let coord = format!("org.jetbrains.kotlin:kotlin-{module}:1.9.22");
+                                if is_test_dep {
+                                    self.project.test_deps.push(coord);
+                                } else {
+                                    self.project.external_deps.push(coord);
+                                }
                             }
                             self.skip_past(TokenKind::RParen);
                         }
@@ -1225,5 +1436,134 @@ mod tests {
         let mut interner = Interner::new();
         let parsed = parse_buildfile(src, FileId(0), &mut interner);
         assert_eq!(parsed.project.test_framework, TestFramework::None);
+    }
+
+    #[test]
+    fn parse_repositories_maven_central_and_google() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            repositories {
+                mavenCentral()
+                google()
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.repositories.len(), 2);
+        assert!(parsed.project.repositories[0].contains("repo1.maven.org"));
+        assert!(parsed.project.repositories[1].contains("google.com"));
+    }
+
+    #[test]
+    fn parse_repositories_maven_url_brace() {
+        let src = r#"
+            repositories {
+                maven { url = "https://jitpack.io" }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed
+            .project
+            .repositories
+            .contains(&"https://jitpack.io".to_string()));
+    }
+
+    #[test]
+    fn parse_repositories_maven_url_paren() {
+        let src = r#"
+            repositories {
+                maven("https://custom.repo.com/maven")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed
+            .project
+            .repositories
+            .contains(&"https://custom.repo.com/maven".to_string()));
+    }
+
+    #[test]
+    fn parse_main_source_dirs() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            sourceSets {
+                main {
+                    kotlin.srcDirs("src", "gen")
+                }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.source_dirs, vec!["src", "gen"]);
+    }
+
+    #[test]
+    fn parse_main_source_dir_single() {
+        let src = r#"
+            sourceSets {
+                main {
+                    kotlin.srcDir("app/src")
+                }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.source_dirs, vec!["app/src"]);
+    }
+
+    #[test]
+    fn parse_version_catalog_deps() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            dependencies {
+                implementation(libs.commons.math3)
+                testImplementation(libs.junit)
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.external_deps, vec!["libs.commons.math3"]);
+        assert_eq!(parsed.project.test_deps, vec!["libs.junit"]);
+    }
+
+    #[test]
+    fn resolve_version_catalog_integration() {
+        let catalog_src = r#"
+[versions]
+math = "3.6.1"
+
+[libraries]
+commons-math3 = "org.apache.commons:commons-math3:3.6.1"
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "1.9.22" }
+"#;
+        let catalog = crate::version_catalog::parse_version_catalog_str(catalog_src).unwrap();
+        let mut project = ProjectModel {
+            external_deps: vec!["libs.commons.math3".to_string()],
+            ..Default::default()
+        };
+        resolve_catalog_deps(&mut project, &catalog);
+        assert_eq!(
+            project.external_deps,
+            vec!["org.apache.commons:commons-math3:3.6.1"]
+        );
+        // Plugin flags should be set from catalog.
+        assert!(project.is_kotlin);
+    }
+
+    #[test]
+    fn parse_alias_in_plugins() {
+        let src = r#"
+            plugins {
+                alias(libs.plugins.kotlin.jvm)
+            }
+        "#;
+        let mut interner = Interner::new();
+        // Without catalog, alias is silently accepted (no crash).
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.target, Some(BuildTarget::Jvm));
     }
 }

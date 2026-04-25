@@ -1431,6 +1431,73 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
     }
 }
 
+/// Emit MIR to create a new exception and throw it.
+/// If `message` is Some, invokes the lambda to get a String and passes it
+/// to the exception's `(Ljava/lang/Object;)V` constructor. Otherwise uses
+/// the no-arg constructor.
+/// Emit MIR to create a new exception and throw it.
+/// If `message` is Some, invokes the lambda to get a String and passes it
+/// to the exception constructor. Uses `lookup_constructor` to find the
+/// correct descriptor.
+fn emit_throw_new(fb: &mut FnBuilder, exception_class: &str, message: Option<LocalId>) {
+    let exc = fb.new_local(Ty::Class(exception_class.to_string()));
+    fb.push_stmt(MStmt::Assign {
+        dest: exc,
+        value: Rvalue::NewInstance(exception_class.to_string()),
+    });
+    if let Some(msg_local) = message {
+        // The message argument may be a lambda (require(cond) { "msg" }).
+        // If it's a lambda class, invoke it to get the String. Otherwise
+        // use it directly.
+        let msg_ty = fb.mf.locals[msg_local.0 as usize].clone();
+        let msg = if matches!(&msg_ty, Ty::Class(n) if n.contains("$Lambda$")) {
+            let result = fb.new_local(Ty::Any);
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Call {
+                    kind: CallKind::Virtual {
+                        class_name: if let Ty::Class(n) = &msg_ty {
+                            n.clone()
+                        } else {
+                            unreachable!()
+                        },
+                        method_name: "invoke".to_string(),
+                    },
+                    args: vec![msg_local],
+                },
+            });
+            result
+        } else {
+            msg_local
+        };
+        // Find the correct constructor descriptor via ClasspathIndex.
+        let descriptor = lookup_constructor(exception_class, 1, &[Ty::String])
+            .unwrap_or_else(|| "(Ljava/lang/String;)V".to_string());
+        fb.push_stmt(MStmt::Assign {
+            dest: exc,
+            value: Rvalue::Call {
+                kind: CallKind::ConstructorJava {
+                    class_name: exception_class.to_string(),
+                    descriptor,
+                },
+                args: vec![msg],
+            },
+        });
+    } else {
+        fb.push_stmt(MStmt::Assign {
+            dest: exc,
+            value: Rvalue::Call {
+                kind: CallKind::ConstructorJava {
+                    class_name: exception_class.to_string(),
+                    descriptor: "()V".to_string(),
+                },
+                args: vec![],
+            },
+        });
+    }
+    fb.set_terminator(Terminator::Throw(exc));
+}
+
 /// Detect whether a lambda body contains a call to a suspend function.
 /// Used to mark the lambda as a suspend lambda so future codegen can
 /// generate a `SuspendLambda`-extending class.
@@ -8560,28 +8627,77 @@ fn lower_expr(
                 return Some(dest);
             }
 
-            // `require(condition)` — throw IllegalArgumentException if false.
-            if callee_str == "require" && arg_locals.len() == 1 {
-                // Simplistic: just ignore the check (no-op). The value
-                // is consumed but no exception is thrown.
+            // `require(condition)` / `require(condition) { "msg" }`
+            // → if (!condition) throw IllegalArgumentException(msg?)
+            if callee_str == "require" && (arg_locals.len() == 1 || arg_locals.len() == 2) {
+                let cond = arg_locals[0];
+                let throw_block = fb.new_block();
+                let ok_block = fb.new_block();
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond,
+                        then_block: ok_block,
+                        else_block: throw_block,
+                    },
+                    throw_block,
+                );
+                emit_throw_new(
+                    fb,
+                    "java/lang/IllegalArgumentException",
+                    if arg_locals.len() == 2 {
+                        Some(arg_locals[1])
+                    } else {
+                        None
+                    },
+                );
+                fb.cur_block = ok_block;
                 let dest = fb.new_local(Ty::Unit);
                 return Some(dest);
             }
 
-            // `check(condition)` — same as require but IllegalStateException.
-            if callee_str == "check" && arg_locals.len() == 1 {
+            // `check(condition)` / `check(condition) { "msg" }`
+            // → if (!condition) throw IllegalStateException(msg?)
+            if callee_str == "check" && (arg_locals.len() == 1 || arg_locals.len() == 2) {
+                let cond = arg_locals[0];
+                let throw_block = fb.new_block();
+                let ok_block = fb.new_block();
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond,
+                        then_block: ok_block,
+                        else_block: throw_block,
+                    },
+                    throw_block,
+                );
+                emit_throw_new(
+                    fb,
+                    "java/lang/IllegalStateException",
+                    if arg_locals.len() == 2 {
+                        Some(arg_locals[1])
+                    } else {
+                        None
+                    },
+                );
+                fb.cur_block = ok_block;
                 let dest = fb.new_local(Ty::Unit);
                 return Some(dest);
             }
 
-            // `error(message)` — throw IllegalStateException(message).
+            // `error(message)` → throw IllegalStateException(message)
             if callee_str == "error" && arg_locals.len() == 1 {
+                emit_throw_new(fb, "java/lang/IllegalStateException", Some(arg_locals[0]));
                 let dest = fb.new_local(Ty::Nothing);
                 return Some(dest);
             }
 
-            // `TODO()` / `TODO(message)` — throw NotImplementedError.
+            // `TODO()` / `TODO(message)` → throw NotImplementedError
             if callee_str == "TODO" {
+                let msg = if arg_locals.is_empty() {
+                    None
+                } else {
+                    Some(arg_locals[0])
+                };
+                emit_throw_new(fb, "kotlin/NotImplementedError", msg);
                 let dest = fb.new_local(Ty::Nothing);
                 return Some(dest);
             }
