@@ -444,3 +444,37 @@ fn with_tests_skotch_runs_junit() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn with_resources_included_in_jar() {
+    let tmp = make_temp("with-resources");
+    copy_dir_recursive(&fixture_dir("with-resources"), &tmp).unwrap();
+
+    let result = skotch_build::build_project(&skotch_build::BuildOptions {
+        project_dir: tmp.clone(),
+        target_override: Some(skotch_build::BuildTarget::Jvm),
+    });
+    assert!(result.is_ok(), "build should succeed: {:?}", result.err());
+
+    // Open the JAR and check for resource entries.
+    let jar_path = tmp.join("build/libs/with-resources.jar");
+    assert!(jar_path.exists(), "JAR should exist");
+    let file = std::fs::File::open(&jar_path).unwrap();
+    let archive = zip::ZipArchive::new(file).unwrap();
+    let names: Vec<String> = (0..archive.len())
+        .map(|i| archive.name_for_index(i).unwrap().to_string())
+        .collect();
+
+    assert!(
+        names.contains(&"config.properties".to_string()),
+        "JAR should contain config.properties, entries: {:?}",
+        names
+    );
+    assert!(
+        names.contains(&"data/items.txt".to_string()),
+        "JAR should contain data/items.txt, entries: {:?}",
+        names
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}

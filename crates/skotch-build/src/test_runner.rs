@@ -129,7 +129,14 @@ pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
         .filter_map(|s| skotch_tape::MavenCoord::parse(s))
         .collect();
 
-    let repos = vec!["https://repo1.maven.org/maven2".to_string()];
+    let repos = if project.repositories.is_empty() {
+        vec![
+            "https://repo1.maven.org/maven2".to_string(),
+            "https://dl.google.com/dl/android/maven2".to_string(),
+        ]
+    } else {
+        project.repositories.clone()
+    };
     let test_resolved = skotch_tape::resolve(&test_coords, &repos, false)
         .with_context(|| "resolving test dependencies")?;
 
