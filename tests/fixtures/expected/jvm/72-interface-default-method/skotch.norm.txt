@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=7
     0000 new Class(FormalGreeter)
     0003 dup
     0004 invokespecial Method(FormalGreeter.<init>:()V)
@@ -11,16 +11,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0009 aload 1
     0011 checkcast Class(FormalGreeter)
     0014 astore 2
-    0016 aload 2
-    0018 checkcast Class(FormalGreeter)
-    0021 astore 3
-    0023 ldc "Alice"
+    0016 ldc "Alice"
+    0018 astore 3
+    0020 aload 2
+    0022 checkcast Class(FormalGreeter)
     0025 astore 4
-    0027 aload 3
-    0029 aload 4
-    0031 invokeinterface InterfaceMethod(Greeter.greet:(Ljava/lang/String;)Ljava/lang/String;)
-    0036 astore 5
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 aload 5
-    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0046 return
+    0027 ldc "Alice"
+    0029 astore 5
+    0031 aload 4
+    0033 aload 5
+    0035 invokeinterface InterfaceMethod(Greeter.greet:(Ljava/lang/String;)Ljava/lang/String;)
+    0040 astore 6
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 aload 6
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0050 return

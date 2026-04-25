@@ -1,0 +1,54 @@
+dex_version   035
+strings       20
+types         9
+methods       7
+classes       1
+
+--- strings ---
+  "<init>"
+  "L"
+  "LCat;"
+  "LDog;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Rex"
+  "V"
+  "VL"
+  "Whiskers"
+  "[Ljava/lang/String;"
+  "bark"
+  "input.kt"
+  "main"
+  "meow"
+  "out"
+  "println"
+
+--- types ---
+  LCat;
+  LDog;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LCat;.<init>(Ljava/lang/String;)V
+  LCat;.meow()Ljava/lang/String;
+  LDog;.<init>(Ljava/lang/String;)V
+  LDog;.bark()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=33
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

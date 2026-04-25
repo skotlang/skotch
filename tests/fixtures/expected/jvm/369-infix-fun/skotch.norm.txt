@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=7
+  code        max_stack=3 max_locals=8
     0000 ldc "Hello"
     0002 astore 1
     0004 new Class(Builder)
@@ -14,16 +14,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0015 aload 2
     0017 checkcast Class(Builder)
     0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(Builder)
-    0027 astore 4
-    0029 ldc " World"
+    0022 ldc " World"
+    0024 astore 4
+    0026 aload 3
+    0028 checkcast Class(Builder)
     0031 astore 5
-    0033 aload 4
-    0035 aload 5
-    0037 invokevirtual Method(Builder.with:(Ljava/lang/String;)Ljava/lang/String;)
-    0040 astore 6
-    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 aload 6
-    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0050 return
+    0033 ldc " World"
+    0035 astore 6
+    0037 aload 5
+    0039 aload 6
+    0041 invokevirtual Method(Builder.with:(Ljava/lang/String;)Ljava/lang/String;)
+    0044 astore 7
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 aload 7
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0054 return

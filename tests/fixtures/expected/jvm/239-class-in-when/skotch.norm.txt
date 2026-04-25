@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=10
+  code        max_stack=3 max_locals=12
     0000 iconst_3
     0001 istore 1
     0003 new Class(Multiplier)
@@ -14,28 +14,32 @@ method        main ([Ljava/lang/String;)V 0x0009
     0014 aload 2
     0016 checkcast Class(Multiplier)
     0019 astore 3
-    0021 aload 3
-    0023 checkcast Class(Multiplier)
-    0026 astore 4
-    0028 bipush 7
-    0030 istore 5
-    0032 aload 4
-    0034 iload 5
-    0036 invokevirtual Method(Multiplier.multiply:(I)I)
-    0039 istore 6
-    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0044 iload 6
-    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0049 aload 3
-    0051 checkcast Class(Multiplier)
-    0054 astore 7
-    0056 bipush 10
-    0058 istore 8
-    0060 aload 7
-    0062 iload 8
-    0064 invokevirtual Method(Multiplier.multiply:(I)I)
-    0067 istore 9
-    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0072 iload 9
-    0074 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0077 return
+    0021 bipush 7
+    0023 istore 4
+    0025 aload 3
+    0027 checkcast Class(Multiplier)
+    0030 astore 5
+    0032 bipush 7
+    0034 istore 6
+    0036 aload 5
+    0038 iload 6
+    0040 invokevirtual Method(Multiplier.multiply:(I)I)
+    0043 istore 7
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 iload 7
+    0050 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0053 bipush 10
+    0055 istore 8
+    0057 aload 3
+    0059 checkcast Class(Multiplier)
+    0062 astore 9
+    0064 bipush 10
+    0066 istore 10
+    0068 aload 9
+    0070 iload 10
+    0072 invokevirtual Method(Multiplier.multiply:(I)I)
+    0075 istore 11
+    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0080 iload 11
+    0082 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0085 return

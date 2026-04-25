@@ -1,0 +1,62 @@
+dex_version   035
+strings       24
+types         10
+methods       8
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "II"
+  "LI"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/IllegalArgumentException;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "guard"
+  "input.kt"
+  "main"
+  "neg"
+  "negative"
+  "out"
+  "println"
+  "safe"
+  "toString"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/IllegalArgumentException;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.guard(I)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.safe(I)I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/IllegalArgumentException;.<init>(Ljava/lang/String;)V
+  Ljava/lang/Integer;.toString(I)Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       guard(I)Ljava/lang/String; flags=0x0019 regs=10 ins=1 outs=2 insns=23
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=22
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       safe(I)I flags=0x0019 regs=9 ins=1 outs=2 insns=19

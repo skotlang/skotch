@@ -60,5 +60,5 @@ classes       1
   source_file  input.kt
   method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=24
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       process(Ljava/lang/Object;I)I flags=0x0019 regs=5 ins=2 outs=2 insns=7
+  method       process(Ljava/lang/Object;I)I flags=0x0019 regs=6 ins=2 outs=2 insns=8
   method       runAction(Ljava/lang/Object;)V flags=0x0019 regs=2 ins=1 outs=1 insns=5

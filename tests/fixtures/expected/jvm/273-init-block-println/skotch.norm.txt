@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=6
+  code        max_stack=3 max_locals=7
     0000 ldc "APP"
     0002 astore 1
     0004 new Class(Logger)
@@ -14,12 +14,14 @@ method        main ([Ljava/lang/String;)V 0x0009
     0015 aload 2
     0017 checkcast Class(Logger)
     0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(Logger)
-    0027 astore 4
-    0029 ldc "started"
+    0022 ldc "started"
+    0024 astore 4
+    0026 aload 3
+    0028 checkcast Class(Logger)
     0031 astore 5
-    0033 aload 4
-    0035 aload 5
-    0037 invokevirtual Method(Logger.log:(Ljava/lang/String;)V)
-    0040 return
+    0033 ldc "started"
+    0035 astore 6
+    0037 aload 5
+    0039 aload 6
+    0041 invokevirtual Method(Logger.log:(Ljava/lang/String;)V)
+    0044 return

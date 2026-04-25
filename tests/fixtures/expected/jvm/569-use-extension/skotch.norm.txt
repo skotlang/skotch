@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=6
+  code        max_stack=3 max_locals=7
     0000 new Class(DbConn)
     0003 dup
     0004 invokespecial Method(DbConn.<init>:()V)
@@ -11,25 +11,30 @@ method        main ([Ljava/lang/String;)V 0x0009
     0009 aload 1
     0011 checkcast Class(DbConn)
     0014 astore 2
-    0016 aload 2
-    0018 checkcast Class(DbConn)
-    0021 astore 3
-    0023 new Class(InputKt$Lambda$1)
-    0026 dup
+    0016 new Class(InputKt$Lambda$1)
+    0019 dup
+    0020 aload 2
+    0022 invokespecial Method(InputKt$Lambda$1.<init>:(LDbConn;)V)
+    0025 astore 3
     0027 aload 2
-    0029 invokespecial Method(InputKt$Lambda$1.<init>:(LDbConn;)V)
+    0029 checkcast Class(DbConn)
     0032 astore 4
-    0034 aload 4
-    0036 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
-    0039 pop
-    0040 aload 3
-    0042 invokevirtual Method(DbConn.close:()V)
-    0045 ldc "done"
-    0047 astore 5
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 aload 5
-    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0057 return
+    0034 new Class(InputKt$Lambda$2)
+    0037 dup
+    0038 aload 2
+    0040 invokespecial Method(InputKt$Lambda$2.<init>:(LDbConn;)V)
+    0043 astore 5
+    0045 aload 5
+    0047 invokevirtual Method(InputKt$Lambda$2.invoke:()Ljava/lang/Object;)
+    0050 pop
+    0051 aload 4
+    0053 invokevirtual Method(DbConn.close:()V)
+    0056 ldc "done"
+    0058 astore 6
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 aload 6
+    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0068 return
 method        process (LDbConn;)Ljava/lang/String; 0x0009
   code        max_stack=1 max_locals=2
     0000 ldc "processed"

@@ -25,18 +25,20 @@ method        main ([Ljava/lang/String;)V 0x0009
     0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0044 return
 method        process (LTransform;I)I 0x0009
-  code        max_stack=2 max_locals=5
-    0000 aload 0
-    0002 checkcast Class(Transform)
-    0005 astore 2
-    0007 iload 1
-    0009 istore 3
-    0011 aload 2
-    0013 iload 3
-    0015 invokeinterface InterfaceMethod(Transform.apply:(I)I)
-    0020 istore 4
-    0022 iload 4
-    0024 op_0xAC
+  code        max_stack=2 max_locals=6
+    0000 iload 1
+    0002 istore 2
+    0004 aload 0
+    0006 checkcast Class(Transform)
+    0009 astore 3
+    0011 iload 1
+    0013 istore 4
+    0015 aload 3
+    0017 iload 4
+    0019 invokeinterface InterfaceMethod(Transform.apply:(I)I)
+    0024 istore 5
+    0026 iload 5
+    0028 op_0xAC
 method        runAction (LAction;)V 0x0009
   code        max_stack=1 max_locals=2
     0000 aload 0

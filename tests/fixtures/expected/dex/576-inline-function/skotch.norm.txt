@@ -1,0 +1,60 @@
+dex_version   035
+strings       23
+types         11
+methods       6
+classes       1
+
+--- strings ---
+  "I"
+  "II"
+  "LInputKt;"
+  "LT;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "VZ"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "double"
+  "hello"
+  "input.kt"
+  "isType"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  LT;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.double(I)I
+  LInputKt;.isType(Ljava/lang/Object;)Z
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Z)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       double(I)I flags=0x0019 regs=4 ins=1 outs=0 insns=5
+  method       isType(Ljava/lang/Object;)Z flags=0x0019 regs=3 ins=1 outs=0 insns=4
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=30
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

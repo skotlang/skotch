@@ -1,0 +1,89 @@
+dex_version   035
+strings       39
+types         17
+methods       15
+classes       1
+
+--- strings ---
+  ": "
+  "<init>"
+  "I"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/Iterator;"
+  "Ljava/util/List;"
+  "Lkotlin/Pair;"
+  "Lkotlin/collections/CollectionsKt;"
+  "V"
+  "VL"
+  "VLL"
+  "Z"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "append"
+  "component1"
+  "component2"
+  "hasNext"
+  "input.kt"
+  "iterator"
+  "listOf"
+  "main"
+  "next"
+  "out"
+  "println"
+  "toString"
+  "valueOf"
+  "x"
+  "y"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/Iterator;
+  Ljava/util/List;
+  Lkotlin/Pair;
+  Lkotlin/collections/CollectionsKt;
+  V
+  Z
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Lkotlin/Pair;.<init>(Ljava/lang/Object;Ljava/lang/Object;)V
+  Lkotlin/Pair;.component1()Ljava/lang/Object;
+  Lkotlin/Pair;.component2()Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=26 ins=0 outs=3 insns=96
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

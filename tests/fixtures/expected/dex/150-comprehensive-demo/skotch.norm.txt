@@ -1,0 +1,78 @@
+dex_version   035
+strings       35
+types         10
+methods       11
+classes       1
+
+--- strings ---
+  ": "
+  "<init>"
+  "Classification: "
+  "Fib(10): "
+  "I"
+  "II"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Sum of odds 1..10: "
+  "V"
+  "VL"
+  "Z"
+  "ZI"
+  "[Ljava/lang/String;"
+  "append"
+  "big"
+  "even"
+  "fibonacci"
+  "input.kt"
+  "isEven"
+  "isOdd"
+  "main"
+  "odd"
+  "out"
+  "println"
+  "small"
+  "sumOfOdds"
+  "toString"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.fibonacci(I)I
+  LInputKt;.isEven(I)Z
+  LInputKt;.isOdd(I)Z
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.sumOfOdds(I)I
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fibonacci(I)I flags=0x0019 regs=25 ins=1 outs=0 insns=54
+  method       isEven(I)Z flags=0x0019 regs=6 ins=1 outs=0 insns=10
+  method       isOdd(I)Z flags=0x0019 regs=5 ins=1 outs=1 insns=9
+  method       main()V flags=0x0019 regs=34 ins=0 outs=2 insns=191
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       sumOfOdds(I)I flags=0x0019 regs=18 ins=1 outs=1 insns=37

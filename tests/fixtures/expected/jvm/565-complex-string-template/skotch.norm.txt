@@ -21,7 +21,7 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0009
     0030 aload 5
     0032 areturn
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=9 max_locals=56
+  code        max_stack=9 max_locals=58
     0000 iconst_1
     0001 istore 1
     0003 iconst_2
@@ -169,83 +169,87 @@ method        main ([Ljava/lang/String;)V 0x0009
     0298 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0301 ldc "Items: "
     0303 astore 38
-    0305 aload 19
-    0307 checkcast Class(java/util/List)
-    0310 astore 39
-    0312 ldc ", "
+    0305 ldc ", "
+    0307 astore 39
+    0309 aload 19
+    0311 checkcast Class(java/util/List)
     0314 astore 40
-    0316 aconst_null
-    0317 astore 41
-    0319 aconst_null
-    0320 astore 42
-    0322 iconst_0
-    0323 istore 43
-    0325 aconst_null
-    0326 astore 44
-    0328 aconst_null
-    0329 astore 45
-    0331 bipush 62
-    0333 istore 46
-    0335 aconst_null
-    0336 astore 47
-    0338 aload 39
-    0340 aload 40
-    0342 aload 41
-    0344 aload 42
-    0346 iload 43
-    0348 aload 44
-    0350 aload 45
-    0352 iload 46
-    0354 aload 47
-    0356 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
-    0359 astore 48
-    0361 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0364 new Class(java/lang/StringBuilder)
-    0367 dup
-    0368 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0371 aload 38
-    0373 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0376 aload 48
-    0378 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0381 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0384 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0387 ldc "Reversed: "
-    0389 astore 49
-    0391 aload 19
-    0393 checkcast Class(java/util/List)
-    0396 astore 50
-    0398 aload 50
-    0400 invokestatic Method(kotlin/collections/CollectionsKt.reversed:(Ljava/lang/Iterable;)Ljava/util/List;)
-    0403 astore 51
-    0405 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0408 new Class(java/lang/StringBuilder)
-    0411 dup
-    0412 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0415 aload 49
-    0417 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0420 aload 51
-    0422 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0425 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0428 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0431 ldc "First three: "
-    0433 astore 52
-    0435 aload 19
-    0437 checkcast Class(java/util/List)
-    0440 astore 53
-    0442 iconst_3
-    0443 istore 54
-    0445 aload 53
-    0447 iload 54
-    0449 invokestatic Method(kotlin/collections/CollectionsKt.take:(Ljava/lang/Iterable;I)Ljava/util/List;)
-    0452 astore 55
-    0454 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0457 new Class(java/lang/StringBuilder)
-    0460 dup
-    0461 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0464 aload 52
-    0466 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0469 aload 55
-    0471 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0474 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0477 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0480 return
+    0316 ldc ", "
+    0318 astore 41
+    0320 aconst_null
+    0321 astore 42
+    0323 aconst_null
+    0324 astore 43
+    0326 iconst_0
+    0327 istore 44
+    0329 aconst_null
+    0330 astore 45
+    0332 aconst_null
+    0333 astore 46
+    0335 bipush 62
+    0337 istore 47
+    0339 aconst_null
+    0340 astore 48
+    0342 aload 40
+    0344 aload 41
+    0346 aload 42
+    0348 aload 43
+    0350 iload 44
+    0352 aload 45
+    0354 aload 46
+    0356 iload 47
+    0358 aload 48
+    0360 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
+    0363 astore 49
+    0365 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0368 new Class(java/lang/StringBuilder)
+    0371 dup
+    0372 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0375 aload 38
+    0377 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0380 aload 49
+    0382 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0385 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0388 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0391 ldc "Reversed: "
+    0393 astore 50
+    0395 aload 19
+    0397 checkcast Class(java/util/List)
+    0400 astore 51
+    0402 aload 51
+    0404 invokestatic Method(kotlin/collections/CollectionsKt.reversed:(Ljava/lang/Iterable;)Ljava/util/List;)
+    0407 astore 52
+    0409 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0412 new Class(java/lang/StringBuilder)
+    0415 dup
+    0416 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0419 aload 50
+    0421 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0424 aload 52
+    0426 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0429 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0432 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0435 ldc "First three: "
+    0437 astore 53
+    0439 iconst_3
+    0440 istore 54
+    0442 aload 19
+    0444 checkcast Class(java/util/List)
+    0447 astore 55
+    0449 iconst_3
+    0450 istore 56
+    0452 aload 55
+    0454 iload 56
+    0456 invokestatic Method(kotlin/collections/CollectionsKt.take:(Ljava/lang/Iterable;I)Ljava/util/List;)
+    0459 astore 57
+    0461 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0464 new Class(java/lang/StringBuilder)
+    0467 dup
+    0468 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0471 aload 53
+    0473 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0476 aload 57
+    0478 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0481 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0484 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0487 return

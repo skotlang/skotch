@@ -1,0 +1,74 @@
+dex_version   035
+strings       29
+types         11
+methods       11
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "ILII"
+  "L"
+  "LInputKt;"
+  "LL"
+  "LOp;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "MINUS"
+  "Op$apply"
+  "Op$valueOf"
+  "Op$values"
+  "PLUS"
+  "V"
+  "VI"
+  "VL"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "add"
+  "input.kt"
+  "main"
+  "name"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  LOp;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.MINUS()Ljava/lang/Object;
+  LInputKt;.Op$apply(Ljava/lang/Object;II)I
+  LInputKt;.Op$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Op$values()Ljava/lang/Object;
+  LInputKt;.PLUS()Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LOp;.<init>(Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       MINUS()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       Op$apply(Ljava/lang/Object;II)I flags=0x0019 regs=15 ins=3 outs=0 insns=30
+  method       Op$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=8 ins=1 outs=0 insns=32
+  method       Op$values()Ljava/lang/Object; flags=0x0019 regs=5 ins=0 outs=2 insns=22
+  method       PLUS()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       main()V flags=0x0019 regs=13 ins=0 outs=3 insns=35
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

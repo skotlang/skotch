@@ -1,0 +1,60 @@
+dex_version   035
+strings       22
+types         10
+methods       9
+classes       1
+
+--- strings ---
+  "<init>"
+  "LDbConn;"
+  "LInputKt$Lambda$1;"
+  "LInputKt$Lambda$2;"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "close"
+  "done"
+  "input.kt"
+  "invoke"
+  "main"
+  "out"
+  "println"
+  "process"
+  "processed"
+
+--- types ---
+  LDbConn;
+  LInputKt$Lambda$1;
+  LInputKt$Lambda$2;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LDbConn;.<init>()V
+  LDbConn;.close()V
+  LInputKt$Lambda$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$Lambda$2;.<init>(Ljava/lang/Object;)V
+  LInputKt$Lambda$2;.invoke()V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.process(Ljava/lang/Object;)Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=31
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       process(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=2 ins=1 outs=0 insns=3

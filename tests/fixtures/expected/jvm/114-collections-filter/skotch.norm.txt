@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=47
+  code        max_stack=3 max_locals=49
     0000 iconst_1
     0001 istore 1
     0003 iconst_2
@@ -127,62 +127,70 @@ method        main ([Ljava/lang/String;)V 0x0009
     0227 aload 33
     0229 checkcast Class(java/util/List)
     0232 astore 34
-    0234 aload 34
-    0236 checkcast Class(java/util/List)
-    0239 astore 35
-    0241 new Class(InputKt$Lambda$0)
-    0244 dup
-    0245 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0234 new Class(InputKt$Lambda$0)
+    0237 dup
+    0238 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0241 astore 35
+    0243 aload 34
+    0245 checkcast Class(java/util/List)
     0248 astore 36
-    0250 aload 35
-    0252 aload 36
-    0254 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0250 new Class(InputKt$Lambda$1)
+    0253 dup
+    0254 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0257 astore 37
-    0259 aload 37
-    0261 checkcast Class(java/util/List)
-    0264 astore 38
-    0266 aload 34
-    0268 checkcast Class(java/util/List)
-    0271 astore 39
-    0273 new Class(InputKt$Lambda$1)
-    0276 dup
-    0277 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0280 astore 40
-    0282 aload 39
-    0284 aload 40
-    0286 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0259 aload 36
+    0261 aload 37
+    0263 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0266 astore 38
+    0268 aload 38
+    0270 checkcast Class(java/util/List)
+    0273 astore 39
+    0275 new Class(InputKt$Lambda$2)
+    0278 dup
+    0279 invokespecial Method(InputKt$Lambda$2.<init>:()V)
+    0282 astore 40
+    0284 aload 34
+    0286 checkcast Class(java/util/List)
     0289 astore 41
-    0291 aload 41
-    0293 checkcast Class(java/util/List)
-    0296 astore 42
-    0298 ldc "evens: "
-    0300 astore 43
-    0302 aload 38
-    0304 checkcast Class(java/util/List)
-    0307 astore 44
-    0309 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0312 new Class(java/lang/StringBuilder)
-    0315 dup
-    0316 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0319 aload 43
-    0321 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0324 aload 44
-    0326 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0329 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0332 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0335 ldc "odds: "
-    0337 astore 45
-    0339 aload 42
-    0341 checkcast Class(java/util/List)
-    0344 astore 46
-    0346 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0349 new Class(java/lang/StringBuilder)
-    0352 dup
-    0353 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0356 aload 45
-    0358 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0361 aload 46
-    0363 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0366 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0369 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0372 return
+    0291 new Class(InputKt$Lambda$3)
+    0294 dup
+    0295 invokespecial Method(InputKt$Lambda$3.<init>:()V)
+    0298 astore 42
+    0300 aload 41
+    0302 aload 42
+    0304 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0307 astore 43
+    0309 aload 43
+    0311 checkcast Class(java/util/List)
+    0314 astore 44
+    0316 ldc "evens: "
+    0318 astore 45
+    0320 aload 39
+    0322 checkcast Class(java/util/List)
+    0325 astore 46
+    0327 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0330 new Class(java/lang/StringBuilder)
+    0333 dup
+    0334 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0337 aload 45
+    0339 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0342 aload 46
+    0344 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0347 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0350 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0353 ldc "odds: "
+    0355 astore 47
+    0357 aload 44
+    0359 checkcast Class(java/util/List)
+    0362 astore 48
+    0364 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0367 new Class(java/lang/StringBuilder)
+    0370 dup
+    0371 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0374 aload 47
+    0376 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0379 aload 48
+    0381 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0384 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0387 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0390 return

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=9
+  code        max_stack=4 max_locals=10
     0000 bipush 10
     0002 istore 1
     0004 new Class(Outer)
@@ -16,22 +16,24 @@ method        main ([Ljava/lang/String;)V 0x0009
     0020 astore 3
     0022 iconst_5
     0023 istore 4
-    0025 new Class(Outer$Inner)
-    0028 dup
-    0029 aload 3
-    0031 iload 4
-    0033 invokespecial Method(Outer$Inner.<init>:(LOuter;I)V)
-    0036 astore 5
-    0038 aload 5
-    0040 checkcast Class(Outer$Inner)
-    0043 astore 6
-    0045 aload 6
-    0047 checkcast Class(Outer$Inner)
-    0050 astore 7
-    0052 aload 7
-    0054 invokevirtual Method(Outer$Inner.sum:()I)
-    0057 istore 8
-    0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0062 iload 8
-    0064 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0067 return
+    0025 iconst_5
+    0026 istore 5
+    0028 new Class(Outer$Inner)
+    0031 dup
+    0032 aload 3
+    0034 iload 5
+    0036 invokespecial Method(Outer$Inner.<init>:(LOuter;I)V)
+    0039 astore 6
+    0041 aload 6
+    0043 checkcast Class(Outer$Inner)
+    0046 astore 7
+    0048 aload 7
+    0050 checkcast Class(Outer$Inner)
+    0053 astore 8
+    0055 aload 8
+    0057 invokevirtual Method(Outer$Inner.sum:()I)
+    0060 istore 9
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 iload 9
+    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0070 return

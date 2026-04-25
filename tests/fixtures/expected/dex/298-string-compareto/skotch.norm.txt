@@ -38,11 +38,11 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
-  Ljava/lang/String;.compareTo(Ljava/lang/String;)I
+  Ljava/lang/String;.compareTo(Ljava/lang/Object;)I
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=14 ins=0 outs=2 insns=40
+  method       main()V flags=0x0019 regs=17 ins=0 outs=2 insns=43
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

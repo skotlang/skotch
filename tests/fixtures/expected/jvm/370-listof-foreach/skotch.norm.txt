@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=19
+  code        max_stack=3 max_locals=20
     0000 iconst_1
     0001 istore 1
     0003 iconst_2
@@ -50,29 +50,33 @@ method        main ([Ljava/lang/String;)V 0x0009
     0077 aload 12
     0079 checkcast Class(java/util/List)
     0082 astore 13
-    0084 aload 13
-    0086 checkcast Class(java/util/List)
-    0089 astore 14
-    0091 new Class(InputKt$Lambda$0)
-    0094 dup
-    0095 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0084 new Class(InputKt$Lambda$0)
+    0087 dup
+    0088 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0091 astore 14
+    0093 aload 13
+    0095 checkcast Class(java/util/List)
     0098 astore 15
-    0100 aload 14
-    0102 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0100 new Class(InputKt$Lambda$1)
+    0103 dup
+    0104 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0107 astore 16
-    0109 goto 112
-    0112 aload 16
-    0114 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0119 istore 17
-    0121 iload 17
-    0123 ifeq 146
-    0126 aload 16
-    0128 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0133 astore 18
-    0135 aload 15
-    0137 aload 18
-    0139 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0142 pop
-    0143 goto 112
-    0146 return
-    sub_attr  StackMapTable (91 bytes)
+    0109 aload 15
+    0111 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0116 astore 17
+    0118 goto 121
+    0121 aload 17
+    0123 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0128 istore 18
+    0130 iload 18
+    0132 ifeq 155
+    0135 aload 17
+    0137 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0142 astore 19
+    0144 aload 16
+    0146 aload 19
+    0148 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0151 pop
+    0152 goto 121
+    0155 return
+    sub_attr  StackMapTable (97 bytes)

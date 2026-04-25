@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=5 max_locals=15
+  code        max_stack=5 max_locals=17
     0000 sipush 255
     0003 istore 1
     0005 iconst_0
@@ -20,33 +20,37 @@ method        main ([Ljava/lang/String;)V 0x0009
     0026 aload 4
     0028 checkcast Class(Color)
     0031 astore 5
-    0033 aload 5
-    0035 checkcast Class(Color)
-    0038 astore 6
-    0040 sipush 128
-    0043 istore 7
-    0045 sipush 128
-    0048 istore 8
-    0050 aload 6
-    0052 getfield Field(Color.r:I)
-    0055 istore 9
-    0057 sipush 128
-    0060 istore 10
-    0062 sipush 128
+    0033 sipush 128
+    0036 istore 6
+    0038 sipush 128
+    0041 istore 7
+    0043 aload 5
+    0045 checkcast Class(Color)
+    0048 astore 8
+    0050 sipush 128
+    0053 istore 9
+    0055 sipush 128
+    0058 istore 10
+    0060 aload 8
+    0062 getfield Field(Color.r:I)
     0065 istore 11
-    0067 aload 6
-    0069 iload 9
-    0071 iload 10
-    0073 iload 11
-    0075 invokevirtual Method(Color.copy:(III)LColor;)
-    0078 astore 12
-    0080 aload 12
-    0082 checkcast Class(Color)
-    0085 astore 13
-    0087 aload 13
-    0089 checkcast Class(Color)
-    0092 astore 14
-    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0097 aload 14
-    0099 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0102 return
+    0067 sipush 128
+    0070 istore 12
+    0072 sipush 128
+    0075 istore 13
+    0077 aload 8
+    0079 iload 11
+    0081 iload 12
+    0083 iload 13
+    0085 invokevirtual Method(Color.copy:(III)LColor;)
+    0088 astore 14
+    0090 aload 14
+    0092 checkcast Class(Color)
+    0095 astore 15
+    0097 aload 15
+    0099 checkcast Class(Color)
+    0102 astore 16
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 aload 16
+    0109 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0112 return

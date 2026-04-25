@@ -3,42 +3,48 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=12
+  code        max_stack=3 max_locals=15
     0000 ldc "Hello, World!"
     0002 astore 1
     0004 aload 1
     0006 astore 2
-    0008 aload 2
-    0010 astore 3
-    0012 bipush 7
-    0014 istore 4
-    0016 aload 3
-    0018 iload 4
-    0020 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
-    0023 astore 5
-    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0028 aload 5
-    0030 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0033 aload 2
-    0035 astore 6
+    0008 bipush 7
+    0010 istore 3
+    0012 aload 2
+    0014 astore 4
+    0016 bipush 7
+    0018 istore 5
+    0020 aload 4
+    0022 iload 5
+    0024 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
+    0027 astore 6
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload 6
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
     0037 iconst_0
     0038 istore 7
     0040 iconst_5
     0041 istore 8
-    0043 aload 6
-    0045 iload 7
-    0047 iload 8
-    0049 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
-    0052 astore 9
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 aload 9
-    0059 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0062 aload 2
-    0064 astore 10
-    0066 aload 10
-    0068 invokevirtual Method(java/lang/String.trim:()Ljava/lang/String;)
-    0071 astore 11
-    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0076 aload 11
-    0078 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0081 return
+    0043 aload 2
+    0045 astore 9
+    0047 iconst_0
+    0048 istore 10
+    0050 iconst_5
+    0051 istore 11
+    0053 aload 9
+    0055 iload 10
+    0057 iload 11
+    0059 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
+    0062 astore 12
+    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0067 aload 12
+    0069 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0072 aload 2
+    0074 astore 13
+    0076 aload 13
+    0078 invokevirtual Method(java/lang/String.trim:()Ljava/lang/String;)
+    0081 astore 14
+    0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0086 aload 14
+    0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0091 return

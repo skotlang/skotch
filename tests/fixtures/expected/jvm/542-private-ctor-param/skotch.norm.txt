@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=12
+  code        max_stack=3 max_locals=14
     0000 bipush 42
     0002 istore 1
     0004 new Class(Secret)
@@ -23,28 +23,32 @@ method        main ([Ljava/lang/String;)V 0x0009
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0039 iload 5
     0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0044 aload 3
-    0046 checkcast Class(Secret)
-    0049 astore 6
-    0051 bipush 42
-    0053 istore 7
-    0055 aload 6
-    0057 iload 7
-    0059 invokevirtual Method(Secret.check:(I)Z)
-    0062 istore 8
-    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0067 iload 8
-    0069 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0072 aload 3
-    0074 checkcast Class(Secret)
-    0077 astore 9
-    0079 bipush 99
-    0081 istore 10
-    0083 aload 9
-    0085 iload 10
-    0087 invokevirtual Method(Secret.check:(I)Z)
-    0090 istore 11
-    0092 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0095 iload 11
-    0097 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0100 return
+    0044 bipush 42
+    0046 istore 6
+    0048 aload 3
+    0050 checkcast Class(Secret)
+    0053 astore 7
+    0055 bipush 42
+    0057 istore 8
+    0059 aload 7
+    0061 iload 8
+    0063 invokevirtual Method(Secret.check:(I)Z)
+    0066 istore 9
+    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0071 iload 9
+    0073 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0076 bipush 99
+    0078 istore 10
+    0080 aload 3
+    0082 checkcast Class(Secret)
+    0085 astore 11
+    0087 bipush 99
+    0089 istore 12
+    0091 aload 11
+    0093 iload 12
+    0095 invokevirtual Method(Secret.check:(I)Z)
+    0098 istore 13
+    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0103 iload 13
+    0105 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0108 return

@@ -1,0 +1,78 @@
+dex_version   035
+strings       34
+types         13
+methods       13
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/LinkedList;"
+  "Ljava/util/List;"
+  "Ljava/util/Map;"
+  "Ljava/util/TreeMap;"
+  "V"
+  "VI"
+  "VL"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "a"
+  "add"
+  "b"
+  "firstKey"
+  "getFirst"
+  "hello"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "put"
+  "size"
+  "valueOf"
+  "world"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/LinkedList;
+  Ljava/util/List;
+  Ljava/util/Map;
+  Ljava/util/TreeMap;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/util/LinkedList;.<init>()V
+  Ljava/util/LinkedList;.getFirst()Ljava/lang/Object;
+  Ljava/util/LinkedList;.size()I
+  Ljava/util/List;.add(Ljava/lang/Object;)Z
+  Ljava/util/Map;.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  Ljava/util/TreeMap;.<init>()V
+  Ljava/util/TreeMap;.firstKey()Ljava/lang/Object;
+  Ljava/util/TreeMap;.size()I
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=35 ins=0 outs=3 insns=110
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

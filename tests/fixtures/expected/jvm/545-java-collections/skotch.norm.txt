@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=29
+  code        max_stack=3 max_locals=35
     0000 new Class(java/util/LinkedList)
     0003 dup
     0004 invokespecial Method(java/util/LinkedList.<init>:()V)
@@ -11,95 +11,107 @@ method        main ([Ljava/lang/String;)V 0x0009
     0009 aload 1
     0011 checkcast Class(java/util/LinkedList)
     0014 astore 2
-    0016 aload 2
-    0018 checkcast Class(java/util/LinkedList)
-    0021 astore 3
-    0023 ldc "hello"
+    0016 ldc "hello"
+    0018 astore 3
+    0020 aload 2
+    0022 checkcast Class(java/util/LinkedList)
     0025 astore 4
-    0027 aload 3
-    0029 aload 4
-    0031 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0036 istore 5
-    0038 aload 2
-    0040 checkcast Class(java/util/LinkedList)
-    0043 astore 6
-    0045 ldc "world"
-    0047 astore 7
-    0049 aload 6
-    0051 aload 7
-    0053 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0058 istore 8
-    0060 aload 2
-    0062 checkcast Class(java/util/LinkedList)
-    0065 astore 9
-    0067 aload 9
-    0069 invokevirtual Method(java/util/LinkedList.size:()I)
-    0072 istore 10
-    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0077 iload 10
-    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0082 aload 2
-    0084 checkcast Class(java/util/LinkedList)
-    0087 astore 11
-    0089 aload 11
-    0091 invokevirtual Method(java/util/LinkedList.getFirst:()Ljava/lang/Object;)
-    0094 astore 12
-    0096 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0099 aload 12
-    0101 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0104 new Class(java/util/TreeMap)
-    0107 dup
-    0108 invokespecial Method(java/util/TreeMap.<init>:()V)
-    0111 astore 13
-    0113 aload 13
-    0115 checkcast Class(java/util/TreeMap)
-    0118 astore 14
-    0120 aload 14
-    0122 checkcast Class(java/util/TreeMap)
-    0125 astore 15
-    0127 ldc "b"
-    0129 astore 16
-    0131 iconst_2
-    0132 istore 17
-    0134 iload 17
-    0136 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0139 astore 18
-    0141 aload 15
-    0143 aload 16
-    0145 aload 18
-    0147 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0152 astore 19
-    0154 aload 14
-    0156 checkcast Class(java/util/TreeMap)
-    0159 astore 20
-    0161 ldc "a"
-    0163 astore 21
-    0165 iconst_1
-    0166 istore 22
-    0168 iload 22
-    0170 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0173 astore 23
-    0175 aload 20
-    0177 aload 21
-    0179 aload 23
-    0181 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0186 astore 24
-    0188 aload 14
-    0190 checkcast Class(java/util/TreeMap)
-    0193 astore 25
-    0195 aload 25
-    0197 invokevirtual Method(java/util/TreeMap.size:()I)
-    0200 istore 26
-    0202 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0205 iload 26
-    0207 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0210 aload 14
+    0027 ldc "hello"
+    0029 astore 5
+    0031 aload 4
+    0033 aload 5
+    0035 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0040 istore 6
+    0042 ldc "world"
+    0044 astore 7
+    0046 aload 2
+    0048 checkcast Class(java/util/LinkedList)
+    0051 astore 8
+    0053 ldc "world"
+    0055 astore 9
+    0057 aload 8
+    0059 aload 9
+    0061 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0066 istore 10
+    0068 aload 2
+    0070 checkcast Class(java/util/LinkedList)
+    0073 astore 11
+    0075 aload 11
+    0077 invokevirtual Method(java/util/LinkedList.size:()I)
+    0080 istore 12
+    0082 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0085 iload 12
+    0087 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0090 aload 2
+    0092 checkcast Class(java/util/LinkedList)
+    0095 astore 13
+    0097 aload 13
+    0099 invokevirtual Method(java/util/LinkedList.getFirst:()Ljava/lang/Object;)
+    0102 astore 14
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 aload 14
+    0109 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0112 new Class(java/util/TreeMap)
+    0115 dup
+    0116 invokespecial Method(java/util/TreeMap.<init>:()V)
+    0119 astore 15
+    0121 aload 15
+    0123 checkcast Class(java/util/TreeMap)
+    0126 astore 16
+    0128 ldc "b"
+    0130 astore 17
+    0132 iconst_2
+    0133 istore 18
+    0135 aload 16
+    0137 checkcast Class(java/util/TreeMap)
+    0140 astore 19
+    0142 ldc "b"
+    0144 astore 20
+    0146 iconst_2
+    0147 istore 21
+    0149 iload 21
+    0151 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0154 astore 22
+    0156 aload 19
+    0158 aload 20
+    0160 aload 22
+    0162 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0167 astore 23
+    0169 ldc "a"
+    0171 astore 24
+    0173 iconst_1
+    0174 istore 25
+    0176 aload 16
+    0178 checkcast Class(java/util/TreeMap)
+    0181 astore 26
+    0183 ldc "a"
+    0185 astore 27
+    0187 iconst_1
+    0188 istore 28
+    0190 iload 28
+    0192 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0195 astore 29
+    0197 aload 26
+    0199 aload 27
+    0201 aload 29
+    0203 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0208 astore 30
+    0210 aload 16
     0212 checkcast Class(java/util/TreeMap)
-    0215 astore 27
-    0217 aload 27
-    0219 invokevirtual Method(java/util/TreeMap.firstKey:()Ljava/lang/Object;)
-    0222 astore 28
+    0215 astore 31
+    0217 aload 31
+    0219 invokevirtual Method(java/util/TreeMap.size:()I)
+    0222 istore 32
     0224 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0227 aload 28
-    0229 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0232 return
+    0227 iload 32
+    0229 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0232 aload 16
+    0234 checkcast Class(java/util/TreeMap)
+    0237 astore 33
+    0239 aload 33
+    0241 invokevirtual Method(java/util/TreeMap.firstKey:()Ljava/lang/Object;)
+    0244 astore 34
+    0246 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0249 aload 34
+    0251 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0254 return

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=17
+  code        max_stack=2 max_locals=21
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
@@ -11,55 +11,63 @@ method        main ([Ljava/lang/String;)V 0x0009
     0009 aload 1
     0011 checkcast Class(java/util/ArrayList)
     0014 astore 2
-    0016 aload 2
-    0018 checkcast Class(java/util/ArrayList)
-    0021 astore 3
-    0023 ldc "alpha"
+    0016 ldc "alpha"
+    0018 astore 3
+    0020 aload 2
+    0022 checkcast Class(java/util/ArrayList)
     0025 astore 4
-    0027 aload 3
-    0029 aload 4
-    0031 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0036 istore 5
-    0038 aload 2
-    0040 checkcast Class(java/util/ArrayList)
-    0043 astore 6
-    0045 ldc "beta"
-    0047 astore 7
-    0049 aload 6
-    0051 aload 7
-    0053 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0058 istore 8
-    0060 aload 2
-    0062 checkcast Class(java/util/ArrayList)
-    0065 astore 9
-    0067 aload 9
-    0069 invokevirtual Method(java/util/ArrayList.size:()I)
-    0072 istore 10
-    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0077 iload 10
-    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0082 aload 2
-    0084 checkcast Class(java/util/ArrayList)
-    0087 astore 11
-    0089 iconst_0
-    0090 istore 12
-    0092 aload 11
-    0094 iload 12
-    0096 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
-    0101 astore 13
-    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0106 aload 13
-    0108 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0111 aload 2
-    0113 checkcast Class(java/util/ArrayList)
-    0116 astore 14
-    0118 iconst_1
-    0119 istore 15
-    0121 aload 14
-    0123 iload 15
-    0125 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
-    0130 astore 16
-    0132 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0135 aload 16
-    0137 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0140 return
+    0027 ldc "alpha"
+    0029 astore 5
+    0031 aload 4
+    0033 aload 5
+    0035 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0040 istore 6
+    0042 ldc "beta"
+    0044 astore 7
+    0046 aload 2
+    0048 checkcast Class(java/util/ArrayList)
+    0051 astore 8
+    0053 ldc "beta"
+    0055 astore 9
+    0057 aload 8
+    0059 aload 9
+    0061 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0066 istore 10
+    0068 aload 2
+    0070 checkcast Class(java/util/ArrayList)
+    0073 astore 11
+    0075 aload 11
+    0077 invokevirtual Method(java/util/ArrayList.size:()I)
+    0080 istore 12
+    0082 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0085 iload 12
+    0087 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0090 iconst_0
+    0091 istore 13
+    0093 aload 2
+    0095 checkcast Class(java/util/ArrayList)
+    0098 astore 14
+    0100 iconst_0
+    0101 istore 15
+    0103 aload 14
+    0105 iload 15
+    0107 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0112 astore 16
+    0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0117 aload 16
+    0119 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0122 iconst_1
+    0123 istore 17
+    0125 aload 2
+    0127 checkcast Class(java/util/ArrayList)
+    0130 astore 18
+    0132 iconst_1
+    0133 istore 19
+    0135 aload 18
+    0137 iload 19
+    0139 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0144 astore 20
+    0146 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0149 aload 20
+    0151 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0154 return

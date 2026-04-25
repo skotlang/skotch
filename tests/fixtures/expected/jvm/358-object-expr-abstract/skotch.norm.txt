@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=7
     0000 new Class($Object$1)
     0003 dup
     0004 invokespecial Method($Object$1.<init>:()V)
@@ -11,16 +11,18 @@ method        main ([Ljava/lang/String;)V 0x0009
     0009 aload 1
     0011 checkcast Class(Handler)
     0014 astore 2
-    0016 aload 2
-    0018 checkcast Class(Handler)
-    0021 astore 3
-    0023 ldc "test"
+    0016 ldc "test"
+    0018 astore 3
+    0020 aload 2
+    0022 checkcast Class(Handler)
     0025 astore 4
-    0027 aload 3
-    0029 aload 4
-    0031 invokevirtual Method(Handler.handle:(Ljava/lang/String;)Ljava/lang/String;)
-    0034 astore 5
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 aload 5
-    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0044 return
+    0027 ldc "test"
+    0029 astore 5
+    0031 aload 4
+    0033 aload 5
+    0035 invokevirtual Method(Handler.handle:(Ljava/lang/String;)Ljava/lang/String;)
+    0038 astore 6
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 aload 6
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0048 return

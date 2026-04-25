@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=21
+  code        max_stack=3 max_locals=22
     0000 iconst_1
     0001 istore 1
     0003 iconst_2
@@ -50,31 +50,33 @@ method        main ([Ljava/lang/String;)V 0x0009
     0077 aload 12
     0079 checkcast Class(java/util/List)
     0082 astore 13
-    0084 aload 13
-    0086 checkcast Class(java/util/List)
-    0089 astore 14
-    0091 iconst_4
-    0092 istore 15
-    0094 iload 15
-    0096 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0099 astore 16
-    0101 aload 14
-    0103 aload 16
-    0105 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0110 istore 17
-    0112 aload 13
-    0114 checkcast Class(java/util/List)
-    0117 astore 18
-    0119 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0122 aload 18
-    0124 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0127 aload 13
-    0129 checkcast Class(java/util/List)
-    0132 astore 19
-    0134 aload 19
-    0136 invokeinterface InterfaceMethod(java/util/List.size:()I)
-    0141 istore 20
-    0143 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0146 iload 20
-    0148 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0151 return
+    0084 iconst_4
+    0085 istore 14
+    0087 aload 13
+    0089 checkcast Class(java/util/List)
+    0092 astore 15
+    0094 iconst_4
+    0095 istore 16
+    0097 iload 16
+    0099 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0102 astore 17
+    0104 aload 15
+    0106 aload 17
+    0108 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0113 istore 18
+    0115 aload 13
+    0117 checkcast Class(java/util/List)
+    0120 astore 19
+    0122 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0125 aload 19
+    0127 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0130 aload 13
+    0132 checkcast Class(java/util/List)
+    0135 astore 20
+    0137 aload 20
+    0139 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0144 istore 21
+    0146 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0149 iload 21
+    0151 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0154 return
