@@ -7570,9 +7570,27 @@ fn walk_block(
                         // net: consumed Scanner, pushed String
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     } else {
-                        // Load arguments.
-                        for a in args {
+                        // Load arguments, inserting widening instructions
+                        // when the local type doesn't match the descriptor
+                        // parameter type (e.g. int → long for JUnit 4's
+                        // assertEquals(long, long)).
+                        let param_types = parse_descriptor_param_types_jvm(descriptor);
+                        for (i, a) in args.iter().enumerate() {
                             load_local(code, stack, max_stack, slots, *a, &func.locals);
+                            if let Some(expected) = param_types.get(i) {
+                                let actual = &func.locals[a.0 as usize];
+                                match (actual, expected.as_str()) {
+                                    (Ty::Int, "J") => {
+                                        code.push(0x85); // i2l
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    (Ty::Int, "D") => {
+                                        code.push(0x87); // i2d
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                         let mref = cp.methodref(class_name, method_name, descriptor);
                         code.push(0xB8); // invokestatic
@@ -8306,6 +8324,51 @@ fn emit_exception_table(
         out.write_u16::<BigEndian>(handler_pc).unwrap();
         out.write_u16::<BigEndian>(catch_type_idx).unwrap();
     }
+}
+
+/// Parse a JVM descriptor into its parameter type strings.
+/// E.g. "(ILjava/lang/String;J)V" → ["I", "Ljava/lang/String;", "J"]
+fn parse_descriptor_param_types_jvm(desc: &str) -> Vec<String> {
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut params = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => {
+                params.push(c.to_string());
+            }
+            'L' => {
+                let mut s = String::from("L");
+                for sc in chars.by_ref() {
+                    s.push(sc);
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                params.push(s);
+            }
+            '[' => {
+                let mut s = String::from("[");
+                if let Some(&next) = chars.peek() {
+                    if next == 'L' {
+                        chars.next();
+                        s.push('L');
+                        for sc in chars.by_ref() {
+                            s.push(sc);
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        s.push(chars.next().unwrap_or('I'));
+                    }
+                }
+                params.push(s);
+            }
+            _ => {}
+        }
+    }
+    params
 }
 
 #[cfg(test)]
