@@ -32,6 +32,7 @@ pub struct TestResult {
 const JUNIT_PLATFORM_LAUNCHER: &str = "org.junit.platform:junit-platform-launcher:1.11.4";
 const JUNIT_PLATFORM_CONSOLE: &str = "org.junit.platform:junit-platform-console-standalone:1.11.4";
 const JUNIT_JUPITER: &str = "org.junit.jupiter:junit-jupiter:5.11.4";
+const JUNIT4: &str = "junit:junit:4.13.2";
 
 /// Run tests for a project.
 pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
@@ -102,14 +103,25 @@ pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
     {
         test_dep_coords.push(JUNIT_PLATFORM_CONSOLE.to_string());
     }
-    if !test_dep_coords.iter().any(|d| d.contains("junit-jupiter")) {
-        test_dep_coords.push(JUNIT_JUPITER.to_string());
-    }
     if !test_dep_coords
         .iter()
         .any(|d| d.contains("junit-platform-launcher"))
     {
         test_dep_coords.push(JUNIT_PLATFORM_LAUNCHER.to_string());
+    }
+    // Add framework-specific dependencies.
+    match project.test_framework {
+        skotch_buildscript::TestFramework::JUnit4 => {
+            if !test_dep_coords.iter().any(|d| d.starts_with("junit:junit")) {
+                test_dep_coords.push(JUNIT4.to_string());
+            }
+        }
+        _ => {
+            // JUnitPlatform or None — default to Jupiter.
+            if !test_dep_coords.iter().any(|d| d.contains("junit-jupiter")) {
+                test_dep_coords.push(JUNIT_JUPITER.to_string());
+            }
+        }
     }
 
     let test_coords: Vec<skotch_tape::MavenCoord> = test_dep_coords
