@@ -15,9 +15,7 @@ use crate::discover::{discover_sources, find_build_file, find_settings_file};
 use crate::merge::merge_modules;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use skotch_buildscript::{
-    parse_buildfile, parse_buildfile_with_catalog, parse_settings, BuildTarget, ProjectModel,
-};
+use skotch_buildscript::{parse_buildfile_with_catalog, parse_settings, BuildTarget, ProjectModel};
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
 use skotch_lexer::lex;
@@ -121,14 +119,21 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
     }
 
     // Discover sources from configured directories or default.
-    let src_dirs: Vec<PathBuf> = if project.source_dirs.is_empty() {
-        vec![project_dir.join("src/main/kotlin")]
-    } else {
+    let src_dirs: Vec<PathBuf> = if !project.source_dirs.is_empty() {
         project
             .source_dirs
             .iter()
             .map(|d| project_dir.join(d))
             .collect()
+    } else if project.is_multiplatform {
+        // KMP default layout: commonMain + jvmMain + main
+        vec![
+            project_dir.join("src/commonMain/kotlin"),
+            project_dir.join("src/jvmMain/kotlin"),
+            project_dir.join("src/main/kotlin"),
+        ]
+    } else {
+        vec![project_dir.join("src/main/kotlin")]
     };
     let mut src_files = Vec::new();
     for src_dir in &src_dirs {
@@ -445,6 +450,21 @@ fn build_multi_module(
     let mut interner = Interner::new();
     let mut modules: Vec<ModuleInfo> = Vec::new();
 
+    // Parse root build.gradle.kts for allprojects/subprojects config.
+    let root_bf = root_dir.join("build.gradle.kts");
+    let (allprojects_cfg, subprojects_cfg) = if root_bf.exists() {
+        let root_text = std::fs::read_to_string(&root_bf)?;
+        let root_fid = sm.add(root_bf, root_text.clone());
+        let root_parsed =
+            parse_buildfile_with_catalog(&root_text, root_fid, &mut interner, Some(root_dir));
+        (
+            root_parsed.allprojects_config,
+            root_parsed.subprojects_config,
+        )
+    } else {
+        Default::default()
+    };
+
     for module_path in &settings.included_modules {
         let dir_name = module_path.trim_start_matches(':');
         let module_dir = root_dir.join(dir_name);
@@ -454,9 +474,12 @@ fn build_multi_module(
         }
         let text = std::fs::read_to_string(&bf)?;
         let fid = sm.add(bf, text.clone());
-        let parsed = parse_buildfile(&text, fid, &mut interner);
+        let parsed = parse_buildfile_with_catalog(&text, fid, &mut interner, Some(&module_dir));
         let mut project = parsed.project;
         project.project_name = Some(dir_name.to_string());
+        // Merge allprojects + subprojects config from root.
+        skotch_buildscript::merge_shared_config(&mut project, &allprojects_cfg);
+        skotch_buildscript::merge_shared_config(&mut project, &subprojects_cfg);
         modules.push(ModuleInfo {
             name: dir_name.to_string(),
             dir: module_dir,
@@ -785,12 +808,37 @@ fn default_repos() -> Vec<String> {
 }
 
 fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<Vec<PathBuf>> {
-    if project.external_deps.is_empty() {
-        return Ok(Vec::new());
+    let repos = if project.repositories.is_empty() {
+        default_repos()
+    } else {
+        project.repositories.clone()
+    };
+
+    // ── BOM resolution: fetch platform POMs and extract version constraints ──
+    let mut bom_versions: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for platform_dep in &project.platform_deps {
+        if let Some(coord) = skotch_tape::MavenCoord::parse(platform_dep) {
+            if let Ok(pom_xml) = skotch_tape::fetch_pom(&coord, &repos) {
+                parse_bom_versions(&pom_xml, &mut bom_versions);
+            }
+        }
     }
 
-    let coords: Vec<skotch_tape::MavenCoord> = project
-        .external_deps
+    // Apply BOM versions to versionless dependencies.
+    let mut deps = project.external_deps.clone();
+    for dep in &mut deps {
+        let parts: Vec<&str> = dep.split(':').collect();
+        if parts.len() == 2 {
+            // Versionless dep like "org.springframework.boot:spring-boot-starter-web"
+            let key = format!("{}:{}", parts[0], parts[1]);
+            if let Some(version) = bom_versions.get(&key) {
+                *dep = format!("{}:{}", key, version);
+            }
+        }
+    }
+
+    let coords: Vec<skotch_tape::MavenCoord> = deps
         .iter()
         .filter_map(|s| skotch_tape::MavenCoord::parse(s))
         .collect();
@@ -799,15 +847,52 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
         return Ok(Vec::new());
     }
 
-    let repos = if project.repositories.is_empty() {
-        default_repos()
-    } else {
-        project.repositories.clone()
-    };
     let resolved = skotch_tape::resolve(&coords, &repos, false)
         .with_context(|| "resolving Maven dependencies")?;
 
     Ok(resolved.jars)
+}
+
+/// Parse a POM XML's `<dependencyManagement>` section to extract version
+/// constraints. Populates `versions` with "group:artifact" → "version" entries.
+/// Minimal XML parser — just looks for `<dependency>` blocks with
+/// `<groupId>`, `<artifactId>`, and `<version>`.
+fn parse_bom_versions(pom_xml: &str, versions: &mut std::collections::HashMap<String, String>) {
+    // Only parse inside <dependencyManagement>...</dependencyManagement>
+    let dm_section = if let Some(start) = pom_xml.find("<dependencyManagement>") {
+        if let Some(end) = pom_xml.find("</dependencyManagement>") {
+            &pom_xml[start..end]
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
+
+    // Split on <dependency> blocks.
+    for dep_block in dm_section.split("<dependency>").skip(1) {
+        let end = dep_block.find("</dependency>").unwrap_or(dep_block.len());
+        let block = &dep_block[..end];
+
+        let group = extract_xml_tag(block, "groupId");
+        let artifact = extract_xml_tag(block, "artifactId");
+        let version = extract_xml_tag(block, "version");
+
+        if let (Some(g), Some(a), Some(v)) = (group, artifact, version) {
+            // Skip property references like ${project.version}
+            if !v.contains("${") {
+                versions.insert(format!("{g}:{a}"), v);
+            }
+        }
+    }
+}
+
+fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+    Some(xml[start..end].trim().to_string())
 }
 
 /// Derive the JVM wrapper class name from a file path: `Hello.kt` → `HelloKt`.

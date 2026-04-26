@@ -63,6 +63,11 @@ pub struct ProjectModel {
     pub source_dirs: Vec<String>,
     /// Maven repository URLs parsed from `repositories { ... }`.
     pub repositories: Vec<String>,
+    /// Platform/BOM dependencies: `implementation(platform("group:artifact:version"))`.
+    /// These provide version constraints for other versionless dependencies.
+    pub platform_deps: Vec<String>,
+    /// Whether this is a KMP project (kotlin("multiplatform") plugin detected).
+    pub is_multiplatform: bool,
 }
 
 /// Which test framework the project uses.
@@ -91,8 +96,24 @@ pub struct SettingsModel {
     pub included_modules: Vec<String>,
 }
 
+/// Configuration extracted from `allprojects { }` or `subprojects { }` blocks.
+/// Merged into child module `ProjectModel`s during multi-module builds.
+#[derive(Clone, Debug, Default)]
+pub struct SharedConfig {
+    pub group: Option<String>,
+    pub version: Option<String>,
+    pub repositories: Vec<String>,
+    pub external_deps: Vec<String>,
+    pub test_deps: Vec<String>,
+    pub is_kotlin: bool,
+}
+
 pub struct ParsedBuildFile {
     pub project: ProjectModel,
+    /// Config from `allprojects { }` — applies to root + all children.
+    pub allprojects_config: SharedConfig,
+    /// Config from `subprojects { }` — applies to children only.
+    pub subprojects_config: SharedConfig,
     pub diags: Diagnostics,
 }
 
@@ -133,27 +154,72 @@ pub fn parse_buildfile_with_catalog(
         }
     }
 
-    ParsedBuildFile { project, diags }
+    ParsedBuildFile {
+        project,
+        allprojects_config: walker.allprojects_config,
+        subprojects_config: walker.subprojects_config,
+        diags,
+    }
+}
+
+/// Merge shared config from allprojects/subprojects into a child module's ProjectModel.
+pub fn merge_shared_config(project: &mut ProjectModel, config: &SharedConfig) {
+    if project.group.is_none() {
+        project.group = config.group.clone();
+    }
+    if project.version.is_none() {
+        project.version = config.version.clone();
+    }
+    if project.repositories.is_empty() {
+        project.repositories = config.repositories.clone();
+    }
+    for dep in &config.external_deps {
+        if !project.external_deps.contains(dep) {
+            project.external_deps.push(dep.clone());
+        }
+    }
+    for dep in &config.test_deps {
+        if !project.test_deps.contains(dep) {
+            project.test_deps.push(dep.clone());
+        }
+    }
+    if config.is_kotlin && !project.is_kotlin {
+        project.is_kotlin = true;
+        project.target.get_or_insert(BuildTarget::Jvm);
+    }
 }
 
 /// Resolve `libs.*` style dependency references using a version catalog.
 fn resolve_catalog_deps(project: &mut ProjectModel, catalog: &version_catalog::VersionCatalog) {
-    let resolve_list = |deps: &mut Vec<String>| {
-        for dep in deps.iter_mut() {
-            // If the dep looks like "libs.xxx.yyy", resolve via catalog.
-            if dep.starts_with("libs.") {
-                let key = dep.strip_prefix("libs.").unwrap();
-                // Gradle convention: dots in accessor path become dashes in
-                // the catalog key (e.g. libs.commons.math3 → commons-math3).
+    let resolve_list = |deps: &mut Vec<String>, catalog: &version_catalog::VersionCatalog| {
+        let mut resolved = Vec::new();
+        for dep in deps.drain(..) {
+            if let Some(key) = dep.strip_prefix("libs.bundles.") {
+                // Bundle: expand to constituent libraries.
+                let bundle_key = key.replace('.', "-");
+                if let Some(lib_keys) = catalog.bundles.get(&bundle_key) {
+                    for lib_key in lib_keys {
+                        if let Some(lib) = catalog.libraries.get(lib_key) {
+                            resolved.push(lib.coordinate());
+                        }
+                    }
+                }
+            } else if let Some(key) = dep.strip_prefix("libs.") {
+                // Direct library reference.
                 let catalog_key = key.replace('.', "-");
                 if let Some(lib) = catalog.libraries.get(&catalog_key) {
-                    *dep = lib.coordinate();
+                    resolved.push(lib.coordinate());
+                } else {
+                    resolved.push(dep); // keep unresolved
                 }
+            } else {
+                resolved.push(dep);
             }
         }
+        *deps = resolved;
     };
-    resolve_list(&mut project.external_deps);
-    resolve_list(&mut project.test_deps);
+    resolve_list(&mut project.external_deps, catalog);
+    resolve_list(&mut project.test_deps, catalog);
 
     // Resolve plugin flags from catalog.
     // If no plugins were detected via standard parsing, check catalog.
@@ -195,6 +261,8 @@ struct Walker<'src, 'lf> {
     pos: usize,
     project: ProjectModel,
     settings: SettingsModel,
+    allprojects_config: SharedConfig,
+    subprojects_config: SharedConfig,
 }
 
 impl<'src, 'lf> Walker<'src, 'lf> {
@@ -205,6 +273,8 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             pos: 0,
             project: ProjectModel::default(),
             settings: SettingsModel::default(),
+            allprojects_config: SharedConfig::default(),
+            subprojects_config: SharedConfig::default(),
         }
     }
 
@@ -314,9 +384,9 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             "android" => self.parse_android_block(),
             "tasks" => self.parse_tasks_block(),
             "sourceSets" => self.parse_source_sets_block(),
-            "kotlin" | "java" | "allprojects" | "subprojects" | "buildscript" => {
-                self.skip_brace_block()
-            }
+            "allprojects" => self.parse_shared_config_block(true),
+            "subprojects" => self.parse_shared_config_block(false),
+            "kotlin" | "java" | "buildscript" | "testing" => self.skip_brace_block(),
             _ => {
                 self.skip_to_newline();
                 true
@@ -343,8 +413,12 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                         if let Some(val) = self.try_consume_string() {
                             self.project.is_kotlin = true;
                             match val.as_str() {
-                                "jvm" | "multiplatform" => {
+                                "jvm" => {
                                     self.project.target.get_or_insert(BuildTarget::Jvm);
+                                }
+                                "multiplatform" => {
+                                    self.project.target.get_or_insert(BuildTarget::Jvm);
+                                    self.project.is_multiplatform = true;
                                 }
                                 "android" => {
                                     self.project.is_android = true;
@@ -735,6 +809,96 @@ impl<'src, 'lf> Walker<'src, 'lf> {
         true
     }
 
+    /// Parse `allprojects { }` or `subprojects { }` to extract shared config.
+    fn parse_shared_config_block(&mut self, is_allprojects: bool) -> bool {
+        if self.peek() != TokenKind::LBrace {
+            return self.skip_to_newline_ret();
+        }
+        self.bump();
+        // Temporarily swap project to capture config into a temp model.
+        let saved = std::mem::take(&mut self.project);
+        loop {
+            self.skip_newlines();
+            if self.peek() == TokenKind::RBrace || self.at_end() {
+                break;
+            }
+            if self.peek() == TokenKind::Ident {
+                let span = self.bump();
+                let ident = self.text(span);
+                match ident {
+                    "group" => {
+                        self.parse_string_assign("group");
+                    }
+                    "version" => {
+                        self.parse_string_assign("version");
+                    }
+                    "repositories" => {
+                        self.parse_repositories_block();
+                    }
+                    "dependencies" => {
+                        self.parse_dependencies_block();
+                    }
+                    "apply" => {
+                        // apply(plugin = "org.jetbrains.kotlin.jvm")
+                        if self.peek() == TokenKind::LParen {
+                            self.bump();
+                            // Look for plugin = "..."
+                            loop {
+                                self.skip_newlines();
+                                if self.peek() == TokenKind::RParen || self.at_end() {
+                                    break;
+                                }
+                                if self.peek() == TokenKind::Ident {
+                                    let inner = self.bump();
+                                    if self.text(inner) == "plugin" {
+                                        if self.peek() == TokenKind::Eq {
+                                            self.bump();
+                                        }
+                                        if let Some(plugin_id) = self.try_consume_string() {
+                                            self.apply_plugin_id(&plugin_id);
+                                        }
+                                    }
+                                } else {
+                                    self.bump();
+                                }
+                            }
+                            if self.peek() == TokenKind::RParen {
+                                self.bump();
+                            }
+                        }
+                    }
+                    _ => {
+                        if self.peek() == TokenKind::LBrace {
+                            self.skip_brace_block();
+                        }
+                    }
+                }
+            } else {
+                self.bump();
+            }
+            self.skip_to_newline();
+        }
+        if self.peek() == TokenKind::RBrace {
+            self.bump();
+        }
+        // Extract the captured config and restore original project.
+        let captured = std::mem::replace(&mut self.project, saved);
+        let config = SharedConfig {
+            group: captured.group,
+            version: captured.version,
+            repositories: captured.repositories,
+            external_deps: captured.external_deps,
+            test_deps: captured.test_deps,
+            is_kotlin: captured.is_kotlin,
+        };
+        if is_allprojects {
+            self.allprojects_config = config;
+        } else {
+            self.subprojects_config = config;
+        }
+        true
+    }
+
     /// Parse `repositories { mavenCentral(); google(); maven("url") }`.
     fn parse_repositories_block(&mut self) -> bool {
         if self.peek() != TokenKind::LBrace {
@@ -845,11 +1009,21 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                 let name = self.text(span).to_string();
                 let is_main_dep = matches!(
                     name.as_str(),
-                    "implementation" | "api" | "compileOnly" | "runtimeOnly"
+                    "implementation"
+                        | "api"
+                        | "compileOnly"
+                        | "runtimeOnly"
+                        | "debugImplementation"
+                        | "releaseImplementation"
                 );
                 let is_test_dep = matches!(
                     name.as_str(),
-                    "testImplementation" | "testRuntimeOnly" | "testCompileOnly"
+                    "testImplementation"
+                        | "testRuntimeOnly"
+                        | "testCompileOnly"
+                        | "androidTestImplementation"
+                        | "ksp"
+                        | "kspTest"
                 );
                 if (is_main_dep || is_test_dep) && self.peek() == TokenKind::LParen {
                     self.bump();
@@ -880,6 +1054,15 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                                 &mut self.project.external_deps
                             };
                             target.push(path);
+                        } else if inner_text == "platform" && self.peek() == TokenKind::LParen {
+                            // platform("group:artifact:version") — BOM dependency
+                            self.bump();
+                            if let Some(coord) = self.try_consume_string() {
+                                if coord.contains(':') {
+                                    self.project.platform_deps.push(coord);
+                                }
+                            }
+                            self.skip_past(TokenKind::RParen);
                         } else if inner_text == "kotlin" && self.peek() == TokenKind::LParen {
                             // kotlin("stdlib") → org.jetbrains.kotlin:kotlin-stdlib
                             self.bump();
@@ -1565,5 +1748,122 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "1.9.22" }
         // Without catalog, alias is silently accepted (no crash).
         let parsed = parse_buildfile(src, FileId(0), &mut interner);
         assert_eq!(parsed.project.target, Some(BuildTarget::Jvm));
+    }
+
+    #[test]
+    fn parse_allprojects_subprojects() {
+        let src = r#"
+            allprojects {
+                group = "org.example"
+                version = "2.0.0"
+                repositories {
+                    mavenCentral()
+                }
+            }
+            subprojects {
+                apply(plugin = "org.jetbrains.kotlin.jvm")
+                dependencies {
+                    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+                }
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(
+            parsed.allprojects_config.group.as_deref(),
+            Some("org.example")
+        );
+        assert_eq!(parsed.allprojects_config.version.as_deref(), Some("2.0.0"));
+        assert!(!parsed.allprojects_config.repositories.is_empty());
+        assert!(parsed.subprojects_config.is_kotlin);
+        assert_eq!(
+            parsed.subprojects_config.test_deps,
+            vec!["org.junit.jupiter:junit-jupiter:5.11.4"]
+        );
+    }
+
+    #[test]
+    fn parse_platform_deps() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            dependencies {
+                implementation(platform("org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.10.1"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(
+            parsed.project.platform_deps,
+            vec!["org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.10.1"]
+        );
+        // Versionless dep is kept as-is (BOM resolves at build time).
+        assert_eq!(
+            parsed.project.external_deps,
+            vec!["org.jetbrains.kotlinx:kotlinx-coroutines-core"]
+        );
+    }
+
+    #[test]
+    fn parse_runtime_only_and_debug_impl() {
+        let src = r#"
+            dependencies {
+                runtimeOnly("com.h2database:h2:2.3.232")
+                debugImplementation("com.example:debug-tools:1.0")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed
+            .project
+            .external_deps
+            .contains(&"com.h2database:h2:2.3.232".to_string()));
+        assert!(parsed
+            .project
+            .external_deps
+            .contains(&"com.example:debug-tools:1.0".to_string()));
+    }
+
+    #[test]
+    fn parse_multiplatform_flag() {
+        let src = r#"
+            plugins { kotlin("multiplatform") }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed.project.is_multiplatform);
+        assert!(parsed.project.is_kotlin);
+    }
+
+    #[test]
+    fn resolve_catalog_bundles() {
+        let catalog_src = r#"
+[versions]
+junit = "5.11.4"
+coroutines = "1.10.1"
+
+[libraries]
+junit-jupiter = "org.junit.jupiter:junit-jupiter:5.11.4"
+coroutines-test = "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1"
+mockk = "io.mockk:mockk:1.13.14"
+
+[bundles]
+testing = ["junit-jupiter", "coroutines-test", "mockk"]
+
+[plugins]
+"#;
+        let catalog = crate::version_catalog::parse_version_catalog_str(catalog_src).unwrap();
+        let mut project = ProjectModel {
+            test_deps: vec!["libs.bundles.testing".to_string()],
+            ..Default::default()
+        };
+        resolve_catalog_deps(&mut project, &catalog);
+        assert_eq!(project.test_deps.len(), 3);
+        assert!(project
+            .test_deps
+            .contains(&"org.junit.jupiter:junit-jupiter:5.11.4".to_string()));
+        assert!(project
+            .test_deps
+            .contains(&"io.mockk:mockk:1.13.14".to_string()));
     }
 }
