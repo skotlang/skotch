@@ -19,6 +19,8 @@ pub struct VersionCatalog {
     pub versions: HashMap<String, String>,
     pub libraries: HashMap<String, LibraryDef>,
     pub plugins: HashMap<String, PluginDef>,
+    /// Bundles: a bundle name maps to a list of library keys.
+    pub bundles: HashMap<String, Vec<String>>,
 }
 
 /// A resolved library dependency.
@@ -70,6 +72,7 @@ pub fn parse_version_catalog_str(src: &str) -> Result<VersionCatalog, CatalogErr
                 "versions" => Section::Versions,
                 "libraries" => Section::Libraries,
                 "plugins" => Section::Plugins,
+                "bundles" => Section::Bundles,
                 _ => Section::Unknown,
             };
             continue;
@@ -94,6 +97,13 @@ pub fn parse_version_catalog_str(src: &str) -> Result<VersionCatalog, CatalogErr
                 let plugin = parse_plugin_value(&raw_value, &catalog.versions)
                     .ok_or_else(|| CatalogError::Syntax(line_no + 1, raw_line.to_string()))?;
                 catalog.plugins.insert(key, plugin);
+            }
+            Section::Bundles => {
+                // Bundles: key = ["lib1", "lib2", ...]
+                let (key, raw_value) = parse_kv_raw(line)
+                    .ok_or_else(|| CatalogError::Syntax(line_no + 1, raw_line.to_string()))?;
+                let libs = parse_bundle_value(&raw_value);
+                catalog.bundles.insert(key, libs);
             }
             Section::None | Section::Unknown => {
                 // Silently skip unknown sections / top-level keys.
@@ -139,6 +149,7 @@ enum Section {
     Versions,
     Libraries,
     Plugins,
+    Bundles,
     Unknown,
 }
 
@@ -266,6 +277,30 @@ fn parse_plugin_value(raw: &str, versions: &HashMap<String, String>) -> Option<P
     };
 
     Some(PluginDef { id, version })
+}
+
+/// Parse a TOML array value: `["lib1", "lib2", "lib3"]` → vec of strings.
+fn parse_bundle_value(raw: &str) -> Vec<String> {
+    let raw = raw.trim();
+    let inner = if raw.starts_with('[') && raw.ends_with(']') {
+        &raw[1..raw.len() - 1]
+    } else {
+        return Vec::new();
+    };
+    inner
+        .split(',')
+        .map(|s| {
+            let s = s.trim();
+            if (s.starts_with('"') && s.ends_with('"'))
+                || (s.starts_with('\'') && s.ends_with('\''))
+            {
+                s[1..s.len() - 1].to_string()
+            } else {
+                s.to_string()
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// Strip the outer `{` and `}` from an inline table.

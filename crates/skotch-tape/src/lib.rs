@@ -316,6 +316,19 @@ fn parse_pom_deps(pom_xml: &str) -> Vec<PomDep> {
 // ─── Resolver ───────────────────────────────────────────────────────────────
 
 /// Resolve a set of Maven coordinates + repositories into downloaded JAR paths.
+/// Fetch the POM XML file for a Maven coordinate and return its content.
+pub fn fetch_pom(coord: &MavenCoord, repos: &[String]) -> Result<String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("creating HTTP client")?;
+
+    let pom_file = coord.pom_name();
+    let pom_path = download_artifact(coord, &pom_file, repos, &client)
+        .with_context(|| format!("downloading {coord}"))?;
+    std::fs::read_to_string(&pom_path).with_context(|| format!("reading {}", pom_path.display()))
+}
+
 pub fn resolve(
     roots: &[MavenCoord],
     repos: &[String],
