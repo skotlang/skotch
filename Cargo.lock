@@ -2227,6 +2227,7 @@ dependencies = [
  "skotch-mir-lower",
  "skotch-parser",
  "skotch-resolve",
+ "skotch-sign",
  "skotch-span",
  "skotch-syntax",
  "skotch-tape",

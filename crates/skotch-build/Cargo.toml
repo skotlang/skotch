@@ -12,6 +12,7 @@ skotch-driver      = { workspace = true }
 skotch-jar         = { workspace = true }
 skotch-axml        = { workspace = true }
 skotch-apk         = { workspace = true }
+skotch-sign        = { workspace = true }
 skotch-mir         = { workspace = true }
 skotch-intern      = { workspace = true }
 skotch-span        = { workspace = true }

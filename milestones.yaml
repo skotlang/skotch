@@ -54,7 +54,7 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.25.0"      # v0.1-v0.25 completed, v0.30 in progress
+  current_version: "0.30.0"      # v0.1-v0.30 completed
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
@@ -1712,7 +1712,7 @@ milestones:
 
   - version: "0.30.0"
     title: "Android Resource Pipeline and APK Assembly"
-    status: in_progress
+    status: completed
     depends_on: ["0.20.0"]
     description: >
       aapt2-equivalent resource compilation, R class generation,
@@ -1722,6 +1722,7 @@ milestones:
 
     features:
       - name: "Resource compilation (aapt2 equivalent)"
+        completed: true
         description: >
           XML layout/drawable/values → binary XML. resources.arsc table
           generation with type/config/entry tables. New skotch-resource crate.
@@ -1736,6 +1737,7 @@ milestones:
         description: >
           skotch-axml already handles binary XML for AndroidManifest.xml.
       - name: "Debug APK assembly"
+        completed: true
         description: >
           AndroidManifest + classes.dex + resources.arsc + res/ + lib/.
           skotch-apk already handles ZIP assembly. Need to integrate

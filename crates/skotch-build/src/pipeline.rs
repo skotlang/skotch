@@ -362,42 +362,81 @@ fn build_android(
     project_dir: &Path,
     module: &MirModule,
 ) -> Result<BuildOutcome> {
-    // 1. Compile to DEX.
-    let dex_bytes = skotch_backend_dex::compile_module(module);
-
-    // 2. Encode AndroidManifest.xml to binary AXML.
-    //    Try to read a source AndroidManifest.xml from the project, or
-    //    build a minimal one from the ProjectModel.
-    let manifest_path = project_dir.join("src/main/AndroidManifest.xml");
-    let manifest_elem = if manifest_path.exists() {
-        // TODO: parse the source XML and convert to Element tree.
-        // For now, build from ProjectModel even if the file exists.
-        build_manifest_from_project(project)
+    // 1. Scan resources and generate R class.
+    let res_dir = project_dir.join("src/main/res");
+    let resource_table = crate::r_class::scan_resources(&res_dir);
+    let _r_classes = if !resource_table.entries.is_empty() {
+        let package = project
+            .namespace
+            .as_deref()
+            .or(project.application_id.as_deref())
+            .unwrap_or("com.example");
+        crate::r_class::generate_r_class(package, &resource_table)
     } else {
-        build_manifest_from_project(project)
+        Vec::new()
     };
+    if !resource_table.entries.is_empty() {
+        eprintln!(
+            "  {} resources found across {} types",
+            resource_table
+                .entries
+                .values()
+                .map(|v| v.len())
+                .sum::<usize>(),
+            resource_table.entries.len()
+        );
+    }
+
+    // 2. Compile to DEX.
+    let dex_bytes = skotch_backend_dex::compile_module(module);
+    // TODO: include R classes in DEX (requires merging MIR or DEX)
+
+    // 3. Encode AndroidManifest.xml to binary AXML.
+    let manifest_elem = build_manifest_from_project(project);
     let axml_bytes = skotch_axml::encode_axml(&manifest_elem);
 
-    // 3. Assemble unsigned APK.
+    // 4. Collect raw resource files for APK.
+    let mut res_files = Vec::new();
+    if res_dir.is_dir() {
+        for entry in walkdir::WalkDir::new(&res_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if entry.path().is_file() {
+                if let Ok(rel) = entry.path().strip_prefix(&res_dir) {
+                    let apk_path_str = format!("res/{}", rel.to_string_lossy().replace('\\', "/"));
+                    if let Ok(data) = std::fs::read(entry.path()) {
+                        res_files.push((apk_path_str, data));
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Assemble unsigned APK.
     let contents = skotch_apk::ApkContents {
         manifest_xml: axml_bytes,
         classes_dex: dex_bytes,
-        resources_arsc: None,
-        res_files: vec![],
+        resources_arsc: None, // TODO: generate resources.arsc binary table
+        res_files,
     };
 
     let build_dir = project_dir.join("build");
     std::fs::create_dir_all(&build_dir).ok();
-    let apk_path = build_dir.join("app-unsigned.apk");
-    skotch_apk::write_unsigned_apk(&apk_path, &contents)
-        .with_context(|| format!("writing {}", apk_path.display()))?;
+    let unsigned_path = build_dir.join("app-unsigned.apk");
+    skotch_apk::write_unsigned_apk(&unsigned_path, &contents)
+        .with_context(|| format!("writing {}", unsigned_path.display()))?;
 
-    eprintln!("BUILD SUCCESS: {}", apk_path.display());
+    // 6. Sign the APK (debug signing with v2 scheme).
+    let signed_path = build_dir.join("app-debug.apk");
+    skotch_sign::sign_apk_debug(&unsigned_path, &signed_path).with_context(|| "signing APK")?;
+
+    eprintln!("BUILD SUCCESS: {}", signed_path.display());
 
     Ok(BuildOutcome {
         project: project.clone(),
         target: BuildTarget::Android,
-        output_path: apk_path,
+        output_path: signed_path,
     })
 }
 

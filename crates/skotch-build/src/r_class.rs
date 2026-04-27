@@ -160,6 +160,188 @@ fn assign_resource_ids(table: &mut ResourceTable) {
     }
 }
 
+/// Generate a minimal `resources.arsc` binary table from the resource table.
+///
+/// The binary format follows Android's `ResourceTypes.h` with:
+/// - ResTable_header (RES_TABLE_TYPE = 0x0002)
+/// - Global string pool (ResStringPool with all resource values)
+/// - Package chunk with type string pool, type specs, and type entries
+///
+/// This is a simplified implementation that handles string and integer
+/// values. Complex resource types (styles, arrays) are deferred.
+pub fn generate_resources_arsc(
+    package_name: &str,
+    table: &ResourceTable,
+    values: &std::collections::HashMap<String, String>,
+) -> Vec<u8> {
+    use byteorder::{LittleEndian, WriteBytesExt};
+
+    // ── 1. Build global string pool (resource values) ──────────────────
+    let mut value_strings: Vec<String> = Vec::new();
+    let mut value_indices: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    for (res_type, entries) in &table.entries {
+        for entry in entries {
+            let key = format!("{}.{}", res_type, entry.name);
+            if let Some(val) = values.get(&key) {
+                if !value_indices.contains_key(val) {
+                    let idx = value_strings.len() as u32;
+                    value_indices.insert(val.clone(), idx);
+                    value_strings.push(val.clone());
+                }
+            }
+        }
+    }
+
+    // ── 2. Build type string pool (resource type names) ────────────────
+    let type_names: Vec<String> = table.entries.keys().cloned().collect();
+
+    // ── 3. Build key string pool (resource entry names) ────────────────
+    let mut key_strings: Vec<String> = Vec::new();
+    for entries in table.entries.values() {
+        for entry in entries {
+            key_strings.push(entry.name.clone());
+        }
+    }
+
+    // ── 4. Encode string pools ─────────────────────────────────────────
+    let global_pool = encode_string_pool(&value_strings);
+    let type_pool = encode_string_pool(&type_names);
+    let key_pool = encode_string_pool(&key_strings);
+
+    // ── 5. Build package chunk ─────────────────────────────────────────
+    let mut package_data = Vec::new();
+
+    // Package ID
+    package_data.write_u32::<LittleEndian>(0x7f).unwrap();
+
+    // Package name (128 UTF-16LE code units, zero-padded)
+    let mut pkg_name_buf = vec![0u8; 256];
+    for (i, ch) in package_name.encode_utf16().enumerate() {
+        if i >= 127 {
+            break;
+        }
+        pkg_name_buf[i * 2] = (ch & 0xFF) as u8;
+        pkg_name_buf[i * 2 + 1] = (ch >> 8) as u8;
+    }
+    package_data.extend_from_slice(&pkg_name_buf);
+
+    // typeStrings offset (from start of package chunk header)
+    let type_strings_offset = 4 + 256 + 4 + 4 + 4 + 4; // after fixed header fields
+    package_data
+        .write_u32::<LittleEndian>(type_strings_offset as u32)
+        .unwrap();
+    // lastPublicType
+    package_data
+        .write_u32::<LittleEndian>(type_names.len() as u32)
+        .unwrap();
+    // keyStrings offset
+    let key_strings_offset = type_strings_offset + type_pool.len();
+    package_data
+        .write_u32::<LittleEndian>(key_strings_offset as u32)
+        .unwrap();
+    // lastPublicKey
+    package_data
+        .write_u32::<LittleEndian>(key_strings.len() as u32)
+        .unwrap();
+
+    // Type string pool
+    package_data.extend_from_slice(&type_pool);
+    // Key string pool
+    package_data.extend_from_slice(&key_pool);
+
+    // Type specs and type entries (simplified: just mark all as public)
+    for (type_idx, (_, entries)) in table.entries.iter().enumerate() {
+        // ResTable_typeSpec
+        let mut spec = Vec::new();
+        spec.write_u16::<LittleEndian>(0x0202).unwrap(); // RES_TABLE_TYPE_SPEC_TYPE
+        spec.write_u16::<LittleEndian>(8).unwrap(); // header size
+        spec.write_u32::<LittleEndian>((8 + entries.len() * 4) as u32)
+            .unwrap(); // chunk size
+        spec.push((type_idx + 1) as u8); // type ID (1-based)
+        spec.push(0); // res0
+        spec.write_u16::<LittleEndian>(0).unwrap(); // res1
+        spec.write_u32::<LittleEndian>(entries.len() as u32)
+            .unwrap(); // entryCount
+        for _ in entries {
+            spec.write_u32::<LittleEndian>(0).unwrap(); // flags (0 = no config variation)
+        }
+        package_data.extend_from_slice(&spec);
+    }
+
+    // Wrap package chunk with header
+    let package_header_size = 288u16; // fixed package header size
+    let package_chunk_size = (package_header_size as usize) + package_data.len();
+    let mut package_chunk = Vec::new();
+    package_chunk.write_u16::<LittleEndian>(0x0200).unwrap(); // RES_TABLE_PACKAGE_TYPE
+    package_chunk
+        .write_u16::<LittleEndian>(package_header_size)
+        .unwrap();
+    package_chunk
+        .write_u32::<LittleEndian>(package_chunk_size as u32)
+        .unwrap();
+    package_chunk.extend_from_slice(&package_data);
+
+    // ── 6. Build the complete ResTable ─────────────────────────────────
+    let mut arsc = Vec::new();
+    let table_header_size = 12u16;
+    let total_size = table_header_size as usize + global_pool.len() + package_chunk.len();
+    arsc.write_u16::<LittleEndian>(0x0002).unwrap(); // RES_TABLE_TYPE
+    arsc.write_u16::<LittleEndian>(table_header_size).unwrap();
+    arsc.write_u32::<LittleEndian>(total_size as u32).unwrap();
+    arsc.write_u32::<LittleEndian>(1).unwrap(); // packageCount
+    arsc.extend_from_slice(&global_pool);
+    arsc.extend_from_slice(&package_chunk);
+
+    arsc
+}
+
+/// Encode a list of strings as an Android string pool chunk.
+fn encode_string_pool(strings: &[String]) -> Vec<u8> {
+    use byteorder::{LittleEndian, WriteBytesExt};
+
+    let header_size = 28u16;
+    let string_count = strings.len() as u32;
+
+    // Encode strings as UTF-8 with length prefix.
+    let mut string_data = Vec::new();
+    let mut offsets = Vec::new();
+    for s in strings {
+        offsets.push(string_data.len() as u32);
+        let bytes = s.as_bytes();
+        // UTF-8 length (varint: len as u8 if < 128)
+        string_data.push(bytes.len() as u8);
+        // UTF-8 length again (Android quirk)
+        string_data.push(bytes.len() as u8);
+        string_data.extend_from_slice(bytes);
+        string_data.push(0); // null terminator
+    }
+
+    let offsets_size = string_count as usize * 4;
+    let strings_start = header_size as usize + offsets_size;
+    let chunk_size = strings_start + string_data.len();
+
+    let mut pool = Vec::new();
+    pool.write_u16::<LittleEndian>(0x0001).unwrap(); // RES_STRING_POOL_TYPE
+    pool.write_u16::<LittleEndian>(header_size).unwrap();
+    pool.write_u32::<LittleEndian>(chunk_size as u32).unwrap();
+    pool.write_u32::<LittleEndian>(string_count).unwrap(); // stringCount
+    pool.write_u32::<LittleEndian>(0).unwrap(); // styleCount
+    pool.write_u32::<LittleEndian>(0x0100).unwrap(); // flags: UTF-8
+    pool.write_u32::<LittleEndian>(strings_start as u32)
+        .unwrap(); // stringsStart
+    pool.write_u32::<LittleEndian>(0).unwrap(); // stylesStart
+
+    // String offsets
+    for offset in &offsets {
+        pool.write_u32::<LittleEndian>(*offset).unwrap();
+    }
+    // String data
+    pool.extend_from_slice(&string_data);
+
+    pool
+}
+
 /// Generate R class bytecode as a JVM .class file.
 ///
 /// Produces a class with nested static classes for each resource type:
@@ -441,5 +623,44 @@ mod tests {
         assert_ne!((layout_id >> 16) & 0xff, (drawable_id >> 16) & 0xff);
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn generate_resources_arsc_basic() {
+        let mut table = ResourceTable::default();
+        table.entries.insert(
+            "string".to_string(),
+            vec![
+                ResourceEntry {
+                    name: "app_name".to_string(),
+                    id: 0x7f090001,
+                },
+                ResourceEntry {
+                    name: "hello".to_string(),
+                    id: 0x7f090002,
+                },
+            ],
+        );
+        let mut values = std::collections::HashMap::new();
+        values.insert("string.app_name".to_string(), "MyApp".to_string());
+        values.insert("string.hello".to_string(), "Hello World".to_string());
+
+        let arsc = generate_resources_arsc("com.example", &table, &values);
+        // Verify the ARSC starts with the correct type header
+        assert!(arsc.len() > 12);
+        assert_eq!(arsc[0], 0x02); // RES_TABLE_TYPE low byte
+        assert_eq!(arsc[1], 0x00); // RES_TABLE_TYPE high byte
+    }
+
+    #[test]
+    fn encode_string_pool_roundtrip() {
+        let strings = vec!["hello".to_string(), "world".to_string()];
+        let pool = super::encode_string_pool(&strings);
+        // Verify string pool header
+        assert_eq!(pool[0], 0x01); // RES_STRING_POOL_TYPE low
+        assert_eq!(pool[1], 0x00);
+        // String count should be 2
+        assert_eq!(pool[8], 2);
+        assert_eq!(pool[9], 0);
     }
 }
