@@ -1997,4 +1997,34 @@ testing = ["junit-jupiter", "coroutines-test", "mockk"]
         assert!(parsed.project.project_deps.contains(&":core".to_string()));
         assert!(parsed.project.project_deps.contains(&":utils".to_string()));
     }
+
+    #[test]
+    fn parse_compose_sample_settings() {
+        let src = r#"
+val snapshotVersion : String? = System.getenv("COMPOSE_SNAPSHOT_ID")
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "Jetchat"
+include(":app")
+"#;
+        let mut interner = Interner::new();
+        let parsed = parse_settings(src, FileId(0), &mut interner);
+        assert_eq!(
+            parsed.settings.root_project_name.as_deref(),
+            Some("Jetchat")
+        );
+        assert_eq!(parsed.settings.included_modules, vec![":app"]);
+    }
 }
