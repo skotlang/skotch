@@ -133,7 +133,11 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
             project_dir.join("src/main/kotlin"),
         ]
     } else {
-        vec![project_dir.join("src/main/kotlin")]
+        // Default: src/main/kotlin + src/main/java (Compose samples use java/ for .kt files)
+        vec![
+            project_dir.join("src/main/kotlin"),
+            project_dir.join("src/main/java"),
+        ]
     };
     let mut src_files = Vec::new();
     for src_dir in &src_dirs {
@@ -632,8 +636,11 @@ fn build_multi_module(
             .iter()
             .map(|&idx| {
                 let module = &modules[idx];
-                let src_dir = module.dir.join("src/main/kotlin");
-                let src_files = discover_sources(&src_dir).unwrap_or_default();
+                let mut src_files = Vec::new();
+                for subdir in &["src/main/kotlin", "src/main/java"] {
+                    src_files
+                        .extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
+                }
                 if src_files.is_empty() {
                     return (idx, Vec::new(), false);
                 }
@@ -726,12 +733,19 @@ fn build_multi_module(
         // Collect results and store per-module symbols for downstream modules.
         for (idx, classes, has_errors) in level_results {
             if has_errors {
-                // Re-gather to store symbols even on error.
+                let module_name = &modules[idx].name;
+                let module_bf = modules[idx].dir.join("build.gradle.kts");
+                diags.push(skotch_diagnostics::Diagnostic::error(
+                    skotch_span::Span::new(sm.add(module_bf.clone(), String::new()), 0, 0),
+                    format!("module '{}' had compilation errors", module_name),
+                ));
             }
             // Store this module's own symbol table for downstream modules.
             let module = &modules[idx];
-            let src_dir = module.dir.join("src/main/kotlin");
-            let src_files = discover_sources(&src_dir).unwrap_or_default();
+            let mut src_files = Vec::new();
+            for subdir in &["src/main/kotlin", "src/main/java"] {
+                src_files.extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
+            }
             if !src_files.is_empty() {
                 let mut tmp_interner = skotch_intern::Interner::new();
                 let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
