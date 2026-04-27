@@ -349,21 +349,68 @@ impl<W: Write> BspServer<W> {
             }
         };
 
+        let target_id = targets
+            .first()
+            .and_then(|t| t.get("uri"))
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+
         // For each target, run the build.
         for _target in &targets {
             match skotch_build::build_project(&skotch_build::BuildOptions {
                 project_dir: project_dir.clone(),
                 target_override: Some(skotch_buildscript::BuildTarget::Jvm),
             }) {
-                Ok(_) => {}
+                Ok(_) => {
+                    // Publish empty diagnostics (clear previous errors).
+                    let _ = self.publish_diagnostics(&target_id, &project_dir, &[]);
+                }
                 Err(e) => {
-                    eprintln!("BSP compile error: {e}");
+                    let err_msg = format!("{e}");
+                    // Publish error as a diagnostic.
+                    let _ = self.publish_diagnostics(&target_id, &project_dir, &[err_msg]);
                     return serde_json::json!({ "statusCode": 2 });
                 }
             }
         }
 
         serde_json::json!({ "statusCode": 1 }) // OK
+    }
+
+    /// Publish diagnostics via `build/publishDiagnostics` notification.
+    /// This bridges BSP compilation errors to the IDE's diagnostic panel,
+    /// sharing the same format as LSP `textDocument/publishDiagnostics`.
+    fn publish_diagnostics(
+        &mut self,
+        target_id: &serde_json::Value,
+        project_dir: &Path,
+        errors: &[String],
+    ) -> Result<()> {
+        let uri = format!("file://{}", project_dir.display());
+        let diagnostics: Vec<serde_json::Value> = errors
+            .iter()
+            .map(|msg| {
+                serde_json::json!({
+                    "range": {
+                        "start": { "line": 0, "character": 0 },
+                        "end": { "line": 0, "character": 0 }
+                    },
+                    "severity": 1, // Error
+                    "source": "skotch",
+                    "message": msg
+                })
+            })
+            .collect();
+
+        self.send_notification(
+            "build/publishDiagnostics",
+            serde_json::json!({
+                "textDocument": { "uri": uri },
+                "buildTarget": { "uri": target_id },
+                "diagnostics": diagnostics,
+                "reset": true
+            }),
+        )
     }
 
     fn handle_test(&mut self, _params: &serde_json::Value) -> serde_json::Value {

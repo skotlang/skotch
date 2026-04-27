@@ -2207,6 +2207,7 @@ version = "0.15.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "byteorder",
  "rayon",
  "rustc-hash",
  "skotch-apk",
