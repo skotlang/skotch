@@ -619,13 +619,13 @@ impl<'a> TypeChecker<'a> {
             Expr::BoolLit(_, _) => Ty::Bool,
             Expr::NullLit(_) => Ty::Nullable(Box::new(Ty::Nothing)),
             Expr::StringLit(_, _) => Ty::String,
-            other => {
-                self.diags.push(Diagnostic::error(
-                    other.span(),
-                    "top-level val initializers must be a literal",
-                ));
-                Ty::Error
-            }
+            // Non-literal initializers (Color(0xFF...), listOf(...), etc.)
+            // are allowed — they'll be lowered as function calls in the
+            // wrapper class's body. Infer as Any for now.
+            Expr::Call { .. } => Ty::Any,
+            Expr::Paren(inner, _) => self.synth_top_init(inner),
+            Expr::Unary { operand, .. } => self.synth_top_init(operand),
+            _ => Ty::Any,
         }
     }
 

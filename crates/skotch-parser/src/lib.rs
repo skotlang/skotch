@@ -295,6 +295,23 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Skip past balanced delimiters (e.g. `(...)`, `{...}`).
+    fn skip_balanced(&mut self, open: TokenKind, close: TokenKind) {
+        if self.peek_kind() != open {
+            return;
+        }
+        self.bump(); // consume open
+        let mut depth = 1u32;
+        while depth > 0 && self.peek_kind() != TokenKind::Eof {
+            if self.peek_kind() == open {
+                depth += 1;
+            } else if self.peek_kind() == close {
+                depth -= 1;
+            }
+            self.bump();
+        }
+    }
+
     /// Get the string content of an Ident token at a given index.
     fn lexeme_str(&self, idx: usize) -> &str {
         match self.payload(idx) {
@@ -319,6 +336,32 @@ impl<'a> Parser<'a> {
         let mut package = None;
         let mut imports = Vec::new();
         let mut decls = Vec::new();
+
+        // Skip file-level annotations: @file:OptIn(...), @file:Suppress(...)
+        // These appear before the package declaration and are metadata only.
+        self.skip_trivia();
+        while self.peek_kind() == TokenKind::At {
+            let saved = self.pos;
+            self.bump(); // consume '@'
+            if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "file" {
+                self.bump(); // consume 'file'
+                if self.peek_kind() == TokenKind::Colon {
+                    self.bump(); // consume ':'
+                                 // Skip the annotation name and arguments.
+                    if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
+                        self.bump(); // annotation name
+                    }
+                    if self.peek_kind() == TokenKind::LParen {
+                        self.skip_balanced(TokenKind::LParen, TokenKind::RParen);
+                    }
+                    self.skip_trivia();
+                    continue;
+                }
+            }
+            // Not a @file: annotation — restore position.
+            self.pos = saved;
+            break;
+        }
 
         self.skip_trivia();
         if self.peek_kind() == TokenKind::KwPackage {
@@ -633,6 +676,11 @@ impl<'a> Parser<'a> {
                     });
                     self.skip_trivia();
                     if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                    // Trailing comma support.
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::RParen {
                         break;
                     }
                 }
@@ -1582,6 +1630,10 @@ impl<'a> Parser<'a> {
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RParen {
+                    break;
+                }
             }
         }
         let rparen = self.expect(TokenKind::RParen, ")");
@@ -1691,6 +1743,34 @@ impl<'a> Parser<'a> {
     fn parse_type_ref(&mut self) -> TypeRef {
         self.skip_trivia();
         let span = self.peek_span();
+
+        // Skip annotations on types: `@Composable () -> Unit`
+        // Compose uses annotations on function types extensively.
+        while self.peek_kind() == TokenKind::At {
+            self.bump(); // consume '@'
+                         // Skip annotation name (possibly qualified: @a.b.Composable)
+            while self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
+                self.bump();
+                if self.peek_kind() == TokenKind::Dot {
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+            // Skip annotation arguments if present, but NOT if the `(`
+            // starts a function type `() -> Unit`. Detect by checking if
+            // the matching `)` is followed by `->`.
+            if self.peek_kind() == TokenKind::LParen {
+                let saved = self.pos;
+                self.skip_balanced(TokenKind::LParen, TokenKind::RParen);
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Arrow {
+                    // This was a function type, not annotation args — restore.
+                    self.pos = saved;
+                }
+            }
+            self.skip_trivia();
+        }
 
         // `suspend () -> T` function-type prefix. Consume
         // the `suspend` keyword and remember it so the returned TypeRef
@@ -3209,6 +3289,66 @@ impl<'a> Parser<'a> {
                         type_args: Vec::new(),
                         span,
                     };
+                }
+                // Class reference / member reference: `Foo::class`, `Foo::member`
+                TokenKind::ColonColon => {
+                    self.bump(); // consume ::
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::KwClass {
+                        // Foo::class — class literal
+                        let class_span = self.peek_span();
+                        self.bump(); // consume 'class'
+                        let span = expr.span().merge(class_span);
+                        // Desugar to: Foo.javaClass (a class reference).
+                        // The actual type is KClass<Foo> but we treat it as Any.
+                        let class_name = self.interner.intern("class");
+                        expr = Expr::Field {
+                            receiver: Box::new(expr),
+                            name: class_name,
+                            span,
+                        };
+                    } else if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword()
+                    {
+                        // Foo::member — member reference, desugar to lambda
+                        let idx = self.pos;
+                        let fn_span = self.peek_span();
+                        self.bump();
+                        let fn_name = self.intern_ident_at(idx);
+                        let span = expr.span().merge(fn_span);
+                        let param_name = self.interner.intern("$ref_arg");
+                        let call = Expr::Call {
+                            callee: Box::new(Expr::Ident(fn_name, fn_span)),
+                            args: vec![CallArg {
+                                name: None,
+                                expr: Expr::Ident(param_name, fn_span),
+                            }],
+                            type_args: Vec::new(),
+                            span,
+                        };
+                        expr = Expr::Lambda {
+                            params: vec![Param {
+                                name: param_name,
+                                ty: TypeRef {
+                                    name: self.interner.intern("Any"),
+                                    nullable: false,
+                                    func_params: None,
+                                    type_args: Vec::new(),
+                                    is_suspend: false,
+                                    has_receiver: false,
+                                    span: fn_span,
+                                },
+                                default: None,
+                                is_vararg: false,
+                                span: fn_span,
+                            }],
+                            body: Block {
+                                stmts: vec![Stmt::Expr(call)],
+                                span,
+                            },
+                            is_suspend: false,
+                            span,
+                        };
+                    }
                 }
                 // Array/collection indexing: `expr[index]`.
                 TokenKind::LBracket => {
