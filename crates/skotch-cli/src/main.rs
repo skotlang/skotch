@@ -121,6 +121,14 @@ enum Command {
         #[arg(short = 'C', long = "project-dir", value_name = "DIR")]
         project_dir: Option<PathBuf>,
     },
+    /// Start the Build Server Protocol (BSP 2.2) server on stdin/stdout.
+    ///
+    /// Used by IDEs (IntelliJ, VS Code) for build target discovery,
+    /// compilation, and test execution through the standardised BSP
+    /// protocol. Auto-discovered via `.bsp/skotch.json`.
+    Bsp,
+    /// Generate the `.bsp/skotch.json` connection file for IDE discovery.
+    Init,
 }
 
 fn main() -> Result<()> {
@@ -134,7 +142,7 @@ fn main() -> Result<()> {
         if !first_arg.starts_with('-')
             && !matches!(
                 first_arg.as_str(),
-                "emit" | "repl" | "run" | "build" | "lsp" | "test" | "help"
+                "emit" | "repl" | "run" | "build" | "lsp" | "test" | "bsp" | "init" | "help"
             )
             && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
         {
@@ -275,6 +283,14 @@ fn main() -> Result<()> {
             if !result.success {
                 std::process::exit(1);
             }
+        }
+        Command::Bsp => {
+            skotch_bsp::run_server()?;
+        }
+        Command::Init => {
+            let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let path = skotch_bsp::generate_connection_file(&project_dir)?;
+            eprintln!("Generated {}", path.display());
         }
     }
     Ok(())

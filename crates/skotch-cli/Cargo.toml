@@ -15,6 +15,7 @@ skotch-driver = { workspace = true }
 skotch-build  = { workspace = true }
 skotch-repl   = { workspace = true }
 skotch-lsp    = { workspace = true }
+skotch-bsp    = { workspace = true }
 clap          = { workspace = true }
 anyhow        = { workspace = true }
 tokio         = { workspace = true }

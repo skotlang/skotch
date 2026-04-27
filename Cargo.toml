@@ -47,13 +47,14 @@ members = [
     # Layer 7 — incremental compilation database
     "crates/skotch-db",
 
-    # Layer 8 — build orchestration + driver + CLI + LSP
+    # Layer 8 — build orchestration + driver + CLI + LSP + BSP
     "crates/skotch-build",
     "crates/skotch-driver",
     "crates/skotch-cli",
     "crates/skotch-repl",
     "crates/skotch-jvm",
     "crates/skotch-lsp",
+    "crates/skotch-bsp",
 
     # Fixture generation tooling (cargo-xtask pattern)
     "xtask",
@@ -174,6 +175,7 @@ skotch-driver          = { path = "crates/skotch-driver" }
 skotch-repl            = { path = "crates/skotch-repl" }
 skotch-jvm             = { path = "crates/skotch-jvm" }
 skotch-lsp             = { path = "crates/skotch-lsp" }
+skotch-bsp             = { path = "crates/skotch-bsp" }
 
 [profile.dev]
 debug            = "line-tables-only"
