@@ -263,6 +263,9 @@ struct Walker<'src, 'lf> {
     settings: SettingsModel,
     allprojects_config: SharedConfig,
     subprojects_config: SharedConfig,
+    /// Local `val` assignments captured from dependencies blocks for
+    /// string interpolation: `val ktor_version = "3.1.0"` → "ktor_version" → "3.1.0".
+    dep_vals: std::collections::HashMap<String, String>,
 }
 
 impl<'src, 'lf> Walker<'src, 'lf> {
@@ -275,6 +278,7 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             settings: SettingsModel::default(),
             allprojects_config: SharedConfig::default(),
             subprojects_config: SharedConfig::default(),
+            dep_vals: std::collections::HashMap::new(),
         }
     }
 
@@ -326,13 +330,26 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                                 value.push_str(s);
                             }
                         }
+                        TokenKind::StringIdentRef => {
+                            // $variable reference inside string template.
+                            // Look up in dep_vals for simple substitution.
+                            let idx = self.pos;
+                            self.bump();
+                            if let Some(Some(skotch_lexer::TokenPayload::StringIdentRef(
+                                var_name,
+                            ))) = self.lexed.payloads.get(idx)
+                            {
+                                if let Some(val) = self.dep_vals.get(var_name.as_str()) {
+                                    value.push_str(val);
+                                }
+                            }
+                        }
                         TokenKind::StringEnd => {
                             self.bump();
                             break;
                         }
                         TokenKind::Eof => break,
                         _ => {
-                            // StringIdentRef, StringExprStart, etc. — skip
                             self.bump();
                         }
                     }
@@ -369,6 +386,39 @@ impl<'src, 'lf> Walker<'src, 'lf> {
     }
 
     fn parse_top_statement(&mut self) -> bool {
+        // Capture top-level `val xxx = "..."` for string interpolation.
+        if self.peek() == TokenKind::KwVal {
+            self.bump();
+            if self.peek() == TokenKind::Ident {
+                let name_span = self.bump();
+                let var_name = self.text(name_span).to_string();
+                // `val x = "..."` or `val x by extra("...")`
+                if self.peek() == TokenKind::Eq {
+                    self.bump();
+                    if let Some(val) = self.try_consume_string() {
+                        self.dep_vals.insert(var_name, val);
+                    }
+                } else if self.peek() == TokenKind::Ident {
+                    // `val x by extra("...")`
+                    let kw = self.bump();
+                    if self.text(kw) == "by" {
+                        // skip `extra(` or similar
+                        if self.peek() == TokenKind::Ident {
+                            self.bump(); // e.g. "extra"
+                        }
+                        if self.peek() == TokenKind::LParen {
+                            self.bump();
+                            if let Some(val) = self.try_consume_string() {
+                                self.dep_vals.insert(var_name, val);
+                            }
+                            self.skip_past(TokenKind::RParen);
+                        }
+                    }
+                }
+            }
+            self.skip_to_newline();
+            return true;
+        }
         if self.peek() != TokenKind::Ident {
             return false;
         }
@@ -1001,6 +1051,23 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             if self.peek() == TokenKind::RBrace || self.at_end() {
                 break;
             }
+            // Capture `val xxx = "..."` local variable assignments for
+            // string interpolation in dependency coordinates.
+            if self.peek() == TokenKind::KwVal {
+                self.bump();
+                if self.peek() == TokenKind::Ident {
+                    let name_span = self.bump();
+                    let var_name = self.text(name_span).to_string();
+                    if self.peek() == TokenKind::Eq {
+                        self.bump();
+                        if let Some(val) = self.try_consume_string() {
+                            self.dep_vals.insert(var_name, val);
+                        }
+                    }
+                }
+                self.skip_to_newline();
+                continue;
+            }
             // Look for dependency declarations:
             //   implementation(project(":lib")) or implementation("g:a:v")
             //   testImplementation("org.junit.jupiter:...")
@@ -1036,6 +1103,16 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                                 self.project.project_deps.push(dep);
                             }
                             self.skip_past(TokenKind::RParen);
+                        } else if inner_text == "projects" {
+                            // Typesafe project accessor: projects.lib → project(":lib")
+                            if self.peek() == TokenKind::Dot {
+                                self.bump();
+                                if self.peek() == TokenKind::Ident {
+                                    let mod_span = self.bump();
+                                    let mod_name = self.text(mod_span).to_string();
+                                    self.project.project_deps.push(format!(":{mod_name}"));
+                                }
+                            }
                         } else if inner_text == "libs" {
                             // Version catalog reference: libs.commons.math3
                             let mut path = String::from("libs");
@@ -1292,7 +1369,10 @@ impl<'src, 'lf> Walker<'src, 'lf> {
 
 /// Strip surrounding double quotes and process basic escape sequences.
 fn unquote_string_lit(raw: &str) -> String {
-    let inner = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
+    let inner = if raw.len() >= 2
+        && ((raw.starts_with('"') && raw.ends_with('"'))
+            || (raw.starts_with('\'') && raw.ends_with('\'')))
+    {
         &raw[1..raw.len() - 1]
     } else {
         raw
@@ -1865,5 +1945,56 @@ testing = ["junit-jupiter", "coroutines-test", "mockk"]
         assert!(project
             .test_deps
             .contains(&"io.mockk:mockk:1.13.14".to_string()));
+    }
+
+    #[test]
+    fn string_interpolation_in_deps() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            dependencies {
+                val ktor_version = "3.1.0"
+                implementation("io.ktor:ktor-server-core:$ktor_version")
+                implementation("io.ktor:ktor-server-netty:$ktor_version")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed
+            .project
+            .external_deps
+            .contains(&"io.ktor:ktor-server-core:3.1.0".to_string()));
+        assert!(parsed
+            .project
+            .external_deps
+            .contains(&"io.ktor:ktor-server-netty:3.1.0".to_string()));
+    }
+
+    #[test]
+    fn top_level_val_interpolation() {
+        let src = r#"
+            val myVersion = "2.0.0"
+            plugins { kotlin("jvm") }
+            dependencies {
+                implementation("com.example:lib:$myVersion")
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert_eq!(parsed.project.external_deps, vec!["com.example:lib:2.0.0"]);
+    }
+
+    #[test]
+    fn typesafe_project_accessors() {
+        let src = r#"
+            plugins { kotlin("jvm") }
+            dependencies {
+                implementation(projects.core)
+                implementation(projects.utils)
+            }
+        "#;
+        let mut interner = Interner::new();
+        let parsed = parse_buildfile(src, FileId(0), &mut interner);
+        assert!(parsed.project.project_deps.contains(&":core".to_string()));
+        assert!(parsed.project.project_deps.contains(&":utils".to_string()));
     }
 }
