@@ -12,6 +12,7 @@ skotch-intern      = { workspace = true }
 skotch-config          = { workspace = true }
 skotch-diagnostics     = { workspace = true }
 skotch-stdlib-registry = { workspace = true }
+skotch-classinfo       = { workspace = true }
 byteorder        = { workspace = true }
 rustc-hash       = { workspace = true }
 

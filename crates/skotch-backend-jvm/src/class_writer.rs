@@ -27,6 +27,18 @@ use skotch_mir::{
 use skotch_types::Ty;
 use std::io::Write;
 
+/// Check if a JVM class is an interface by reading its ACC_INTERFACE
+/// flag from the classfile. Falls back to the static JVM_INTERFACES
+/// list when the classfile isn't available.
+fn is_jvm_interface_check(class_name: &str) -> bool {
+    // Try classfile ACC_INTERFACE flag first (authoritative).
+    if let Some(is_iface) = skotch_classinfo::check_is_interface(class_name) {
+        return is_iface;
+    }
+    // Fallback to static list for environments without JDK.
+    skotch_stdlib_registry::is_jvm_interface(class_name)
+}
+
 const ACC_PUBLIC: u16 = 0x0001;
 #[allow(dead_code)]
 const ACC_PRIVATE: u16 = 0x0002;
@@ -2938,8 +2950,7 @@ fn emit_multi_suspend_state_machine_method(
             $code.push(0xB5);
             $code.write_u16::<BigEndian>(fr_label).unwrap();
             emit_load_ref_slot($code, cont_slot);
-            let is_iface =
-                $site.is_virtual && skotch_stdlib_registry::is_jvm_interface(&$site.callee_class);
+            let is_iface = $site.is_virtual && is_jvm_interface_check(&$site.callee_class);
             if $site.is_virtual {
                 if is_iface {
                     $code.push(0xB9);
@@ -3033,7 +3044,7 @@ fn emit_multi_suspend_state_machine_method(
                 code.write_u16::<BigEndian>(fr_label).unwrap();
                 emit_load_ref_slot(&mut code, cont_slot);
                 if site.is_virtual {
-                    let is_iface = skotch_stdlib_registry::is_jvm_interface(&site.callee_class);
+                    let is_iface = is_jvm_interface_check(&site.callee_class);
                     if is_iface {
                         code.push(0xB9);
                         code.write_u16::<BigEndian>(callee_refs[case_i]).unwrap();
@@ -4178,7 +4189,7 @@ fn emit_mir_segment(
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
-                    let is_iface = skotch_stdlib_registry::is_jvm_interface(class_name);
+                    let is_iface = is_jvm_interface_check(class_name);
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, &descriptor);
                         code.push(0xB9); // invokeinterface
@@ -4285,7 +4296,7 @@ fn emit_mir_segment(
                         }
                     }
                     // Check if target is an interface for invokeinterface.
-                    let is_iface = skotch_stdlib_registry::is_jvm_interface(class_name);
+                    let is_iface = is_jvm_interface_check(class_name);
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
                         code.push(0xB9); // invokeinterface
@@ -5787,8 +5798,7 @@ fn emit_lambda_multi_suspend_body(
                 emit_iconst_small($code, $label);
                 $code.push(0xB5); // putfield label
                 $code.write_u16::<BigEndian>(fr_label).unwrap();
-                let is_iface = $site.is_virtual
-                    && skotch_stdlib_registry::is_jvm_interface(&$site.callee_class);
+                let is_iface = $site.is_virtual && is_jvm_interface_check(&$site.callee_class);
                 if $site.is_virtual {
                     if is_iface {
                         $code.push(0xB9);
@@ -7656,7 +7666,7 @@ fn walk_block(
                         }
                     }
                     // Well-known JDK/Kotlin interfaces require invokeinterface.
-                    let is_jdk_interface = skotch_stdlib_registry::is_jvm_interface(class_name);
+                    let is_jdk_interface = is_jvm_interface_check(class_name);
                     if is_jdk_interface {
                         let imref = cp.interface_methodref(class_name, method_name, descriptor);
                         code.push(0xB9); // invokeinterface

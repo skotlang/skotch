@@ -1837,12 +1837,21 @@ milestones:
 
     features:
       - name: "JVM interface detection from ACC_INTERFACE flag"
+        completed: true
         description: >
-          Instead of a hardcoded list of interface class names, check the
-          ACC_INTERFACE (0x0200) bit in classfile access_flags when deciding
-          between invokevirtual and invokeinterface. skotch-classinfo
-          already parses access_flags. This eliminates the JVM_INTERFACES
-          static list entirely.
+          check_is_interface() in skotch-classinfo loads the class and
+          checks ACC_INTERFACE (0x0200). is_jvm_interface_check() in
+          the JVM backend delegates to this, falling back to the static
+          JVM_INTERFACES list when classfiles aren't available. All 6
+          invokevirtual/invokeinterface decision sites updated.
+
+      - name: "Type-aware overload resolution"
+        completed: true
+        description: >
+          Implemented in skotch-mir-lower via pick_best_overload() with
+          overload_score() scoring. Handles exact matches (Int→I: 3),
+          widening (Int→J: 2), autobox (Int→Object: 1). Supports
+          int-to-long widening in JVM backend with i2l instruction.
 
       - name: "Stdlib extension discovery from facade class scanning"
         description: >

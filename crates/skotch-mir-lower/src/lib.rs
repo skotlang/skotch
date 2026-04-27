@@ -101,6 +101,22 @@ fn ensure_class_loaded(class_name: &str) {
     }
 }
 
+/// Check if a JVM class is an interface by reading its ACC_INTERFACE flag
+/// from the classfile. Falls back to the static registry for known stdlib
+/// interfaces. This replaces the hardcoded JVM_INTERFACES list.
+pub fn is_jvm_interface(class_name: &str) -> bool {
+    // First check the classfile registry (authoritative).
+    ensure_class_loaded(class_name);
+    let from_classfile =
+        with_registry(|reg| reg.get(class_name).map(|ci| ci.is_interface())).flatten();
+    if let Some(is_iface) = from_classfile {
+        return is_iface;
+    }
+    // Fallback to static registry for known stdlib interfaces when
+    // classfile isn't available (e.g. no JDK installed).
+    skotch_stdlib_registry::is_jvm_interface(class_name)
+}
+
 /// Convert a `Ty` to its JVM descriptor string fragment (for building
 /// method descriptors in the MIR lowerer).
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
