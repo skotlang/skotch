@@ -54,7 +54,7 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.9.0"       # v0.1-v0.9 completed, v0.10-v0.11 in progress
+  current_version: "0.20.0"      # v0.1-v0.20 completed
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
@@ -1505,48 +1505,77 @@ milestones:
 
   - version: "0.20.0"
     title: "Build System and Dependency Resolution"
-    status: planned
+    status: completed
     depends_on: ["0.15.0"]
     description: >
-      Complete the build pipeline: AAR handling, BOM version constraints,
-      Google Maven/Maven Central resolution for Android dependencies,
-      multi-module project support. Core infrastructure already exists.
+      Complete the build pipeline: BOM version constraints, Google Maven
+      resolution, multi-module support, version catalogs with bundles,
+      test runner with JUnit 4/5, and Gradle compatibility covering
+      allprojects/subprojects, custom source dirs, repositories, string
+      interpolation in deps, Groovy DSL fallback, and classpath-based
+      method resolution for external dependencies.
 
     features:
       - name: "Maven dependency resolution"
         completed: true
-        description: "skotch-tape crate. POM parsing, transitive deps, caching."
+        description: "skotch-tape crate. POM parsing, transitive deps, SHA-1 checksum, caching."
       - name: "Version catalog (libs.versions.toml)"
         completed: true
-        description: "Already implemented in skotch-buildscript."
+        description: >
+          Full TOML parser in skotch-buildscript/version_catalog.rs.
+          Supports [versions], [libraries], [plugins], [bundles] sections.
+          libs.xxx and libs.bundles.xxx resolved in build files.
+          alias(libs.plugins.xxx) in plugins block.
       - name: "Gradle build.gradle.kts token walker"
         completed: true
         description: >
-          Token walker (NOT a Kotlin evaluator) extracts plugins {},
-          dependencies {}, android {} config. Silently skips unrecognised
-          DSL. Sufficient for skotch's needs.
+          Token walker extracts plugins {}, dependencies {}, android {},
+          repositories {}, sourceSets {}, tasks {}, allprojects {},
+          subprojects {} config. String interpolation in dep coordinates.
+          Groovy DSL (build.gradle) fallback. Typesafe project accessors
+          (projects.xxx). Version catalog bundle expansion.
       - name: "Package-aware class naming"
         completed: true
-        description: "Already implemented."
+        description: "Package declarations prefix class names correctly."
+      - name: "BOM support"
+        completed: true
+        description: >
+          platform("group:artifact:version") deps parsed. BOM POM XML
+          fetched and dependencyManagement versions extracted. Applied
+          to versionless deps before resolution.
+      - name: "Google Maven repository"
+        completed: true
+        description: >
+          Repositories parsed from build.gradle.kts: mavenCentral(),
+          google(), maven("url"), maven { url = "..." }. Google Maven
+          (dl.google.com/dl/android/maven2) included as default fallback.
+      - name: "settings.gradle.kts multi-module"
+        completed: true
+        description: >
+          include(":app", ":lib") parsed. Kahn's algorithm topological
+          sort. Cross-module symbol visibility. Parallel compilation by
+          dependency level. allprojects/subprojects config inheritance.
+      - name: "Test runner (skotch test)"
+        completed: true
+        description: >
+          JUnit 4 and 5 support. Test source compilation with main
+          source visibility. JUnit Platform Console Launcher. XML
+          reports. Classpath-based method resolution with type-aware
+          overload selection.
+      - name: "Classpath method resolution"
+        completed: true
+        description: >
+          skotch-classinfo reads .class files from JARs. Pre-loaded
+          into shared registry. Static method imports. Constructor
+          overload resolution. Int-to-long widening.
+      - name: "Resources in JAR"
+        completed: true
+        description: "src/main/resources/ files included in output JAR."
       - name: "AAR handling"
         description: >
           Extract classes.jar + res/ from .aar files. Add classes.jar to
           compilation classpath. Forward res/ to the resource pipeline.
           Needed for all AndroidX/Material3 dependencies.
-      - name: "BOM support"
-        description: >
-          platform("compose-bom:2026.03.00") constrains dependency
-          versions. Parse BOM POM and apply version constraints before
-          resolving transitive dependencies.
-      - name: "Google Maven repository"
-        description: >
-          Resolve from dl.google.com/dl/android/maven2/ in addition to
-          Maven Central. Required for all AndroidX artifacts.
-      - name: "settings.gradle.kts multi-module"
-        description: >
-          Parse include(":app", ":lib") from settings.gradle.kts.
-          Build modules in dependency order. Already have settings
-          parser in skotch-buildscript.
 
 # ============================================================================
 # v0.25.0 — Build Server Protocol (BSP)
