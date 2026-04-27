@@ -455,6 +455,163 @@ pub fn scan_jars(jars: &[PathBuf]) -> HashMap<String, ClassInfo> {
 }
 
 /// Build a class registry from the JDK for commonly-used java.lang classes.
+/// A discovered extension function from scanning a Kotlin facade class.
+#[derive(Clone, Debug)]
+pub struct DiscoveredExtension {
+    /// JVM facade class: "kotlin/collections/CollectionsKt"
+    pub facade_class: String,
+    /// Method name: "map"
+    pub method_name: String,
+    /// JVM method descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;"
+    pub descriptor: String,
+    /// Receiver type (first parameter): "Ljava/lang/Iterable;"
+    pub receiver_descriptor: String,
+    /// Return type descriptor: "Ljava/util/List;"
+    pub return_descriptor: String,
+}
+
+/// Scan kotlin-stdlib.jar for all `*Kt` facade classes and extract
+/// public static methods as potential extension functions. An extension
+/// function in Kotlin compiles to a static method whose first parameter
+/// is the receiver type.
+pub fn discover_stdlib_extensions() -> Vec<DiscoveredExtension> {
+    let mut extensions = Vec::new();
+    let kotlin_lib = match find_kotlin_lib_dir() {
+        Ok(dir) => dir.join("kotlin-stdlib.jar"),
+        Err(_) => return extensions,
+    };
+    if !kotlin_lib.exists() {
+        return extensions;
+    }
+    let file = match std::fs::File::open(&kotlin_lib) {
+        Ok(f) => f,
+        Err(_) => return extensions,
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => return extensions,
+    };
+    for i in 0..archive.len() {
+        let mut entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.name().to_string();
+        // Scan *Kt.class facade classes (not inner classes, not $-suffixed).
+        // Include implementation classes like CollectionsKt__CollectionsKt
+        // and CollectionsKt___CollectionsKt which contain the actual methods.
+        if !name.ends_with(".class") || name.contains('$') {
+            continue;
+        }
+        // Must contain "Kt" in the simple class name.
+        let simple = name.trim_end_matches(".class");
+        let simple_name = simple.rsplit('/').next().unwrap_or(simple);
+        if !simple_name.contains("Kt") {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        if entry.read_to_end(&mut bytes).is_err() {
+            continue;
+        }
+        let class_info = match parse_class(&bytes) {
+            Ok(ci) => ci,
+            Err(_) => continue,
+        };
+        // Extract public static methods with at least one parameter
+        // (the first parameter is the receiver).
+        for method in &class_info.methods {
+            if !method.is_public() || !method.is_static() {
+                continue;
+            }
+            // Skip constructors, synthetic methods, and $default overloads.
+            if method.name.starts_with('<')
+                || method.name.contains('$')
+                || method.name.starts_with("access$")
+            {
+                continue;
+            }
+            // Parse the descriptor to get the first parameter (receiver).
+            let params = parse_descriptor_params(&method.descriptor);
+            if params.is_empty() {
+                continue; // No receiver → not an extension function
+            }
+            let return_desc = method
+                .descriptor
+                .rsplit(')')
+                .next()
+                .unwrap_or("V")
+                .to_string();
+            // Map internal impl class to public facade:
+            // kotlin/collections/CollectionsKt__CollectionsKt →
+            // kotlin/collections/CollectionsKt
+            let facade = normalize_facade_class(&class_info.name);
+            extensions.push(DiscoveredExtension {
+                facade_class: facade,
+                method_name: method.name.clone(),
+                descriptor: method.descriptor.clone(),
+                receiver_descriptor: params[0].clone(),
+                return_descriptor: return_desc,
+            });
+        }
+    }
+    extensions
+}
+
+/// Map Kotlin internal implementation class names to their public facade.
+/// E.g. `kotlin/collections/CollectionsKt__CollectionsKt` → `kotlin/collections/CollectionsKt`
+fn normalize_facade_class(name: &str) -> String {
+    // Internal implementation classes have `__` or `___` before the suffix.
+    if let Some(idx) = name.find("__") {
+        name[..idx].to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+/// Parse a JVM descriptor to extract parameter type strings.
+fn parse_descriptor_params(desc: &str) -> Vec<String> {
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut params = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => {
+                params.push(c.to_string());
+            }
+            'L' => {
+                let mut s = String::from("L");
+                for sc in chars.by_ref() {
+                    s.push(sc);
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                params.push(s);
+            }
+            '[' => {
+                let mut s = String::from("[");
+                if let Some(&next) = chars.peek() {
+                    if next == 'L' {
+                        chars.next();
+                        s.push('L');
+                        for sc in chars.by_ref() {
+                            s.push(sc);
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        s.push(chars.next().unwrap_or('I'));
+                    }
+                }
+                params.push(s);
+            }
+            _ => {}
+        }
+    }
+    params
+}
+
 pub fn build_jdk_registry() -> HashMap<String, ClassInfo> {
     let mut reg = HashMap::new();
     let classes = [

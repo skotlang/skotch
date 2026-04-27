@@ -322,9 +322,76 @@ fn stdlib_extension(
     })
 }
 
-// The old hardcoded match table (~200 lines) has been replaced by the
-// data-driven registry in `skotch-stdlib-registry::STDLIB_EXTENSIONS`.
-// To add new stdlib extension mappings, add entries to that crate's table.
+/// Dynamically discovered stdlib extension cache. Populated on first use
+/// by scanning kotlin-stdlib.jar for all *Kt facade classes.
+static DISCOVERED_EXTENSIONS: Mutex<Option<Vec<skotch_classinfo::DiscoveredExtension>>> =
+    Mutex::new(None);
+
+/// Look up an extension function dynamically from kotlin-stdlib.jar.
+/// Falls back to this when the static STDLIB_EXTENSIONS table has no match.
+fn dynamic_stdlib_extension(
+    receiver_ty: &str,
+    method: &str,
+) -> Option<(String, String, String, Ty)> {
+    let mut guard = DISCOVERED_EXTENSIONS.lock().ok()?;
+    let extensions = guard.get_or_insert_with(skotch_classinfo::discover_stdlib_extensions);
+
+    // Map Skotch receiver type names to JVM descriptor prefixes.
+    let receiver_descriptors: Vec<&str> = match receiver_ty {
+        "java/lang/Iterable"
+        | "java/util/List"
+        | "java/util/Collection"
+        | "List"
+        | "MutableList"
+        | "Collection"
+        | "Iterable" => {
+            vec![
+                "Ljava/lang/Iterable;",
+                "Ljava/util/Collection;",
+                "Ljava/util/List;",
+            ]
+        }
+        "java/util/Map" | "Map" | "MutableMap" => vec!["Ljava/util/Map;"],
+        "java/util/Set" | "Set" | "MutableSet" => vec!["Ljava/util/Set;", "Ljava/lang/Iterable;"],
+        "java/lang/String" | "String" => vec!["Ljava/lang/CharSequence;", "Ljava/lang/String;"],
+        "java/lang/CharSequence" | "CharSequence" => vec!["Ljava/lang/CharSequence;"],
+        _ if receiver_ty.starts_with("java/") || receiver_ty.starts_with("kotlin/") => {
+            vec![] // Return empty for specific JVM types we don't handle yet
+        }
+        _ => vec!["Ljava/lang/Iterable;", "Ljava/lang/Object;"], // Try common supertypes
+    };
+
+    for ext in extensions.iter() {
+        if ext.method_name != method {
+            continue;
+        }
+        for &recv_desc in &receiver_descriptors {
+            if ext.receiver_descriptor == recv_desc {
+                let return_ty = match ext.return_descriptor.as_str() {
+                    "V" => Ty::Unit,
+                    "Z" => Ty::Bool,
+                    "I" => Ty::Int,
+                    "J" => Ty::Long,
+                    "D" => Ty::Double,
+                    d if d.starts_with("Ljava/lang/String;") => Ty::String,
+                    d if d.starts_with("Ljava/util/List;") => {
+                        Ty::Class("java/util/List".to_string())
+                    }
+                    d if d.starts_with("Ljava/util/Set;") => Ty::Class("java/util/Set".to_string()),
+                    d if d.starts_with("Ljava/util/Map;") => Ty::Class("java/util/Map".to_string()),
+                    _ => Ty::Any,
+                };
+                return Some((
+                    ext.facade_class.clone(),
+                    ext.method_name.clone(),
+                    ext.descriptor.clone(),
+                    return_ty,
+                ));
+            }
+        }
+    }
+    None
+}
 
 /// Lower a parsed/resolved/typed file to MIR.
 pub fn lower_file(
@@ -6116,9 +6183,12 @@ fn lower_expr(
                         Ty::Any => "java/lang/Object",
                         _ => "",
                     };
-                    if let Some((facade_class, facade_method, descriptor, ret_ty)) =
-                        stdlib_extension(recv_ty_str, &method_name_str)
-                    {
+                    // Try static table first. Dynamic discovery is
+                    // deferred until after Java instance method lookup
+                    // to avoid shadowing String.substring, String.trim, etc.
+                    let ext_result = stdlib_extension(recv_ty_str, &method_name_str)
+                        .map(|(a, b, c, d)| (a.to_string(), b.to_string(), c.to_string(), d));
+                    if let Some((facade_class, facade_method, descriptor, ret_ty)) = ext_result {
                         // For `fold`, the second arg (initial accumulator,
                         // index 1 in all_args) is `Object` on the JVM so
                         // any primitive must be boxed.
@@ -6738,6 +6808,30 @@ fn lower_expr(
                             module.functions[fid.0 as usize].return_ty.clone(),
                         )
                     } else {
+                        // Last resort: try dynamic stdlib extension discovery.
+                        let recv_ty_str2 = match &recv_ty {
+                            Ty::Class(cn) => cn.as_str(),
+                            Ty::String => "java/lang/String",
+                            Ty::Any => "java/lang/Object",
+                            _ => "",
+                        };
+                        if let Some((fc, fm, fd, rt)) =
+                            dynamic_stdlib_extension(recv_ty_str2, &method_name_str)
+                        {
+                            let dest = fb.new_local(rt);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: fc,
+                                        method_name: fm,
+                                        descriptor: fd,
+                                    },
+                                    args: all_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
                         diags.push(Diagnostic::error(
                             *span,
                             format!("unknown method `{}`", interner.resolve(method_name)),
