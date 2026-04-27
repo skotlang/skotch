@@ -13,6 +13,7 @@ skotch-jar         = { workspace = true }
 skotch-axml        = { workspace = true }
 skotch-apk         = { workspace = true }
 skotch-sign        = { workspace = true }
+skotch-compose     = { workspace = true }
 skotch-mir         = { workspace = true }
 skotch-intern      = { workspace = true }
 skotch-span        = { workspace = true }

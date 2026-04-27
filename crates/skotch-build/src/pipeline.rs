@@ -218,6 +218,10 @@ pub fn build_project(opts: &BuildOptions) -> Result<BuildOutcome> {
             for (file_module, _, _) in &results {
                 merge_modules(&mut module, file_module.clone());
             }
+            // Apply Compose transform if the project uses Compose.
+            if project.is_compose || skotch_compose::has_composables(&module) {
+                skotch_compose::compose_transform(&mut module);
+            }
             build_android(&project, &project_dir, &module)
         }
         BuildTarget::Native => {

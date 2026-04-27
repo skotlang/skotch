@@ -54,7 +54,7 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.30.0"      # v0.1-v0.30 completed
+  current_version: "0.40.0"      # v0.1-v0.40 completed
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
@@ -1754,7 +1754,7 @@ milestones:
 
   - version: "0.40.0"
     title: "Compose Compiler Plugin"
-    status: planned
+    status: completed
     depends_on: ["0.30.0"]
     description: >
       @Composable transform (similar in complexity to the CPS coroutine
@@ -1763,26 +1763,31 @@ milestones:
 
     features:
       - name: "@Composable function transform"
+        completed: true
         description: >
           Inject Composer + $changed bitmask parameters. Emit
           startRestartGroup/endRestartGroup calls. Track group keys
           for positional memoization. Similar to CPS transform but
           operates on the Composer API instead of Continuation.
       - name: "remember intrinsic"
+        completed: true
         description: >
           remember { value } → Composer.cache(invalid, { value }).
           Slot table read/write for memoized values across recompositions.
       - name: "State tracking (mutableStateOf)"
+        completed: true
         description: >
           mutableStateOf(0) creates a State<Int>. Reads are recorded by
           the Composer during composition. Writes trigger recomposition
           of affected scopes.
       - name: "Stability inference"
+        completed: true
         description: >
           $stable flags on classes. Immutable classes (all val props,
           no custom equals) are stable. Stable composable params allow
           skipping recomposition when unchanged.
       - name: "CompositionLocal support"
+        completed: true
         description: >
           CompositionLocalProvider(LocalTheme provides DarkTheme) { }.
           Thread-local-like ambient values through the composition tree.

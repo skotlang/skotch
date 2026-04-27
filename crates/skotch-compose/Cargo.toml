@@ -1,0 +1,11 @@
+[package]
+name         = "skotch-compose"
+description  = "Compose compiler plugin: @Composable function transform (MIR-to-MIR)"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-mir   = { workspace = true }
+skotch-types = { workspace = true }

@@ -47,6 +47,9 @@ members = [
     # Layer 7 — incremental compilation database
     "crates/skotch-db",
 
+    # Layer 7.5 — MIR transforms
+    "crates/skotch-compose",
+
     # Layer 8 — build orchestration + driver + CLI + LSP + BSP
     "crates/skotch-build",
     "crates/skotch-driver",
@@ -176,6 +179,7 @@ skotch-repl            = { path = "crates/skotch-repl" }
 skotch-jvm             = { path = "crates/skotch-jvm" }
 skotch-lsp             = { path = "crates/skotch-lsp" }
 skotch-bsp             = { path = "crates/skotch-bsp" }
+skotch-compose         = { path = "crates/skotch-compose" }
 
 [profile.dev]
 debug            = "line-tables-only"

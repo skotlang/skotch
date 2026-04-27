@@ -2216,6 +2216,7 @@ dependencies = [
  "skotch-backend-jvm",
  "skotch-buildscript",
  "skotch-classinfo",
+ "skotch-compose",
  "skotch-config",
  "skotch-db",
  "skotch-diagnostics",
@@ -2276,6 +2277,14 @@ dependencies = [
  "skotch-lsp",
  "skotch-repl",
  "tokio",
+]
+
+[[package]]
+name = "skotch-compose"
+version = "0.15.0"
+dependencies = [
+ "skotch-mir",
+ "skotch-types",
 ]
 
 [[package]]
