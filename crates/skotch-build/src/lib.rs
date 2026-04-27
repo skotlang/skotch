@@ -8,6 +8,7 @@ pub mod cache;
 pub mod discover;
 pub mod merge;
 pub mod pipeline;
+pub mod r_class;
 pub mod test_runner;
 
 pub use pipeline::{build_project, BuildOptions, BuildOutcome};

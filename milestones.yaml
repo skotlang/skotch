@@ -54,7 +54,7 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.20.0"      # v0.1-v0.20 completed
+  current_version: "0.25.0"      # v0.1-v0.25 completed, v0.30 in progress
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,
@@ -1618,7 +1618,7 @@ milestones:
 
   - version: "0.25.0"
     title: "Build Server Protocol (BSP)"
-    status: in_progress
+    status: completed
     depends_on: ["0.20.0"]
     description: >
       A BSP 2.2 server (skotch-bsp crate) that lets IDEs drive Kotlin/
@@ -1683,6 +1683,7 @@ milestones:
           the dependency graph.
 
       - name: "BSP ↔ LSP diagnostic bridge"
+        completed: true
         description: >
           When a BSP compile produces diagnostics, they are
           automatically forwarded to the co-located LSP server (if
@@ -1711,7 +1712,7 @@ milestones:
 
   - version: "0.30.0"
     title: "Android Resource Pipeline and APK Assembly"
-    status: planned
+    status: in_progress
     depends_on: ["0.20.0"]
     description: >
       aapt2-equivalent resource compilation, R class generation,
@@ -1725,6 +1726,7 @@ milestones:
           XML layout/drawable/values → binary XML. resources.arsc table
           generation with type/config/entry tables. New skotch-resource crate.
       - name: "R class generation"
+        completed: true
         description: >
           R.string.app_name, R.drawable.ic_launcher, R.layout.activity_main
           → integer constants. Generated as a real .class file that's
