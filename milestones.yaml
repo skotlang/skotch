@@ -1854,13 +1854,16 @@ milestones:
           int-to-long widening in JVM backend with i2l instruction.
 
       - name: "Stdlib extension discovery from facade class scanning"
+        completed: true
         description: >
-          Scan kotlin-stdlib.jar for all *Kt facade classes (CollectionsKt,
-          MapsKt, StringsKt, etc.). Extract public static methods whose
-          first parameter is the receiver type. Auto-build the extension
-          function table from method signatures. This eliminates the
-          STDLIB_EXTENSIONS static table and automatically supports new
-          stdlib functions across Kotlin versions without code changes.
+          discover_stdlib_extensions() in skotch-classinfo scans
+          kotlin-stdlib.jar for all *Kt facade classes. Extracts
+          public static methods whose first parameter is the receiver.
+          Internal impl classes (CollectionsKt__CollectionsKt) are
+          normalized to their public facade. dynamic_stdlib_extension()
+          in the MIR lowerer consults this as a fallback when the
+          static table has no match. Newly discovered: reduce,
+          mapIndexed, mapNotNull, chunked, windowed, partition, etc.
 
       - name: "Type-aware overload resolution"
         description: >
