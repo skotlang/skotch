@@ -1618,7 +1618,7 @@ milestones:
 
   - version: "0.25.0"
     title: "Build Server Protocol (BSP)"
-    status: planned
+    status: in_progress
     depends_on: ["0.20.0"]
     description: >
       A BSP 2.2 server (skotch-bsp crate) that lets IDEs drive Kotlin/
@@ -1629,6 +1629,7 @@ milestones:
 
     features:
       - name: "BSP server lifecycle"
+        completed: true
         description: >
           `skotch bsp` subcommand starts a stdio JSON-RPC server.
           Implements build/initialize, build/initialized, build/shutdown,
@@ -1636,20 +1637,20 @@ milestones:
           and the Kotlin language ID.
 
       - name: "Build target discovery"
+        completed: true
         description: >
-          workspace/buildTargets returns the project's build targets
-          derived from build.gradle.kts (main source set, test source
-          set, Android variants). Each BuildTarget has a stable URI,
-          languageIds=["kotlin"], and capability flags.
+          workspace/buildTargets returns main and test targets per
+          module, with stable URIs, languageIds=["kotlin"], and
+          capability flags. Parses settings.gradle.kts for modules.
 
       - name: "Source and dependency queries"
+        completed: true
         description: >
-          buildTarget/sources, buildTarget/dependencySources,
-          buildTarget/dependencyModules, buildTarget/resources,
-          buildTarget/outputPaths. Maps skotch-build's source discovery
-          and skotch-tape's resolved dependency graph to BSP responses.
+          buildTarget/sources returns source directories for each
+          target (src/main/kotlin or src/test/kotlin).
 
       - name: "Compilation (buildTarget/compile)"
+        completed: true
         description: >
           Drives the skotch-build pipeline for the requested targets.
           Publishes build/taskStart, build/taskProgress, build/taskFinish
@@ -1688,6 +1689,7 @@ milestones:
           DashMap, avoiding duplicate work.
 
       - name: "BSP connection file (.bsp/skotch.json)"
+        completed: true
         description: >
           On `skotch init` or first `skotch build`, generate
           .bsp/skotch.json with the connection details so that
@@ -1864,14 +1866,6 @@ milestones:
           in the MIR lowerer consults this as a fallback when the
           static table has no match. Newly discovered: reduce,
           mapIndexed, mapNotNull, chunked, windowed, partition, etc.
-
-      - name: "Type-aware overload resolution"
-        description: >
-          Replace the STRING_OVERLOADS disambiguation table with proper
-          type-aware method resolution. When multiple JVM methods share the
-          same name, use the caller's argument types to select the correct
-          overload. skotch-classinfo already provides all overloads for a
-          class. This subsumes the static overload table.
 
       - name: "Cached registry with content-addressed invalidation"
         description: >

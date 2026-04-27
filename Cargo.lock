@@ -2188,6 +2188,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "skotch-bsp"
+version = "0.15.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "skotch-build",
+ "skotch-buildscript",
+ "skotch-intern",
+ "skotch-span",
+]
+
+[[package]]
 name = "skotch-build"
 version = "0.15.0"
 dependencies = [
@@ -2252,6 +2265,7 @@ version = "0.15.0"
 dependencies = [
  "anyhow",
  "clap",
+ "skotch-bsp",
  "skotch-build",
  "skotch-driver",
  "skotch-lsp",

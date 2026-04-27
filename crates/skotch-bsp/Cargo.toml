@@ -1,0 +1,16 @@
+[package]
+name         = "skotch-bsp"
+description  = "Build Server Protocol (BSP 2.2) server for Kotlin projects"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+skotch-build       = { workspace = true }
+skotch-buildscript = { workspace = true }
+skotch-intern      = { workspace = true }
+skotch-span        = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+anyhow             = { workspace = true }
