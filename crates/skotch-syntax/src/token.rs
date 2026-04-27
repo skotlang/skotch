@@ -163,6 +163,62 @@ impl TokenKind {
     pub fn is_trivia(self) -> bool {
         false
     }
+
+    /// Returns true if this token is a Kotlin keyword (reserved or soft).
+    /// Used to allow keywords as member names after `.` — Kotlin permits
+    /// `drawerState.open()`, `list.class`, etc.
+    pub fn is_keyword(self) -> bool {
+        matches!(
+            self,
+            TokenKind::KwFun
+                | TokenKind::KwVal
+                | TokenKind::KwVar
+                | TokenKind::KwIf
+                | TokenKind::KwElse
+                | TokenKind::KwWhen
+                | TokenKind::KwWhile
+                | TokenKind::KwFor
+                | TokenKind::KwDo
+                | TokenKind::KwReturn
+                | TokenKind::KwBreak
+                | TokenKind::KwContinue
+                | TokenKind::KwClass
+                | TokenKind::KwObject
+                | TokenKind::KwInterface
+                | TokenKind::KwIs
+                | TokenKind::KwAs
+                | TokenKind::KwIn
+                | TokenKind::KwNull
+                | TokenKind::KwTrue
+                | TokenKind::KwFalse
+                | TokenKind::KwSuper
+                | TokenKind::KwPackage
+                | TokenKind::KwImport
+                | TokenKind::KwThrow
+                | TokenKind::KwTry
+                | TokenKind::KwCatch
+                | TokenKind::KwFinally
+                | TokenKind::KwOpen
+                | TokenKind::KwOverride
+                | TokenKind::KwAbstract
+                | TokenKind::KwPrivate
+                | TokenKind::KwProtected
+                | TokenKind::KwInternal
+                | TokenKind::KwEnum
+                | TokenKind::KwSealed
+                | TokenKind::KwData
+                | TokenKind::KwConst
+                | TokenKind::KwLateinit
+                | TokenKind::KwSuspend
+                | TokenKind::KwInit
+                | TokenKind::KwInfix
+                | TokenKind::KwInline
+                | TokenKind::KwOperator
+                | TokenKind::KwVararg
+                | TokenKind::KwConstructor
+                | TokenKind::KwTailrec
+        )
+    }
 }
 
 /// A single token in the lexer's output stream.

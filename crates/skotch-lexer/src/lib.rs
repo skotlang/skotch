@@ -602,8 +602,28 @@ impl<'a> Lexer<'a> {
                         b't' => chunk.push('\t'),
                         b'\\' => chunk.push('\\'),
                         b'"' => chunk.push('"'),
+                        b'\'' => chunk.push('\''),
                         b'$' => chunk.push('$'),
                         b'0' => chunk.push('\0'),
+                        b'u' => {
+                            // Unicode escape: \uXXXX (4 hex digits)
+                            let mut hex = String::with_capacity(4);
+                            for _ in 0..4 {
+                                if let Some(&h) = self.bytes.get(self.pos) {
+                                    if h.is_ascii_hexdigit() {
+                                        hex.push(h as char);
+                                        self.pos += 1;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            if let Ok(cp) = u32::from_str_radix(&hex, 16) {
+                                if let Some(ch) = char::from_u32(cp) {
+                                    chunk.push(ch);
+                                }
+                            }
+                        }
                         other => {
                             self.error(
                                 esc_start,

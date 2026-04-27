@@ -498,7 +498,9 @@ impl<'a> Parser<'a> {
         let mut end_span = kw;
         loop {
             self.skip_trivia();
-            if self.peek_kind() != TokenKind::Ident {
+            // Accept keywords as package path segments (e.g. `package com.example.data`
+            // where `data` is a soft keyword).
+            if self.peek_kind() != TokenKind::Ident && !self.peek_kind().is_keyword() {
                 self.diags.push(Diagnostic::error(
                     self.peek_span(),
                     "expected identifier in package path",
@@ -533,7 +535,10 @@ impl<'a> Parser<'a> {
                 is_wildcard = true;
                 break;
             }
-            if self.peek_kind() != TokenKind::Ident {
+            // Accept identifiers AND keywords as import path segments.
+            // Kotlin allows keywords in package names (e.g. `jetchat.data.unreadMessages`
+            // where `data` is a keyword).
+            if self.peek_kind() != TokenKind::Ident && !self.peek_kind().is_keyword() {
                 break;
             }
             let idx = self.pos;
@@ -3030,7 +3035,9 @@ impl<'a> Parser<'a> {
                     self.bump();
                     let idx = self.pos;
                     let span = self.peek_span();
-                    if self.peek_kind() != TokenKind::Ident {
+                    // Allow keywords as member names after '.' — Kotlin permits
+                    // this (e.g. `drawerState.open()`, `list.in`, `obj.class`).
+                    if self.peek_kind() != TokenKind::Ident && !self.peek_kind().is_keyword() {
                         self.diags
                             .push(Diagnostic::error(span, "expected field name after '.'"));
                         break;
@@ -3170,6 +3177,12 @@ impl<'a> Parser<'a> {
                             }
                             self.skip_trivia();
                             if !self.eat(TokenKind::Comma) {
+                                break;
+                            }
+                            // Trailing comma: `f(a, b,)` — skip newlines and
+                            // check for `)` before trying to parse another arg.
+                            self.skip_trivia();
+                            if self.peek_kind() == TokenKind::RParen {
                                 break;
                             }
                         }
