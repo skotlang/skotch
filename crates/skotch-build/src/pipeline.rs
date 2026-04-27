@@ -631,7 +631,7 @@ fn build_multi_module(
 
         // Build cross-module symbol table for each module at this level.
         // Include exports from all dependency modules.
-        type ModuleBuildResult = (usize, Vec<(String, Vec<u8>)>, bool);
+        type ModuleBuildResult = (usize, Vec<(String, Vec<u8>)>, bool, String);
         let level_results: Vec<ModuleBuildResult> = level_modules
             .iter()
             .map(|&idx| {
@@ -642,7 +642,7 @@ fn build_multi_module(
                         .extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
                 }
                 if src_files.is_empty() {
-                    return (idx, Vec::new(), false);
+                    return (idx, Vec::new(), false, String::new());
                 }
 
                 // Build combined symbol table: this module's own exports +
@@ -715,7 +715,8 @@ fn build_multi_module(
 
                 // Compile each file with the combined symbol table.
                 let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
-                for (_fid, ast, wrapper) in &parsed {
+                for (fid_idx, (_fid, ast, wrapper)) in parsed.iter().enumerate() {
+                    let pre_errors = mod_diags.len();
                     let mir = skotch_driver::compile_ast(
                         ast,
                         wrapper,
@@ -723,16 +724,40 @@ fn build_multi_module(
                         &mut mod_diags,
                         Some(&combined_symbols),
                     );
-                    classes.extend(skotch_backend_jvm::compile_module(&mir, &mod_interner));
+                    let file_classes = skotch_backend_jvm::compile_module(&mir, &mod_interner);
+                    let new_errors = mod_diags.len() - pre_errors;
+                    if !file_classes.is_empty() {
+                        eprintln!(
+                            "    [{}] {} classes ({} errors)",
+                            fid_idx,
+                            file_classes.len(),
+                            new_errors
+                        );
+                    }
+                    classes.extend(file_classes);
                 }
 
-                (idx, classes, mod_diags.has_errors())
+                let mod_diag_text = if mod_diags.has_errors() {
+                    render(&mod_diags, &mod_sm)
+                } else {
+                    String::new()
+                };
+                (idx, classes, mod_diags.has_errors(), mod_diag_text)
             })
             .collect();
 
         // Collect results and store per-module symbols for downstream modules.
-        for (idx, classes, has_errors) in level_results {
+        for (idx, classes, has_errors, diag_text) in level_results {
             if has_errors {
+                let err_count = diag_text.matches("error:").count();
+                eprintln!(
+                    "  module '{}': {} compilation errors ({} classes emitted)",
+                    modules[idx].name,
+                    err_count,
+                    classes.len()
+                );
+                // Continue building even with errors — emit what we can.
+                // This allows partial compilation for Compose samples.
                 let module_name = &modules[idx].name;
                 let module_bf = modules[idx].dir.join("build.gradle.kts");
                 diags.push(skotch_diagnostics::Diagnostic::error(
@@ -782,9 +807,17 @@ fn build_multi_module(
         }
     }
 
-    if diags.has_errors() {
+    if diags.has_errors() && all_classes.is_empty() {
         eprint!("{}", render(&diags, &sm));
         anyhow::bail!("compilation failed");
+    } else if diags.has_errors() {
+        // Partial success: some files compiled, others had errors.
+        // Continue to produce output (JAR/APK) with available classes.
+        eprintln!(
+            "  WARNING: {} module(s) had errors, proceeding with {} classes",
+            diags.len(),
+            all_classes.len()
+        );
     }
 
     let mut project = app_project.unwrap_or_default();
