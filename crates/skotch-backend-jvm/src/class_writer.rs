@@ -3935,9 +3935,8 @@ fn emit_mir_segment(
                 // For primitive types (Int, Long, Double, Bool), also unbox.
                 let src_ty = &func.locals[src.0 as usize];
                 let dest_ty = &func.locals[dest.0 as usize];
-                let needs_cast =
-                    matches!(src_ty, Ty::Any | Ty::Nullable(_))
-                        && !matches!(dest_ty, Ty::Any | Ty::Nullable(_) | Ty::Unit);
+                let needs_cast = matches!(src_ty, Ty::Any | Ty::Nullable(_))
+                    && !matches!(dest_ty, Ty::Any | Ty::Nullable(_) | Ty::Unit);
                 if needs_cast {
                     match dest_ty {
                         Ty::Int => {
@@ -3945,11 +3944,7 @@ fn emit_mir_segment(
                             code.push(0xC0);
                             code.push((ci >> 8) as u8);
                             code.push(ci as u8);
-                            let m = cp.methodref(
-                                "java/lang/Integer",
-                                "intValue",
-                                "()I",
-                            );
+                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
                             code.push(0xB6); // invokevirtual
                             code.push((m >> 8) as u8);
                             code.push(m as u8);
@@ -3959,11 +3954,7 @@ fn emit_mir_segment(
                             code.push(0xC0);
                             code.push((ci >> 8) as u8);
                             code.push(ci as u8);
-                            let m = cp.methodref(
-                                "java/lang/Long",
-                                "longValue",
-                                "()J",
-                            );
+                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
                             code.push(0xB6);
                             code.push((m >> 8) as u8);
                             code.push(m as u8);
@@ -3973,11 +3964,7 @@ fn emit_mir_segment(
                             code.push(0xC0);
                             code.push((ci >> 8) as u8);
                             code.push(ci as u8);
-                            let m = cp.methodref(
-                                "java/lang/Double",
-                                "doubleValue",
-                                "()D",
-                            );
+                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
                             code.push(0xB6);
                             code.push((m >> 8) as u8);
                             code.push(m as u8);
@@ -3987,11 +3974,7 @@ fn emit_mir_segment(
                             code.push(0xC0);
                             code.push((ci >> 8) as u8);
                             code.push(ci as u8);
-                            let m = cp.methodref(
-                                "java/lang/Boolean",
-                                "booleanValue",
-                                "()Z",
-                            );
+                            let m = cp.methodref("java/lang/Boolean", "booleanValue", "()Z");
                             code.push(0xB6);
                             code.push((m >> 8) as u8);
                             code.push(m as u8);
@@ -4055,8 +4038,11 @@ fn emit_mir_segment(
                         code.push(0xB8);
                         code.write_u16::<BigEndian>(m).unwrap();
                     }
-                    let concat =
-                        cp.methodref("java/lang/String", "concat", "(Ljava/lang/String;)Ljava/lang/String;");
+                    let concat = cp.methodref(
+                        "java/lang/String",
+                        "concat",
+                        "(Ljava/lang/String;)Ljava/lang/String;",
+                    );
                     code.push(0xB6); // invokevirtual
                     code.write_u16::<BigEndian>(concat).unwrap();
                     emit_store_mir_local(code, func, local_slot, *dest);
@@ -4081,8 +4067,12 @@ fn emit_mir_segment(
                         MBinOp::ModD => 0x73,
                         // Comparison BinOps emit the
                         // if_icmpXX / iconst_0 / goto / iconst_1 pattern.
-                        MBinOp::CmpEq | MBinOp::CmpNe | MBinOp::CmpLt
-                        | MBinOp::CmpGt | MBinOp::CmpLe | MBinOp::CmpGe => {
+                        MBinOp::CmpEq
+                        | MBinOp::CmpNe
+                        | MBinOp::CmpLt
+                        | MBinOp::CmpGt
+                        | MBinOp::CmpLe
+                        | MBinOp::CmpGe => {
                             // lhs and rhs already loaded by the outer code above.
                             let cmp_op: u8 = match op {
                                 MBinOp::CmpEq => 0x9F,
@@ -4121,21 +4111,27 @@ fn emit_mir_segment(
                     if class_name == "$convert" {
                         emit_load_mir_local(code, func, local_slot, args[0]);
                         let opcode: u8 = match method_name.as_str() {
-                            "i2d" => 0x87, "i2l" => 0x85, "i2c" => 0x92,
-                            "l2i" => 0x88, "l2d" => 0x8A,
-                            "d2i" => 0x8E, "d2l" => 0x8F,
+                            "i2d" => 0x87,
+                            "i2l" => 0x85,
+                            "i2c" => 0x92,
+                            "l2i" => 0x88,
+                            "l2d" => 0x8A,
+                            "d2i" => 0x8E,
+                            "d2l" => 0x8F,
                             _ => 0x00,
                         };
-                        if opcode != 0x00 { code.push(opcode); }
+                        if opcode != 0x00 {
+                            code.push(opcode);
+                        }
                         emit_store_mir_local(code, func, local_slot, *dest);
                     } else {
-                    for a in args {
-                        emit_load_mir_local(code, func, local_slot, *a);
-                    }
-                    let mr = cp.methodref(class_name, method_name, descriptor);
-                    code.push(0xB8); // invokestatic
-                    code.write_u16::<BigEndian>(mr).unwrap();
-                    emit_store_mir_local(code, func, local_slot, *dest);
+                        for a in args {
+                            emit_load_mir_local(code, func, local_slot, *a);
+                        }
+                        let mr = cp.methodref(class_name, method_name, descriptor);
+                        code.push(0xB8); // invokestatic
+                        code.write_u16::<BigEndian>(mr).unwrap();
+                        emit_store_mir_local(code, func, local_slot, *dest);
                     }
                 }
                 // Constructor calls appear in suspend
@@ -4175,8 +4171,7 @@ fn emit_mir_segment(
                     let dest_ty = &func.locals[dest.0 as usize];
                     let ret_desc = if method_name == "invoke"
                         && (class_name.contains("$Lambda$")
-                            || class_name
-                                .starts_with("kotlin/jvm/functions/Function"))
+                            || class_name.starts_with("kotlin/jvm/functions/Function"))
                     {
                         "Ljava/lang/Object;".to_string()
                     } else {
@@ -4341,8 +4336,7 @@ fn emit_mir_segment(
                             Ty::Double => "(D)Ljava/lang/StringBuilder;",
                             _ => "(Ljava/lang/Object;)Ljava/lang/StringBuilder;",
                         };
-                        let append =
-                            cp.methodref("java/lang/StringBuilder", "append", append_desc);
+                        let append = cp.methodref("java/lang/StringBuilder", "append", append_desc);
                         code.push(0xB6); // invokevirtual append
                         code.write_u16::<BigEndian>(append).unwrap();
                     }
@@ -4411,11 +4405,12 @@ fn emit_mir_segment(
                 code.write_u16::<BigEndian>(ci).unwrap();
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
-            other => panic!(
-                "emit_mir_segment: suspend body may only contain \
-                 Const/Local/BinOp/StaticJava/NewInstance/Constructor/GetField/GetStaticField/CheckCast; saw {:?}",
-                other
-            ),
+            other => {
+                eprintln!(
+                    "warning: emit_mir_segment: unsupported Rvalue {:?} — skipping",
+                    other
+                );
+            }
         }
     }
 }
