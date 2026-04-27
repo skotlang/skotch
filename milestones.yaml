@@ -1661,6 +1661,7 @@ milestones:
           skotch-build cache.
 
       - name: "Test execution (buildTarget/test)"
+        completed: true
         description: >
           Runs JUnit/KotlinTest suites discovered in test source sets.
           Reports per-test pass/fail via build/taskFinish with
@@ -1668,12 +1669,14 @@ milestones:
           and run/printStderr.
 
       - name: "Run execution (buildTarget/run)"
+        completed: true
         description: >
           Launches the main class (JVM) or installs + launches the
           debug APK (Android). Streams process output. Supports
           run/readStdin for interactive programs.
 
       - name: "Clean and reload"
+        completed: true
         description: >
           buildTarget/cleanCache clears the skotch-build cache.
           workspace/reload re-parses build.gradle.kts and refreshes
@@ -1828,7 +1831,7 @@ milestones:
 
   - version: "future"
     title: "Dynamic Stdlib Registry from Classfile Scanning"
-    status: planned
+    status: completed
     depends_on: ["0.15.0"]
     description: >
       Replace the static stdlib-registry tables with runtime classfile
@@ -1868,6 +1871,7 @@ milestones:
           mapIndexed, mapNotNull, chunked, windowed, partition, etc.
 
       - name: "Cached registry with content-addressed invalidation"
+        completed: true
         description: >
           On first skotch build, scan kotlin-stdlib.jar + JDK jmods and
           build the registry tables from classfile metadata. Cache the

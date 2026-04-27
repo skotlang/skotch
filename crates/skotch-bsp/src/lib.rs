@@ -124,6 +124,33 @@ impl<W: Write> BspServer<W> {
                         self.send_response(id, response)?;
                     }
                 }
+                "buildTarget/test" => {
+                    let params = msg.get("params").cloned().unwrap_or_default();
+                    let response = self.handle_test(&params);
+                    if let Some(id) = id {
+                        self.send_response(id, response)?;
+                    }
+                }
+                "buildTarget/run" => {
+                    let params = msg.get("params").cloned().unwrap_or_default();
+                    let response = self.handle_run(&params);
+                    if let Some(id) = id {
+                        self.send_response(id, response)?;
+                    }
+                }
+                "buildTarget/cleanCache" => {
+                    let response = self.handle_clean();
+                    if let Some(id) = id {
+                        self.send_response(id, response)?;
+                    }
+                }
+                "workspace/reload" => {
+                    // Re-read build files — a no-op currently since we
+                    // re-parse on every compile/test anyway.
+                    if let Some(id) = id {
+                        self.send_response(id, serde_json::json!({}))?;
+                    }
+                }
                 _ => {
                     // Unknown method — respond with method not found.
                     if let Some(id) = id {
@@ -337,6 +364,82 @@ impl<W: Write> BspServer<W> {
         }
 
         serde_json::json!({ "statusCode": 1 }) // OK
+    }
+
+    fn handle_test(&mut self, _params: &serde_json::Value) -> serde_json::Value {
+        let project_dir = match &self.project_dir {
+            Some(d) => d.clone(),
+            None => {
+                return serde_json::json!({ "statusCode": 2 });
+            }
+        };
+
+        match skotch_build::run_tests(&skotch_build::TestOptions {
+            project_dir: project_dir.clone(),
+        }) {
+            Ok(result) => {
+                serde_json::json!({
+                    "statusCode": if result.success { 1 } else { 2 },
+                    "data": {
+                        "testsFound": result.tests_found,
+                        "testsPassed": result.tests_passed,
+                        "testsFailed": result.tests_failed,
+                        "testsSkipped": result.tests_skipped
+                    }
+                })
+            }
+            Err(e) => {
+                eprintln!("BSP test error: {e}");
+                serde_json::json!({ "statusCode": 2 })
+            }
+        }
+    }
+
+    fn handle_run(&mut self, _params: &serde_json::Value) -> serde_json::Value {
+        let project_dir = match &self.project_dir {
+            Some(d) => d.clone(),
+            None => {
+                return serde_json::json!({ "statusCode": 2 });
+            }
+        };
+
+        // Build first, then run the main class.
+        match skotch_build::build_project(&skotch_build::BuildOptions {
+            project_dir: project_dir.clone(),
+            target_override: Some(skotch_buildscript::BuildTarget::Jvm),
+        }) {
+            Ok(outcome) => {
+                // Run the JAR.
+                let java = match which::which("java") {
+                    Ok(j) => j,
+                    Err(_) => {
+                        return serde_json::json!({ "statusCode": 2 });
+                    }
+                };
+                let status = std::process::Command::new(java)
+                    .arg("-jar")
+                    .arg(&outcome.output_path)
+                    .status();
+                match status {
+                    Ok(s) if s.success() => serde_json::json!({ "statusCode": 1 }),
+                    _ => serde_json::json!({ "statusCode": 2 }),
+                }
+            }
+            Err(e) => {
+                eprintln!("BSP run error: {e}");
+                serde_json::json!({ "statusCode": 2 })
+            }
+        }
+    }
+
+    fn handle_clean(&mut self) -> serde_json::Value {
+        if let Some(project_dir) = &self.project_dir {
+            let build_dir = project_dir.join("build");
+            if build_dir.exists() {
+                let _ = std::fs::remove_dir_all(&build_dir);
+            }
+        }
+        serde_json::json!({ "cleaned": true })
     }
 }
 

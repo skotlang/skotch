@@ -456,7 +456,7 @@ pub fn scan_jars(jars: &[PathBuf]) -> HashMap<String, ClassInfo> {
 
 /// Build a class registry from the JDK for commonly-used java.lang classes.
 /// A discovered extension function from scanning a Kotlin facade class.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct DiscoveredExtension {
     /// JVM facade class: "kotlin/collections/CollectionsKt"
     pub facade_class: String,
@@ -470,11 +470,59 @@ pub struct DiscoveredExtension {
     pub return_descriptor: String,
 }
 
-/// Scan kotlin-stdlib.jar for all `*Kt` facade classes and extract
-/// public static methods as potential extension functions. An extension
-/// function in Kotlin compiles to a static method whose first parameter
-/// is the receiver type.
+/// Discover stdlib extensions with disk caching.
+/// The cache is stored in `~/.skotch/cache/stdlib-extensions-{hash}.json`
+/// and invalidated when kotlin-stdlib.jar changes (by file size).
 pub fn discover_stdlib_extensions() -> Vec<DiscoveredExtension> {
+    // Try to load from cache first.
+    if let Some(cached) = load_cached_extensions() {
+        return cached;
+    }
+    // Scan and cache.
+    let extensions = discover_stdlib_extensions_uncached();
+    save_cached_extensions(&extensions);
+    extensions
+}
+
+/// Load cached extensions from disk if the cache is valid.
+fn load_cached_extensions() -> Option<Vec<DiscoveredExtension>> {
+    let kotlin_lib = find_kotlin_lib_dir().ok()?.join("kotlin-stdlib.jar");
+    let meta = std::fs::metadata(&kotlin_lib).ok()?;
+    let size = meta.len();
+    let cache_key = format!("stdlib-extensions-{size}");
+    let cache_dir = dirs_cache_dir()?;
+    let cache_file = cache_dir.join(format!("{cache_key}.json"));
+    let data = std::fs::read_to_string(&cache_file).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+/// Save extensions to the disk cache.
+fn save_cached_extensions(extensions: &[DiscoveredExtension]) {
+    let kotlin_lib = match find_kotlin_lib_dir() {
+        Ok(dir) => dir.join("kotlin-stdlib.jar"),
+        Err(_) => return,
+    };
+    let size = std::fs::metadata(&kotlin_lib).map(|m| m.len()).unwrap_or(0);
+    let cache_key = format!("stdlib-extensions-{size}");
+    if let Some(cache_dir) = dirs_cache_dir() {
+        let _ = std::fs::create_dir_all(&cache_dir);
+        let cache_file = cache_dir.join(format!("{cache_key}.json"));
+        if let Ok(json) = serde_json::to_string(extensions) {
+            let _ = std::fs::write(cache_file, json);
+        }
+    }
+}
+
+fn dirs_cache_dir() -> Option<std::path::PathBuf> {
+    // ~/.skotch/cache/
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
+    Some(std::path::PathBuf::from(home).join(".skotch/cache"))
+}
+
+/// Uncached scan of kotlin-stdlib.jar for extension functions.
+fn discover_stdlib_extensions_uncached() -> Vec<DiscoveredExtension> {
     let mut extensions = Vec::new();
     let kotlin_lib = match find_kotlin_lib_dir() {
         Ok(dir) => dir.join("kotlin-stdlib.jar"),

@@ -2198,6 +2198,7 @@ dependencies = [
  "skotch-buildscript",
  "skotch-intern",
  "skotch-span",
+ "which",
 ]
 
 [[package]]
@@ -2255,6 +2256,8 @@ dependencies = [
 name = "skotch-classinfo"
 version = "0.15.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "which",
  "zip",
 ]
