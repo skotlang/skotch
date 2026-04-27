@@ -2123,6 +2123,7 @@ version = "0.15.0"
 dependencies = [
  "byteorder",
  "rustc-hash",
+ "skotch-classinfo",
  "skotch-config",
  "skotch-diagnostics",
  "skotch-intern",

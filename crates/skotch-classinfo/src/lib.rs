@@ -42,6 +42,17 @@ pub struct FieldInfo {
 
 const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
+const ACC_INTERFACE: u16 = 0x0200;
+const ACC_ABSTRACT: u16 = 0x0400;
+
+impl ClassInfo {
+    pub fn is_interface(&self) -> bool {
+        self.access_flags & ACC_INTERFACE != 0
+    }
+    pub fn is_abstract(&self) -> bool {
+        self.access_flags & ACC_ABSTRACT != 0
+    }
+}
 
 impl MethodInfo {
     pub fn is_static(&self) -> bool {
@@ -50,6 +61,13 @@ impl MethodInfo {
     pub fn is_public(&self) -> bool {
         self.access_flags & ACC_PUBLIC != 0
     }
+}
+
+/// Check if a JVM class is an interface by loading its classfile and
+/// checking the ACC_INTERFACE flag. Returns `None` if the class can't
+/// be loaded.
+pub fn check_is_interface(class_path: &str) -> Option<bool> {
+    load_jdk_class(class_path).ok().map(|ci| ci.is_interface())
 }
 
 /// Parse a `.class` file from raw bytes.
