@@ -27,14 +27,17 @@ pub fn discover_sources(root: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Walk up from `start` looking for `build.gradle.kts`.
+/// Walk up from `start` looking for `build.gradle.kts`, falling back
+/// to `build.gradle` (Groovy DSL) if the Kotlin DSL file isn't found.
 pub fn find_build_file(start: &Path) -> Option<PathBuf> {
-    find_file_upward(start, "build.gradle.kts")
+    find_file_upward(start, "build.gradle.kts").or_else(|| find_file_upward(start, "build.gradle"))
 }
 
-/// Walk up from `start` looking for `settings.gradle.kts`.
+/// Walk up from `start` looking for `settings.gradle.kts`, falling back
+/// to `settings.gradle` (Groovy DSL).
 pub fn find_settings_file(start: &Path) -> Option<PathBuf> {
     find_file_upward(start, "settings.gradle.kts")
+        .or_else(|| find_file_upward(start, "settings.gradle"))
 }
 
 fn find_file_upward(start: &Path, name: &str) -> Option<PathBuf> {
