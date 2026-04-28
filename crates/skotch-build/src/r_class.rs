@@ -319,6 +319,10 @@ fn encode_string_pool(strings: &[String]) -> Vec<u8> {
 
     let offsets_size = string_count as usize * 4;
     let strings_start = header_size as usize + offsets_size;
+    // Pad string data to 4-byte boundary (Android requirement).
+    while string_data.len() % 4 != 0 {
+        string_data.push(0);
+    }
     let chunk_size = strings_start + string_data.len();
 
     let mut pool = Vec::new();

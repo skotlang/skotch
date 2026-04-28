@@ -148,8 +148,9 @@ pub fn parse_buildfile_with_catalog(
     if let Some(dir) = project_dir {
         let catalog_path = dir.join("gradle/libs.versions.toml");
         if catalog_path.exists() {
-            if let Ok(catalog) = version_catalog::parse_version_catalog(&catalog_path) {
-                resolve_catalog_deps(&mut project, &catalog);
+            match version_catalog::parse_version_catalog(&catalog_path) {
+                Ok(catalog) => resolve_catalog_deps(&mut project, &catalog),
+                Err(e) => eprintln!("  WARNING: failed to parse version catalog: {e}"),
             }
         }
     }
@@ -220,6 +221,7 @@ fn resolve_catalog_deps(project: &mut ProjectModel, catalog: &version_catalog::V
     };
     resolve_list(&mut project.external_deps, catalog);
     resolve_list(&mut project.test_deps, catalog);
+    resolve_list(&mut project.platform_deps, catalog);
 
     // Resolve plugin flags from catalog — always check (don't gate on is_kotlin).
     for plugin in catalog.plugins.values() {
@@ -1060,6 +1062,7 @@ impl<'src, 'lf> Walker<'src, 'lf> {
             }
             // Capture `val xxx = "..."` local variable assignments for
             // string interpolation in dependency coordinates.
+            // Also detect `val xxx = platform(libs.yyy)` → register as platform dep.
             if self.peek() == TokenKind::KwVal {
                 self.bump();
                 if self.peek() == TokenKind::Ident {
@@ -1067,7 +1070,39 @@ impl<'src, 'lf> Walker<'src, 'lf> {
                     let var_name = self.text(name_span).to_string();
                     if self.peek() == TokenKind::Eq {
                         self.bump();
-                        if let Some(val) = self.try_consume_string() {
+                        // Check for platform(libs.xxx) or platform("g:a:v")
+                        if self.peek() == TokenKind::Ident {
+                            let fn_span = self.bump();
+                            let fn_name = self.text(fn_span).to_string();
+                            if fn_name == "platform" && self.peek() == TokenKind::LParen {
+                                self.bump();
+                                if self.peek() == TokenKind::Ident {
+                                    let inner_span = self.bump();
+                                    let inner = self.text(inner_span).to_string();
+                                    if inner == "libs" {
+                                        // libs.xxx.yyy
+                                        let mut path = String::from("libs");
+                                        while self.peek() == TokenKind::Dot {
+                                            self.bump();
+                                            if self.peek() == TokenKind::Ident {
+                                                let seg = self.bump();
+                                                path.push('.');
+                                                path.push_str(self.text(seg));
+                                            }
+                                        }
+                                        // Also store var for `implementation(composeBom)`.
+                                        self.dep_vals.insert(var_name.clone(), path.clone());
+                                        self.project.platform_deps.push(path);
+                                    }
+                                } else if let Some(coord) = self.try_consume_string() {
+                                    if coord.contains(':') {
+                                        self.project.platform_deps.push(coord.clone());
+                                        self.dep_vals.insert(var_name.clone(), coord);
+                                    }
+                                }
+                                self.skip_past(TokenKind::RParen);
+                            }
+                        } else if let Some(val) = self.try_consume_string() {
                             self.dep_vals.insert(var_name, val);
                         }
                     }

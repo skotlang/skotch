@@ -2539,6 +2539,7 @@ dependencies = [
  "reqwest",
  "roxmltree",
  "sha1_smol",
+ "zip",
 ]
 
 [[package]]

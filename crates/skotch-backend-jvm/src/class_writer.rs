@@ -4180,7 +4180,7 @@ fn emit_mir_segment(
                     let mut descriptor = String::from("(");
                     for a in args.iter().skip(1) {
                         let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_type_string(ty));
+                        descriptor.push_str(&jvm_param_type_string(ty));
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
@@ -6686,11 +6686,21 @@ fn jvm_descriptor(func: &MirFunction) -> String {
     let mut s = String::from("(");
     for &p in &func.params {
         let ty = &func.locals[p.0 as usize];
-        s.push_str(&jvm_type_string(ty));
+        s.push_str(&jvm_param_type_string(ty));
     }
     s.push(')');
     s.push_str(&jvm_type_string(&func.return_ty));
     s
+}
+
+/// Type descriptor for parameter positions — `Unit` becomes `Lkotlin/Unit;`
+/// (not `V`, which is only valid as a return type).
+fn jvm_param_type_string(ty: &Ty) -> String {
+    match ty {
+        Ty::Unit => "Lkotlin/Unit;".to_string(),
+        Ty::Nothing => "Ljava/lang/Void;".to_string(),
+        other => jvm_type_string(other),
+    }
 }
 
 /// Emit autoboxing bytecode: int→Integer, bool→Boolean, etc.
@@ -7705,7 +7715,7 @@ fn walk_block(
                         let mut descriptor = String::from("(");
                         for a in args.iter().skip(1) {
                             let ty = &func.locals[a.0 as usize];
-                            descriptor.push_str(&jvm_type_string(ty));
+                            descriptor.push_str(&jvm_param_type_string(ty));
                         }
                         descriptor.push_str(")V");
                         let mref = cp.methodref(class_name, "<init>", &descriptor);
@@ -7763,9 +7773,9 @@ fn walk_block(
                                 if matches!(param_ty, Ty::Any) {
                                     autobox(code, cp, stack, max_stack, arg_ty);
                                 }
-                                descriptor.push_str(&jvm_type_string(param_ty));
+                                descriptor.push_str(&jvm_param_type_string(param_ty));
                             } else {
-                                descriptor.push_str(&jvm_type_string(arg_ty));
+                                descriptor.push_str(&jvm_param_type_string(arg_ty));
                             }
                         }
                         descriptor.push_str(")V");
@@ -7814,7 +7824,7 @@ fn walk_block(
                     // Skip first arg (receiver) in descriptor
                     for a in args.iter().skip(1) {
                         let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_type_string(ty));
+                        descriptor.push_str(&jvm_param_type_string(ty));
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
@@ -7876,7 +7886,7 @@ fn walk_block(
                     let mut descriptor = String::from("(");
                     for a in args.iter().skip(1) {
                         let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_type_string(ty));
+                        descriptor.push_str(&jvm_param_type_string(ty));
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);

@@ -325,7 +325,15 @@ impl<'a> Parser<'a> {
         // the immutable borrow before mutating the interner.
         let s = match self.payload(idx) {
             Some(TokenPayload::Ident(s)) => s.clone(),
-            _ => String::new(),
+            _ => {
+                // Keyword tokens don't carry an Ident payload — derive the
+                // text from the token kind (e.g. KwData → "data").
+                self.tokens[idx]
+                    .kind
+                    .keyword_text()
+                    .unwrap_or("")
+                    .to_string()
+            }
         };
         self.interner.intern(&s)
     }

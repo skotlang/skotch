@@ -54,6 +54,11 @@ impl MavenCoord {
         format!("{}-{}.jar", self.artifact, self.version)
     }
 
+    /// AAR filename: `appcompat-1.7.1.aar`
+    pub fn aar_name(&self) -> String {
+        format!("{}-{}.aar", self.artifact, self.version)
+    }
+
     /// POM filename: `kotlinx-html-jvm-0.7.3.pom`
     pub fn pom_name(&self) -> String {
         format!("{}-{}.pom", self.artifact, self.version)
@@ -365,10 +370,22 @@ pub fn resolve(
             pb.inc(0); // update display
         }
 
-        // Download JAR.
-        let jar_path = download_artifact(&coord, &coord.jar_name(), repos, &client)
-            .with_context(|| format!("downloading {}", coord))?;
-        jars.push(jar_path);
+        // Download JAR (or AAR for Android libraries).
+        // Skip deps that can't be downloaded — don't abort the whole resolution.
+        let jar_result = match download_artifact(&coord, &coord.jar_name(), repos, &client) {
+            Ok(p) => Ok(p),
+            Err(_) => {
+                // Try AAR (Android Archive) — extract classes.jar from inside.
+                match download_artifact(&coord, &coord.aar_name(), repos, &client) {
+                    Ok(aar_path) => extract_classes_jar_from_aar(&aar_path, &coord),
+                    Err(_) => Err(anyhow::anyhow!("not found as JAR or AAR: {}", coord)),
+                }
+            }
+        };
+        match jar_result {
+            Ok(jar_path) => jars.push(jar_path),
+            Err(_) => continue, // skip this dep
+        }
 
         // Download POM for transitive deps.
         if let Ok(pom_path) = download_artifact(&coord, &coord.pom_name(), repos, &client) {
@@ -392,6 +409,25 @@ pub fn resolve(
     }
 
     Ok(ResolvedDeps { jars })
+}
+
+/// Extract `classes.jar` from an AAR file (Android Archive).
+/// AARs are ZIP files containing `classes.jar`, `AndroidManifest.xml`, etc.
+fn extract_classes_jar_from_aar(aar_path: &std::path::Path, coord: &MavenCoord) -> Result<PathBuf> {
+    let file = std::fs::File::open(aar_path)
+        .with_context(|| format!("opening AAR {}", aar_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("reading AAR {}", aar_path.display()))?;
+
+    let mut classes_jar = archive
+        .by_name("classes.jar")
+        .with_context(|| format!("classes.jar not found in AAR for {}", coord))?;
+
+    // Write classes.jar next to the AAR.
+    let jar_path = aar_path.with_extension("jar");
+    let mut out = std::fs::File::create(&jar_path)?;
+    std::io::copy(&mut classes_jar, &mut out)?;
+    Ok(jar_path)
 }
 
 // ─── High-level API ─────────────────────────────────────────────────────────

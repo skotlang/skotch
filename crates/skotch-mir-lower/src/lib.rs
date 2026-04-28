@@ -119,6 +119,8 @@ pub fn is_jvm_interface(class_name: &str) -> bool {
 
 /// Convert a `Ty` to its JVM descriptor string fragment (for building
 /// method descriptors in the MIR lowerer).
+/// Map a `Ty` to a JVM descriptor string for use in parameter positions.
+/// `Unit` maps to `Lkotlin/Unit;` (not `V`, which is only valid as return type).
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
     match ty {
         Ty::Bool => "Z".to_string(),
@@ -130,7 +132,8 @@ fn jvm_type_string_for_ty(ty: &Ty) -> String {
         Ty::Long => "J".to_string(),
         Ty::Double => "D".to_string(),
         Ty::String => "Ljava/lang/String;".to_string(),
-        Ty::Unit => "V".to_string(),
+        Ty::Unit => "Lkotlin/Unit;".to_string(),
+        Ty::Function { params, .. } => format!("Lkotlin/jvm/functions/Function{};", params.len()),
         Ty::Class(name) => format!("L{name};"),
         _ => "Ljava/lang/Object;".to_string(),
     }
@@ -13910,7 +13913,14 @@ fn lower_class(
         let super_class_name = c
             .parent_class
             .as_ref()
-            .map(|sc| interner.resolve(sc.name).to_string())
+            .map(|sc| {
+                let simple = interner.resolve(sc.name).to_string();
+                module
+                    .import_map
+                    .get(&simple)
+                    .cloned()
+                    .unwrap_or(simple)
+            })
             .unwrap_or_else(|| "java/lang/Object".to_string());
         // Lower super args if present.
         let mut super_arg_ids = vec![this_id]; // receiver is always first
@@ -14068,10 +14078,14 @@ fn lower_class(
         }
     }
 
-    let super_class = c
-        .parent_class
-        .as_ref()
-        .map(|sc| interner.resolve(sc.name).to_string());
+    let super_class = c.parent_class.as_ref().map(|sc| {
+        let simple = interner.resolve(sc.name).to_string();
+        module
+            .import_map
+            .get(&simple)
+            .cloned()
+            .unwrap_or(simple)
+    });
 
     // Pre-register the class with method stubs so that implicit
     // `this.method()` resolution works during method body lowering.
@@ -15310,7 +15324,14 @@ fn lower_class(
             let super_class_name = c
                 .parent_class
                 .as_ref()
-                .map(|sc| interner.resolve(sc.name).to_string())
+                .map(|sc| {
+                    let simple = interner.resolve(sc.name).to_string();
+                    module
+                        .import_map
+                        .get(&simple)
+                        .cloned()
+                        .unwrap_or(simple)
+                })
                 .unwrap_or_else(|| "java/lang/Object".to_string());
             sec_fn.blocks[0].stmts.push(MStmt::Assign {
                 dest: sec_this, // dummy

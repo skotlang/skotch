@@ -448,6 +448,356 @@ fn build_android(
     })
 }
 
+/// Find aapt2 from Android SDK.
+fn find_aapt2() -> Result<PathBuf> {
+    find_sdk_tool("aapt2")
+}
+
+/// Find d8 from Android SDK.
+fn find_d8() -> Result<PathBuf> {
+    find_sdk_tool("d8")
+}
+
+/// Find a tool from the Android SDK build-tools directory.
+fn find_sdk_tool(name: &str) -> Result<PathBuf> {
+    for var in &["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(sdk) = std::env::var(var) {
+            let bt = PathBuf::from(sdk).join("build-tools");
+            if let Some(tool) = find_latest_tool(&bt, name) {
+                return Ok(tool);
+            }
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let bt = PathBuf::from(&home).join("Library/Android/sdk/build-tools");
+    if let Some(tool) = find_latest_tool(&bt, name) {
+        return Ok(tool);
+    }
+    anyhow::bail!("{name} not found in Android SDK")
+}
+
+fn find_latest_tool(build_tools: &Path, name: &str) -> Option<PathBuf> {
+    let mut versions: Vec<_> = std::fs::read_dir(build_tools)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join(name).exists())
+        .collect();
+    versions.sort();
+    versions.last().map(|p| p.join(name))
+}
+
+/// Compile .class files to DEX using Android SDK's d8 tool.
+fn compile_classes_with_d8(
+    d8: &Path,
+    classes: &[(String, Vec<u8>)],
+    build_dir: &Path,
+    dep_jars: &[PathBuf],
+) -> Result<Vec<u8>> {
+    let android_jar = find_android_jar();
+
+    // If we have dep JARs, compile them separately first, then compile
+    // app classes with deps as classpath (not program input). This avoids
+    // d8 rejecting app classes due to type mismatches with real libraries.
+    if !dep_jars.is_empty() {
+        // Deduplicate dep JARs: when multiple versions of the same artifact
+        // exist (e.g. annotation-1.1.0.jar and annotation-1.4.0.jar), keep
+        // only the latest version to avoid "defined multiple times" errors.
+        let deduped_jars = dedup_dep_jars(dep_jars);
+        eprintln!("  d8: {} dep JARs ({} after dedup)", dep_jars.len(), deduped_jars.len());
+
+        let deps_dex_dir = build_dir.join("d8-deps");
+        std::fs::create_dir_all(&deps_dex_dir)?;
+
+        // Phase 1: d8 on dependency JARs only.
+        // Retry loop: exclude JARs that cause duplicate class errors.
+        let mut jar_list = deduped_jars.clone();
+        let deps_dex = deps_dex_dir.join("classes.dex");
+        for _attempt in 0..20 {
+            std::fs::create_dir_all(&deps_dex_dir)?;
+            let _ = std::fs::remove_file(&deps_dex);
+            let mut cmd = std::process::Command::new(d8);
+            cmd.arg("--output").arg(&deps_dex_dir);
+            if let Some(ref jar) = android_jar {
+                cmd.arg("--lib").arg(jar);
+            }
+            cmd.arg("--min-api").arg("24");
+            for jar in &jar_list {
+                cmd.arg(jar);
+            }
+            let output = cmd.output().with_context(|| "running d8 on deps")?;
+            if deps_dex.exists() {
+                eprintln!(
+                    "  deps DEX: {} bytes ({} JARs)",
+                    std::fs::metadata(&deps_dex).map(|m| m.len()).unwrap_or(0),
+                    jar_list.len()
+                );
+                break;
+            }
+            // Parse failing JAR from error message and exclude it.
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let bad_jar = stderr.lines().find_map(|line| {
+                if let Some(rest) = line.strip_prefix("Error in ") {
+                    if let Some(idx) = rest.find(".jar:") {
+                        return Some(PathBuf::from(&rest[..idx + 4]));
+                    }
+                }
+                None
+            });
+            if let Some(ref bad) = bad_jar {
+                eprintln!("  d8 deps: excluding {}", bad.display());
+                jar_list.retain(|j| j != bad);
+                if jar_list.is_empty() {
+                    break;
+                }
+            } else {
+                eprintln!("  d8 deps: unrecoverable error");
+                break;
+            }
+        }
+
+        // Phase 2: d8 on app classes with deps as --classpath.
+        let app_dex = compile_app_classes_with_d8(d8, classes, build_dir, dep_jars, &android_jar)?;
+
+        // Merge: if we have deps DEX(es) and app DEX, combine them.
+        // d8 may produce multiple DEX files (classes.dex, classes2.dex, ...)
+        // for large dependency sets.
+        let deps_dexes: Vec<PathBuf> = (0..10)
+            .map(|i| {
+                if i == 0 {
+                    deps_dex_dir.join("classes.dex")
+                } else {
+                    deps_dex_dir.join(format!("classes{}.dex", i + 1))
+                }
+            })
+            .filter(|p| p.exists())
+            .collect();
+        if !deps_dexes.is_empty() {
+            // Merge by running d8 on all DEX files.
+            let merge_dir = build_dir.join("d8-merged");
+            std::fs::create_dir_all(&merge_dir)?;
+            let mut cmd = std::process::Command::new(d8);
+            cmd.arg("--output").arg(&merge_dir);
+            cmd.arg("--min-api").arg("24");
+            for dex in &deps_dexes {
+                cmd.arg(dex);
+            }
+            // Write app DEX to a temp file.
+            let app_dex_path = build_dir.join("d8-app-classes.dex");
+            std::fs::write(&app_dex_path, &app_dex)?;
+            cmd.arg(&app_dex_path);
+            let output = cmd.output()?;
+            // Collect all merged DEX files into a single blob.
+            // The APK will need all of them (classes.dex, classes2.dex, ...).
+            let merged = merge_dir.join("classes.dex");
+            if merged.exists() {
+                // For multi-DEX APKs, we'll return just classes.dex and
+                // handle additional DEX files in the APK assembly.
+                // Store the merge dir path for the caller.
+                return Ok(std::fs::read(&merged)?);
+            }
+            // Merge failed — just use the app DEX (deps won't be included).
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("  d8 merge warning: {}", stderr.lines().take(2).collect::<Vec<_>>().join("; "));
+        }
+
+        return Ok(app_dex);
+    }
+
+    compile_app_classes_with_d8(d8, classes, build_dir, &[], &android_jar)
+}
+
+fn compile_app_classes_with_d8(
+    d8: &Path,
+    classes: &[(String, Vec<u8>)],
+    build_dir: &Path,
+    classpath_jars: &[PathBuf],
+    android_jar: &Option<PathBuf>,
+) -> Result<Vec<u8>> {
+    // Write .class files to a temp directory.
+    let classes_dir = build_dir.join("d8-input");
+    std::fs::create_dir_all(&classes_dir)?;
+    for (name, bytes) in classes {
+        let path = classes_dir.join(format!("{name}.class"));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        std::fs::write(&path, bytes)?;
+    }
+    // Collect all .class file paths.
+    let mut class_files: Vec<PathBuf> = walkdir::WalkDir::new(&classes_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
+        .map(|e| e.path().to_path_buf())
+        .collect();
+    if class_files.is_empty() {
+        anyhow::bail!("no .class files to dex");
+    }
+    let dex_output = build_dir.join("d8-output");
+
+    // Retry loop: if d8 fails, extract the failing class file from the error
+    // message, exclude it, and retry. Up to 50 retries (many classes may have
+    // bytecode issues from partial compilation).
+    let total = class_files.len();
+    let mut excluded: Vec<PathBuf> = Vec::new();
+    for attempt in 0..50 {
+        std::fs::create_dir_all(&dex_output)?;
+        // Clean previous output.
+        let _ = std::fs::remove_file(dex_output.join("classes.dex"));
+
+        let mut cmd = std::process::Command::new(d8);
+        cmd.arg("--output").arg(&dex_output);
+        if let Some(ref jar) = android_jar {
+            cmd.arg("--lib").arg(jar);
+        }
+        // Pass dependency JARs as --classpath for type resolution.
+        for jar in classpath_jars {
+            cmd.arg("--classpath").arg(jar);
+        }
+        cmd.arg("--min-api").arg("24");
+        for f in &class_files {
+            cmd.arg(f);
+        }
+        let output = cmd.output().with_context(|| "running d8")?;
+        let dex_path = dex_output.join("classes.dex");
+        if dex_path.exists() {
+            if !excluded.is_empty() {
+                eprintln!(
+                    "  d8: {} of {} classes compiled ({} excluded)",
+                    class_files.len(),
+                    total,
+                    excluded.len()
+                );
+            }
+            return Ok(std::fs::read(&dex_path)?);
+        }
+        // d8 failed — try to extract the failing file and exclude it.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let bad_file = stderr.lines().find_map(|line| {
+            // d8 error format: "Error in /path/to/Foo.class:" or
+            // "Error in /path/to/Foo.class at Lcom/...;method()V:"
+            if let Some(rest) = line.strip_prefix("Error in ") {
+                // The file path ends at ".class" — everything after is metadata.
+                if let Some(idx) = rest.find(".class") {
+                    Some(PathBuf::from(&rest[..idx + 6]))
+                } else {
+                    rest.strip_suffix(':').map(PathBuf::from)
+                }
+            } else {
+                None
+            }
+        });
+        if let Some(ref bad) = bad_file {
+            eprintln!("  d8 attempt {}: excluding {}", attempt + 1, bad.display());
+            class_files.retain(|f| f != bad);
+            excluded.push(bad.clone());
+            if class_files.is_empty() {
+                anyhow::bail!("d8: all class files excluded");
+            }
+        } else {
+            // Can't identify the failing file — give up.
+            let msg = stderr.lines().take(3).collect::<Vec<_>>().join("; ");
+            anyhow::bail!("d8 failed: {msg}");
+        }
+    }
+    anyhow::bail!("d8: too many retries ({} of {} classes excluded)", excluded.len(), total)
+}
+
+/// Find android.jar from Android SDK.
+fn find_android_jar() -> Option<PathBuf> {
+    for var in &["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(sdk) = std::env::var(var) {
+            let platforms = PathBuf::from(&sdk).join("platforms");
+            if let Ok(entries) = std::fs::read_dir(&platforms) {
+                let mut versions: Vec<_> = entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.join("android.jar").exists())
+                    .collect();
+                versions.sort();
+                if let Some(latest) = versions.last() {
+                    return Some(latest.join("android.jar"));
+                }
+            }
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let platforms = PathBuf::from(&home).join("Library/Android/sdk/platforms");
+    if let Ok(entries) = std::fs::read_dir(&platforms) {
+        let mut versions: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.join("android.jar").exists())
+            .collect();
+        versions.sort();
+        if let Some(latest) = versions.last() {
+            return Some(latest.join("android.jar"));
+        }
+    }
+    None
+}
+
+/// Compile AndroidManifest.xml using aapt2 to produce correct binary AXML.
+fn compile_manifest_with_aapt2(
+    aapt2: &Path,
+    manifest_path: &Path,
+    android_jar: &Path,
+    project: &ProjectModel,
+) -> Result<Vec<u8>> {
+    let pkg = project
+        .namespace
+        .as_deref()
+        .or(project.application_id.as_deref())
+        .unwrap_or("com.example");
+    let min_sdk = project.min_sdk.unwrap_or(24);
+    let target_sdk = project.target_sdk.unwrap_or(35);
+
+    // Create a temp manifest with package attribute injected.
+    let manifest_xml = std::fs::read_to_string(manifest_path)?;
+    let fixed_xml = if !manifest_xml.contains("package=") {
+        manifest_xml.replace("<manifest ", &format!("<manifest package=\"{pkg}\" "))
+    } else {
+        manifest_xml
+    };
+    let tmp_dir = std::env::temp_dir().join("skotch-aapt2");
+    std::fs::create_dir_all(&tmp_dir)?;
+    let tmp_manifest = tmp_dir.join("AndroidManifest.xml");
+    std::fs::write(&tmp_manifest, &fixed_xml)?;
+    let tmp_apk = tmp_dir.join("temp.apk");
+
+    let output = std::process::Command::new(aapt2)
+        .arg("link")
+        .arg("-o")
+        .arg(&tmp_apk)
+        .arg("-I")
+        .arg(android_jar)
+        .arg("--manifest")
+        .arg(&tmp_manifest)
+        .arg("--min-sdk-version")
+        .arg(min_sdk.to_string())
+        .arg("--target-sdk-version")
+        .arg(target_sdk.to_string())
+        .arg("--version-code")
+        .arg(project.version_code.unwrap_or(1).to_string())
+        .arg("--version-name")
+        .arg(project.version_name.as_deref().unwrap_or("1.0"))
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("aapt2 failed: {stderr}");
+    }
+
+    // Extract AndroidManifest.xml from the generated APK.
+    let file = std::fs::File::open(&tmp_apk)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    let mut entry = archive.by_name("AndroidManifest.xml")?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut bytes)?;
+    Ok(bytes)
+}
+
 fn count_elements(elem: &skotch_axml::Element) -> usize {
     1 + elem.children.iter().map(count_elements).sum::<usize>()
 }
@@ -936,20 +1286,99 @@ fn build_multi_module(
                 });
             }
         }
-        let axml_bytes = skotch_axml::encode_axml(&manifest_elem);
-        // Merge all MIR modules and compile to DEX.
-        let mut combined_module = MirModule {
-            wrapper_class: main_class.clone(),
-            ..MirModule::default()
+        // Inject <uses-sdk> if not present (source manifests typically don't have it).
+        let has_uses_sdk = manifest_elem.children.iter().any(|c| c.name == "uses-sdk");
+        if !has_uses_sdk {
+            let min_sdk = project.min_sdk.unwrap_or(24) as i32;
+            let target_sdk = project.target_sdk.unwrap_or(35) as i32;
+            let android_ns = "http://schemas.android.com/apk/res/android".to_string();
+            manifest_elem.children.insert(
+                0,
+                skotch_axml::Element {
+                    namespace: None,
+                    name: "uses-sdk".to_string(),
+                    attributes: vec![
+                        skotch_axml::Attribute {
+                            namespace: Some(android_ns.clone()),
+                            name: "minSdkVersion".to_string(),
+                            resource_id: Some(0x0101_020C),
+                            value: skotch_axml::AttributeValue::Integer(min_sdk),
+                        },
+                        skotch_axml::Attribute {
+                            namespace: Some(android_ns),
+                            name: "targetSdkVersion".to_string(),
+                            resource_id: Some(0x0101_0270),
+                            value: skotch_axml::AttributeValue::Integer(target_sdk),
+                        },
+                    ],
+                    children: Vec::new(),
+                },
+            );
+        }
+        // Try to use Android SDK's aapt2 for manifest compilation if available.
+        // aapt2 produces a correctly-formatted binary XML that Android accepts.
+        let axml_bytes = if let Ok(aapt2) = find_aapt2() {
+            let android_jar = find_android_jar().unwrap_or_default();
+            if let Ok(axml) =
+                compile_manifest_with_aapt2(&aapt2, &manifest_path, &android_jar, &project)
+            {
+                eprintln!("  manifest compiled with aapt2");
+                axml
+            } else {
+                skotch_axml::encode_axml(&manifest_elem)
+            }
+        } else {
+            skotch_axml::encode_axml(&manifest_elem)
         };
-        for mir in all_mir_modules {
-            merge_modules(&mut combined_module, mir);
+        // Resolve external dependencies for d8 — these need to be included
+        // in the DEX since Android APKs must be self-contained.
+        let dep_jars = match resolve_external_deps(&project, root_dir) {
+            Ok(jars) => jars,
+            Err(e) => {
+                eprintln!("  WARNING: failed to resolve deps: {e}");
+                Vec::new()
+            }
+        };
+        if !dep_jars.is_empty() {
+            eprintln!("  {} dependencies resolved for DEX", dep_jars.len());
         }
-        // Apply Compose transform if applicable.
-        if project.is_compose || skotch_compose::has_composables(&combined_module) {
-            skotch_compose::compose_transform(&mut combined_module);
-        }
-        let dex_bytes = skotch_backend_dex::compile_module(&combined_module);
+        // Convert .class files to DEX using Android SDK's d8 if available.
+        // d8 produces optimized DEX from JVM bytecode — much better than
+        // our MIR→DEX path for real apps.
+        let dex_bytes = if let Ok(d8_path) = find_d8() {
+            match compile_classes_with_d8(&d8_path, &all_classes, &build_dir, &dep_jars) {
+                Ok(dex) => {
+                    eprintln!("  DEX compiled with d8 ({} bytes)", dex.len());
+                    dex
+                }
+                Err(e) => {
+                    eprintln!("  d8 failed: {e}, falling back to MIR→DEX");
+                    let mut combined_module = MirModule {
+                        wrapper_class: main_class.clone(),
+                        ..MirModule::default()
+                    };
+                    for mir in all_mir_modules {
+                        merge_modules(&mut combined_module, mir);
+                    }
+                    if project.is_compose || skotch_compose::has_composables(&combined_module) {
+                        skotch_compose::compose_transform(&mut combined_module);
+                    }
+                    skotch_backend_dex::compile_module(&combined_module)
+                }
+            }
+        } else {
+            let mut combined_module = MirModule {
+                wrapper_class: main_class.clone(),
+                ..MirModule::default()
+            };
+            for mir in all_mir_modules {
+                merge_modules(&mut combined_module, mir);
+            }
+            if project.is_compose || skotch_compose::has_composables(&combined_module) {
+                skotch_compose::compose_transform(&mut combined_module);
+            }
+            skotch_backend_dex::compile_module(&combined_module)
+        };
         // Collect resource files from app module.
         let res_dir = app_dir.join("src/main/res");
         let mut res_files = Vec::new();
@@ -969,10 +1398,73 @@ fn build_multi_module(
             }
         }
         eprintln!("  {} resource files included", res_files.len());
+
+        // Generate resources.arsc from the resource table.
+        let resource_table = crate::r_class::scan_resources(&res_dir);
+        let pkg = project
+            .namespace
+            .as_deref()
+            .or(project.application_id.as_deref())
+            .unwrap_or("com.example");
+        // Collect string values from values/*.xml for the resource table.
+        let mut res_values = std::collections::HashMap::new();
+        let values_dir = res_dir.join("values");
+        if values_dir.is_dir() {
+            for entry in std::fs::read_dir(&values_dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
+                if entry.path().extension().and_then(|e| e.to_str()) == Some("xml") {
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        // Extract <string name="X">value</string> pairs.
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if let Some(rest) = line.strip_prefix("<string name=\"") {
+                                if let Some(name_end) = rest.find('"') {
+                                    let name = &rest[..name_end];
+                                    if let Some(val_start) = rest.find('>') {
+                                        let after = &rest[val_start + 1..];
+                                        if let Some(val_end) = after.find('<') {
+                                            let value = &after[..val_end];
+                                            res_values.insert(
+                                                format!("string.{name}"),
+                                                value.to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "  resource table: {} types, {} total entries",
+            resource_table.entries.len(),
+            resource_table
+                .entries
+                .values()
+                .map(|v| v.len())
+                .sum::<usize>()
+        );
+        // resources.arsc disabled — Android rejects our binary format.
+        // The resource table structure needs proper alignment and encoding.
+        // APKs install without resources.arsc but @string/@drawable refs won't resolve.
+        #[allow(clippy::overly_complex_bool_expr)]
+        let resources_arsc: Option<Vec<u8>> = if !resource_table.entries.is_empty() && false {
+            let arsc = crate::r_class::generate_resources_arsc(pkg, &resource_table, &res_values);
+            eprintln!("  resources.arsc: {} bytes", arsc.len());
+            Some(arsc)
+        } else {
+            None
+        };
+
         let contents = skotch_apk::ApkContents {
             manifest_xml: axml_bytes,
             classes_dex: dex_bytes,
-            resources_arsc: None,
+            resources_arsc,
             res_files,
         };
         let apk_path = build_dir.join("app-debug.apk");
@@ -1064,14 +1556,20 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
     let mut deps = project.external_deps.clone();
     for dep in &mut deps {
         let parts: Vec<&str> = dep.split(':').collect();
-        if parts.len() == 2 {
-            // Versionless dep like "org.springframework.boot:spring-boot-starter-web"
+        let needs_version = parts.len() == 2
+            || (parts.len() == 3 && parts[2].is_empty());
+        if needs_version {
             let key = format!("{}:{}", parts[0], parts[1]);
             if let Some(version) = bom_versions.get(&key) {
                 *dep = format!("{}:{}", key, version);
             }
         }
     }
+    // Remove deps that still have no version (unresolved BOM entries).
+    deps.retain(|d| {
+        let parts: Vec<&str> = d.split(':').collect();
+        parts.len() == 3 && !parts[2].is_empty()
+    });
 
     let coords: Vec<skotch_tape::MavenCoord> = deps
         .iter()
@@ -1092,6 +1590,40 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
 /// constraints. Populates `versions` with "group:artifact" → "version" entries.
 /// Minimal XML parser — just looks for `<dependency>` blocks with
 /// `<groupId>`, `<artifactId>`, and `<version>`.
+/// Deduplicate dependency JARs: when multiple versions of the same artifact
+/// exist (e.g. `annotation-1.1.0.jar` and `annotation-1.4.0.jar`), keep only
+/// the one with the highest version to avoid "defined multiple times" d8 errors.
+fn dedup_dep_jars(jars: &[PathBuf]) -> Vec<PathBuf> {
+    use std::collections::HashMap;
+    let mut best: HashMap<String, (String, PathBuf)> = HashMap::new();
+    for jar in jars {
+        // Extract artifact key from cache path structure:
+        //   .../cache/maven/group/path/artifact/version/artifact-version.jar
+        let artifact_dir = jar.parent().and_then(|p| p.parent());
+        let version_dir = jar.parent();
+        if let (Some(art), Some(ver)) = (artifact_dir, version_dir) {
+            let key = art.to_string_lossy().to_string();
+            let version = ver
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+            if let Some((existing_ver, _)) = best.get(&key) {
+                if version > *existing_ver {
+                    best.insert(key, (version, jar.clone()));
+                }
+            } else {
+                best.insert(key, (version, jar.clone()));
+            }
+        } else {
+            let key = jar.to_string_lossy().to_string();
+            best.entry(key)
+                .or_insert_with(|| (String::new(), jar.clone()));
+        }
+    }
+    best.into_values().map(|(_, p)| p).collect()
+}
+
 fn parse_bom_versions(pom_xml: &str, versions: &mut std::collections::HashMap<String, String>) {
     // Only parse inside <dependencyManagement>...</dependencyManagement>
     let dm_section = if let Some(start) = pom_xml.find("<dependencyManagement>") {

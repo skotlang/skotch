@@ -159,7 +159,22 @@ pub enum ExternalClassKind {
 // ── Gather pass ─────────────────────────────────────────────────────
 
 /// Map an AST `TypeRef` name to a JVM type descriptor character/string.
+/// When `param_position` is true, `Unit` maps to `Lkotlin/Unit;` (not `V`,
+/// which is only valid as a return-type descriptor).
 fn type_ref_to_descriptor(tr: &TypeRef, interner: &Interner) -> String {
+    type_ref_to_descriptor_inner(tr, interner, false)
+}
+
+fn type_ref_to_param_descriptor(tr: &TypeRef, interner: &Interner) -> String {
+    type_ref_to_descriptor_inner(tr, interner, true)
+}
+
+fn type_ref_to_descriptor_inner(tr: &TypeRef, interner: &Interner, param_position: bool) -> String {
+    // Function types: (P1, P2, ...) -> R  →  Lkotlin/jvm/functions/FunctionN;
+    if tr.func_params.is_some() {
+        let arity = tr.func_params.as_ref().map_or(0, |v| v.len());
+        return format!("Lkotlin/jvm/functions/Function{arity};");
+    }
     let name = interner.resolve(tr.name);
     if tr.nullable {
         return "Ljava/lang/Object;".to_string();
@@ -173,6 +188,7 @@ fn type_ref_to_descriptor(tr: &TypeRef, interner: &Interner) -> String {
         "Byte" => "B".to_string(),
         "Short" => "S".to_string(),
         "Char" => "C".to_string(),
+        "Unit" if param_position => "Lkotlin/Unit;".to_string(),
         "Unit" => "V".to_string(),
         "String" => "Ljava/lang/String;".to_string(),
         "IntArray" => "[I".to_string(),
@@ -204,10 +220,10 @@ fn build_descriptor(
 ) -> String {
     let mut desc = String::from("(");
     if let Some(recv) = receiver_ty {
-        desc.push_str(&type_ref_to_descriptor(recv, interner));
+        desc.push_str(&type_ref_to_param_descriptor(recv, interner));
     }
     for p in params {
-        desc.push_str(&type_ref_to_descriptor(&p.ty, interner));
+        desc.push_str(&type_ref_to_param_descriptor(&p.ty, interner));
     }
     desc.push(')');
     if let Some(ret) = return_ty {

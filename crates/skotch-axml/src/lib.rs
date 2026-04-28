@@ -164,17 +164,32 @@ fn parse_element(src: &mut &str, ids: &HashMap<&str, u32>) -> Option<Element> {
             (None, attr_full.to_string())
         };
 
-        // Determine typed value
+        // Determine typed value — resolve Android enum/flag constants.
         let value = if value_str.starts_with("@") {
-            // Resource reference like @mipmap/ic_launcher, @string/app_name
-            // For binary AXML, store as string (full resolution needs R class)
-            AttributeValue::String(value_str)
+            // Resource references like @mipmap/ic_launcher need resolved R IDs.
+            // Since we don't have a fully compiled R class, strip resource
+            // references by using a placeholder string. This allows the manifest
+            // to be installed without a valid resources.arsc.
+            AttributeValue::String(
+                value_str
+                    .strip_prefix("@string/")
+                    .unwrap_or(&value_str)
+                    .to_string(),
+            )
         } else if value_str == "true" {
             AttributeValue::Boolean(true)
         } else if value_str == "false" {
             AttributeValue::Boolean(false)
         } else if let Ok(n) = value_str.parse::<i32>() {
             AttributeValue::Integer(n)
+        } else if let Some(int_val) = resolve_android_enum(&attr_name, &value_str) {
+            AttributeValue::Integer(int_val)
+        } else if value_str.starts_with("0x") {
+            value_str
+                .strip_prefix("0x")
+                .and_then(|h| i32::from_str_radix(h, 16).ok())
+                .map(AttributeValue::Integer)
+                .unwrap_or(AttributeValue::String(value_str))
         } else {
             AttributeValue::String(value_str)
         };
@@ -248,12 +263,63 @@ fn parse_element(src: &mut &str, ids: &HashMap<&str, u32>) -> Option<Element> {
         }
     }
 
+    // Filter out elements that reference unresolved resources
+    // (like <meta-data android:resource="@xml/...">) to prevent
+    // install failures. Keep only essential elements.
+    let children = children
+        .into_iter()
+        .filter(|child| {
+            // Keep meta-data only if it doesn't have unresolved @resource refs.
+            if child.name == "meta-data" {
+                return child.attributes.iter().all(|a| {
+                    if a.name == "resource" {
+                        !matches!(&a.value, AttributeValue::String(s) if s.starts_with('@'))
+                    } else {
+                        true
+                    }
+                });
+            }
+            true
+        })
+        .collect();
+
     Some(Element {
         namespace: None,
         name: tag_name,
         attributes,
         children,
     })
+}
+
+/// Resolve Android attribute enum/flag values to their integer constants.
+/// E.g. `windowSoftInputMode="adjustResize"` → 0x10.
+fn resolve_android_enum(attr_name: &str, value: &str) -> Option<i32> {
+    match (attr_name, value) {
+        // windowSoftInputMode flags
+        ("windowSoftInputMode", "adjustNothing") => Some(0x30),
+        ("windowSoftInputMode", "adjustResize") => Some(0x10),
+        ("windowSoftInputMode", "adjustPan") => Some(0x20),
+        ("windowSoftInputMode", "adjustUnspecified") => Some(0x00),
+        ("windowSoftInputMode", "stateUnspecified") => Some(0x00),
+        ("windowSoftInputMode", "stateHidden") => Some(0x02),
+        ("windowSoftInputMode", "stateVisible") => Some(0x04),
+        ("windowSoftInputMode", "stateAlwaysHidden") => Some(0x03),
+        ("windowSoftInputMode", "stateAlwaysVisible") => Some(0x05),
+        // configChanges flags
+        ("configChanges", "orientation") => Some(0x0080),
+        ("configChanges", "screenSize") => Some(0x0400),
+        ("configChanges", "keyboardHidden") => Some(0x0020),
+        // launchMode
+        ("launchMode", "standard") => Some(0),
+        ("launchMode", "singleTop") => Some(1),
+        ("launchMode", "singleTask") => Some(2),
+        ("launchMode", "singleInstance") => Some(3),
+        // screenOrientation
+        ("screenOrientation", "unspecified") => Some(-1),
+        ("screenOrientation", "portrait") => Some(1),
+        ("screenOrientation", "landscape") => Some(0),
+        _ => None,
+    }
 }
 
 /// Encode an XML element tree into Android binary XML bytes.

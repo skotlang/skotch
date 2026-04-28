@@ -219,6 +219,61 @@ impl TokenKind {
                 | TokenKind::KwTailrec
         )
     }
+
+    /// Return the source text for keyword tokens (e.g. `KwData` → `"data"`).
+    /// Returns `None` for non-keyword tokens.
+    pub fn keyword_text(&self) -> Option<&'static str> {
+        match self {
+            TokenKind::KwFun => Some("fun"),
+            TokenKind::KwVal => Some("val"),
+            TokenKind::KwVar => Some("var"),
+            TokenKind::KwClass => Some("class"),
+            TokenKind::KwObject => Some("object"),
+            TokenKind::KwInterface => Some("interface"),
+            TokenKind::KwIf => Some("if"),
+            TokenKind::KwElse => Some("else"),
+            TokenKind::KwWhen => Some("when"),
+            TokenKind::KwWhile => Some("while"),
+            TokenKind::KwFor => Some("for"),
+            TokenKind::KwDo => Some("do"),
+            TokenKind::KwReturn => Some("return"),
+            TokenKind::KwBreak => Some("break"),
+            TokenKind::KwContinue => Some("continue"),
+            TokenKind::KwIn => Some("in"),
+            TokenKind::KwIs => Some("is"),
+            TokenKind::KwAs => Some("as"),
+            TokenKind::KwTrue => Some("true"),
+            TokenKind::KwFalse => Some("false"),
+            TokenKind::KwNull => Some("null"),
+            TokenKind::KwSuper => Some("super"),
+            TokenKind::KwPackage => Some("package"),
+            TokenKind::KwImport => Some("import"),
+            TokenKind::KwThrow => Some("throw"),
+            TokenKind::KwTry => Some("try"),
+            TokenKind::KwCatch => Some("catch"),
+            TokenKind::KwFinally => Some("finally"),
+            TokenKind::KwOpen => Some("open"),
+            TokenKind::KwOverride => Some("override"),
+            TokenKind::KwAbstract => Some("abstract"),
+            TokenKind::KwPrivate => Some("private"),
+            TokenKind::KwProtected => Some("protected"),
+            TokenKind::KwInternal => Some("internal"),
+            TokenKind::KwEnum => Some("enum"),
+            TokenKind::KwSealed => Some("sealed"),
+            TokenKind::KwData => Some("data"),
+            TokenKind::KwConst => Some("const"),
+            TokenKind::KwLateinit => Some("lateinit"),
+            TokenKind::KwSuspend => Some("suspend"),
+            TokenKind::KwInit => Some("init"),
+            TokenKind::KwInfix => Some("infix"),
+            TokenKind::KwInline => Some("inline"),
+            TokenKind::KwOperator => Some("operator"),
+            TokenKind::KwVararg => Some("vararg"),
+            TokenKind::KwConstructor => Some("constructor"),
+            TokenKind::KwTailrec => Some("tailrec"),
+            _ => None,
+        }
+    }
 }
 
 /// A single token in the lexer's output stream.

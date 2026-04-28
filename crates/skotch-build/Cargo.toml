@@ -36,6 +36,7 @@ skotch-classinfo   = { workspace = true }
 skotch-mir-lower   = { workspace = true }
 which              = { workspace = true }
 byteorder          = { workspace = true }
+zip                = { workspace = true }
 
 [dev-dependencies]
 zip              = { workspace = true }

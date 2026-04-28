@@ -228,11 +228,23 @@ fn parse_library_value(raw: &str, versions: &HashMap<String, String>) -> Option<
     }
 
     // Inline table: { group = "...", name = "...", version.ref = "..." }
+    // or: { module = "group:name", version.ref = "..." }
     let inner = strip_braces(raw)?;
     let fields = parse_inline_table(inner);
 
-    let group = fields.get("group").cloned()?;
-    let name = fields.get("name").cloned()?;
+    let (group, name) = if let Some(module) = fields.get("module") {
+        // module = "group:name" — split on ':'
+        let parts: Vec<&str> = module.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            return None;
+        }
+    } else {
+        let group = fields.get("group").cloned()?;
+        let name = fields.get("name").cloned()?;
+        (group, name)
+    };
 
     // `version.ref` → look up in [versions]; `version` → literal.
     let version = if let Some(ref_key) = fields.get("version.ref") {
