@@ -151,7 +151,16 @@ fn main() -> Result<()> {
         if !first_arg.starts_with('-')
             && !matches!(
                 first_arg.as_str(),
-                "emit" | "repl" | "run" | "build" | "assemble" | "lsp" | "test" | "bsp" | "init" | "help"
+                "emit"
+                    | "repl"
+                    | "run"
+                    | "build"
+                    | "assemble"
+                    | "lsp"
+                    | "test"
+                    | "bsp"
+                    | "init"
+                    | "help"
             )
             && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
         {
