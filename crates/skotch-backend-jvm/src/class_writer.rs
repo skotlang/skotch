@@ -1406,12 +1406,47 @@ fn emit_method_body(
                 code.push(0xBF); // athrow
             }
             Terminator::Return => {
-                // Lambda invoke must return Object to match FunctionN.
-                if func.name == "invoke" && class_name.contains("$Lambda$") {
-                    code.push(0x01); // aconst_null
-                    code.push(0xB0); // areturn
+                // If the function declares a non-void return type, we can't
+                // emit `return` (void) — the JVM verifier rejects it. Push
+                // a default value and use the typed return instruction.
+                // Lambda invoke methods must return Object even when the
+                // Kotlin return type is Unit.
+                let effective_ty = if func.name == "invoke"
+                    && class_name.contains("$Lambda$")
+                    && func.return_ty == Ty::Unit
+                {
+                    &Ty::Any // JVM invoke returns Object
                 } else {
-                    code.push(0xB1); // return (void)
+                    &func.return_ty
+                };
+                match effective_ty {
+                    Ty::Unit => code.push(0xB1), // return (void)
+                    Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => {
+                        code.push(0x03); // iconst_0
+                        bump(&mut stack, &mut max_stack, 1);
+                        code.push(0xAC); // ireturn
+                    }
+                    Ty::Long => {
+                        code.push(0x09); // lconst_0
+                        bump(&mut stack, &mut max_stack, 2);
+                        code.push(0xAD); // lreturn
+                    }
+                    Ty::Float => {
+                        code.push(0x0B); // fconst_0
+                        bump(&mut stack, &mut max_stack, 1);
+                        code.push(0xAE); // freturn
+                    }
+                    Ty::Double => {
+                        code.push(0x0E); // dconst_0
+                        bump(&mut stack, &mut max_stack, 2);
+                        code.push(0xAF); // dreturn
+                    }
+                    _ => {
+                        // Reference type: return null.
+                        code.push(0x01); // aconst_null
+                        bump(&mut stack, &mut max_stack, 1);
+                        code.push(0xB0); // areturn
+                    }
                 }
             }
             Terminator::ReturnValue(local) => {

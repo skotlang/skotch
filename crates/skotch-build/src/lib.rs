@@ -11,7 +11,7 @@ pub mod pipeline;
 pub mod r_class;
 pub mod test_runner;
 
-pub use pipeline::{build_project, BuildOptions, BuildOutcome};
+pub use pipeline::{assemble_android, build_project, AssembleOptions, BuildOptions, BuildOutcome};
 pub use skotch_buildscript::BuildTarget;
 pub use test_runner::{run_tests, TestOptions, TestResult};
 

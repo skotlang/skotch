@@ -107,6 +107,15 @@ enum Command {
         #[arg(long = "target", value_name = "TARGET")]
         target: Option<String>,
     },
+    /// Assemble a signed Android debug APK using SDK tools.
+    ///
+    /// Uses aapt2 for resources/manifest, d8 for DEX, and apksigner for
+    /// signing. Produces build/app-debug.apk matching Gradle's output.
+    Assemble {
+        /// Project directory (default: current directory).
+        #[arg(short = 'C', long = "project-dir", value_name = "DIR")]
+        project_dir: Option<PathBuf>,
+    },
     /// Start the Language Server Protocol server (stdin/stdout).
     ///
     /// Used by editors (VS Code, Neovim, etc.) for real-time diagnostics,
@@ -142,7 +151,7 @@ fn main() -> Result<()> {
         if !first_arg.starts_with('-')
             && !matches!(
                 first_arg.as_str(),
-                "emit" | "repl" | "run" | "build" | "lsp" | "test" | "bsp" | "init" | "help"
+                "emit" | "repl" | "run" | "build" | "assemble" | "lsp" | "test" | "bsp" | "init" | "help"
             )
             && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
         {
@@ -266,6 +275,11 @@ fn main() -> Result<()> {
                 target_override,
             };
             skotch_build::build_project(&opts)?;
+        }
+        Command::Assemble { project_dir } => {
+            let dir = project_dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let opts = skotch_build::AssembleOptions { project_dir: dir };
+            skotch_build::assemble_android(&opts)?;
         }
         Command::Lsp => {
             tokio::runtime::Runtime::new()

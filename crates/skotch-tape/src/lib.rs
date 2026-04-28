@@ -300,6 +300,17 @@ fn parse_pom_deps(pom_xml: &str) -> Vec<PomDep> {
                     }
                 }
 
+                // Strip Maven version range brackets: "[1.7.1]" → "1.7.1".
+                if version.starts_with('[') || version.starts_with('(') {
+                    version = version
+                        .trim_start_matches(['[', '('])
+                        .trim_end_matches([']', ')'])
+                        .to_string();
+                    // For ranges like "[1.0,2.0)", take the lower bound.
+                    if let Some(idx) = version.find(',') {
+                        version = version[..idx].to_string();
+                    }
+                }
                 if !group.is_empty() && !artifact.is_empty() && !version.is_empty() {
                     deps.push(PomDep {
                         coord: MavenCoord {
