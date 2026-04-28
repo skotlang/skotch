@@ -13915,11 +13915,7 @@ fn lower_class(
             .as_ref()
             .map(|sc| {
                 let simple = interner.resolve(sc.name).to_string();
-                module
-                    .import_map
-                    .get(&simple)
-                    .cloned()
-                    .unwrap_or(simple)
+                module.import_map.get(&simple).cloned().unwrap_or(simple)
             })
             .unwrap_or_else(|| "java/lang/Object".to_string());
         // Lower super args if present.
@@ -14080,11 +14076,7 @@ fn lower_class(
 
     let super_class = c.parent_class.as_ref().map(|sc| {
         let simple = interner.resolve(sc.name).to_string();
-        module
-            .import_map
-            .get(&simple)
-            .cloned()
-            .unwrap_or(simple)
+        module.import_map.get(&simple).cloned().unwrap_or(simple)
     });
 
     // Pre-register the class with method stubs so that implicit
@@ -15326,11 +15318,7 @@ fn lower_class(
                 .as_ref()
                 .map(|sc| {
                     let simple = interner.resolve(sc.name).to_string();
-                    module
-                        .import_map
-                        .get(&simple)
-                        .cloned()
-                        .unwrap_or(simple)
+                    module.import_map.get(&simple).cloned().unwrap_or(simple)
                 })
                 .unwrap_or_else(|| "java/lang/Object".to_string());
             sec_fn.blocks[0].stmts.push(MStmt::Assign {

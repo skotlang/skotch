@@ -504,7 +504,11 @@ fn compile_classes_with_d8(
         // exist (e.g. annotation-1.1.0.jar and annotation-1.4.0.jar), keep
         // only the latest version to avoid "defined multiple times" errors.
         let deduped_jars = dedup_dep_jars(dep_jars);
-        eprintln!("  d8: {} dep JARs ({} after dedup)", dep_jars.len(), deduped_jars.len());
+        eprintln!(
+            "  d8: {} dep JARs ({} after dedup)",
+            dep_jars.len(),
+            deduped_jars.len()
+        );
 
         let deps_dex_dir = build_dir.join("d8-deps");
         std::fs::create_dir_all(&deps_dex_dir)?;
@@ -598,7 +602,10 @@ fn compile_classes_with_d8(
             }
             // Merge failed — just use the app DEX (deps won't be included).
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("  d8 merge warning: {}", stderr.lines().take(2).collect::<Vec<_>>().join("; "));
+            eprintln!(
+                "  d8 merge warning: {}",
+                stderr.lines().take(2).collect::<Vec<_>>().join("; ")
+            );
         }
 
         return Ok(app_dex);
@@ -701,7 +708,11 @@ fn compile_app_classes_with_d8(
             anyhow::bail!("d8 failed: {msg}");
         }
     }
-    anyhow::bail!("d8: too many retries ({} of {} classes excluded)", excluded.len(), total)
+    anyhow::bail!(
+        "d8: too many retries ({} of {} classes excluded)",
+        excluded.len(),
+        total
+    )
 }
 
 /// Find android.jar from Android SDK.
@@ -869,7 +880,10 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
             .output()?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("  aapt2 compile app resources: {}", stderr.lines().take(3).collect::<Vec<_>>().join("; "));
+            eprintln!(
+                "  aapt2 compile app resources: {}",
+                stderr.lines().take(3).collect::<Vec<_>>().join("; ")
+            );
         }
     }
 
@@ -907,7 +921,11 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         let v: Vec<PathBuf> = best.into_values().map(|(_, p)| p).collect();
         v
     };
-    eprintln!("  {} library resource dirs ({} after dedup)", extra_res_dirs.len(), deduped_res_dirs.len());
+    eprintln!(
+        "  {} library resource dirs ({} after dedup)",
+        extra_res_dirs.len(),
+        deduped_res_dirs.len()
+    );
 
     // Compile library resources (from extracted AARs).
     for (i, res_dir) in deduped_res_dirs.iter().enumerate() {
@@ -1010,9 +1028,7 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         lib_packages.sort();
         lib_packages.dedup();
         if !lib_packages.is_empty() {
-            link_cmd
-                .arg("--extra-packages")
-                .arg(lib_packages.join(":"));
+            link_cmd.arg("--extra-packages").arg(lib_packages.join(":"));
         }
         for z in &res_zips {
             link_cmd.arg(z);
@@ -1029,7 +1045,9 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
             if let Some(idx) = line.find(".zip@") {
                 let prefix = &line[..idx + 4];
                 // Extract just the filename part.
-                return Some(PathBuf::from(prefix.split_whitespace().last().unwrap_or(prefix)));
+                return Some(PathBuf::from(
+                    prefix.split_whitespace().last().unwrap_or(prefix),
+                ));
             }
             None
         });
@@ -1122,7 +1140,10 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
             }
         }
     }
-    eprintln!("  aapt2 base APK: {} bytes", std::fs::metadata(&base_apk)?.len());
+    eprintln!(
+        "  aapt2 base APK: {} bytes",
+        std::fs::metadata(&base_apk)?.len()
+    );
 
     // ── Step 3.5: Compile R.java → R.class ────────────────────────────
     // aapt2 generates R.java files for resource ID constants.
@@ -1156,7 +1177,11 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
                     .count();
-                eprintln!("  {} R.class files compiled from {} R.java files", r_count, r_java_files.len());
+                eprintln!(
+                    "  {} R.class files compiled from {} R.java files",
+                    r_count,
+                    r_java_files.len()
+                );
             }
             _ => {
                 eprintln!("  WARNING: javac failed to compile R.java files");
@@ -1176,8 +1201,12 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
 
     // Deduplicate dependency JARs.
     let deduped = dedup_dep_jars(&dep_jars);
-    eprintln!("  d8: {} app classes, {} dep JARs ({} after dedup)",
-        all_classes.len(), dep_jars.len(), deduped.len());
+    eprintln!(
+        "  d8: {} app classes, {} dep JARs ({} after dedup)",
+        all_classes.len(),
+        dep_jars.len(),
+        deduped.len()
+    );
 
     // Write app .class files to a temp dir.
     let app_classes_dir = build_dir.join("d8-input");
@@ -1293,7 +1322,10 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
                 None
             });
             if let Some(ref bad) = bad_jar {
-                eprintln!("  d8 deps: excluding {}", bad.file_name().and_then(|n| n.to_str()).unwrap_or("?"));
+                eprintln!(
+                    "  d8 deps: excluding {}",
+                    bad.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+                );
                 jar_list.retain(|j| j != bad);
             } else {
                 eprintln!("  d8 deps-only failed (no recoverable JAR)");
@@ -1304,10 +1336,19 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
             .flatten()
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("dex"))
             .count();
-        eprintln!("  d8 deps: {} DEX files from {} JARs", deps_dex_count, jar_list.len());
+        eprintln!(
+            "  d8 deps: {} DEX files from {} JARs",
+            deps_dex_count,
+            jar_list.len()
+        );
         // Phase 2: app classes with deps as classpath.
-        let app_dex =
-            compile_app_classes_with_d8(&d8, &all_classes, &build_dir, &dep_jars, &Some(android_jar.clone()))?;
+        let app_dex = compile_app_classes_with_d8(
+            &d8,
+            &all_classes,
+            &build_dir,
+            &dep_jars,
+            &Some(android_jar.clone()),
+        )?;
 
         // Instead of merging DEX files (which can corrupt class references),
         // collect all DEX files: deps DEX + app DEX, rename sequentially.
@@ -1341,7 +1382,8 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
                 // Collect ALL DEX files from the R class compilation.
                 for entry in std::fs::read_dir(&r_dex_dir)?.flatten() {
                     if entry.path().extension().and_then(|e| e.to_str()) == Some("dex") {
-                        let dest = dex_dir.join(format!("r-{}", entry.file_name().to_string_lossy()));
+                        let dest =
+                            dex_dir.join(format!("r-{}", entry.file_name().to_string_lossy()));
                         std::fs::copy(entry.path(), &dest)?;
                         all_dex.push(dest);
                     }
@@ -1384,8 +1426,16 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         let bn = b.file_name().and_then(|n| n.to_str()).unwrap_or("");
         an.cmp(bn)
     });
-    let total_dex_size: u64 = dex_files.iter().filter_map(|p| std::fs::metadata(p).ok()).map(|m| m.len()).sum();
-    eprintln!("  {} DEX files ({:.1} MB)", dex_files.len(), total_dex_size as f64 / 1_048_576.0);
+    let total_dex_size: u64 = dex_files
+        .iter()
+        .filter_map(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len())
+        .sum();
+    eprintln!(
+        "  {} DEX files ({:.1} MB)",
+        dex_files.len(),
+        total_dex_size as f64 / 1_048_576.0
+    );
 
     // ── Step 5: Build final APK from scratch ─────────────────────────
     // Instead of appending to the aapt2 base APK (which breaks alignment),
@@ -1410,7 +1460,10 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
 
         // 2. DEX files (STORED, aligned) — these come first for performance.
         for dex_path in &dex_files {
-            let name = dex_path.file_name().and_then(|n| n.to_str()).unwrap_or("classes.dex");
+            let name = dex_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("classes.dex");
             zip.start_file(name, stored)?;
             let data = std::fs::read(dex_path)?;
             std::io::Write::write_all(&mut zip, &data)?;
@@ -1520,11 +1573,18 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         .output()?;
     if !sign_output.status.success() {
         let stderr = String::from_utf8_lossy(&sign_output.stderr);
-        anyhow::bail!("apksigner failed: {}", stderr.lines().take(3).collect::<Vec<_>>().join("; "));
+        anyhow::bail!(
+            "apksigner failed: {}",
+            stderr.lines().take(3).collect::<Vec<_>>().join("; ")
+        );
     }
 
     let apk_size = std::fs::metadata(&signed_apk)?.len();
-    eprintln!("BUILD SUCCESS: {} ({:.1} MB)", signed_apk.display(), apk_size as f64 / 1_048_576.0);
+    eprintln!(
+        "BUILD SUCCESS: {} ({:.1} MB)",
+        signed_apk.display(),
+        apk_size as f64 / 1_048_576.0
+    );
 
     Ok(BuildOutcome {
         project,
@@ -1644,13 +1704,20 @@ fn compile_multi_module_classes(
             if let Some(&dep_idx) = name_to_idx.get(dep_name) {
                 let dep_syms = &module_symbols[dep_idx];
                 for (k, v) in &dep_syms.functions {
-                    combined_symbols.functions.entry(k.clone()).or_default().extend(v.clone());
+                    combined_symbols
+                        .functions
+                        .entry(k.clone())
+                        .or_default()
+                        .extend(v.clone());
                 }
                 for (k, v) in &dep_syms.vals {
                     combined_symbols.vals.entry(k.clone()).or_insert(v.clone());
                 }
                 for (k, v) in &dep_syms.classes {
-                    combined_symbols.classes.entry(k.clone()).or_insert(v.clone());
+                    combined_symbols
+                        .classes
+                        .entry(k.clone())
+                        .or_insert(v.clone());
                 }
             }
         }
@@ -1676,13 +1743,20 @@ fn compile_multi_module_classes(
         let own_symbols = gather_declarations(&refs, &mod_interner);
 
         for (k, v) in &own_symbols.functions {
-            combined_symbols.functions.entry(k.clone()).or_default().extend(v.clone());
+            combined_symbols
+                .functions
+                .entry(k.clone())
+                .or_default()
+                .extend(v.clone());
         }
         for (k, v) in &own_symbols.vals {
             combined_symbols.vals.entry(k.clone()).or_insert(v.clone());
         }
         for (k, v) in &own_symbols.classes {
-            combined_symbols.classes.entry(k.clone()).or_insert(v.clone());
+            combined_symbols
+                .classes
+                .entry(k.clone())
+                .or_insert(v.clone());
         }
 
         let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
@@ -1711,7 +1785,8 @@ fn compile_multi_module_classes(
             let mut tmp_interner = skotch_intern::Interner::new();
             let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
             let mut tmp_sm = skotch_span::SourceMap::new();
-            let mut re_parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+            let mut re_parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> =
+                Vec::new();
             for path in &src_files {
                 let text = std::fs::read_to_string(path).unwrap_or_default();
                 let fid = tmp_sm.add(path.clone(), text.clone());
@@ -1720,7 +1795,10 @@ fn compile_multi_module_classes(
                 let wrapper = wrapper_class_for(path);
                 re_parsed.push((fid, ast, wrapper));
             }
-            let refs: Vec<_> = re_parsed.iter().map(|(fid, ast, wc)| (*fid, ast, wc.as_str())).collect();
+            let refs: Vec<_> = re_parsed
+                .iter()
+                .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+                .collect();
             module_symbols[idx] = gather_declarations(&refs, &tmp_interner);
         }
 
@@ -2554,8 +2632,7 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
     let mut deps = project.external_deps.clone();
     for dep in &mut deps {
         let parts: Vec<&str> = dep.split(':').collect();
-        let needs_version = parts.len() == 2
-            || (parts.len() == 3 && parts[2].is_empty());
+        let needs_version = parts.len() == 2 || (parts.len() == 3 && parts[2].is_empty());
         if needs_version {
             let key = format!("{}:{}", parts[0], parts[1]);
             if let Some(version) = bom_versions.get(&key) {
@@ -2638,10 +2715,7 @@ fn dedup_dep_jars(jars: &[PathBuf]) -> Vec<PathBuf> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
                 .to_string();
-            by_group
-                .entry(gkey)
-                .or_default()
-                .push((aname, jar.clone()));
+            by_group.entry(gkey).or_default().push((aname, jar.clone()));
         }
     }
     // For each group, resolve artifact renames:
