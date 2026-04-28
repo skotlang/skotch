@@ -448,6 +448,10 @@ fn build_android(
     })
 }
 
+fn count_elements(elem: &skotch_axml::Element) -> usize {
+    1 + elem.children.iter().map(count_elements).sum::<usize>()
+}
+
 fn build_manifest_from_project(project: &ProjectModel) -> skotch_axml::Element {
     let package = project
         .namespace
@@ -521,7 +525,9 @@ fn build_multi_module(
         }
         let text = std::fs::read_to_string(&bf)?;
         let fid = sm.add(bf, text.clone());
-        let parsed = parse_buildfile_with_catalog(&text, fid, &mut interner, Some(&module_dir));
+        // Use root dir for catalog lookup — the catalog is typically at the
+        // root project level, not in the submodule.
+        let parsed = parse_buildfile_with_catalog(&text, fid, &mut interner, Some(root_dir));
         let mut project = parsed.project;
         project.project_name = Some(dir_name.to_string());
         // Merge allprojects + subprojects config from root.
@@ -583,6 +589,7 @@ fn build_multi_module(
     // Each module accumulates exports from its dependencies so cross-module
     // function calls and class references resolve correctly.
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut all_mir_modules: Vec<MirModule> = Vec::new();
     let mut app_project: Option<ProjectModel> = None;
     let mut diags = Diagnostics::new();
 
@@ -631,7 +638,7 @@ fn build_multi_module(
 
         // Build cross-module symbol table for each module at this level.
         // Include exports from all dependency modules.
-        type ModuleBuildResult = (usize, Vec<(String, Vec<u8>)>, bool, String);
+        type ModuleBuildResult = (usize, Vec<(String, Vec<u8>)>, Vec<MirModule>, bool, String);
         let level_results: Vec<ModuleBuildResult> = level_modules
             .iter()
             .map(|&idx| {
@@ -642,7 +649,7 @@ fn build_multi_module(
                         .extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
                 }
                 if src_files.is_empty() {
-                    return (idx, Vec::new(), false, String::new());
+                    return (idx, Vec::new(), Vec::new(), false, String::new());
                 }
 
                 // Build combined symbol table: this module's own exports +
@@ -715,6 +722,7 @@ fn build_multi_module(
 
                 // Compile each file with the combined symbol table.
                 let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
+                let mut mir_modules: Vec<MirModule> = Vec::new();
                 for (fid_idx, (_fid, ast, wrapper)) in parsed.iter().enumerate() {
                     let pre_errors = mod_diags.len();
                     let mir = skotch_driver::compile_ast(
@@ -725,6 +733,7 @@ fn build_multi_module(
                         Some(&combined_symbols),
                     );
                     let file_classes = skotch_backend_jvm::compile_module(&mir, &mod_interner);
+                    mir_modules.push(mir);
                     let new_errors = mod_diags.len() - pre_errors;
                     if !file_classes.is_empty() {
                         eprintln!(
@@ -742,12 +751,19 @@ fn build_multi_module(
                 } else {
                     String::new()
                 };
-                (idx, classes, mod_diags.has_errors(), mod_diag_text)
+                (
+                    idx,
+                    classes,
+                    mir_modules,
+                    mod_diags.has_errors(),
+                    mod_diag_text,
+                )
             })
             .collect();
 
         // Collect results and store per-module symbols for downstream modules.
-        for (idx, classes, has_errors, diag_text) in level_results {
+        for (idx, classes, file_mirs, has_errors, diag_text) in level_results {
+            all_mir_modules.extend(file_mirs);
             if has_errors {
                 let err_count = diag_text.matches("error:").count();
                 eprintln!(
@@ -804,6 +820,10 @@ fn build_multi_module(
             if modules[idx].project.main_class.is_some() || app_project.is_none() {
                 app_project = Some(modules[idx].project.clone());
             }
+            // Prefer the Android module's project for target detection.
+            if modules[idx].project.is_android {
+                app_project = Some(modules[idx].project.clone());
+            }
         }
     }
 
@@ -843,21 +863,146 @@ fn build_multi_module(
         })
         .unwrap_or_else(|| "MainKt".to_string());
 
-    // Package as JAR (Gradle-compatible: build/libs/{project-name}.jar).
-    let jar_dir = root_dir.join("build/libs");
-    std::fs::create_dir_all(&jar_dir).ok();
-    let jar_name = settings.root_project_name.as_deref().unwrap_or("app");
-    let jar_path = jar_dir.join(format!("{jar_name}.jar"));
-    skotch_jar::write_jar(&jar_path, &main_class, &all_classes, &[])?;
+    let target = project.target.clone().unwrap_or(BuildTarget::Jvm);
 
     eprintln!("  {} modules, {} classes compiled", n, all_classes.len());
-    eprintln!("BUILD SUCCESS: {}", jar_path.display());
 
-    Ok(BuildOutcome {
-        project,
-        target: BuildTarget::Jvm,
-        output_path: jar_path,
-    })
+    // Package based on detected target.
+    if target == BuildTarget::Android {
+        // For Android, merge all classes into a single MIR module and build APK.
+        let mut module = MirModule::default();
+        for (file_module, _, _) in std::iter::empty::<&(MirModule, bool, String)>() {
+            merge_modules(&mut module, file_module.clone());
+        }
+        // Build DEX from compiled classes (simplified: write JAR first, note APK as TODO).
+        let build_dir = root_dir.join("build");
+        std::fs::create_dir_all(&build_dir).ok();
+        let jar_name = settings.root_project_name.as_deref().unwrap_or("app");
+        let jar_path = build_dir.join(format!("libs/{jar_name}.jar"));
+        std::fs::create_dir_all(jar_path.parent().unwrap()).ok();
+        skotch_jar::write_jar(&jar_path, &main_class, &all_classes, &[])?;
+
+        // Find the app module directory for manifest and resources.
+        let app_dir = modules
+            .iter()
+            .find(|m| m.project.is_android)
+            .or_else(|| modules.iter().find(|m| m.dir.join("src/main/res").exists()))
+            .or_else(|| {
+                modules
+                    .iter()
+                    .find(|m| m.dir.join("src/main/AndroidManifest.xml").exists())
+            })
+            .map(|m| m.dir.clone())
+            .unwrap_or_else(|| root_dir.to_path_buf());
+
+        // Build AndroidManifest.xml — prefer source manifest if available.
+        let manifest_path = app_dir.join("src/main/AndroidManifest.xml");
+        eprintln!(
+            "  manifest: {} (exists: {})",
+            manifest_path.display(),
+            manifest_path.exists()
+        );
+        let manifest_elem = if manifest_path.exists() {
+            let xml = std::fs::read_to_string(&manifest_path).unwrap_or_default();
+            match skotch_axml::parse_source_manifest(&xml) {
+                Some(elem) => {
+                    eprintln!(
+                        "  using source AndroidManifest.xml ({} elements)",
+                        count_elements(&elem)
+                    );
+                    elem
+                }
+                None => {
+                    eprintln!("  WARNING: failed to parse source manifest, using generated");
+                    build_manifest_from_project(&project)
+                }
+            }
+        } else {
+            build_manifest_from_project(&project)
+        };
+        // Inject package attribute if missing (build.gradle.kts has namespace).
+        let mut manifest_elem = manifest_elem;
+        if !manifest_elem.attributes.iter().any(|a| a.name == "package") {
+            if let Some(pkg) = project
+                .namespace
+                .as_deref()
+                .or(project.application_id.as_deref())
+            {
+                manifest_elem.attributes.push(skotch_axml::Attribute {
+                    namespace: None,
+                    name: "package".to_string(),
+                    resource_id: None,
+                    value: skotch_axml::AttributeValue::String(pkg.to_string()),
+                });
+            }
+        }
+        let axml_bytes = skotch_axml::encode_axml(&manifest_elem);
+        // Merge all MIR modules and compile to DEX.
+        let mut combined_module = MirModule {
+            wrapper_class: main_class.clone(),
+            ..MirModule::default()
+        };
+        for mir in all_mir_modules {
+            merge_modules(&mut combined_module, mir);
+        }
+        // Apply Compose transform if applicable.
+        if project.is_compose || skotch_compose::has_composables(&combined_module) {
+            skotch_compose::compose_transform(&mut combined_module);
+        }
+        let dex_bytes = skotch_backend_dex::compile_module(&combined_module);
+        // Collect resource files from app module.
+        let res_dir = app_dir.join("src/main/res");
+        let mut res_files = Vec::new();
+        if res_dir.is_dir() {
+            for entry in walkdir::WalkDir::new(&res_dir)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if entry.path().is_file() {
+                    if let Ok(rel) = entry.path().strip_prefix(&res_dir) {
+                        let apk_path = format!("res/{}", rel.to_string_lossy().replace('\\', "/"));
+                        if let Ok(data) = std::fs::read(entry.path()) {
+                            res_files.push((apk_path, data));
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("  {} resource files included", res_files.len());
+        let contents = skotch_apk::ApkContents {
+            manifest_xml: axml_bytes,
+            classes_dex: dex_bytes,
+            resources_arsc: None,
+            res_files,
+        };
+        let apk_path = build_dir.join("app-debug.apk");
+        skotch_apk::write_unsigned_apk(&apk_path, &contents)?;
+        // Sign the APK.
+        let signed_path = build_dir.join("app-debug-signed.apk");
+        skotch_sign::sign_apk_debug(&apk_path, &signed_path)?;
+
+        eprintln!("BUILD SUCCESS: {}", signed_path.display());
+
+        Ok(BuildOutcome {
+            project,
+            target: BuildTarget::Android,
+            output_path: apk_path,
+        })
+    } else {
+        let jar_dir = root_dir.join("build/libs");
+        std::fs::create_dir_all(&jar_dir).ok();
+        let jar_name = settings.root_project_name.as_deref().unwrap_or("app");
+        let jar_path = jar_dir.join(format!("{jar_name}.jar"));
+        skotch_jar::write_jar(&jar_path, &main_class, &all_classes, &[])?;
+
+        eprintln!("BUILD SUCCESS: {}", jar_path.display());
+
+        Ok(BuildOutcome {
+            project,
+            target: BuildTarget::Jvm,
+            output_path: jar_path,
+        })
+    }
 }
 
 /// Resolve external Maven dependencies declared in `build.gradle.kts`.

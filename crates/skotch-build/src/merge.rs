@@ -22,16 +22,42 @@ pub fn merge_modules(into: &mut MirModule, other: MirModule) {
         remap.push(new_id.0);
     }
 
+    // Remap and merge functions.
     for mut f in other.functions {
-        // Rewrite string references.
         for block in &mut f.blocks {
             for stmt in &mut block.stmts {
                 let Stmt::Assign { value, .. } = stmt;
                 if let Rvalue::Const(MirConst::String(sid)) = value {
-                    *sid = StringId(remap[sid.0 as usize]);
+                    if (sid.0 as usize) < remap.len() {
+                        *sid = StringId(remap[sid.0 as usize]);
+                    }
                 }
             }
         }
         into.functions.push(f);
     }
+
+    // Merge classes (with string remapping).
+    for mut cls in other.classes {
+        // Remap strings in constructor and methods.
+        for f in std::iter::once(&mut cls.constructor)
+            .chain(cls.methods.iter_mut())
+            .chain(cls.secondary_constructors.iter_mut())
+        {
+            for block in &mut f.blocks {
+                for stmt in &mut block.stmts {
+                    let Stmt::Assign { value, .. } = stmt;
+                    if let Rvalue::Const(MirConst::String(sid)) = value {
+                        if (sid.0 as usize) < remap.len() {
+                            *sid = StringId(remap[sid.0 as usize]);
+                        }
+                    }
+                }
+            }
+        }
+        into.classes.push(cls);
+    }
+
+    // Merge enum names.
+    into.enum_names.extend(other.enum_names);
 }

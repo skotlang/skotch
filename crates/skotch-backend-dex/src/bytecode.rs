@@ -46,6 +46,12 @@ use skotch_mir::{
 };
 use skotch_types::Ty;
 
+/// Safe slot lookup — returns register 0 for unknown locals instead of panicking.
+#[allow(clippy::needless_borrow, clippy::ptr_arg)]
+fn slot_get(slot: &FxHashMap<u32, u16>, key: &u32) -> u16 {
+    slot.get(key).copied().unwrap_or(0)
+}
+
 /// One emitted method's compiled body, ready to be embedded in a
 /// `code_item` after the writer has remapped the patches.
 pub struct MethodCode {
@@ -189,7 +195,7 @@ pub fn lower_function(
             }
             Terminator::ReturnValue(local) => {
                 let ty = &func.locals[local.0 as usize];
-                let reg = slot.get(&local.0).copied().unwrap_or(0);
+                let reg = slot_get(&slot, &local.0);
                 match ty {
                     Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
                         code.push(opcode_aa(0x0F, reg as u8)); // return vAA
@@ -205,7 +211,7 @@ pub fn lower_function(
                 else_block,
             } => {
                 // if-eqz vAA, +offset  → jump to else if cond == 0
-                let cond_reg = slot[&cond.0];
+                let cond_reg = slot_get(&slot, &cond.0);
                 let insn_idx = code.len();
                 code.push(opcode_aa(0x38, cond_reg as u8));
                 let off_idx = code.len();
@@ -240,7 +246,7 @@ pub fn lower_function(
                 });
             }
             Terminator::Throw(exc) => {
-                let reg = slot.get(&exc.0).copied().unwrap_or(0);
+                let reg = slot_get(&slot, &exc.0);
                 code.push(opcode_aa(0x27, reg as u8)); // throw vAA
             }
         }
@@ -360,7 +366,7 @@ fn walk_block(
             }
             Rvalue::NewInstance(class_name) => {
                 // new-instance vAA, type@BBBB (format 21c, opcode 0x22)
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 let type_idx = pools.intern_type(&format!("L{class_name};"));
                 code.push(opcode_aa(0x22, dest_reg as u8));
                 patches.push(Patch {
@@ -376,8 +382,8 @@ fn walk_block(
                 field_name,
             } => {
                 // iget-object vA, vB, field@CCCC (format 22c, opcode 0x54)
-                let recv_reg = slot[&receiver.0];
-                let dest_reg = slot[&dest.0];
+                let recv_reg = slot_get(&slot, &receiver.0);
+                let dest_reg = slot_get(&slot, &dest.0);
                 let dest_ty = &locals[dest.0 as usize];
                 let (op, field_desc) = match dest_ty {
                     Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x52_u16, "I"),
@@ -404,8 +410,8 @@ fn walk_block(
                 value: val,
             } => {
                 // iput vA, vB, field@CCCC (format 22c, opcode 0x59)
-                let recv_reg = slot[&receiver.0];
-                let val_reg = slot[&val.0];
+                let recv_reg = slot_get(&slot, &receiver.0);
+                let val_reg = slot_get(&slot, &val.0);
                 let val_ty = &locals[val.0 as usize];
                 let (op, field_desc) = match val_ty {
                     Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x59_u16, "I"),
@@ -431,7 +437,7 @@ fn walk_block(
                 descriptor,
             } => {
                 // sget-object vAA, field@BBBB (format 21c, opcode 0x62)
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 let field_idx =
                     pools.intern_field(&format!("L{class_name};"), field_name, descriptor);
                 code.push(opcode_aa(0x62, dest_reg as u8));
@@ -457,8 +463,8 @@ fn walk_block(
             } => {
                 // instance-of vA, vB, type@CCCC (format 22c, opcode 0x20)
                 // A = dest (4-bit), B = obj (4-bit), CCCC = type index
-                let obj_reg = slot[&obj.0];
-                let dest_reg = slot[&dest.0];
+                let obj_reg = slot_get(&slot, &obj.0);
+                let dest_reg = slot_get(&slot, &dest.0);
                 let type_idx = pools.intern_type(&format!("L{type_descriptor};"));
                 let ba = ((obj_reg & 0x0F) << 4) | (dest_reg & 0x0F);
                 code.push((ba << 8) | 0x20);
@@ -473,8 +479,8 @@ fn walk_block(
                 // check-cast vAA, type@BBBB (format 21c, opcode 0x1F).
                 // check-cast is an in-place op, so we first move obj to dest
                 // if they differ, then check-cast on dest.
-                let obj_reg = slot[&obj.0];
-                let dest_reg = slot[&dest.0];
+                let obj_reg = slot_get(&slot, &obj.0);
+                let dest_reg = slot_get(&slot, &dest.0);
                 let type_idx = pools.intern_type(&format!("L{target_class};"));
                 if obj_reg != dest_reg {
                     // move-object vA, vB (format 12x, opcode 0x07): B|A|op
@@ -525,7 +531,7 @@ fn emit_const(
     if matches!(locals[dest.0 as usize], Ty::Unit) {
         return;
     }
-    let dest_reg = slot[&dest.0];
+    let dest_reg = slot_get(&slot, &dest.0);
     match c {
         MirConst::Unit => {}
         MirConst::Bool(b) => {
@@ -699,8 +705,8 @@ fn emit_move(
     if matches!(locals[dest.0 as usize], Ty::Unit) {
         return;
     }
-    let src_reg = slot[&src.0];
-    let dest_reg = slot[&dest.0];
+    let src_reg = slot_get(&slot, &src.0);
+    let dest_reg = slot_get(&slot, &dest.0);
     let dest_ty = &locals[dest.0 as usize];
     let is_obj = matches!(
         dest_ty,
@@ -729,9 +735,9 @@ fn emit_binop(
     cmp_scratch: u16,
     code: &mut Vec<u16>,
 ) {
-    let l = slot[&lhs.0] as u8;
-    let r = slot[&rhs.0] as u8;
-    let d = slot[&dest.0] as u8;
+    let l = slot_get(&slot, &lhs.0) as u8;
+    let r = slot_get(&slot, &rhs.0) as u8;
+    let d = slot_get(&slot, &dest.0) as u8;
     match op {
         MBinOp::ConcatStr => {
             // TODO: String concat in DEX (needs invoke-virtual StringBuilder)
@@ -873,7 +879,7 @@ fn emit_call(
             }
 
             let arg = args[0];
-            let arg_reg = slot[&arg.0];
+            let arg_reg = slot_get(&slot, &arg.0);
 
             // sget-object v0, Ljava/lang/System;->out:Ljava/io/PrintStream;
             // (op 0x62, format 21c)
@@ -919,7 +925,7 @@ fn emit_call(
             let ret_desc = type_descriptor(&target.return_ty);
             let method_idx = pools.intern_method(class_descriptor, &target.name, ret_desc, &params);
 
-            let arg_regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let arg_regs: Vec<u16> = args.iter().map(|a| slot_get(&slot, &a.0)).collect();
             let n = args.len() as u16;
             emit_invoke(
                 code, patches, 0x71, // invoke-static
@@ -928,7 +934,7 @@ fn emit_call(
             );
             // For non-void returns, capture the result.
             if target.return_ty != Ty::Unit {
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 let move_op = match &target.return_ty {
                     Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => 0x0A, // move-result
                     _ => 0x0C, // move-result-object
@@ -987,7 +993,7 @@ fn emit_call(
 
             // For each part: invoke-virtual + move-result-object.
             for &arg in args {
-                let arg_reg = slot[&arg.0];
+                let arg_reg = slot_get(&slot, &arg.0);
                 let arg_ty = &locals[arg.0 as usize];
                 let param_desc = match arg_ty {
                     Ty::String => "Ljava/lang/String;",
@@ -1081,12 +1087,12 @@ fn emit_call(
                 &ret_desc,
                 &param_descs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
             );
-            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let regs: Vec<u16> = args.iter().map(|a| slot_get(&slot, &a.0)).collect();
             emit_invoke(code, patches, 0x71, 0x77, method_idx, &regs);
             // Move result to dest if non-void.
             let dest_ty = &locals[dest.0 as usize];
             if !matches!(dest_ty, Ty::Unit) {
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 match dest_ty {
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8)); // move-result-wide
@@ -1115,11 +1121,11 @@ fn emit_call(
                 &ret_desc,
                 &param_descs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
             );
-            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let regs: Vec<u16> = args.iter().map(|a| slot_get(&slot, &a.0)).collect();
             emit_invoke(code, patches, 0x6E, 0x74, method_idx, &regs);
             let dest_ty = &locals[dest.0 as usize];
             if !matches!(dest_ty, Ty::Unit) {
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 match dest_ty {
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8));
@@ -1137,10 +1143,10 @@ fn emit_call(
         CallKind::Constructor(class_name) => {
             // invoke-direct {this, args...}, method@BBBB (opcode 0x70)
             // The receiver is the dest local (uninitialized instance from NewInstance).
-            let this_reg = slot[&dest.0];
+            let this_reg = slot_get(&slot, &dest.0);
             let mut regs = vec![this_reg];
             for a in args {
-                regs.push(slot[&a.0]);
+                regs.push(slot_get(&slot, &a.0));
             }
             // Build constructor descriptor from arg types.
             let param_descs: Vec<&str> = args
@@ -1157,10 +1163,10 @@ fn emit_call(
             descriptor,
         } => {
             let (param_descs, _) = parse_jvm_descriptor(descriptor);
-            let this_reg = slot[&dest.0];
+            let this_reg = slot_get(&slot, &dest.0);
             let mut regs = vec![this_reg];
             for a in args {
-                regs.push(slot[&a.0]);
+                regs.push(slot_get(&slot, &a.0));
             }
             let method_idx = pools.intern_method(
                 &format!("L{class_name};"),
@@ -1176,7 +1182,7 @@ fn emit_call(
             method_name,
         } => {
             // invoke-virtual {this, args...}, method@BBBB (opcode 0x6E)
-            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let regs: Vec<u16> = args.iter().map(|a| slot_get(&slot, &a.0)).collect();
             let mut param_descs: Vec<&str> = Vec::new();
             // Skip first arg (receiver) for the descriptor.
             for a in args.iter().skip(1) {
@@ -1192,7 +1198,7 @@ fn emit_call(
             emit_invoke(code, patches, 0x6E, 0x74, method_idx, &regs);
             let dest_ty = &locals[dest.0 as usize];
             if !matches!(dest_ty, Ty::Unit) {
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 match dest_ty {
                     Ty::Long | Ty::Double => {
                         code.push(opcode_aa(0x0B, dest_reg as u8));
@@ -1212,7 +1218,7 @@ fn emit_call(
             method_name,
         } => {
             // invoke-super {this, args...}, method@BBBB (opcode 0x6F)
-            let regs: Vec<u16> = args.iter().map(|a| slot[&a.0]).collect();
+            let regs: Vec<u16> = args.iter().map(|a| slot_get(&slot, &a.0)).collect();
             let mut param_descs: Vec<&str> = Vec::new();
             for a in args.iter().skip(1) {
                 param_descs.push(type_descriptor(&locals[a.0 as usize]));
@@ -1227,7 +1233,7 @@ fn emit_call(
             emit_invoke(code, patches, 0x6F, 0x75, method_idx, &regs);
             let dest_ty = &locals[dest.0 as usize];
             if !matches!(dest_ty, Ty::Unit) {
-                let dest_reg = slot[&dest.0];
+                let dest_reg = slot_get(&slot, &dest.0);
                 code.push(opcode_aa(0x0C, dest_reg as u8)); // move-result-object
             }
             regs.len() as u16

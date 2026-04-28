@@ -221,21 +221,28 @@ fn resolve_catalog_deps(project: &mut ProjectModel, catalog: &version_catalog::V
     resolve_list(&mut project.external_deps, catalog);
     resolve_list(&mut project.test_deps, catalog);
 
-    // Resolve plugin flags from catalog.
-    // If no plugins were detected via standard parsing, check catalog.
-    if !project.is_kotlin {
-        for plugin in catalog.plugins.values() {
-            match plugin.id.as_str() {
-                "org.jetbrains.kotlin.jvm" => project.is_kotlin = true,
-                "org.jetbrains.kotlin.android" | "org.jetbrains.kotlin.multiplatform" => {
-                    project.is_kotlin = true;
-                }
-                "com.android.application" | "com.android.library" => {
-                    project.is_android = true;
-                    project.is_kotlin = true;
-                }
-                _ => {}
+    // Resolve plugin flags from catalog — always check (don't gate on is_kotlin).
+    for plugin in catalog.plugins.values() {
+        match plugin.id.as_str() {
+            "org.jetbrains.kotlin.jvm" => project.is_kotlin = true,
+            "org.jetbrains.kotlin.android" => {
+                project.is_kotlin = true;
+                project.is_android = true;
+                project.target = Some(BuildTarget::Android);
             }
+            "org.jetbrains.kotlin.multiplatform" => {
+                project.is_kotlin = true;
+                project.is_multiplatform = true;
+            }
+            "com.android.application" | "com.android.library" => {
+                project.is_android = true;
+                project.is_kotlin = true;
+                project.target = Some(BuildTarget::Android);
+            }
+            "org.jetbrains.kotlin.plugin.compose" | "org.jetbrains.compose" => {
+                project.is_compose = true;
+            }
+            _ => {}
         }
     }
 }

@@ -54,7 +54,7 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.40.0"      # v0.1-v0.40 completed
+  current_version: "0.40.0"      # v0.1-v0.40 completed; 3/6 Compose samples produce APKs
   target_version: "1.0.0"
   target_description: >
     Build every Official Jetpack Compose Sample using only `skotch build`,

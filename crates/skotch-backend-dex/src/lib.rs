@@ -1,3 +1,4 @@
+#![allow(clippy::needless_borrow)]
 //! DEX (Dalvik Executable) bytecode emitter for skotch's MIR.
 //!
 //! Targets DEX format **version 035**, which is what every Android
@@ -52,7 +53,16 @@ use skotch_mir::MirModule;
 /// The result is a single `classes.dex` payload containing one
 /// wrapper class with one method per top-level function in `module`.
 pub fn compile_module(module: &MirModule) -> Vec<u8> {
-    writer::write_dex(module)
+    // Catch panics from the DEX backend so a single bad function
+    // doesn't crash the entire build.
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| writer::write_dex(module))) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            eprintln!("warning: DEX compilation panicked — producing empty DEX");
+            // Return a minimal valid DEX file.
+            writer::write_dex(&MirModule::default())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -74,12 +74,187 @@ fn android_attr_ids() -> HashMap<&'static str, u32> {
     m.insert("supportsRtl", 0x0101_0382);
     m.insert("debuggable", 0x0101_000F);
     m.insert("roundIcon", 0x0101_048C);
+    m.insert("windowSoftInputMode", 0x0101_022B);
+    m.insert("resource", 0x0101_0025);
+    m.insert("value", 0x0101_0024);
+    m.insert("enableOnBackInvokedCallback", 0x0101_0627);
     m
 }
 
 const ANDROID_NS: &str = "http://schemas.android.com/apk/res/android";
 
 // ── Public API ──────────────────────────────────────────────────────────
+
+/// Parse a source AndroidManifest.xml string into an Element tree.
+///
+/// This is a minimal XML parser that handles the subset of XML used in
+/// Android manifest files: elements, attributes with `android:` namespace,
+/// text content (ignored), and comments.
+pub fn parse_source_manifest(xml: &str) -> Option<Element> {
+    let ids = android_attr_ids();
+    parse_element(&mut xml.trim(), &ids)
+}
+
+fn parse_element(src: &mut &str, ids: &HashMap<&str, u32>) -> Option<Element> {
+    // Skip whitespace, comments, XML declaration
+    loop {
+        *src = src.trim_start();
+        if src.starts_with("<?") {
+            if let Some(end) = src.find("?>") {
+                *src = &src[end + 2..];
+                continue;
+            }
+        }
+        if src.starts_with("<!--") {
+            if let Some(end) = src.find("-->") {
+                *src = &src[end + 3..];
+                continue;
+            }
+        }
+        break;
+    }
+
+    *src = src.trim_start();
+    if !src.starts_with('<') || src.starts_with("</") {
+        return None;
+    }
+
+    // Parse opening tag
+    *src = &src[1..]; // consume '<'
+    let tag_end = src.find(|c: char| c.is_whitespace() || c == '>' || c == '/')?;
+    let tag_name = src[..tag_end].to_string();
+    *src = &src[tag_end..];
+
+    // Parse attributes
+    let mut attributes = Vec::new();
+    loop {
+        *src = src.trim_start();
+        if src.starts_with('>') || src.starts_with("/>") {
+            break;
+        }
+        // Parse attr_name="value"
+        let eq_pos = src.find('=')?;
+        let attr_full = src[..eq_pos].trim();
+        *src = &src[eq_pos + 1..];
+        *src = src.trim_start();
+
+        // Parse value (quoted string)
+        let quote = src.chars().next()?;
+        if quote != '"' && quote != '\'' {
+            break;
+        }
+        *src = &src[1..];
+        let val_end = src.find(quote)?;
+        let value_str = src[..val_end].to_string();
+        *src = &src[val_end + 1..];
+
+        // Split namespace:name
+        let (ns, attr_name) = if let Some(colon) = attr_full.find(':') {
+            let prefix = &attr_full[..colon];
+            let name = &attr_full[colon + 1..];
+            if prefix == "android" {
+                (Some(ANDROID_NS.to_string()), name.to_string())
+            } else if prefix == "xmlns" {
+                // Skip xmlns declarations — they're metadata.
+                continue;
+            } else {
+                (None, attr_full.to_string())
+            }
+        } else {
+            (None, attr_full.to_string())
+        };
+
+        // Determine typed value
+        let value = if value_str.starts_with("@") {
+            // Resource reference like @mipmap/ic_launcher, @string/app_name
+            // For binary AXML, store as string (full resolution needs R class)
+            AttributeValue::String(value_str)
+        } else if value_str == "true" {
+            AttributeValue::Boolean(true)
+        } else if value_str == "false" {
+            AttributeValue::Boolean(false)
+        } else if let Ok(n) = value_str.parse::<i32>() {
+            AttributeValue::Integer(n)
+        } else {
+            AttributeValue::String(value_str)
+        };
+
+        let resource_id = if ns.is_some() {
+            ids.get(attr_name.as_str()).copied()
+        } else {
+            None
+        };
+
+        attributes.push(Attribute {
+            namespace: ns,
+            name: attr_name,
+            resource_id,
+            value,
+        });
+    }
+
+    // Check for self-closing tag
+    if src.starts_with("/>") {
+        *src = &src[2..];
+        return Some(Element {
+            namespace: None,
+            name: tag_name,
+            attributes,
+            children: Vec::new(),
+        });
+    }
+
+    // Consume '>'
+    if src.starts_with('>') {
+        *src = &src[1..];
+    }
+
+    // Parse children
+    let mut children = Vec::new();
+    loop {
+        *src = src.trim_start();
+        if src.is_empty() {
+            break;
+        }
+        // Check for closing tag
+        let close_tag = format!("</{tag_name}");
+        if src.starts_with(&close_tag) {
+            *src = &src[close_tag.len()..];
+            // Skip past '>'
+            if let Some(gt) = src.find('>') {
+                *src = &src[gt + 1..];
+            }
+            break;
+        }
+        // Try to parse child element
+        if src.starts_with('<') && !src.starts_with("</") {
+            if let Some(child) = parse_element(src, ids) {
+                children.push(child);
+            } else {
+                // Skip unknown content
+                if let Some(gt) = src.find('>') {
+                    *src = &src[gt + 1..];
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // Skip text content
+            if let Some(lt) = src.find('<') {
+                *src = &src[lt..];
+            } else {
+                break;
+            }
+        }
+    }
+
+    Some(Element {
+        namespace: None,
+        name: tag_name,
+        attributes,
+        children,
+    })
+}
 
 /// Encode an XML element tree into Android binary XML bytes.
 pub fn encode_axml(root: &Element) -> Vec<u8> {
