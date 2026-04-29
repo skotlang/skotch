@@ -402,7 +402,10 @@ pub fn resolve(
         if let Ok(pom_path) = download_artifact(&coord, &coord.pom_name(), repos, &client) {
             if let Ok(pom_xml) = std::fs::read_to_string(&pom_path) {
                 for dep in parse_pom_deps(&pom_xml) {
-                    if dep.scope == "compile" && !dep.optional && !visited.contains(&dep.coord) {
+                    if (dep.scope == "compile" || dep.scope == "runtime")
+                        && !dep.optional
+                        && !visited.contains(&dep.coord)
+                    {
                         queue.push_back(dep.coord);
                     }
                 }

@@ -1115,23 +1115,29 @@ fn emit_user_method(
         d.push_str(")V");
         d
     } else {
-        // Instance method descriptor.
-        let mut d = String::from("(");
-        for &p in func.params.iter().skip(1) {
-            let ty = &func.locals[p.0 as usize];
-            d.push_str(&jvm_type_string(ty));
-        }
-        d.push(')');
-        // Lambda invoke methods always return Object on JVM to match
-        // the FunctionN interface, even when the Kotlin return type
-        // is Unit. The JVM verifier requires the descriptor to match
-        // the interface's abstract method signature.
-        if func.name == "invoke" && class_name.contains("$Lambda$") {
-            d.push_str("Ljava/lang/Object;");
+        // Instance method descriptor. For overridden methods, try to use
+        // the parent class's descriptor (which has the correct types).
+        let parent_desc = skotch_classinfo::lookup_method_descriptor(
+            _super_name,
+            &func.name,
+            func.params.len().saturating_sub(1),
+        );
+        if let Some(pd) = parent_desc {
+            pd
         } else {
-            d.push_str(&jvm_type_string(&func.return_ty));
-        }
-        d
+            let mut d = String::from("(");
+            for &p in func.params.iter().skip(1) {
+                let ty = &func.locals[p.0 as usize];
+                d.push_str(&jvm_type_string(ty));
+            }
+            d.push(')');
+            if func.name == "invoke" && class_name.contains("$Lambda$") {
+                d.push_str("Ljava/lang/Object;");
+            } else {
+                d.push_str(&jvm_type_string(&func.return_ty));
+            }
+            d
+        } // end else (no parent_desc)
     };
 
     let access = if func.is_abstract {
@@ -7929,25 +7935,41 @@ fn walk_block(
                     for a in args {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
                     }
-                    let dest_ty = &func.locals[dest.0 as usize];
-                    let ret_desc = jvm_type_string(dest_ty);
-                    let mut descriptor = String::from("(");
-                    for a in args.iter().skip(1) {
-                        let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_param_type_string(ty));
-                    }
-                    descriptor.push(')');
-                    descriptor.push_str(&ret_desc);
+                    // Try to look up the actual method descriptor from the
+                    // classpath. The MIR local types may be wrong (e.g. Ty::Any
+                    // from null stubs) but the parent class has the real signature.
+                    let classpath_desc = skotch_classinfo::lookup_method_descriptor(
+                        class_name,
+                        method_name,
+                        args.len().saturating_sub(1),
+                    );
+                    let descriptor = if let Some(ref d) = classpath_desc {
+                        d.clone()
+                    } else {
+                        let dest_ty = &func.locals[dest.0 as usize];
+                        let ret_desc = jvm_type_string(dest_ty);
+                        let mut d = String::from("(");
+                        for a in args.iter().skip(1) {
+                            let ty = &func.locals[a.0 as usize];
+                            d.push_str(&jvm_param_type_string(ty));
+                        }
+                        d.push(')');
+                        d.push_str(&ret_desc);
+                        d
+                    };
+                    // Determine the actual return type from the descriptor.
+                    let ret_char = descriptor.rsplit(')').next().unwrap_or("V");
+                    let is_void = ret_char == "V";
                     let mref = cp.methodref(class_name, method_name, &descriptor);
                     code.push(0xB7); // invokespecial
                     code.write_u16::<BigEndian>(mref).unwrap();
-                    let net = if dest_ty == &Ty::Unit {
+                    let net = if is_void {
                         -(args.len() as i32)
                     } else {
                         -(args.len() as i32) + 1
                     };
                     bump(stack, max_stack, net);
-                    if *dest_ty != Ty::Unit {
+                    if !is_void {
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }
                 }

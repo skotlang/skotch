@@ -278,6 +278,11 @@ impl<'a> Lexer<'a> {
             b',' => Some(TokenKind::Comma),
             b';' => Some(TokenKind::Semi),
             b':' => Some(TokenKind::Colon),
+            b'.' if self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_digit() => {
+                // `.3f` — float literal without leading zero.
+                self.lex_dot_number();
+                return;
+            }
             b'.' => Some(TokenKind::Dot),
             b'=' => Some(TokenKind::Eq),
             b'+' => Some(TokenKind::Plus),
@@ -817,6 +822,54 @@ impl<'a> Lexer<'a> {
             Span::new(self.file, start as u32, end as u32),
         ));
         self.payloads.push(payload);
+    }
+
+    /// Lex a float literal starting with `.`: `.3f`, `.5`, `.123e4`
+    fn lex_dot_number(&mut self) -> Token {
+        let start = self.pos - 1; // include the leading '.'
+        while let Some(b) = self.peek() {
+            if b.is_ascii_digit() || b == b'_' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        // Exponent
+        if self.pos < self.bytes.len()
+            && (self.bytes[self.pos] == b'e' || self.bytes[self.pos] == b'E')
+        {
+            self.pos += 1;
+            if self.pos < self.bytes.len()
+                && (self.bytes[self.pos] == b'+' || self.bytes[self.pos] == b'-')
+            {
+                self.pos += 1;
+            }
+            while let Some(b) = self.peek() {
+                if b.is_ascii_digit() {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        let is_float = self.pos < self.bytes.len()
+            && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F');
+        if is_float {
+            self.pos += 1;
+        }
+        let raw = std::str::from_utf8(&self.bytes[start..self.pos]).expect("ASCII");
+        let s: String = raw
+            .chars()
+            .filter(|c| *c != '_' && *c != 'f' && *c != 'F')
+            .collect();
+        let kind = if is_float {
+            TokenKind::FloatLit
+        } else {
+            TokenKind::DoubleLit
+        };
+        let val = s.parse::<f64>().unwrap_or(0.0);
+        self.emit(kind, start, self.pos, Some(TokenPayload::Double(val)));
+        Token::new(kind, Span::new(self.file, start as u32, self.pos as u32))
     }
 
     fn error(&mut self, start: usize, end: usize, msg: impl Into<String>) {
