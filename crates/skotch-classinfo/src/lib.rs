@@ -70,6 +70,93 @@ pub fn check_is_interface(class_path: &str) -> Option<bool> {
     load_jdk_class(class_path).ok().map(|ci| ci.is_interface())
 }
 
+/// Look up a method's JVM descriptor from the classpath (JDK + loaded JARs).
+/// Returns the descriptor string like `"()Z"` or `"(Ljava/lang/String;)V"`.
+pub fn lookup_method_descriptor(
+    class_path: &str,
+    method_name: &str,
+    param_count: usize,
+) -> Option<String> {
+    // Try the CLASS_REGISTRY first (loaded dependency JARs).
+    {
+        // Check classfiles loaded via CLASSPATH env var.
+        // classfiles loaded via CLASSPATH env var.
+        let cp = std::env::var("CLASSPATH").unwrap_or_default();
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        for jar_path in cp.split(sep) {
+            if jar_path.is_empty() {
+                continue;
+            }
+            let path = std::path::Path::new(jar_path);
+            if !path.exists() {
+                continue;
+            }
+            if let Ok(file) = std::fs::File::open(path) {
+                if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                    let entry_name = format!("{class_path}.class");
+                    if let Ok(mut entry) = archive.by_name(&entry_name) {
+                        let mut bytes = Vec::new();
+                        if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
+                            if let Ok(ci) = parse_class(&bytes) {
+                                for m in &ci.methods {
+                                    if m.name == method_name
+                                        && count_descriptor_params(&m.descriptor) == param_count
+                                    {
+                                        return Some(m.descriptor.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Try JDK classes.
+    if let Ok(ci) = load_jdk_class(class_path) {
+        for m in &ci.methods {
+            if m.name == method_name && count_descriptor_params(&m.descriptor) == param_count {
+                return Some(m.descriptor.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Count the number of parameters in a JVM method descriptor.
+/// E.g. `(Landroid/content/Context;)V` → 1, `(II)V` → 2.
+fn count_descriptor_params(desc: &str) -> usize {
+    let inner = desc
+        .strip_prefix('(')
+        .and_then(|s| s.split(')').next())
+        .unwrap_or("");
+    let mut count = 0;
+    let bytes = inner.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'L' => {
+                count += 1;
+                while i < bytes.len() && bytes[i] != b';' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            b'[' => {
+                i += 1; // skip array prefix, next iteration counts the element
+            }
+            b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' => {
+                count += 1;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    count
+}
+
 /// Parse a `.class` file from raw bytes.
 pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
     let mut r = Reader { bytes, pos: 0 };

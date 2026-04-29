@@ -7300,7 +7300,15 @@ fn lower_expr(
             // Check import_map for Java classes: `import java.util.Random`
             // allows `Random()` as a constructor call.
             if let Some(jvm_class) = module.import_map.get(&callee_str).cloned() {
-                if skotch_classinfo::load_jdk_class(&jvm_class).is_ok() {
+                // Check if this is a class (starts with uppercase last segment)
+                // that we can construct. Check both JDK and classpath JARs.
+                let last_seg = jvm_class.rsplit('/').next().unwrap_or(&jvm_class);
+                let is_class = last_seg.starts_with(|c: char| c.is_uppercase());
+                let class_exists = is_class
+                    && (skotch_classinfo::load_jdk_class(&jvm_class).is_ok()
+                        || skotch_classinfo::lookup_method_descriptor(&jvm_class, "<init>", 0)
+                            .is_some());
+                if class_exists {
                     let mut arg_locals = Vec::new();
                     for a in args {
                         let id = lower_expr(
@@ -7316,6 +7324,13 @@ fn lower_expr(
                         )?;
                         arg_locals.push(id);
                     }
+                    // Look up the actual constructor descriptor from the classpath
+                    // to get correct parameter types.
+                    let ctor_desc = skotch_classinfo::lookup_method_descriptor(
+                        &jvm_class,
+                        "<init>",
+                        arg_locals.len(),
+                    );
                     let dest = fb.new_local(Ty::Class(jvm_class.clone()));
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -7324,7 +7339,14 @@ fn lower_expr(
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::Call {
-                            kind: CallKind::Constructor(jvm_class),
+                            kind: if let Some(desc) = ctor_desc {
+                                CallKind::ConstructorJava {
+                                    class_name: jvm_class,
+                                    descriptor: desc,
+                                }
+                            } else {
+                                CallKind::Constructor(jvm_class)
+                            },
                             args: arg_locals,
                         },
                     });
@@ -9755,11 +9777,26 @@ fn lower_expr(
                         return None;
                     }
                 } else if let Some(jvm_class) = module.import_map.get(callee_str) {
-                    // Imported library function — emit as StaticJava call.
-                    // The import_map maps the simple name to the JVM class path.
-                    // Top-level Kotlin functions are compiled as static methods
-                    // on their wrapper class (e.g. ColumnKt.Column(...)).
-                    let wrapper_class = format!("{jvm_class}Kt");
+                    // Imported library function/class.
+                    // Only use the "append Kt" wrapper class pattern when the
+                    // last segment of the JVM path is lowercase (package), meaning
+                    // the import is `import pkg.functionName`. When the last segment
+                    // is uppercase, it's a class import like `import pkg.ClassName`
+                    // and the function is a companion/static method on that class.
+                    let last_segment = jvm_class.rsplit('/').next().unwrap_or(jvm_class);
+                    let wrapper_class = if last_segment.starts_with(|c: char| c.is_lowercase()) {
+                        // Package-level function — we don't know the wrapper class
+                        // name. Emit as a null stub instead of guessing.
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
+                    } else {
+                        // Class-level function: the class IS the wrapper.
+                        jvm_class.clone()
+                    };
                     let arg_types: Vec<Ty> = arg_locals
                         .iter()
                         .map(|l| fb.mf.locals[l.0 as usize].clone())

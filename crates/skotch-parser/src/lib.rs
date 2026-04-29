@@ -1380,9 +1380,9 @@ impl<'a> Parser<'a> {
                     None
                 }
             } else {
-                // Generic delegate: parse as an expression.
-                // `Cached { "Hello" }` → Call(Cached, [Lambda])
-                let expr = self.parse_expr();
+                // Generic delegate: parse a postfix expression only.
+                // Don't use parse_expr() which crosses newlines.
+                let expr = self.parse_postfix();
                 // Wrap in a synthetic block with a single expression stmt.
                 Some(Box::new(Block {
                     stmts: vec![Stmt::Expr(expr)],
@@ -2003,8 +2003,23 @@ impl<'a> Parser<'a> {
         };
         self.skip_trivia();
 
-        // Parse getter body: `get() = expr` or `get() { stmts }` or just `= expr`
-        let body = if self.peek_kind() == TokenKind::Ident {
+        // Parse getter body: `get() = expr` or `get() { stmts }` or
+        // `by delegate` or just `= expr`
+        let body = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by" {
+            // Property delegation: `val ReceiverType.prop by delegate`
+            self.bump(); // consume `by`
+            self.skip_trivia();
+            let delegate_expr = self.parse_postfix();
+            let s = delegate_expr.span();
+            Block {
+                stmts: vec![Stmt::Return {
+                    value: Some(delegate_expr),
+                    label: None,
+                    span: s,
+                }],
+                span: s,
+            }
+        } else if self.peek_kind() == TokenKind::Ident {
             // Might be `get() = expr`
             let idx = self.pos;
             let text = self.payload(idx).and_then(|p| {
@@ -2139,8 +2154,10 @@ impl<'a> Parser<'a> {
                         Expr::NullLit(self.peek_span())
                     }
                 } else {
-                    // Generic delegate: parse as expression.
-                    self.parse_expr()
+                    // Generic delegate: parse a postfix expression only.
+                    // Don't use parse_expr() which would consume across
+                    // newlines into the next declaration (e.g. @Composable).
+                    self.parse_postfix()
                 };
             // Desugar: for `by lazy { body }`, the init is the lambda body
             // invoked immediately. For generic delegates, we call getValue.
@@ -2928,7 +2945,17 @@ impl<'a> Parser<'a> {
             };
             let is_infix = matches!(
                 text.as_str(),
-                "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr" | "contains" | "zip"
+                "to" | "and"
+                    | "or"
+                    | "xor"
+                    | "shl"
+                    | "shr"
+                    | "ushr"
+                    | "contains"
+                    | "zip"
+                    | "until"
+                    | "downTo"
+                    | "step"
             );
             if is_infix && self.peek_kind_at(1) != TokenKind::LParen {
                 let kw_span = self.peek_span();

@@ -808,7 +808,7 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
     let build_dir = root_dir.join("build");
     std::fs::create_dir_all(&build_dir)?;
 
-    eprintln!("  {} app classes compiled", all_classes.len());
+    eprintln!("  {} app classes compiled by Skotch", all_classes.len());
 
     // ── Step 1: Resolve external dependencies ─────────────────────────
     let dep_jars = match resolve_external_deps(&project, &root_dir) {
@@ -1189,7 +1189,7 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         }
     }
 
-    // ── Step 4: d8 on all classes → DEX files ─────────────────────────
+    // ── Step 4: DEX files ───────────────────────────────────────────────
     let dex_dir = build_dir.join("d8-final");
     std::fs::create_dir_all(&dex_dir)?;
     // Clean old outputs.
@@ -1199,216 +1199,218 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         }
     }
 
-    // Deduplicate dependency JARs.
-    let deduped = dedup_dep_jars(&dep_jars);
-    eprintln!(
-        "  d8: {} app classes, {} dep JARs ({} after dedup)",
-        all_classes.len(),
-        dep_jars.len(),
-        deduped.len()
-    );
+    {
+        // Deduplicate dependency JARs.
+        let deduped = dedup_dep_jars(&dep_jars);
+        eprintln!(
+            "  d8: {} app classes, {} dep JARs ({} after dedup)",
+            all_classes.len(),
+            dep_jars.len(),
+            deduped.len()
+        );
 
-    // Write app .class files to a temp dir.
-    let app_classes_dir = build_dir.join("d8-input");
-    if app_classes_dir.exists() {
-        std::fs::remove_dir_all(&app_classes_dir).ok();
-    }
-    std::fs::create_dir_all(&app_classes_dir)?;
-    for (name, bytes) in &all_classes {
-        let path = app_classes_dir.join(format!("{name}.class"));
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).ok();
+        // Write app .class files to a temp dir.
+        let app_classes_dir = build_dir.join("d8-input");
+        if app_classes_dir.exists() {
+            std::fs::remove_dir_all(&app_classes_dir).ok();
         }
-        std::fs::write(&path, bytes)?;
-    }
-    let app_class_files: Vec<PathBuf> = walkdir::WalkDir::new(&app_classes_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
-        .map(|e| e.path().to_path_buf())
-        .collect();
-    // R classes are compiled separately — they'll be d8'd as a separate DEX
-    // to avoid interfering with the app class d8 retry loop.
-    let r_class_files: Vec<PathBuf> = walkdir::WalkDir::new(&r_classes_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
-        .map(|e| e.path().to_path_buf())
-        .collect();
+        std::fs::create_dir_all(&app_classes_dir)?;
+        for (name, bytes) in &all_classes {
+            let path = app_classes_dir.join(format!("{name}.class"));
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            std::fs::write(&path, bytes)?;
+        }
+        let app_class_files: Vec<PathBuf> = walkdir::WalkDir::new(&app_classes_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
+            .map(|e| e.path().to_path_buf())
+            .collect();
+        // R classes are compiled separately — they'll be d8'd as a separate DEX
+        // to avoid interfering with the app class d8 retry loop.
+        let r_class_files: Vec<PathBuf> = walkdir::WalkDir::new(&r_classes_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("class"))
+            .map(|e| e.path().to_path_buf())
+            .collect();
 
-    // Run d8 with all dep JARs + app classes + R classes as program inputs.
-    // Use --map-diagnostics to downgrade duplicate-class errors.
-    let mut d8_cmd = std::process::Command::new(&d8);
-    d8_cmd
-        .arg("--output")
-        .arg(&dex_dir)
-        .arg("--lib")
-        .arg(&android_jar)
-        .arg("--map-diagnostics")
-        .arg("error")
-        .arg("warning")
-        .arg("--min-api")
-        .arg(min_sdk.to_string());
-    for jar in &deduped {
-        d8_cmd.arg(jar);
-    }
-    for f in &app_class_files {
-        d8_cmd.arg(f);
-    }
-    for f in &r_class_files {
-        d8_cmd.arg(f);
-    }
-    let d8_output = d8_cmd.output()?;
-    if !d8_output.status.success() {
-        let stderr = String::from_utf8_lossy(&d8_output.stderr);
-        // d8 may fail on some app classes. Retry: compile deps only, then
-        // try app classes separately with deps as classpath.
-        eprintln!("  d8 combined failed, trying two-phase approach");
-        for line in stderr.lines().take(3) {
-            eprintln!("    {line}");
+        // Run d8 with all dep JARs + app classes + R classes as program inputs.
+        // Use --map-diagnostics to downgrade duplicate-class errors.
+        let mut d8_cmd = std::process::Command::new(&d8);
+        d8_cmd
+            .arg("--output")
+            .arg(&dex_dir)
+            .arg("--lib")
+            .arg(&android_jar)
+            .arg("--map-diagnostics")
+            .arg("error")
+            .arg("warning")
+            .arg("--min-api")
+            .arg(min_sdk.to_string());
+        for jar in &deduped {
+            d8_cmd.arg(jar);
         }
-        // Clean and retry.
-        for entry in std::fs::read_dir(&dex_dir)?.flatten() {
-            std::fs::remove_file(entry.path()).ok();
+        for f in &app_class_files {
+            d8_cmd.arg(f);
         }
-        // Phase 1: deps only — with retry loop to exclude conflicting JARs.
-        let mut jar_list = deduped.clone();
-        for _retry in 0..30 {
+        for f in &r_class_files {
+            d8_cmd.arg(f);
+        }
+        let d8_output = d8_cmd.output()?;
+        if !d8_output.status.success() {
+            let stderr = String::from_utf8_lossy(&d8_output.stderr);
+            // d8 may fail on some app classes. Retry: compile deps only, then
+            // try app classes separately with deps as classpath.
+            eprintln!("  d8 combined failed, trying two-phase approach");
+            for line in stderr.lines().take(3) {
+                eprintln!("    {line}");
+            }
+            // Clean and retry.
             for entry in std::fs::read_dir(&dex_dir)?.flatten() {
                 std::fs::remove_file(entry.path()).ok();
             }
-            let mut deps_cmd = std::process::Command::new(&d8);
-            deps_cmd
-                .arg("--output")
-                .arg(&dex_dir)
-                .arg("--lib")
-                .arg(&android_jar)
-                .arg("--min-api")
-                .arg(min_sdk.to_string());
-            for jar in &jar_list {
-                deps_cmd.arg(jar);
-            }
-            let deps_out = deps_cmd.output()?;
-            if deps_out.status.success() || dex_dir.join("classes.dex").exists() {
-                break;
-            }
-            // Extract conflicting JARs. d8 reports:
-            //   "Type X defined multiple times: A.jar:..., B.jar:..."
-            // Always exclude the SECOND JAR (the older/conflicting one).
-            // d8 reports "Error in A.jar" where A is the first-encountered
-            // (often newer), and B is the duplicate. Exclude B to keep A.
-            let deps_stderr = String::from_utf8_lossy(&deps_out.stderr);
-            let extract_jar = |s: &str| -> Option<PathBuf> {
-                s.find(".jar:")
-                    .or_else(|| s.find(".jar,"))
-                    .map(|idx| PathBuf::from(&s[..idx + 4]))
-            };
-            let bad_jar = deps_stderr.lines().find_map(|line| {
-                if line.contains("defined multiple times") {
-                    // "defined in A.jar:..., B.jar:..." — exclude B (the second).
-                    let parts: Vec<&str> = line.split(", ").collect();
-                    if parts.len() >= 2 {
-                        if let Some(jar2) = extract_jar(parts[1]) {
-                            return Some(jar2);
+            // Phase 1: deps only — with retry loop to exclude conflicting JARs.
+            let mut jar_list = deduped.clone();
+            for _retry in 0..30 {
+                for entry in std::fs::read_dir(&dex_dir)?.flatten() {
+                    std::fs::remove_file(entry.path()).ok();
+                }
+                let mut deps_cmd = std::process::Command::new(&d8);
+                deps_cmd
+                    .arg("--output")
+                    .arg(&dex_dir)
+                    .arg("--lib")
+                    .arg(&android_jar)
+                    .arg("--min-api")
+                    .arg(min_sdk.to_string());
+                for jar in &jar_list {
+                    deps_cmd.arg(jar);
+                }
+                let deps_out = deps_cmd.output()?;
+                if deps_out.status.success() || dex_dir.join("classes.dex").exists() {
+                    break;
+                }
+                // Extract conflicting JARs. d8 reports:
+                //   "Type X defined multiple times: A.jar:..., B.jar:..."
+                // Always exclude the SECOND JAR (the older/conflicting one).
+                // d8 reports "Error in A.jar" where A is the first-encountered
+                // (often newer), and B is the duplicate. Exclude B to keep A.
+                let deps_stderr = String::from_utf8_lossy(&deps_out.stderr);
+                let extract_jar = |s: &str| -> Option<PathBuf> {
+                    s.find(".jar:")
+                        .or_else(|| s.find(".jar,"))
+                        .map(|idx| PathBuf::from(&s[..idx + 4]))
+                };
+                let bad_jar = deps_stderr.lines().find_map(|line| {
+                    if line.contains("defined multiple times") {
+                        // "defined in A.jar:..., B.jar:..." — exclude B (the second).
+                        let parts: Vec<&str> = line.split(", ").collect();
+                        if parts.len() >= 2 {
+                            if let Some(jar2) = extract_jar(parts[1]) {
+                                return Some(jar2);
+                            }
+                            // Fallback to first if second can't be parsed.
+                            return extract_jar(parts[0].split_whitespace().last().unwrap_or(""));
                         }
-                        // Fallback to first if second can't be parsed.
-                        return extract_jar(parts[0].split_whitespace().last().unwrap_or(""));
+                    }
+                    // Fallback: extract from "Error in" line.
+                    if let Some(rest) = line.strip_prefix("Error in ") {
+                        return extract_jar(rest);
+                    }
+                    None
+                });
+                if let Some(ref bad) = bad_jar {
+                    eprintln!(
+                        "  d8 deps: excluding {}",
+                        bad.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+                    );
+                    jar_list.retain(|j| j != bad);
+                } else {
+                    eprintln!("  d8 deps-only failed (no recoverable JAR)");
+                    break;
+                }
+            }
+            let deps_dex_count = std::fs::read_dir(&dex_dir)?
+                .flatten()
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("dex"))
+                .count();
+            eprintln!(
+                "  d8 deps: {} DEX files from {} JARs",
+                deps_dex_count,
+                jar_list.len()
+            );
+            // Phase 2: app classes with deps as classpath.
+            let app_dex = compile_app_classes_with_d8(
+                &d8,
+                &all_classes,
+                &build_dir,
+                &dep_jars,
+                &Some(android_jar.clone()),
+            )?;
+
+            // Instead of merging DEX files (which can corrupt class references),
+            // collect all DEX files: deps DEX + app DEX, rename sequentially.
+            // Collect dep DEX files.
+            let mut all_dex: Vec<PathBuf> = std::fs::read_dir(&dex_dir)?
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("dex"))
+                .collect();
+            all_dex.sort();
+            // Write app DEX as a separate file.
+            let app_dex_path = dex_dir.join("app-classes.dex");
+            std::fs::write(&app_dex_path, &app_dex)?;
+            all_dex.push(app_dex_path);
+
+            // Compile R classes to separate DEX(es) — they may span multiple
+            // DEX files due to the 65K method limit.
+            if !r_class_files.is_empty() {
+                let r_dex_dir = build_dir.join("d8-rclasses");
+                std::fs::create_dir_all(&r_dex_dir)?;
+                let mut r_cmd = std::process::Command::new(&d8);
+                r_cmd
+                    .arg("--output")
+                    .arg(&r_dex_dir)
+                    .arg("--min-api")
+                    .arg(min_sdk.to_string());
+                for f in &r_class_files {
+                    r_cmd.arg(f);
+                }
+                if r_cmd.output()?.status.success() {
+                    // Collect ALL DEX files from the R class compilation.
+                    for entry in std::fs::read_dir(&r_dex_dir)?.flatten() {
+                        if entry.path().extension().and_then(|e| e.to_str()) == Some("dex") {
+                            let dest =
+                                dex_dir.join(format!("r-{}", entry.file_name().to_string_lossy()));
+                            std::fs::copy(entry.path(), &dest)?;
+                            all_dex.push(dest);
+                        }
                     }
                 }
-                // Fallback: extract from "Error in" line.
-                if let Some(rest) = line.strip_prefix("Error in ") {
-                    return extract_jar(rest);
+            }
+
+            // Rename all DEX files: classes.dex, classes2.dex, classes3.dex, ...
+            let final_dir = build_dir.join("d8-assembled");
+            std::fs::create_dir_all(&final_dir)?;
+            for (i, dex_path) in all_dex.iter().enumerate() {
+                let name = if i == 0 {
+                    "classes.dex".to_string()
+                } else {
+                    format!("classes{}.dex", i + 1)
+                };
+                std::fs::copy(dex_path, final_dir.join(&name))?;
+            }
+            // Replace dex_dir contents with assembled DEX files.
+            for entry in std::fs::read_dir(&dex_dir)?.flatten() {
+                std::fs::remove_file(entry.path()).ok();
+            }
+            for entry in std::fs::read_dir(&final_dir)?.flatten() {
+                if entry.path().extension().and_then(|e| e.to_str()) == Some("dex") {
+                    std::fs::copy(entry.path(), dex_dir.join(entry.file_name()))?;
                 }
-                None
-            });
-            if let Some(ref bad) = bad_jar {
-                eprintln!(
-                    "  d8 deps: excluding {}",
-                    bad.file_name().and_then(|n| n.to_str()).unwrap_or("?")
-                );
-                jar_list.retain(|j| j != bad);
-            } else {
-                eprintln!("  d8 deps-only failed (no recoverable JAR)");
-                break;
-            }
-        }
-        let deps_dex_count = std::fs::read_dir(&dex_dir)?
-            .flatten()
-            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("dex"))
-            .count();
-        eprintln!(
-            "  d8 deps: {} DEX files from {} JARs",
-            deps_dex_count,
-            jar_list.len()
-        );
-        // Phase 2: app classes with deps as classpath.
-        let app_dex = compile_app_classes_with_d8(
-            &d8,
-            &all_classes,
-            &build_dir,
-            &dep_jars,
-            &Some(android_jar.clone()),
-        )?;
-
-        // Instead of merging DEX files (which can corrupt class references),
-        // collect all DEX files: deps DEX + app DEX, rename sequentially.
-        // Collect dep DEX files.
-        let mut all_dex: Vec<PathBuf> = std::fs::read_dir(&dex_dir)?
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("dex"))
-            .collect();
-        all_dex.sort();
-        // Write app DEX as a separate file.
-        let app_dex_path = dex_dir.join("app-classes.dex");
-        std::fs::write(&app_dex_path, &app_dex)?;
-        all_dex.push(app_dex_path);
-
-        // Compile R classes to separate DEX(es) — they may span multiple
-        // DEX files due to the 65K method limit.
-        if !r_class_files.is_empty() {
-            let r_dex_dir = build_dir.join("d8-rclasses");
-            std::fs::create_dir_all(&r_dex_dir)?;
-            let mut r_cmd = std::process::Command::new(&d8);
-            r_cmd
-                .arg("--output")
-                .arg(&r_dex_dir)
-                .arg("--min-api")
-                .arg(min_sdk.to_string());
-            for f in &r_class_files {
-                r_cmd.arg(f);
-            }
-            if r_cmd.output()?.status.success() {
-                // Collect ALL DEX files from the R class compilation.
-                for entry in std::fs::read_dir(&r_dex_dir)?.flatten() {
-                    if entry.path().extension().and_then(|e| e.to_str()) == Some("dex") {
-                        let dest =
-                            dex_dir.join(format!("r-{}", entry.file_name().to_string_lossy()));
-                        std::fs::copy(entry.path(), &dest)?;
-                        all_dex.push(dest);
-                    }
-                }
-            }
-        }
-
-        // Rename all DEX files: classes.dex, classes2.dex, classes3.dex, ...
-        let final_dir = build_dir.join("d8-assembled");
-        std::fs::create_dir_all(&final_dir)?;
-        for (i, dex_path) in all_dex.iter().enumerate() {
-            let name = if i == 0 {
-                "classes.dex".to_string()
-            } else {
-                format!("classes{}.dex", i + 1)
-            };
-            std::fs::copy(dex_path, final_dir.join(&name))?;
-        }
-        // Replace dex_dir contents with assembled DEX files.
-        for entry in std::fs::read_dir(&dex_dir)?.flatten() {
-            std::fs::remove_file(entry.path()).ok();
-        }
-        for entry in std::fs::read_dir(&final_dir)?.flatten() {
-            if entry.path().extension().and_then(|e| e.to_str()) == Some("dex") {
-                std::fs::copy(entry.path(), dex_dir.join(entry.file_name()))?;
             }
         }
     }
@@ -1437,9 +1439,7 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         total_dex_size as f64 / 1_048_576.0
     );
 
-    // ── Step 5: Build final APK from scratch ─────────────────────────
-    // Instead of appending to the aapt2 base APK (which breaks alignment),
-    // extract its entries and rebuild with DEX files in a fresh ZIP.
+    // ── Step 5: Build final APK ────────────────────────────────────────
     let unsigned_apk = build_dir.join("app-unsigned.apk");
     {
         let buf = std::io::Cursor::new(Vec::new());
@@ -1450,61 +1450,58 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
         let deflated = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
 
-        // 1. AndroidManifest.xml from aapt2 base (STORED, aligned).
-        let base_file = std::fs::File::open(&base_apk)?;
-        let mut base_zip = zip::ZipArchive::new(base_file)?;
-        if let Ok(mut entry) = base_zip.by_name("AndroidManifest.xml") {
-            zip.start_file("AndroidManifest.xml", stored)?;
-            std::io::copy(&mut entry, &mut zip)?;
-        }
-
-        // 2. DEX files (STORED, aligned) — these come first for performance.
-        for dex_path in &dex_files {
-            let name = dex_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("classes.dex");
-            zip.start_file(name, stored)?;
-            let data = std::fs::read(dex_path)?;
-            std::io::Write::write_all(&mut zip, &data)?;
-        }
-
-        // 3. resources.arsc from aapt2 base (STORED, aligned).
-        if let Ok(mut entry) = base_zip.by_name("resources.arsc") {
-            zip.start_file("resources.arsc", stored)?;
-            std::io::copy(&mut entry, &mut zip)?;
-        }
-
-        // 4. Resource files from aapt2 base (DEFLATED).
-        for i in 0..base_zip.len() {
-            let entry = base_zip.by_index(i)?;
-            let name = entry.name().to_string();
-            if name == "AndroidManifest.xml" || name == "resources.arsc" {
-                continue; // already added
+        {
+            // 1. AndroidManifest.xml from aapt2 base (STORED).
+            let base_file = std::fs::File::open(&base_apk)?;
+            let mut base_zip = zip::ZipArchive::new(base_file)?;
+            if let Ok(mut entry) = base_zip.by_name("AndroidManifest.xml") {
+                zip.start_file("AndroidManifest.xml", stored)?;
+                std::io::copy(&mut entry, &mut zip)?;
             }
-            drop(entry);
-            let mut entry = base_zip.by_index(i)?;
-            zip.start_file(&name, deflated)?;
-            std::io::copy(&mut entry, &mut zip)?;
-        }
-
-        // 5. Raw resource files from app's res/ not in the aapt2 base.
-        if app_res_dir.is_dir() {
-            // Collect names already in the ZIP.
-            let existing: std::collections::HashSet<String> = (0..base_zip.len())
-                .filter_map(|i| base_zip.by_index(i).ok().map(|e| e.name().to_string()))
-                .collect();
-            for entry in walkdir::WalkDir::new(&app_res_dir)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                if entry.path().is_file() {
-                    if let Ok(rel) = entry.path().strip_prefix(&app_res_dir) {
-                        let apk_path = format!("res/{}", rel.to_string_lossy().replace('\\', "/"));
-                        if !existing.contains(&apk_path) {
-                            zip.start_file(&apk_path, deflated)?;
-                            if let Ok(data) = std::fs::read(entry.path()) {
-                                std::io::Write::write_all(&mut zip, &data)?;
+            // 2. DEX files (STORED).
+            for dex_path in &dex_files {
+                let name = dex_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("classes.dex");
+                zip.start_file(name, stored)?;
+                std::io::Write::write_all(&mut zip, &std::fs::read(dex_path)?)?;
+            }
+            // 3. resources.arsc from aapt2 base (STORED).
+            if let Ok(mut entry) = base_zip.by_name("resources.arsc") {
+                zip.start_file("resources.arsc", stored)?;
+                std::io::copy(&mut entry, &mut zip)?;
+            }
+            // 4. Resource files from aapt2 base (DEFLATED).
+            for i in 0..base_zip.len() {
+                let entry = base_zip.by_index(i)?;
+                let name = entry.name().to_string();
+                if name == "AndroidManifest.xml" || name == "resources.arsc" {
+                    continue;
+                }
+                drop(entry);
+                let mut entry = base_zip.by_index(i)?;
+                zip.start_file(&name, deflated)?;
+                std::io::copy(&mut entry, &mut zip)?;
+            }
+            // 5. Raw resource files from app's res/.
+            if app_res_dir.is_dir() {
+                let existing: std::collections::HashSet<String> = (0..base_zip.len())
+                    .filter_map(|i| base_zip.by_index(i).ok().map(|e| e.name().to_string()))
+                    .collect();
+                for entry in walkdir::WalkDir::new(&app_res_dir)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                {
+                    if entry.path().is_file() {
+                        if let Ok(rel) = entry.path().strip_prefix(&app_res_dir) {
+                            let apk_path =
+                                format!("res/{}", rel.to_string_lossy().replace('\\', "/"));
+                            if !existing.contains(&apk_path) {
+                                zip.start_file(&apk_path, deflated)?;
+                                if let Ok(data) = std::fs::read(entry.path()) {
+                                    std::io::Write::write_all(&mut zip, &data)?;
+                                }
                             }
                         }
                     }
