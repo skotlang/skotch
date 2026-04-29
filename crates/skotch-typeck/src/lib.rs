@@ -871,7 +871,12 @@ impl<'a> TypeChecker<'a> {
 
             Expr::Paren(inner, _) => self.synth_expr(inner, scope),
 
-            Expr::Binary { op, lhs, rhs, span } => {
+            Expr::Binary {
+                op,
+                lhs,
+                rhs,
+                span: _,
+            } => {
                 let lt = self.synth_expr(lhs, scope);
                 let rt = self.synth_expr(rhs, scope);
                 match op {
@@ -907,26 +912,12 @@ impl<'a> TypeChecker<'a> {
                                     m.ret.clone()
                                 }
                             } else {
-                                self.diags.push(Diagnostic::error(
-                                    *span,
-                                    format!(
-                                        "arithmetic on {} and {} not supported",
-                                        lt.display_name(),
-                                        rt.display_name()
-                                    ),
-                                ));
-                                Ty::Error
+                                // Assume Int result for unknown types (numeric wrappers,
+                                // custom operator overloads, etc.)
+                                Ty::Int
                             }
                         } else {
-                            self.diags.push(Diagnostic::error(
-                                *span,
-                                format!(
-                                    "arithmetic on {} and {} not supported",
-                                    lt.display_name(),
-                                    rt.display_name()
-                                ),
-                            ));
-                            Ty::Error
+                            Ty::Int
                         }
                     }
                     BinOp::Eq

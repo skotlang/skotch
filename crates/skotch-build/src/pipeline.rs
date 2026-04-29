@@ -648,7 +648,7 @@ fn compile_app_classes_with_d8(
     // bytecode issues from partial compilation).
     let total = class_files.len();
     let mut excluded: Vec<PathBuf> = Vec::new();
-    for attempt in 0..50 {
+    for attempt in 0..200 {
         std::fs::create_dir_all(&dex_output)?;
         // Clean previous output.
         let _ = std::fs::remove_file(dex_output.join("classes.dex"));
@@ -1678,6 +1678,31 @@ fn compile_multi_module_classes(
         }
     }
 
+    // Resolve external Maven dependencies for classpath — needed so the MIR
+    // lowerer can resolve library method signatures and types.
+    for module in &modules {
+        if let Ok(dep_jars) = resolve_external_deps(&module.project, root_dir) {
+            if !dep_jars.is_empty() {
+                // Add to CLASSPATH.
+                let sep = if cfg!(windows) { ";" } else { ":" };
+                let mut cp = std::env::var("CLASSPATH").unwrap_or_default();
+                for jar in &dep_jars {
+                    if !cp.is_empty() {
+                        cp.push_str(sep);
+                    }
+                    cp.push_str(&jar.to_string_lossy());
+                }
+                std::env::set_var("CLASSPATH", &cp);
+                skotch_mir_lower::preload_registry_jars(&dep_jars);
+                eprintln!(
+                    "  {} dependency JARs loaded for compilation",
+                    dep_jars.len()
+                );
+                break; // Only need to load once (all modules share classpath).
+            }
+        }
+    }
+
     // Compile in order.
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
     let mut app_project: Option<ProjectModel> = None;
@@ -1773,6 +1798,10 @@ fn compile_multi_module_classes(
         }
 
         let err_count = mod_diags.len();
+        if mod_diags.has_errors() {
+            let diag_text = render(&mod_diags, &mod_sm);
+            eprint!("{diag_text}");
+        }
         eprintln!(
             "    [{}] {} classes ({} errors)",
             module.name,

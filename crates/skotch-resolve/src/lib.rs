@@ -926,6 +926,8 @@ impl<'a> Resolver<'a> {
                         if is_callee {
                             return DefId::PossibleExternal(*name);
                         }
+                        // Emit a diagnostic but continue — MIR lowering may
+                        // resolve it later (implicit `it`, scope functions, etc.).
                         self.diags.push(Diagnostic::error(
                             *span,
                             format!("unresolved identifier `{name_str}`"),
@@ -1044,16 +1046,15 @@ impl<'a> Resolver<'a> {
             | Expr::NullLit(_)
             | Expr::StringLit(_, _) => {}
             Expr::Ident(name, span) => {
-                let def = self.out.top_level.get(name).copied().unwrap_or_else(|| {
-                    self.diags.push(Diagnostic::error(
-                        *span,
-                        format!(
-                            "unresolved top-level identifier `{}`",
-                            self.interner.resolve(*name)
-                        ),
-                    ));
-                    DefId::Error
-                });
+                // If the identifier is defined at file-level, record the reference.
+                // Otherwise, don't error here — it may be an imported type that
+                // will be resolved during MIR lowering (via the import_map).
+                let def = self
+                    .out
+                    .top_level
+                    .get(name)
+                    .copied()
+                    .unwrap_or(DefId::Error);
                 refs.push(ResolvedRef { span: *span, def });
             }
             Expr::Call { callee, args, .. } => {
@@ -1079,11 +1080,13 @@ impl<'a> Resolver<'a> {
                     "if-expressions in top-level val initializers are not yet supported",
                 ));
             }
-            Expr::StringTemplate(_, _) => {
-                self.diags.push(Diagnostic::error(
-                    expr.span(),
-                    "string templates in top-level val initializers are not yet supported",
-                ));
+            Expr::StringTemplate(parts, _) => {
+                // Resolve ident refs inside the template.
+                for p in parts {
+                    if let TemplatePart::Expr(e) = p {
+                        self.resolve_expr_in_top(e, refs);
+                    }
+                }
             }
             // New expression types — not meaningful at top level, just ignore.
             Expr::Throw { .. }

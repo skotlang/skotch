@@ -234,6 +234,13 @@ impl<'a> Parser<'a> {
                         }
                     }
                     skotch_syntax::AnnotationArg::QualifiedName(parts)
+                } else if self.peek_kind() == TokenKind::ColonColon {
+                    // `Foo::class` — class literal reference. Skip `::class`.
+                    self.bump(); // consume `::`
+                    if self.peek_kind() == TokenKind::KwClass {
+                        self.bump(); // consume `class`
+                    }
+                    skotch_syntax::AnnotationArg::Ident(sym)
                 } else if self.peek_kind() == TokenKind::Eq {
                     // Named argument: `name = "value"` — skip the name, parse value.
                     self.bump(); // consume '='
@@ -1707,7 +1714,7 @@ impl<'a> Parser<'a> {
         }
         let name_idx = self.pos;
         let name_span = self.peek_span();
-        let name = if self.peek_kind() == TokenKind::Ident {
+        let name = if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
             self.bump();
             self.intern_ident_at(name_idx)
         } else {
@@ -1837,9 +1844,24 @@ impl<'a> Parser<'a> {
         }
 
         let idx = self.pos;
-        let name = if self.peek_kind() == TokenKind::Ident {
+        let name = if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
             self.bump();
-            self.intern_ident_at(idx)
+            let mut sym = self.intern_ident_at(idx);
+            // Handle fully-qualified type names: `a.b.c.ClassName`
+            // Consume dot-separated segments as long as the next segment is
+            // an identifier and NOT followed by `(` (which would be a function
+            // type `Type.() -> R`).
+            while self.peek_kind() == TokenKind::Dot
+                && self.peek_kind_at(1) != TokenKind::LParen
+                && (self.peek_kind_at(1) == TokenKind::Ident || self.peek_kind_at(1).is_keyword())
+            {
+                self.bump(); // consume `.`
+                let seg_idx = self.pos;
+                self.bump(); // consume segment
+                             // Use the LAST segment as the type name (it's the class name).
+                sym = self.intern_ident_at(seg_idx);
+            }
+            sym
         } else {
             self.diags
                 .push(Diagnostic::error(span, "expected type name"));
@@ -2069,7 +2091,7 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let name_idx = self.pos;
         let name_span = self.peek_span();
-        let name = if self.peek_kind() == TokenKind::Ident {
+        let mut name = if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
             self.bump();
             self.intern_ident_at(name_idx)
         } else {
@@ -2079,6 +2101,16 @@ impl<'a> Parser<'a> {
             ));
             self.interner.intern("")
         };
+        // Handle extension properties: `var ReceiverType.propName`
+        // Parse dotted segments and use the LAST one as the property name.
+        while self.peek_kind() == TokenKind::Dot
+            && (self.peek_kind_at(1) == TokenKind::Ident || self.peek_kind_at(1).is_keyword())
+        {
+            self.bump(); // consume `.`
+            let seg_idx = self.pos;
+            self.bump(); // consume segment
+            name = self.intern_ident_at(seg_idx);
+        }
         self.skip_trivia();
         let ty = if self.eat(TokenKind::Colon) {
             Some(self.parse_type_ref())
@@ -3453,6 +3485,16 @@ impl<'a> Parser<'a> {
                 let idx = self.pos;
                 self.bump();
                 let sym = self.intern_ident_at(idx);
+                let name = self.interner.resolve(sym);
+                // Handle `this@Label` — labeled this expression.
+                // Treat as plain `this` (the label is for disambiguation).
+                if name == "this" && self.peek_kind() == TokenKind::At {
+                    self.bump(); // consume @
+                                 // Consume the label identifier.
+                    if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
+                        self.bump();
+                    }
+                }
                 Expr::Ident(sym, span)
             }
             TokenKind::KwSuper => {

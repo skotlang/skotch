@@ -1527,9 +1527,15 @@ fn emit_method_body(
                     *cond,
                     &func.locals,
                 );
-                // ifeq <else_offset> — jump to else block if cond == 0
+                // Branch: if cond is int, use ifeq (jump if 0).
+                // If cond is a reference type (from null stubs), use ifnull.
+                let cond_ty = &func.locals[cond.0 as usize];
                 let insn_pos = code.len();
-                code.push(0x99); // ifeq
+                let is_ref = matches!(
+                    cond_ty,
+                    Ty::Any | Ty::Class(_) | Ty::Nullable(_) | Ty::String | Ty::Error
+                );
+                code.push(if is_ref { 0xC6 } else { 0x99 }); // ifnull or ifeq
                 let offset_pos = code.len();
                 code.write_i16::<BigEndian>(0).unwrap(); // placeholder
                 bump(&mut stack, &mut max_stack, -1);
@@ -1602,7 +1608,14 @@ fn emit_method_body(
     let max_slots = next_slot as usize;
 
     // Build a global JVM-slot -> MIR-local reverse map (for verification types).
-    let mut slot_to_local: Vec<Option<u32>> = vec![None; max_slots];
+    let actual_max = slots
+        .values()
+        .copied()
+        .max()
+        .map(|v| v as usize + 1)
+        .unwrap_or(0);
+    let slot_count = std::cmp::max(max_slots, actual_max);
+    let mut slot_to_local: Vec<Option<u32>> = vec![None; slot_count];
     for (&mir_id, &jvm_slot) in slots.iter() {
         slot_to_local[jvm_slot as usize] = Some(mir_id);
     }

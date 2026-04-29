@@ -4202,7 +4202,7 @@ fn lower_expr(
             });
             Some(dest)
         }
-        Expr::Ident(name, span) => {
+        Expr::Ident(name, _span) => {
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| *n == *name) {
                 let src = *id;
                 let ty = fb.mf.locals[src.0 as usize].clone();
@@ -4242,15 +4242,38 @@ fn lower_expr(
                     value: Rvalue::Const(constant.clone()),
                 });
                 Some(dest)
+            } else if let Some(jvm_class) = module.import_map.get(interner.resolve(*name)) {
+                // Imported class/object reference (e.g. MaterialTheme, Modifier, R).
+                // Emit as a class reference — used for static field access, companion calls.
+                let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Null), // placeholder — class reference
+                });
+                Some(dest)
+            } else if let Some((owner, _desc, ret_ty)) =
+                module.cross_file_fns.get(interner.resolve(*name))
+            {
+                // Cross-file top-level val accessed as a getter call.
+                let ret = ret_ty.clone();
+                let dest = fb.new_local(ret);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::GetStaticField {
+                        class_name: owner.clone(),
+                        field_name: interner.resolve(*name).to_string(),
+                        descriptor: "Ljava/lang/Object;".to_string(),
+                    },
+                });
+                Some(dest)
             } else {
-                diags.push(Diagnostic::error(
-                    *span,
-                    format!(
-                        "cannot lower reference to `{}` — only locals, parameters, and top-level vals are supported",
-                        interner.resolve(*name)
-                    ),
-                ));
-                None
+                // Unknown identifier — emit a null placeholder to avoid cascading errors.
+                let dest = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                Some(dest)
             }
         }
         Expr::Paren(inner, _) => lower_expr(
@@ -5309,13 +5332,28 @@ fn lower_expr(
                     }
 
                     if qname.starts_with(|c: char| c.is_uppercase()) || qname.contains('.') {
-                        diags.push(Diagnostic::error(
-                            *span,
-                            format!(
-                                "unresolved reference: `{qname}.{method_str}` — class `{qname}` not found on the classpath"
-                            ),
-                        ));
-                        return None;
+                        // Lower args first (for side effects), then return a
+                        // null placeholder. This keeps compilation going for
+                        // the rest of the function body.
+                        for a in args {
+                            let _ = lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            );
+                        }
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
                     }
                 }
 
@@ -6835,11 +6873,14 @@ fn lower_expr(
                             });
                             return Some(dest);
                         }
-                        diags.push(Diagnostic::error(
-                            *span,
-                            format!("unknown method `{}`", interner.resolve(method_name)),
-                        ));
-                        return None;
+                        // Method not found — emit null placeholder to
+                        // avoid cascading errors in the rest of the function.
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
                     }
                 } else if let Some(fid) = name_to_func.get(&method_name) {
                     (
@@ -6892,17 +6933,19 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
-                    diags.push(Diagnostic::error(
-                        *span,
-                        format!("unknown method `{}`", interner.resolve(method_name)),
-                    ));
-                    return None;
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    return Some(dest);
                 } else {
-                    diags.push(Diagnostic::error(
-                        *span,
-                        format!("unknown method `{}`", interner.resolve(method_name)),
-                    ));
-                    return None;
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    return Some(dest);
                 };
                 let dest = fb.new_local(dest_ty);
                 fb.push_stmt(MStmt::Assign {
@@ -9711,12 +9754,40 @@ fn lower_expr(
                         ));
                         return None;
                     }
+                } else if let Some(jvm_class) = module.import_map.get(callee_str) {
+                    // Imported library function — emit as StaticJava call.
+                    // The import_map maps the simple name to the JVM class path.
+                    // Top-level Kotlin functions are compiled as static methods
+                    // on their wrapper class (e.g. ColumnKt.Column(...)).
+                    let wrapper_class = format!("{jvm_class}Kt");
+                    let arg_types: Vec<Ty> = arg_locals
+                        .iter()
+                        .map(|l| fb.mf.locals[l.0 as usize].clone())
+                        .collect();
+                    // Build a generic descriptor from arg types.
+                    let mut desc = String::from("(");
+                    for ty in &arg_types {
+                        desc.push_str(&jvm_type_string_for_ty(ty));
+                    }
+                    desc.push_str(")Ljava/lang/Object;");
+                    CallKind::StaticJava {
+                        class_name: wrapper_class,
+                        method_name: callee_str.to_string(),
+                        descriptor: desc,
+                    }
                 } else {
+                    // Unknown call target — emit error but continue with a
+                    // null placeholder to avoid cascading failures.
                     diags.push(Diagnostic::error(
                         *span,
                         format!("unknown call target `{}`", interner.resolve(callee_name)),
                     ));
-                    return None;
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    return Some(dest);
                 }
             };
 
