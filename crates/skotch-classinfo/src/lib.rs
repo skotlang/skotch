@@ -125,6 +125,10 @@ pub fn lookup_method_descriptor(
 
 /// Count the number of parameters in a JVM method descriptor.
 /// E.g. `(Landroid/content/Context;)V` → 1, `(II)V` → 2.
+pub fn count_descriptor_params_pub(desc: &str) -> usize {
+    count_descriptor_params(desc)
+}
+
 fn count_descriptor_params(desc: &str) -> usize {
     let inner = desc
         .strip_prefix('(')

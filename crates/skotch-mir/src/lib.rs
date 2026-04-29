@@ -388,6 +388,8 @@ pub struct MirFunction {
     /// are rejected at lowering time until multi-point support lands.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suspend_state_machine: Option<SuspendStateMachine>,
+    // NOTE: `has_unresolved` is detected at emit time by `has_null_stubs()`
+    // in the JVM backend, so we don't need a field here.
     /// Annotations on this function (emitted as RuntimeVisibleAnnotations).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<MirAnnotation>,

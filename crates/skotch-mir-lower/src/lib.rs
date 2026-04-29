@@ -1871,6 +1871,7 @@ struct FnBuilder {
     /// Reified type parameter substitutions for the current inline scope.
     /// Maps type param names (e.g. "A", "B") to concrete types (e.g. "String").
     reified_types: FxHashMap<String, String>,
+    // (has_unresolved detection moved to JVM backend's has_null_stubs())
 }
 
 impl FnBuilder {
