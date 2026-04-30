@@ -1912,19 +1912,24 @@ fn emit_method_body(
 /// be emitted as a safe return-default stub instead.
 fn has_null_stubs(func: &MirFunction) -> bool {
     use skotch_mir::{Rvalue, Stmt};
+    // Check each block for dangerous patterns:
     for block in &func.blocks {
+        // Track null-Any locals within THIS block only.
+        let mut block_null_locals = std::collections::HashSet::new();
         for stmt in &block.stmts {
             let Stmt::Assign { dest, value } = stmt;
+            if matches!(value, Rvalue::Const(MirConst::Null))
+                && matches!(func.locals.get(dest.0 as usize), Some(Ty::Any))
+            {
+                block_null_locals.insert(dest.0);
+            }
             match value {
-                // Null assigned to Ty::Any — classic unresolved call stub.
-                Rvalue::Const(MirConst::Null) => {
-                    if matches!(func.locals.get(dest.0 as usize), Some(Ty::Any)) {
+                // GetField where receiver is a null-Any local (in same block)
+                // or a primitive type.
+                Rvalue::GetField { receiver, .. } => {
+                    if block_null_locals.contains(&receiver.0) {
                         return true;
                     }
-                }
-                // GetField on a primitive-typed receiver — broken MIR from
-                // unresolved member access (e.g. mutableStateOf compiled as Int).
-                Rvalue::GetField { receiver, .. } => {
                     let recv_ty = func.locals.get(receiver.0 as usize);
                     if matches!(
                         recv_ty,
@@ -1937,8 +1942,11 @@ fn has_null_stubs(func: &MirFunction) -> bool {
                         return true;
                     }
                 }
-                // PutField on a primitive-typed receiver.
+                // PutField where receiver is a null-Any local or primitive.
                 Rvalue::PutField { receiver, .. } => {
+                    if block_null_locals.contains(&receiver.0) {
+                        return true;
+                    }
                     let recv_ty = func.locals.get(receiver.0 as usize);
                     if matches!(
                         recv_ty,
@@ -2080,7 +2088,8 @@ fn emit_method(
     // If the function has unresolved calls (null stubs from MIR lowering),
     // emit a safe stub body that simply returns the default value for the
     // return type. This produces valid bytecode that d8 always accepts.
-    if has_null_stubs(func) {
+    // Never stub `main` — it must always have a real body.
+    if func.name != "main" && has_null_stubs(func) {
         return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC | ACC_STATIC);
     }
     // Coroutine transform. If the MIR lowerer

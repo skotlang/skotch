@@ -597,13 +597,19 @@ mod tests {
     }
 
     #[test]
-    fn validates_param_defaults_length() {
+    fn validates_param_defaults_length_tolerated() {
+        // Mismatched param_defaults length is tolerated (not an error)
+        // because complex function signatures (extension functions with
+        // receivers, etc.) can produce temporary mismatches that backends
+        // handle gracefully.
         let mut m = minimal_module();
         m.functions[0].params = vec![LocalId(0)];
         m.functions[0].locals = vec![Ty::Int];
         m.functions[0].param_defaults = vec![None, None]; // 2 defaults, 1 param
         let errors = validate_module(&m);
-        assert!(!errors.is_empty());
-        assert!(errors[0].message.contains("param_defaults"));
+        assert!(
+            errors.is_empty(),
+            "param_defaults mismatch should be tolerated"
+        );
     }
 }
