@@ -94,15 +94,17 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
         .map(|f| f.name.clone())
         .collect();
 
+    // Bump ALL Function0 lambda classes to Function2 in Compose projects.
+    // The Compose runtime expects @Composable lambdas as Function2.
+    // Non-composable lambdas that get bumped will have their invoke body
+    // emitted as a stub by the JVM backend (the arity mismatch detection
+    // handles this). The key composable lambda (setContent block) gets
+    // the correct Function2 interface and its body executes normally
+    // since the extra $composer/$changed params sit in unused JVM slots.
     for class in &mut module.classes {
         if !class.name.contains("$Lambda$") {
             continue;
         }
-        // In a Compose project, bump ALL Function0 lambda classes to
-        // Function2 — the Compose runtime expects @Composable lambdas
-        // as Function2<Composer, Int, Unit>. Non-composable lambdas
-        // that implement Function2 still work (extra params are ignored
-        // by the stub invoke body).
         let has_function0 = class
             .interfaces
             .iter()
@@ -110,7 +112,6 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
         if !has_function0 {
             continue;
         }
-        // Bump each FunctionN interface to Function(N+2).
         for iface in &mut class.interfaces {
             if let Some(n_str) = iface.strip_prefix("kotlin/jvm/functions/Function") {
                 if let Ok(n) = n_str.parse::<usize>() {
@@ -118,9 +119,106 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                 }
             }
         }
-        // The JVM backend's compile_user_class detects the Function2
-        // interface and generates the correct invoke descriptor
-        // (Object, Object)Object automatically — no MIR changes needed.
+        // Also inject $composer and $changed into the invoke method's
+        // MIR params so that inner composable function calls can forward
+        // the composer. The params are added AFTER existing ones — they
+        // map to JVM slots after `this` + captured-field slots.
+        for method in &mut class.methods {
+            if method.name == "invoke" {
+                let composer_id = LocalId(method.locals.len() as u32);
+                method
+                    .locals
+                    .push(Ty::Class("androidx/compose/runtime/Composer".to_string()));
+                method.params.push(composer_id);
+                method.param_names.push("$composer".to_string());
+
+                let changed_id = LocalId(method.locals.len() as u32);
+                method.locals.push(Ty::Int);
+                method.params.push(changed_id);
+                method.param_names.push("$changed".to_string());
+
+                // Post-process: in StaticJava calls where a Const(Null)
+                // arg precedes an Int arg (the $composer/$changed pattern
+                // from arg padding), replace with the real param locals.
+                thread_composer_args(method, composer_id, changed_id);
+            }
+        }
+    }
+}
+
+/// Replace null $composer and zero $changed placeholders in composable
+/// function calls with references to the actual lambda invoke params.
+fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed_local: LocalId) {
+    use skotch_mir::MirConst;
+    // First, find which locals hold Const(Null) that are used as
+    // $composer args, and which hold Const(Int(0)) for $changed args.
+    // The pattern from arg padding is:
+    //   Assign { dest: X, value: Const(Null) }     ← $composer placeholder
+    //   Assign { dest: Y, value: Const(Int(0)) }   ← $changed placeholder
+    //   Assign { dest: Z, value: Call { kind: StaticJava { ... }, args: [..., X, Y] } }
+    //
+    // Replace X→composer_local and Y→changed_local in the Call args.
+
+    // Collect locals that are assigned Const(Null) with Ty::Any.
+    let null_locals: std::collections::HashSet<u32> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.stmts.iter())
+        .filter_map(|stmt| {
+            let MStmt::Assign { dest, value } = stmt;
+            if matches!(value, Rvalue::Const(MirConst::Null))
+                && matches!(func.locals.get(dest.0 as usize), Some(Ty::Any))
+            {
+                Some(dest.0)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Collect locals assigned Const(Int(0)).
+    let zero_locals: std::collections::HashSet<u32> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.stmts.iter())
+        .filter_map(|stmt| {
+            let MStmt::Assign { dest, value } = stmt;
+            if matches!(value, Rvalue::Const(MirConst::Int(0))) {
+                Some(dest.0)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // In StaticJava calls, replace null/$zero args that appear in the
+    // last 2 positions with the real $composer/$changed locals.
+    for block in &mut func.blocks {
+        for stmt in &mut block.stmts {
+            let MStmt::Assign { value, .. } = stmt;
+            if let Rvalue::Call {
+                kind: CallKind::StaticJava { descriptor, .. },
+                args,
+            } = value
+            {
+                let n = args.len();
+                if n >= 2 {
+                    // Check if the descriptor has Composer + int as last 2 params.
+                    let desc_has_composer = descriptor.contains("Composer;")
+                        || descriptor.contains("Ljava/lang/Object;I)");
+                    if desc_has_composer {
+                        // Replace second-to-last arg if it's a null placeholder.
+                        if null_locals.contains(&args[n - 2].0) {
+                            args[n - 2] = composer_local;
+                        }
+                        // Replace last arg if it's a zero placeholder.
+                        if zero_locals.contains(&args[n - 1].0) {
+                            args[n - 1] = changed_local;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

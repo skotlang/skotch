@@ -9786,28 +9786,112 @@ fn lower_expr(
                     // and the function is a companion/static method on that class.
                     let last_segment = jvm_class.rsplit('/').next().unwrap_or(jvm_class);
                     let wrapper_class = if last_segment.starts_with(|c: char| c.is_lowercase()) {
-                        // Package-level function — we don't know the wrapper class
-                        // name. Emit as a null stub instead of guessing.
-                        let dest = fb.new_local(Ty::Any);
-                        fb.push_stmt(MStmt::Assign {
-                            dest,
-                            value: Rvalue::Const(MirConst::Null),
-                        });
-                        return Some(dest);
+                        // Package-level function import like
+                        // `import a.b.c.functionName` → jvm_class = "a/b/c/functionName"
+                        // Strip the function name to get the package: "a/b/c"
+                        let package_path = jvm_class
+                            .rsplit_once('/')
+                            .map(|(pkg, _)| pkg)
+                            .unwrap_or(jvm_class);
+                        let found = skotch_classinfo::find_wrapper_class_for_function(
+                            package_path,
+                            callee_str,
+                        );
+                        if let Some(f) = found {
+                            f
+                        } else {
+                            // Not found in any JAR — emit null stub.
+                            let dest = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            return Some(dest);
+                        }
                     } else {
                         // Class-level function: the class IS the wrapper.
                         jvm_class.clone()
                     };
-                    let arg_types: Vec<Ty> = arg_locals
-                        .iter()
-                        .map(|l| fb.mf.locals[l.0 as usize].clone())
-                        .collect();
-                    // Build a generic descriptor from arg types.
-                    let mut desc = String::from("(");
-                    for ty in &arg_types {
-                        desc.push_str(&jvm_type_string_for_ty(ty));
+                    // Try to look up the actual method descriptor from the
+                    // classpath. Also try with +2 params for @Composable
+                    // functions (which have extra $composer/$changed args).
+                    let desc = skotch_classinfo::lookup_method_descriptor(
+                        &wrapper_class,
+                        callee_str,
+                        arg_locals.len(),
+                    )
+                    .or_else(|| {
+                        // Composable functions have +2 params ($composer, $changed).
+                        skotch_classinfo::lookup_method_descriptor(
+                            &wrapper_class,
+                            callee_str,
+                            arg_locals.len() + 2,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        let arg_types: Vec<Ty> = arg_locals
+                            .iter()
+                            .map(|l| fb.mf.locals[l.0 as usize].clone())
+                            .collect();
+                        let mut d = String::from("(");
+                        for ty in &arg_types {
+                            d.push_str(&jvm_type_string_for_ty(ty));
+                        }
+                        d.push_str(")Ljava/lang/Object;");
+                        d
+                    });
+                    // If the descriptor has more params than we have args
+                    // (composable functions with $composer/$changed), forward
+                    // the $composer/$changed from the enclosing scope.
+                    let desc_param_count = skotch_classinfo::count_descriptor_params_pub(&desc);
+                    if arg_locals.len() < desc_param_count {
+                        // Try to find $composer in the current scope.
+                        // In a @Composable function, $composer was injected
+                        // by the compose transform as a parameter.
+                        // In a lambda invoked as Function2, $composer is
+                        // at param slot 1 (after this at slot 0).
+                        let composer_sym = interner.intern("$composer");
+                        let changed_sym = interner.intern("$changed");
+                        let scope_composer = scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| *s == composer_sym)
+                            .map(|(_, id)| *id);
+                        let scope_changed = scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| *s == changed_sym)
+                            .map(|(_, id)| *id);
+
+                        while arg_locals.len() < desc_param_count {
+                            let remaining = desc_param_count - arg_locals.len();
+                            if remaining == 1 {
+                                // $changed (Int) — forward from scope or use 0.
+                                if let Some(cid) = scope_changed {
+                                    arg_locals.push(cid);
+                                } else {
+                                    let changed = fb.new_local(Ty::Int);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: changed,
+                                        value: Rvalue::Const(MirConst::Int(0)),
+                                    });
+                                    arg_locals.push(changed);
+                                }
+                            } else {
+                                // $composer — forward from scope or use null.
+                                if let Some(cid) = scope_composer {
+                                    arg_locals.push(cid);
+                                } else {
+                                    let composer = fb.new_local(Ty::Any);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: composer,
+                                        value: Rvalue::Const(MirConst::Null),
+                                    });
+                                    arg_locals.push(composer);
+                                }
+                            }
+                        }
                     }
-                    desc.push_str(")Ljava/lang/Object;");
                     CallKind::StaticJava {
                         class_name: wrapper_class,
                         method_name: callee_str.to_string(),

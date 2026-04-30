@@ -137,6 +137,63 @@ pub fn lookup_method_descriptor(
     None
 }
 
+/// Find which wrapper class (e.g. `ComposablesKt`) in a package contains
+/// a given static method. Searches all `*Kt.class` files in the package
+/// within the classpath JARs.
+pub fn find_wrapper_class_for_function(package_path: &str, method_name: &str) -> Option<String> {
+    let cp = std::env::var("CLASSPATH").unwrap_or_default();
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    let prefix = format!("{package_path}/");
+
+    for jar_path in cp.split(sep) {
+        if jar_path.is_empty() {
+            continue;
+        }
+        let path = std::path::Path::new(jar_path);
+        if !path.exists() {
+            continue;
+        }
+        if let Ok(file) = std::fs::File::open(path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                // Collect Kt class names in this package.
+                let kt_classes: Vec<String> = (0..archive.len())
+                    .filter_map(|i| {
+                        archive.by_index(i).ok().and_then(|e| {
+                            let name = e.name().to_string();
+                            if name.starts_with(&prefix)
+                                && name.ends_with("Kt.class")
+                                && !name[prefix.len()..].contains('/')
+                            {
+                                Some(name)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+
+                for class_file in &kt_classes {
+                    if let Ok(mut entry) = archive.by_name(class_file) {
+                        let mut bytes = Vec::new();
+                        if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
+                            if let Ok(ci) = parse_class(&bytes) {
+                                if ci.methods.iter().any(|m| {
+                                    m.name == method_name && m.is_static() && m.is_public()
+                                }) {
+                                    let class_name =
+                                        class_file.strip_suffix(".class").unwrap_or(class_file);
+                                    return Some(class_name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Count the number of parameters in a JVM method descriptor.
 /// E.g. `(Landroid/content/Context;)V` → 1, `(II)V` → 2.
 pub fn count_descriptor_params_pub(desc: &str) -> usize {

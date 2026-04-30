@@ -1063,8 +1063,9 @@ fn emit_user_method(
         return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC);
     }
     // Lambda invoke methods whose interface was bumped by the Compose
-    // transform (Function0→Function2) have more params in the descriptor
-    // than the MIR body expects. Emit a stub to avoid VerifyError.
+    // transform (Function0→Function2). If the body has broken patterns
+    // (null stubs, wrong field types), emit a stub with the correct
+    // Function2 descriptor. Otherwise keep the original body.
     if !is_init && func.name == "invoke" && class_name.contains("$Lambda$") {
         let iface_arity = module
             .classes
@@ -1078,9 +1079,9 @@ fn emit_user_method(
             })
             .unwrap_or(0);
         let mir_params = func.params.len().saturating_sub(1);
-        if iface_arity > mir_params {
-            // Build the correct Function2 descriptor and emit a stub
-            // with the right invoke signature.
+        if iface_arity > mir_params && has_null_stubs(func) {
+            // Body has broken patterns — emit a clean stub with the
+            // correct Function2 descriptor.
             let name_idx = cp.utf8(&func.name);
             let mut desc = String::from("(");
             for _ in 0..iface_arity {
@@ -1088,24 +1089,23 @@ fn emit_user_method(
             }
             desc.push_str(")Ljava/lang/Object;");
             let desc_idx = cp.utf8(&desc);
-            // Minimal code: aconst_null; areturn
             let mut blob = Vec::new();
             blob.write_u16::<BigEndian>(ACC_PUBLIC).unwrap();
             blob.write_u16::<BigEndian>(name_idx).unwrap();
             blob.write_u16::<BigEndian>(desc_idx).unwrap();
-            blob.write_u16::<BigEndian>(1).unwrap(); // 1 attribute (Code)
+            blob.write_u16::<BigEndian>(1).unwrap();
             blob.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
-            let code_len = 2u32; // aconst_null + areturn
-            let attr_len = 2 + 2 + 4 + code_len + 2 + 2;
-            blob.write_u32::<BigEndian>(attr_len).unwrap();
-            blob.write_u16::<BigEndian>(1).unwrap(); // max_stack
+            let code_len = 2u32;
+            blob.write_u32::<BigEndian>(2 + 2 + 4 + code_len + 2 + 2)
+                .unwrap();
+            blob.write_u16::<BigEndian>(1).unwrap();
             blob.write_u16::<BigEndian>((iface_arity + 1) as u16)
-                .unwrap(); // max_locals
+                .unwrap();
             blob.write_u32::<BigEndian>(code_len).unwrap();
             blob.push(0x01); // aconst_null
             blob.push(0xB0); // areturn
-            blob.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
-            blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+            blob.write_u16::<BigEndian>(0).unwrap();
+            blob.write_u16::<BigEndian>(0).unwrap();
             return blob;
         }
     }
@@ -2038,15 +2038,33 @@ fn has_null_stubs(func: &MirFunction) -> bool {
                         return true;
                     }
                 }
-                // VirtualJava call with wrong arg count.
+                // VirtualJava call with wrong arg count or wrong receiver type.
                 Rvalue::Call {
-                    kind: skotch_mir::CallKind::VirtualJava { descriptor, .. },
+                    kind:
+                        skotch_mir::CallKind::VirtualJava {
+                            descriptor,
+                            class_name: call_class,
+                            ..
+                        },
                     args,
                 } => {
-                    // Virtual calls include receiver in args, descriptor doesn't.
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
                     if !args.is_empty() && desc_params != args.len() - 1 {
                         return true;
+                    }
+                    // Check if the receiver (first arg) is `this` (param 0)
+                    // but the call targets a different class. This happens when
+                    // a lambda body calls an enclosing class method on `this`
+                    // but `this` is actually the lambda instance.
+                    if !args.is_empty() && !func.params.is_empty() && args[0] == func.params[0] {
+                        let this_ty = func.locals.get(func.params[0].0 as usize);
+                        if let Some(Ty::Class(this_class)) = this_ty {
+                            if this_class != call_class
+                                && !call_class.starts_with("java/lang/Object")
+                            {
+                                return true;
+                            }
+                        }
                     }
                 }
                 // ConstructorJava with wrong arg count.
