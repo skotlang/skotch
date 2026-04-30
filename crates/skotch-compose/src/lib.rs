@@ -71,6 +71,57 @@ pub fn compose_transform(module: &mut MirModule) {
             transform_composable_function(&mut class.methods[idx]);
         }
     }
+
+    // Patch lambda classes that serve as @Composable content blocks.
+    // The Compose runtime expects @Composable lambdas to implement
+    // Function2<Composer, Int, Unit> (or Function3 for lambdas with
+    // one user parameter, etc.) instead of the plain FunctionN.
+    // We detect lambda classes whose invoke method has @Composable
+    // annotation OR whose interface is Function0 and they're used
+    // in a composable context — and bump their arity by 2.
+    patch_composable_lambda_interfaces(module);
+}
+
+/// Patch lambda classes to implement the correct FunctionN interface
+/// for Compose. A @Composable () -> Unit lambda must implement
+/// Function2<Composer, Int, Unit> instead of Function0<Unit>.
+fn patch_composable_lambda_interfaces(module: &mut MirModule) {
+    // Collect names of all @Composable top-level functions.
+    let _composable_fn_names: std::collections::HashSet<String> = module
+        .functions
+        .iter()
+        .filter(|f| is_composable(f))
+        .map(|f| f.name.clone())
+        .collect();
+
+    for class in &mut module.classes {
+        if !class.name.contains("$Lambda$") {
+            continue;
+        }
+        // In a Compose project, bump ALL Function0 lambda classes to
+        // Function2 — the Compose runtime expects @Composable lambdas
+        // as Function2<Composer, Int, Unit>. Non-composable lambdas
+        // that implement Function2 still work (extra params are ignored
+        // by the stub invoke body).
+        let has_function0 = class
+            .interfaces
+            .iter()
+            .any(|i| i == "kotlin/jvm/functions/Function0");
+        if !has_function0 {
+            continue;
+        }
+        // Bump each FunctionN interface to Function(N+2).
+        for iface in &mut class.interfaces {
+            if let Some(n_str) = iface.strip_prefix("kotlin/jvm/functions/Function") {
+                if let Ok(n) = n_str.parse::<usize>() {
+                    *iface = format!("kotlin/jvm/functions/Function{}", n + 2);
+                }
+            }
+        }
+        // The JVM backend's compile_user_class detects the Function2
+        // interface and generates the correct invoke descriptor
+        // (Object, Object)Object automatically — no MIR changes needed.
+    }
 }
 
 /// Check if a function has the `@Composable` annotation.

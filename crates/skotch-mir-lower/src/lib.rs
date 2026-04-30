@@ -9814,8 +9814,90 @@ fn lower_expr(
                         descriptor: desc,
                     }
                 } else {
-                    // Unknown call target — emit error but continue with a
-                    // null placeholder to avoid cascading failures.
+                    // Check if it's a method on the current class or its
+                    // superclass chain (e.g. setContentView from Activity,
+                    // findNavController as a private method in same class).
+                    let this_sym = interner.intern("this");
+                    let this_id = scope
+                        .iter()
+                        .rev()
+                        .find(|(s, _)| *s == this_sym)
+                        .map(|(_, id)| *id);
+
+                    if let Some(tid) = this_id {
+                        // Try own class methods, then superclass chain.
+                        let current_class = module.classes.iter().find(|c| !c.is_cross_file_stub);
+                        let mut resolved_desc: Option<(String, String)> = None; // (class, descriptor)
+
+                        if let Some(cls) = current_class {
+                            // Own methods (including private ones).
+                            if cls.methods.iter().any(|m| m.name == callee_str) {
+                                if let Some(d) = skotch_classinfo::lookup_method_descriptor(
+                                    &cls.name,
+                                    callee_str,
+                                    arg_locals.len(),
+                                ) {
+                                    resolved_desc = Some((cls.name.clone(), d));
+                                } else {
+                                    // Build descriptor from arg types.
+                                    let mut d = String::from("(");
+                                    for a in &arg_locals {
+                                        d.push_str(&jvm_type_string_for_ty(
+                                            &fb.mf.locals[a.0 as usize],
+                                        ));
+                                    }
+                                    d.push_str(")Ljava/lang/Object;");
+                                    resolved_desc = Some((cls.name.clone(), d));
+                                }
+                            }
+                            // Superclass methods via classpath.
+                            if resolved_desc.is_none() {
+                                if let Some(ref sup) = cls.super_class {
+                                    if let Some(d) = skotch_classinfo::lookup_method_descriptor(
+                                        sup,
+                                        callee_str,
+                                        arg_locals.len(),
+                                    ) {
+                                        resolved_desc = Some((sup.clone(), d));
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some((class_name, descriptor)) = resolved_desc {
+                            let ret_char = descriptor
+                                .rsplit(')')
+                                .next()
+                                .and_then(|s| s.chars().next())
+                                .unwrap_or('V');
+                            let dest_ty = match ret_char {
+                                'V' => Ty::Unit,
+                                'Z' => Ty::Bool,
+                                'I' => Ty::Int,
+                                'J' => Ty::Long,
+                                'F' => Ty::Float,
+                                'D' => Ty::Double,
+                                _ => Ty::Any,
+                            };
+                            let mut call_args = vec![tid];
+                            call_args.extend_from_slice(&arg_locals);
+                            let dest = fb.new_local(dest_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name,
+                                        method_name: callee_str.to_string(),
+                                        descriptor,
+                                    },
+                                    args: call_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+
+                    // Truly unknown — emit null placeholder.
                     diags.push(Diagnostic::error(
                         *span,
                         format!("unknown call target `{}`", interner.resolve(callee_name)),

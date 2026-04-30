@@ -907,7 +907,7 @@ pub fn assemble_android(opts: &AssembleOptions) -> Result<BuildOutcome> {
                     .unwrap_or("")
                     .to_string();
                 if let Some((ev, _)) = best.get(&key) {
-                    if ver_name > *ev {
+                    if semver_gt(&ver_name, ev) {
                         best.insert(key, (ver_name, dir.clone()));
                     }
                 } else {
@@ -1783,13 +1783,17 @@ fn compile_multi_module_classes(
 
         let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
         for (_fid, ast, wrapper) in &parsed {
-            let mir = skotch_driver::compile_ast(
+            let mut mir = skotch_driver::compile_ast(
                 ast,
                 wrapper,
                 &mut mod_interner,
                 &mut mod_diags,
                 Some(&combined_symbols),
             );
+            // Apply Compose transform if the module has @Composable functions.
+            if module.project.is_compose || skotch_compose::has_composables(&mir) {
+                skotch_compose::compose_transform(&mut mir);
+            }
             let file_classes = skotch_backend_jvm::compile_module(&mir, &mod_interner);
             classes.extend(file_classes);
         }
@@ -2694,6 +2698,28 @@ fn resolve_external_deps(project: &ProjectModel, _project_dir: &Path) -> Result<
 /// Deduplicate dependency JARs: when multiple versions of the same artifact
 /// exist (e.g. `annotation-1.1.0.jar` and `annotation-1.4.0.jar`), keep only
 /// the one with the highest version to avoid "defined multiple times" d8 errors.
+/// Compare two version strings using semantic versioning.
+/// "1.18.0" > "1.9.0" (unlike string comparison where "9" > "1").
+fn semver_gt(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.')
+            .map(|p| {
+                // Strip non-numeric suffixes like "-alpha01", "-rc1"
+                let numeric: String = p.chars().take_while(|c| c.is_ascii_digit()).collect();
+                numeric.parse::<u64>().unwrap_or(0)
+            })
+            .collect()
+    };
+    let va = parse(a);
+    let vb = parse(b);
+    for (x, y) in va.iter().zip(vb.iter()) {
+        if x != y {
+            return x > y;
+        }
+    }
+    va.len() > vb.len()
+}
+
 fn dedup_dep_jars(jars: &[PathBuf]) -> Vec<PathBuf> {
     use std::collections::HashMap;
 
@@ -2710,7 +2736,7 @@ fn dedup_dep_jars(jars: &[PathBuf]) -> Vec<PathBuf> {
                 .unwrap_or("")
                 .to_string();
             if let Some((existing_ver, _)) = best.get(&key) {
-                if version > *existing_ver {
+                if semver_gt(&version, existing_ver) {
                     best.insert(key, (version, jar.clone()));
                 }
             } else {
@@ -2759,12 +2785,36 @@ fn dedup_dep_jars(jars: &[PathBuf]) -> Vec<PathBuf> {
             if names.contains(&android_name) || names.contains(&jvm_name) {
                 to_remove.insert(path.clone());
             }
-            // Drop X-ktx when X-android or X-jvm exists (ktx absorbed into KMP artifact).
+            // Drop X-ktx when X-android, X-jvm, or a newer X exists.
+            // In newer AndroidX, the plain artifact absorbs the -ktx classes
+            // (e.g. activity-1.13.0 contains everything from activity-ktx).
+            // Drop -ktx when the plain version is higher.
             if let Some(base) = name.strip_suffix("-ktx") {
                 let android_of_base = format!("{base}-android");
                 let jvm_of_base = format!("{base}-jvm");
                 if names.contains(&android_of_base) || names.contains(&jvm_of_base) {
                     to_remove.insert(path.clone());
+                } else {
+                    // Check if plain X has a higher version than X-ktx.
+                    // If so, X absorbed the ktx classes — drop X-ktx.
+                    let ktx_ver = path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("");
+                    for (other_name, other_path) in artifacts.iter() {
+                        if other_name == base {
+                            let plain_ver = other_path
+                                .parent()
+                                .and_then(|p| p.file_name())
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("");
+                            if semver_gt(plain_ver, ktx_ver) {
+                                to_remove.insert(path.clone());
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         }

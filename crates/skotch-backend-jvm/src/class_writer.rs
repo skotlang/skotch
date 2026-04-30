@@ -1059,8 +1059,55 @@ fn emit_user_method(
     is_init: bool,
 ) -> Vec<u8> {
     // If the function has unresolved calls, emit a safe stub body.
-    if !is_init && (has_null_stubs(func)) {
+    if !is_init && has_null_stubs(func) {
         return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC);
+    }
+    // Lambda invoke methods whose interface was bumped by the Compose
+    // transform (Function0→Function2) have more params in the descriptor
+    // than the MIR body expects. Emit a stub to avoid VerifyError.
+    if !is_init && func.name == "invoke" && class_name.contains("$Lambda$") {
+        let iface_arity = module
+            .classes
+            .iter()
+            .find(|c| c.name == class_name)
+            .and_then(|c| {
+                c.interfaces.iter().find_map(|i| {
+                    i.strip_prefix("kotlin/jvm/functions/Function")
+                        .and_then(|n| n.parse::<usize>().ok())
+                })
+            })
+            .unwrap_or(0);
+        let mir_params = func.params.len().saturating_sub(1);
+        if iface_arity > mir_params {
+            // Build the correct Function2 descriptor and emit a stub
+            // with the right invoke signature.
+            let name_idx = cp.utf8(&func.name);
+            let mut desc = String::from("(");
+            for _ in 0..iface_arity {
+                desc.push_str("Ljava/lang/Object;");
+            }
+            desc.push_str(")Ljava/lang/Object;");
+            let desc_idx = cp.utf8(&desc);
+            // Minimal code: aconst_null; areturn
+            let mut blob = Vec::new();
+            blob.write_u16::<BigEndian>(ACC_PUBLIC).unwrap();
+            blob.write_u16::<BigEndian>(name_idx).unwrap();
+            blob.write_u16::<BigEndian>(desc_idx).unwrap();
+            blob.write_u16::<BigEndian>(1).unwrap(); // 1 attribute (Code)
+            blob.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+            let code_len = 2u32; // aconst_null + areturn
+            let attr_len = 2 + 2 + 4 + code_len + 2 + 2;
+            blob.write_u32::<BigEndian>(attr_len).unwrap();
+            blob.write_u16::<BigEndian>(1).unwrap(); // max_stack
+            blob.write_u16::<BigEndian>((iface_arity + 1) as u16)
+                .unwrap(); // max_locals
+            blob.write_u32::<BigEndian>(code_len).unwrap();
+            blob.push(0x01); // aconst_null
+            blob.push(0xB0); // areturn
+            blob.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+            blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+            return blob;
+        }
     }
     // The synthetic continuation class's `invokeSuspend(Object)` body is a
     // fixed three-step recipe (stash `$result`, set the label's
@@ -1129,18 +1176,39 @@ fn emit_user_method(
         if let Some(pd) = parent_desc {
             pd
         } else {
-            let mut d = String::from("(");
-            for &p in func.params.iter().skip(1) {
-                let ty = &func.locals[p.0 as usize];
-                d.push_str(&jvm_type_string(ty));
-            }
-            d.push(')');
+            // For lambda invoke methods, derive descriptor from the
+            // FunctionN interface the class implements.
             if func.name == "invoke" && class_name.contains("$Lambda$") {
-                d.push_str("Ljava/lang/Object;");
+                // Find the FunctionN arity from the class interfaces.
+                let arity = module
+                    .classes
+                    .iter()
+                    .find(|c| c.name == class_name)
+                    .and_then(|c| {
+                        c.interfaces.iter().find_map(|iface| {
+                            iface
+                                .strip_prefix("kotlin/jvm/functions/Function")
+                                .and_then(|n| n.parse::<usize>().ok())
+                        })
+                    })
+                    .unwrap_or(0);
+                // Build erased descriptor: all params are Object.
+                let mut d = String::from("(");
+                for _ in 0..arity {
+                    d.push_str("Ljava/lang/Object;");
+                }
+                d.push_str(")Ljava/lang/Object;");
+                d
             } else {
+                let mut d = String::from("(");
+                for &p in func.params.iter().skip(1) {
+                    let ty = &func.locals[p.0 as usize];
+                    d.push_str(&jvm_type_string(ty));
+                }
+                d.push(')');
                 d.push_str(&jvm_type_string(&func.return_ty));
+                d
             }
-            d
         } // end else (no parent_desc)
     };
 

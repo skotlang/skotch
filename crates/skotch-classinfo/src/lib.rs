@@ -98,12 +98,19 @@ pub fn lookup_method_descriptor(
                         let mut bytes = Vec::new();
                         if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
                             if let Ok(ci) = parse_class(&bytes) {
+                                // Collect all matching overloads, prefer ones
+                                // with object params over primitive params.
+                                let mut best: Option<&str> = None;
                                 for m in &ci.methods {
                                     if m.name == method_name
                                         && count_descriptor_params(&m.descriptor) == param_count
+                                        && (best.is_none() || has_object_params(&m.descriptor))
                                     {
-                                        return Some(m.descriptor.clone());
+                                        best = Some(&m.descriptor);
                                     }
+                                }
+                                if let Some(d) = best {
+                                    return Some(d.to_string());
                                 }
                             }
                         }
@@ -114,10 +121,17 @@ pub fn lookup_method_descriptor(
     }
     // Try JDK classes.
     if let Ok(ci) = load_jdk_class(class_path) {
+        let mut best: Option<&str> = None;
         for m in &ci.methods {
-            if m.name == method_name && count_descriptor_params(&m.descriptor) == param_count {
-                return Some(m.descriptor.clone());
+            if m.name == method_name
+                && count_descriptor_params(&m.descriptor) == param_count
+                && (best.is_none() || has_object_params(&m.descriptor))
+            {
+                best = Some(&m.descriptor);
             }
+        }
+        if let Some(d) = best {
+            return Some(d.to_string());
         }
     }
     None
@@ -127,6 +141,15 @@ pub fn lookup_method_descriptor(
 /// E.g. `(Landroid/content/Context;)V` → 1, `(II)V` → 2.
 pub fn count_descriptor_params_pub(desc: &str) -> usize {
     count_descriptor_params(desc)
+}
+
+/// Check if a descriptor has any object (L...;) parameters.
+fn has_object_params(desc: &str) -> bool {
+    let inner = desc
+        .strip_prefix('(')
+        .and_then(|s| s.split(')').next())
+        .unwrap_or("");
+    inner.contains('L')
 }
 
 fn count_descriptor_params(desc: &str) -> usize {
