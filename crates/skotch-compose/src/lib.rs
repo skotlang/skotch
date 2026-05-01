@@ -83,9 +83,7 @@ pub fn compose_transform(module: &mut MirModule) {
         .filter(|(_, f)| is_composable(f))
         .map(|(i, _)| i as u32)
         .collect();
-    if !composable_fid_set.is_empty() {
-        patch_static_calls_to_composable(module, &composable_fid_set);
-    }
+    patch_static_calls_to_composable(module, &composable_fid_set);
 
     // Patch lambda classes that serve as @Composable content blocks.
     // The Compose runtime expects @Composable lambdas to implement
@@ -260,6 +258,7 @@ fn patch_static_calls_to_composable(
     }
 }
 
+#[allow(clippy::collapsible_if)]
 fn patch_calls_in_function(
     func: &mut MirFunction,
     composable_fids: &std::collections::HashSet<u32>,
@@ -268,57 +267,157 @@ fn patch_calls_in_function(
 
     for block in &mut func.blocks {
         // Collect patches to apply (we can't borrow stmts mutably while iterating).
-        let mut patches: Vec<(usize, LocalId, LocalId)> = Vec::new();
+        let mut patches: Vec<(usize, LocalId, Option<LocalId>, Option<LocalId>)> = Vec::new();
         for (si, stmt) in block.stmts.iter().enumerate() {
             let MStmt::Assign { value, .. } = stmt;
-            if let Rvalue::Call {
-                kind: CallKind::Static(fid),
-                args,
-            } = value
-            {
-                if composable_fids.contains(&fid.0) {
-                    // Check if args already include $composer/$changed
-                    // (avoid double-patching). The expected param count after
-                    // transform is original + 2. If args.len() is already at
-                    // or above that, skip.
-                    // We can't easily check the expected count here, so just
-                    // check if the last arg type is Int ($changed marker).
+            let needs_patch = match value {
+                // CallKind::Static to a composable function (user-defined).
+                Rvalue::Call {
+                    kind: CallKind::Static(fid),
+                    args,
+                } if composable_fids.contains(&fid.0) => {
                     let last_is_int = args
                         .last()
                         .and_then(|a| func.locals.get(a.0 as usize))
                         .is_some_and(|ty| matches!(ty, Ty::Int));
-                    if last_is_int {
-                        continue; // likely already patched
+                    !last_is_int
+                }
+                // StaticJava/VirtualJava where descriptor expects 2 more args
+                // than provided — these are composable calls to library/cross-file
+                // functions where the descriptor includes $composer/$changed but
+                // the call site doesn't pass them.
+                Rvalue::Call {
+                    kind: CallKind::StaticJava { descriptor, .. },
+                    args,
+                } => {
+                    let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
+                    // Missing $composer + $changed (and possibly $default mask).
+                    // The descriptor has Composer param but args are short by 2+.
+                    desc_params > args.len()
+                        && desc_params <= args.len() + 3
+                        && descriptor.contains("Composer;")
+                }
+                Rvalue::Call {
+                    kind: CallKind::VirtualJava { descriptor, .. },
+                    args,
+                } => {
+                    let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
+                    // VirtualJava: args include receiver, desc doesn't
+                    let call_params = if args.is_empty() { 0 } else { args.len() - 1 };
+                    desc_params > call_params
+                        && desc_params <= call_params + 3
+                        && descriptor.contains("Composer;")
+                }
+                _ => false,
+            };
+            if needs_patch {
+                // Skip if already patched: last 2+ args are [Composer, Int(changed), ...]
+                let already_patched = match value {
+                    Rvalue::Call { args, .. } if args.len() >= 2 => {
+                        let pen = func.locals.get(args[args.len() - 2].0 as usize);
+                        let last = func.locals.get(args[args.len() - 1].0 as usize);
+                        matches!(pen, Some(Ty::Class(c)) if c.contains("Composer"))
+                            && matches!(last, Some(Ty::Int))
                     }
-                    // Create placeholder locals for $composer and $changed.
+                    _ => false,
+                };
+                if !already_patched {
+                    // Compute how many args are missing.
+                    let missing = match value {
+                        Rvalue::Call {
+                            kind: CallKind::StaticJava { descriptor, .. },
+                            args,
+                        } => {
+                            let dp = skotch_classinfo::count_descriptor_params_pub(descriptor);
+                            dp.saturating_sub(args.len())
+                        }
+                        Rvalue::Call {
+                            kind: CallKind::VirtualJava { descriptor, .. },
+                            args,
+                        } => {
+                            let dp = skotch_classinfo::count_descriptor_params_pub(descriptor);
+                            let cp = if args.is_empty() { 0 } else { args.len() - 1 };
+                            dp.saturating_sub(cp)
+                        }
+                        Rvalue::Call {
+                            kind: CallKind::Static(_),
+                            ..
+                        } => 2,
+                        _ => 2,
+                    };
+                    if missing == 0 {
+                        continue;
+                    }
+                    // Add exactly `missing` args. The pattern is:
+                    // missing=2: $composer (null) + $changed (0)
+                    // missing=3: $composer (null) + $changed (0) + $default (0)
+                    // missing=1: just $composer (null) — unusual but safe
                     let composer_id = LocalId(func.locals.len() as u32);
                     func.locals
                         .push(Ty::Class("androidx/compose/runtime/Composer".to_string()));
-                    let changed_id = LocalId(func.locals.len() as u32);
-                    func.locals.push(Ty::Int);
-                    patches.push((si, composer_id, changed_id));
+                    let changed_id = if missing >= 2 {
+                        let id = LocalId(func.locals.len() as u32);
+                        func.locals.push(Ty::Int);
+                        Some(id)
+                    } else {
+                        None
+                    };
+                    let default_id = if missing >= 3 {
+                        let id = LocalId(func.locals.len() as u32);
+                        func.locals.push(Ty::Int);
+                        Some(id)
+                    } else {
+                        None
+                    };
+                    patches.push((si, composer_id, changed_id, default_id));
                 }
             }
         }
         // Apply patches in reverse order to maintain statement indices.
-        for (si, composer_id, changed_id) in patches.into_iter().rev() {
-            // Insert Const(Null) assignment for $composer before the call.
-            let composer_stmt = MStmt::Assign {
-                dest: composer_id,
-                value: Rvalue::Const(MirConst::Null),
-            };
-            block.stmts.insert(si, composer_stmt);
-            // Insert Const(Int(0)) for $changed.
-            let changed_stmt = MStmt::Assign {
-                dest: changed_id,
-                value: Rvalue::Const(MirConst::Int(0)),
-            };
-            block.stmts.insert(si + 1, changed_stmt);
-            // Now the call is at si + 2. Append the new locals to its args.
-            let MStmt::Assign { value, .. } = &mut block.stmts[si + 2];
+        for (si, composer_id, changed_id, default_id) in patches.into_iter().rev() {
+            // Insert assignment statements for the new args before the call.
+            let mut insert_count = 0;
+            // $composer = null
+            block.stmts.insert(
+                si,
+                MStmt::Assign {
+                    dest: composer_id,
+                    value: Rvalue::Const(MirConst::Null),
+                },
+            );
+            insert_count += 1;
+            // $changed = 0 (if missing >= 2)
+            if let Some(cid) = changed_id {
+                block.stmts.insert(
+                    si + insert_count,
+                    MStmt::Assign {
+                        dest: cid,
+                        value: Rvalue::Const(MirConst::Int(0)),
+                    },
+                );
+                insert_count += 1;
+            }
+            // $default = 0 (if missing >= 3)
+            if let Some(def_id) = default_id {
+                block.stmts.insert(
+                    si + insert_count,
+                    MStmt::Assign {
+                        dest: def_id,
+                        value: Rvalue::Const(MirConst::Int(0)),
+                    },
+                );
+                insert_count += 1;
+            }
+            // Append the new locals to the call's args.
+            let MStmt::Assign { value, .. } = &mut block.stmts[si + insert_count];
             if let Rvalue::Call { args, .. } = value {
                 args.push(composer_id);
-                args.push(changed_id);
+                if let Some(cid) = changed_id {
+                    args.push(cid);
+                }
+                if let Some(def_id) = default_id {
+                    args.push(def_id);
+                }
             }
         }
     }

@@ -2283,6 +2283,7 @@ dependencies = [
 name = "skotch-compose"
 version = "0.40.1"
 dependencies = [
+ "skotch-classinfo",
  "skotch-mir",
  "skotch-types",
 ]

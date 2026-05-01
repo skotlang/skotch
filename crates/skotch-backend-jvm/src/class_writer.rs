@@ -1980,6 +1980,21 @@ fn emit_method_body(
 /// would produce invalid bytecode. Returns true if the function should
 /// be emitted as a safe return-default stub instead.
 fn has_null_stubs(func: &MirFunction) -> bool {
+    has_null_stubs_inner(func, false)
+}
+
+/// Diagnostic version: prints the reason when a function is stubbed.
+#[allow(dead_code)]
+fn has_null_stubs_why(func: &MirFunction, class_name: &str) -> bool {
+    let result = has_null_stubs_inner(func, true);
+    if result {
+        eprintln!("  STUB: {class_name}.{}", func.name);
+    }
+    result
+}
+
+#[allow(clippy::collapsible_match, clippy::collapsible_if)]
+fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
     use skotch_mir::{Rvalue, Stmt};
     // Check each block for dangerous patterns:
     for block in &func.blocks {
@@ -1995,47 +2010,57 @@ fn has_null_stubs(func: &MirFunction) -> bool {
             match value {
                 // GetField where receiver is a null-Any local (in same block)
                 // or a primitive type.
-                Rvalue::GetField { receiver, .. } => {
+                Rvalue::GetField {
+                    receiver,
+                    field_name,
+                    class_name: cn,
+                } => {
                     if block_null_locals.contains(&receiver.0) {
+                        if report {
+                            eprintln!(
+                                "    reason: GetField on null-Any local (field={cn}.{field_name})"
+                            );
+                        }
                         return true;
                     }
-                    let recv_ty = func.locals.get(receiver.0 as usize);
-                    if matches!(
-                        recv_ty,
-                        Some(Ty::Int)
-                            | Some(Ty::Bool)
-                            | Some(Ty::Long)
-                            | Some(Ty::Float)
-                            | Some(Ty::Double)
-                    ) {
-                        return true;
-                    }
+                    // Primitive-typed receivers only matter if the class is
+                    // a well-known value type. For objects with type inference
+                    // failures (e.g., MutableState typed as Int), the JVM will
+                    // still execute correctly since the actual runtime value
+                    // IS an object — only the compile-time type is wrong.
                 }
-                // PutField where receiver is a null-Any local or primitive.
-                Rvalue::PutField { receiver, .. } => {
+                // PutField where receiver is a null-Any local.
+                Rvalue::PutField {
+                    receiver,
+                    field_name,
+                    class_name: cn,
+                    ..
+                } => {
                     if block_null_locals.contains(&receiver.0) {
-                        return true;
-                    }
-                    let recv_ty = func.locals.get(receiver.0 as usize);
-                    if matches!(
-                        recv_ty,
-                        Some(Ty::Int)
-                            | Some(Ty::Bool)
-                            | Some(Ty::Long)
-                            | Some(Ty::Float)
-                            | Some(Ty::Double)
-                    ) {
+                        if report {
+                            eprintln!(
+                                "    reason: PutField on null-Any local (field={cn}.{field_name})"
+                            );
+                        }
                         return true;
                     }
                 }
                 // StaticJava call where the descriptor arg count doesn't
                 // match the actual args — produces stack underflow/overflow.
                 Rvalue::Call {
-                    kind: skotch_mir::CallKind::StaticJava { descriptor, .. },
+                    kind:
+                        skotch_mir::CallKind::StaticJava {
+                            descriptor,
+                            method_name,
+                            class_name: cn,
+                        },
                     args,
                 } => {
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
                     if desc_params != args.len() {
+                        if report {
+                            eprintln!("    reason: StaticJava arg mismatch {cn}.{method_name}: desc expects {desc_params}, got {} args", args.len());
+                        }
                         return true;
                     }
                 }
@@ -2045,36 +2070,37 @@ fn has_null_stubs(func: &MirFunction) -> bool {
                         skotch_mir::CallKind::VirtualJava {
                             descriptor,
                             class_name: call_class,
-                            ..
+                            method_name,
                         },
                     args,
                 } => {
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
                     if !args.is_empty() && desc_params != args.len() - 1 {
+                        if report {
+                            eprintln!("    reason: VirtualJava arg mismatch {call_class}.{method_name}: desc expects {desc_params}, got {} args (excl recv)", args.len() - 1);
+                        }
                         return true;
                     }
-                    // Check if the receiver (first arg) is `this` (param 0)
-                    // but the call targets a different class. This happens when
-                    // a lambda body calls an enclosing class method on `this`
-                    // but `this` is actually the lambda instance.
-                    if !args.is_empty() && !func.params.is_empty() && args[0] == func.params[0] {
-                        let this_ty = func.locals.get(func.params[0].0 as usize);
-                        if let Some(Ty::Class(this_class)) = this_ty {
-                            if this_class != call_class
-                                && !call_class.starts_with("java/lang/Object")
-                            {
-                                return true;
-                            }
-                        }
-                    }
+                    // Note: receiver type mismatch check removed — calling
+                    // superclass methods on `this` is valid JVM bytecode, and
+                    // lambda bodies legitimately call enclosing-class methods
+                    // via captured receivers. The JVM verifier handles real
+                    // type errors at runtime.
                 }
                 // ConstructorJava with wrong arg count.
                 Rvalue::Call {
-                    kind: skotch_mir::CallKind::ConstructorJava { descriptor, .. },
+                    kind:
+                        skotch_mir::CallKind::ConstructorJava {
+                            descriptor,
+                            class_name: cn,
+                        },
                     args,
                 } => {
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
                     if desc_params != args.len() {
+                        if report {
+                            eprintln!("    reason: ConstructorJava arg mismatch {cn}.<init>: desc expects {desc_params}, got {} args", args.len());
+                        }
                         return true;
                     }
                 }

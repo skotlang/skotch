@@ -7,5 +7,6 @@ license.workspace      = true
 version.workspace      = true
 
 [dependencies]
-skotch-mir   = { workspace = true }
-skotch-types = { workspace = true }
+skotch-mir       = { workspace = true }
+skotch-types     = { workspace = true }
+skotch-classinfo = { workspace = true }
