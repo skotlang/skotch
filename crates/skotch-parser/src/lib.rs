@@ -81,26 +81,26 @@ impl<'a> Parser<'a> {
     /// (`data`, `open`, `sealed`, etc.) that is valid as a name in
     /// expression/argument context.
     fn is_name_token_at(&self, offset: usize) -> bool {
-        match self.peek_kind_at(offset) {
-            TokenKind::Ident => true,
-            TokenKind::KwData
-            | TokenKind::KwEnum
-            | TokenKind::KwSealed
-            | TokenKind::KwOpen
-            | TokenKind::KwAbstract
-            | TokenKind::KwOverride
-            | TokenKind::KwInline
-            | TokenKind::KwOperator
-            | TokenKind::KwInfix
-            | TokenKind::KwSuspend
-            | TokenKind::KwLateinit
-            | TokenKind::KwTailrec
-            | TokenKind::KwVararg
-            | TokenKind::KwConst
-            | TokenKind::KwConstructor
-            | TokenKind::KwInit => true,
-            _ => false,
-        }
+        matches!(
+            self.peek_kind_at(offset),
+            TokenKind::Ident
+                | TokenKind::KwData
+                | TokenKind::KwEnum
+                | TokenKind::KwSealed
+                | TokenKind::KwOpen
+                | TokenKind::KwAbstract
+                | TokenKind::KwOverride
+                | TokenKind::KwInline
+                | TokenKind::KwOperator
+                | TokenKind::KwInfix
+                | TokenKind::KwSuspend
+                | TokenKind::KwLateinit
+                | TokenKind::KwTailrec
+                | TokenKind::KwVararg
+                | TokenKind::KwConst
+                | TokenKind::KwConstructor
+                | TokenKind::KwInit
+        )
     }
 
     #[allow(dead_code)]

@@ -872,7 +872,7 @@ impl<'a> Resolver<'a> {
         expr: &Expr,
         scope: &mut Vec<(Symbol, DefId)>,
         rf: &mut ResolvedFunction,
-        is_callee: bool,
+        _is_callee: bool,
     ) {
         match expr {
             Expr::IntLit(_, _)
