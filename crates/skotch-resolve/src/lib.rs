@@ -768,19 +768,11 @@ impl<'a> Resolver<'a> {
                     self.resolve_stmt(fn_idx, s, scope, rf);
                 }
             }
-            Stmt::Assign {
-                target,
-                value,
-                span,
-            } => {
-                // Resolve the target — it must already be declared.
-                let _def = lookup(scope, *target).unwrap_or_else(|| {
-                    self.diags.push(Diagnostic::error(
-                        *span,
-                        format!("unresolved identifier `{}`", self.interner.resolve(*target)),
-                    ));
-                    DefId::Local(fn_idx, 0)
-                });
+            Stmt::Assign { target, value, .. } => {
+                // Resolve the target — if not declared, it might be a
+                // receiver scope property (e.g. `alpha = x` inside
+                // `graphicsLayer { ... }`). Defer to MIR lowering.
+                let _def = lookup(scope, *target).unwrap_or(DefId::Local(fn_idx, 0));
                 self.resolve_expr(fn_idx, value, scope, rf);
             }
             Stmt::Break { .. } | Stmt::Continue { .. } => {}
@@ -919,20 +911,13 @@ impl<'a> Resolver<'a> {
                         if is_possible_external(name_str) {
                             return DefId::PossibleExternal(*name);
                         }
-                        // When used as a call callee, defer to MIR
-                        // lowering — the identifier might be a method
-                        // on an implicit receiver (e.g., `append` in a
-                        // lambda-with-receiver body).
-                        if is_callee {
-                            return DefId::PossibleExternal(*name);
-                        }
-                        // Emit a diagnostic but continue — MIR lowering may
-                        // resolve it later (implicit `it`, scope functions, etc.).
-                        self.diags.push(Diagnostic::error(
-                            *span,
-                            format!("unresolved identifier `{name_str}`"),
-                        ));
-                        DefId::Error
+                        // Defer ALL unresolved identifiers to MIR lowering.
+                        // The MIR lowering pass has more context (classpath,
+                        // import map, lambda receiver scope) to resolve
+                        // identifiers that are out of scope here. This avoids
+                        // premature error emission that causes `has_null_stubs()`
+                        // to stub out entire function bodies.
+                        DefId::PossibleExternal(*name)
                     })
                 });
                 rf.body_refs.push(ResolvedRef { span: *span, def });

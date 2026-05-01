@@ -1,0 +1,129 @@
+dex_version   035
+strings       61
+types         13
+methods       22
+classes       2
+
+--- strings ---
+  ""
+  "()I"
+  "()Ljava/lang/String;"
+  "(Ljava/lang/String;I)V"
+  ")"
+  ", age="
+  "<init>"
+  "Alice"
+  "I"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLLIIL"
+  "LUser;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "User(name="
+  "V"
+  "VI"
+  "VL"
+  "VLI"
+  "VLL"
+  "Z"
+  "ZL"
+  "ZLL"
+  "[Ljava/lang/String;"
+  "age"
+  "append"
+  "areEqual"
+  "checkNotNullParameter"
+  "component1"
+  "component2"
+  "copy"
+  "copy$default"
+  "d1"
+  "d2"
+  "equals"
+  "getAge"
+  "getName"
+  "hashCode"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "name"
+  "other"
+  "out"
+  "println"
+  "toString"
+  "u"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "�� \n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\n\n\u{2}\u{10}\u{b}\n\u{2}\u{8}\u{3}\u{8}\u{86}\u{8}\u{18}��2\u{2}0\u{1}B\u{17}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{12}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{5}¢\u{6}\u{4}\u{8}\u{6}\u{10}\u{7}J\t\u{10}\u{c}\u{1a}\u{2}0\u{3}HÆ\u{3}J\t\u{10}\r\u{1a}\u{2}0\u{5}HÆ\u{3}J\u{1d}\u{10}\u{e}\u{1a}\u{2}0��2\u{8}\u{8}\u{2}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{8}\u{8}\u{2}\u{10}\u{4}\u{1a}\u{2}0\u{5}HÆ\u{1}J\u{14}\u{10}\u{f}\u{1a}\u{2}0\u{10}2\u{8}\u{10}\u{11}\u{1a}\u{4}\u{18}\u{1}0\u{1}HÖ\u{83}\u{4}J\n\u{10}\u{12}\u{1a}\u{2}0\u{5}HÖ\u{81}\u{4}J\n\u{10}\u{13}\u{1a}\u{2}0\u{3}HÖ\u{81}\u{4}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{8}\u{10}\tR\u{11}\u{10}\u{4}\u{1a}\u{2}0\u{5}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\n\u{10}\u{b}"
+
+--- types ---
+  I
+  LInputKt;
+  LUser;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LUser;.<init>(Ljava/lang/String;I)V
+  LUser;.component1()Ljava/lang/String;
+  LUser;.component2()I
+  LUser;.copy$default(LUser;Ljava/lang/String;IILjava/lang/Object;)LUser;
+  LUser;.copy(Ljava/lang/String;I)LUser;
+  LUser;.equals(Ljava/lang/Object;)Z
+  LUser;.getAge()I
+  LUser;.getName()Ljava/lang/String;
+  LUser;.hashCode()I
+  LUser;.toString()Ljava/lang/String;
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/String;.hashCode()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Lkotlin/jvm/internal/Intrinsics;.areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=3 ins=0 outs=3 insns=33
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+
+--- class[1] ---
+  descriptor   LUser;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;I)V flags=0x10001 regs=4 ins=3 outs=2 insns=13
+  method       component1()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       component2()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       copy(Ljava/lang/String;I)LUser; flags=0x0011 regs=4 ins=3 outs=3 insns=11
+  method       copy$default(LUser;Ljava/lang/String;IILjava/lang/Object;)LUser; flags=0x1009 regs=5 ins=5 outs=3 insns=17
+  method       equals(Ljava/lang/Object;)Z flags=0x0001 regs=7 ins=2 outs=2 insns=32
+  method       getAge()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getName()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       hashCode()I flags=0x0001 regs=4 ins=1 outs=1 insns=12
+  method       toString()Ljava/lang/String; flags=0x0001 regs=5 ins=1 outs=2 insns=40

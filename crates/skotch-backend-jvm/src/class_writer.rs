@@ -360,7 +360,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         .unwrap();
     for field in &class.fields {
         let name_idx = cp.utf8(&field.name);
-        let desc_idx = cp.utf8(&jvm_type_string(&field.ty));
+        // Field descriptors cannot use V (void) — use Lkotlin/Unit; for Unit fields.
+        let desc_idx = cp.utf8(&jvm_param_type_string(&field.ty));
         out.write_u16::<BigEndian>(ACC_PUBLIC).unwrap(); // access flags
         out.write_u16::<BigEndian>(name_idx).unwrap();
         out.write_u16::<BigEndian>(desc_idx).unwrap();
@@ -393,7 +394,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     }
     for field in &class.fields {
         let n = cp2.utf8(&field.name);
-        let d = cp2.utf8(&jvm_type_string(&field.ty));
+        let d = cp2.utf8(&jvm_param_type_string(&field.ty));
         field_infos.push((n, d));
     }
     // Pre-register interface entries.
@@ -596,7 +597,7 @@ fn emit_suspend_lambda_shell(
     let init_desc = {
         let mut d = String::from("(");
         for f in &capture_fields {
-            d.push_str(&jvm_type_string(&f.ty));
+            d.push_str(&jvm_param_type_string(&f.ty));
         }
         d.push_str("Lkotlin/coroutines/Continuation;)V");
         d
@@ -617,7 +618,7 @@ fn emit_suspend_lambda_shell(
     // Pre-register fieldrefs for capture fields (used in ctor + create).
     let capture_fieldrefs: Vec<u16> = capture_fields
         .iter()
-        .map(|f| cp.fieldref(&class.name, &f.name, &jvm_type_string(&f.ty)))
+        .map(|f| cp.fieldref(&class.name, &f.name, &jvm_param_type_string(&f.ty)))
         .collect();
     let mr_self_create = cp.methodref(
         &class.name,
@@ -1134,7 +1135,7 @@ fn emit_user_method(
         let mut desc = String::from("(");
         for &p in func.params.iter().skip(1) {
             let ty = &func.locals[p.0 as usize];
-            desc.push_str(&jvm_type_string(ty));
+            desc.push_str(&jvm_param_type_string(ty));
         }
         desc.push(')');
         desc.push_str(&jvm_type_string(&func.return_ty));
@@ -1161,7 +1162,7 @@ fn emit_user_method(
         let mut d = String::from("(");
         for &p in func.params.iter().skip(1) {
             let ty = &func.locals[p.0 as usize];
-            d.push_str(&jvm_type_string(ty));
+            d.push_str(&jvm_param_type_string(ty));
         }
         d.push_str(")V");
         d
@@ -1203,7 +1204,7 @@ fn emit_user_method(
                 let mut d = String::from("(");
                 for &p in func.params.iter().skip(1) {
                     let ty = &func.locals[p.0 as usize];
-                    d.push_str(&jvm_type_string(ty));
+                    d.push_str(&jvm_param_type_string(ty));
                 }
                 d.push(')');
                 d.push_str(&jvm_type_string(&func.return_ty));
@@ -2991,7 +2992,7 @@ fn emit_multi_suspend_state_machine_method(
                 &site.arg_tys[..]
             };
             for ty in arg_tys_for_desc {
-                desc.push_str(&jvm_type_string(ty));
+                desc.push_str(&jvm_param_type_string(ty));
             }
             desc.push_str("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;");
             // is_virtual means the call is a VirtualJava
@@ -4471,7 +4472,7 @@ fn emit_mir_segment(
                     let mut desc = String::from("(");
                     for a in args {
                         let ty = &func.locals[a.0 as usize];
-                        desc.push_str(&jvm_type_string(ty));
+                        desc.push_str(&jvm_param_type_string(ty));
                     }
                     desc.push_str(")V");
                     let mr = cp.methodref(class_name, "<init>", &desc);
@@ -4703,7 +4704,7 @@ fn emit_mir_segment(
             } => {
                 emit_load_mir_local(code, func, local_slot, *receiver);
                 let field_ty = &func.locals[dest.0 as usize];
-                let fr = cp.fieldref(class_name, field_name, &jvm_type_string(field_ty));
+                let fr = cp.fieldref(class_name, field_name, &jvm_param_type_string(field_ty));
                 code.push(0xB4); // getfield
                 code.write_u16::<BigEndian>(fr).unwrap();
                 emit_store_mir_local(code, func, local_slot, *dest);
@@ -5024,7 +5025,7 @@ fn emit_invoke_suspend_method(
     // Build the outer method descriptor including user param types.
     let mut outer_desc = String::from("(");
     for ty in &sm.outer_user_param_tys {
-        outer_desc.push_str(&jvm_type_string(ty));
+        outer_desc.push_str(&jvm_param_type_string(ty));
     }
     outer_desc.push_str("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;");
     let mr_outer = cp.methodref(&sm.outer_class, &sm.outer_method, &outer_desc);
@@ -5097,7 +5098,7 @@ fn emit_invoke_suspend_method(
         // Build the instance descriptor: skip `this` from outer_user_param_tys.
         let mut inst_desc = String::from("(");
         for ty in sm.outer_user_param_tys.iter().skip(1) {
-            inst_desc.push_str(&jvm_type_string(ty));
+            inst_desc.push_str(&jvm_param_type_string(ty));
         }
         inst_desc.push_str("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;");
         let mr_inst = cp.methodref(&sm.outer_class, &sm.outer_method, &inst_desc);
@@ -5794,7 +5795,7 @@ fn emit_lambda_multi_suspend_body(
                 &site.arg_tys[..]
             };
             for ty in arg_tys_for_desc {
-                desc.push_str(&jvm_type_string(ty));
+                desc.push_str(&jvm_param_type_string(ty));
             }
             desc.push_str("Lkotlin/coroutines/Continuation;)Ljava/lang/Object;");
             let is_interface = site.is_virtual

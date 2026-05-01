@@ -61,12 +61,12 @@ classes       1
   Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
   Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
   Lkotlin/Pair;.<init>(Ljava/lang/Object;Ljava/lang/Object;)V
-  Lkotlin/Pair;.component1()V
-  Lkotlin/Pair;.component2()V
+  Lkotlin/Pair;.component1()Ljava/lang/Object;
+  Lkotlin/Pair;.component2()Ljava/lang/Object;
   Lkotlin/Triple;.<init>(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V
-  Lkotlin/Triple;.component1()V
-  Lkotlin/Triple;.component2()V
-  Lkotlin/Triple;.component3()V
+  Lkotlin/Triple;.component1()Ljava/lang/Object;
+  Lkotlin/Triple;.component2()Ljava/lang/Object;
+  Lkotlin/Triple;.component3()Ljava/lang/Object;
 
 --- class[0] ---
   descriptor   LInputKt;

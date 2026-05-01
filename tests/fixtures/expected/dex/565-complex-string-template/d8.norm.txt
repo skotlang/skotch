@@ -1,0 +1,118 @@
+dex_version   035
+strings       64
+types         19
+methods       16
+classes       1
+
+--- strings ---
+  ""
+  "!"
+  ", "
+  ", Product: "
+  "<init>"
+  "Count: "
+  "First three: "
+  "Greeting: "
+  "Hello, "
+  "I"
+  "Items: "
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLLLLILLIL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/CharSequence;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/functions/Function1;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "Reversed: "
+  "Sum: "
+  "V"
+  "VL"
+  "VLL"
+  "World"
+  "[Ljava/lang/Integer;"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "append"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "greet"
+  "input.kt"
+  "items"
+  "joinToString$default"
+  "k"
+  "listOf"
+  "main"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "reversed"
+  "size"
+  "take"
+  "toString"
+  "valueOf"
+  "x"
+  "xi"
+  "y"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{e}\n��\n\u{2}\u{10}\u{e}\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{2}\u{1a}\u{e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{1}\u{1a}\u{6}\u{10}\u{3}\u{1a}\u{2}0\u{4}"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/CharSequence;
+  Ljava/lang/Integer;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/functions/Function1;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/Integer;
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.greet(Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/List;.size()I
+  Lkotlin/collections/CollectionsKt;.joinToString$default(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;.reversed(Ljava/lang/Iterable;)Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;.take(Ljava/lang/Iterable;I)Ljava/util/List;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       greet(Ljava/lang/String;)Ljava/lang/String; flags=0x0019 regs=3 ins=1 outs=2 insns=31
+  method       main()V flags=0x0019 regs=15 ins=0 outs=9 insns=249
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

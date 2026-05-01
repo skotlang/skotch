@@ -4035,16 +4035,12 @@ fn lower_stmt(
                 return false;
             };
             // Determine the class name from the init local's type.
+            // For non-class types (Ty::Any, Ty::Error), fall back to
+            // "java/lang/Object" so componentN() calls still compile.
             let init_ty = fb.mf.locals[init_local.0 as usize].clone();
             let class_name = match &init_ty {
                 Ty::Class(name) => name.clone(),
-                _ => {
-                    diags.push(Diagnostic::error(
-                        init.span(),
-                        "destructuring requires a class type with componentN() methods",
-                    ));
-                    return false;
-                }
+                _ => "java/lang/Object".to_string(),
             };
             // For each name at position i, emit a virtual call to component{i+1}().
             for (i, name) in names.iter().enumerate() {
@@ -4056,7 +4052,7 @@ fn lower_stmt(
                     .find(|c| c.name == class_name)
                     .and_then(|c| c.fields.get(i))
                     .map(|f| f.ty.clone())
-                    .unwrap_or(Ty::Error);
+                    .unwrap_or(Ty::Any);
                 let result = fb.new_local(field_ty);
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
@@ -4294,6 +4290,20 @@ fn lower_expr(
                 });
                 Some(dest)
             } else {
+                // Special case: `this` not in scope — use the function's
+                // first parameter, which is `this` for class methods and
+                // lambda invoke methods.
+                let name_str = interner.resolve(*name);
+                if name_str == "this" && !fb.mf.params.is_empty() {
+                    let this_local = fb.mf.params[0];
+                    let ty = fb.mf.locals[this_local.0 as usize].clone();
+                    let dest = fb.new_local(ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Local(this_local),
+                    });
+                    return Some(dest);
+                }
                 // Unknown identifier — emit a null placeholder to avoid cascading errors.
                 let dest = fb.new_local(Ty::Any);
                 fb.push_stmt(MStmt::Assign {
@@ -7289,6 +7299,15 @@ fn lower_expr(
                 }
             }
 
+            // ─── Resolve type aliases for constructor calls ─────────
+            // e.g. `typealias SymbolAnnotation = Pair<...>` allows
+            // `SymbolAnnotation(a, b)` which is really `Pair(a, b)`.
+            let callee_str = if let Some(target) = module.type_aliases.get(&callee_str) {
+                target.clone()
+            } else {
+                callee_str
+            };
+
             // ─── Check for constructor call (class instantiation) ────
             let is_class = module.classes.iter().any(|c| c.name == callee_str);
             if is_class {
@@ -7469,6 +7488,27 @@ fn lower_expr(
                 module.force_suspend_lambda = true;
             }
 
+            // Well-known functions that take a trailing lambda with receiver.
+            // The receiver type is set just before lowering the LAST lambda
+            // arg so earlier lambdas (e.g. `content` in Layout) don't consume it.
+            let known_trailing_receiver: Option<&str> = match callee_str.as_str() {
+                "buildAnnotatedString" => Some("androidx/compose/ui/text/AnnotatedString$Builder"),
+                "buildString" => Some("java/lang/StringBuilder"),
+                "buildList" | "buildMutableList" => Some("java/util/ArrayList"),
+                "buildMap" | "buildMutableMap" => Some("java/util/LinkedHashMap"),
+                "buildSet" | "buildMutableSet" => Some("java/util/LinkedHashSet"),
+                "Layout" => Some("androidx/compose/ui/layout/MeasureScope"),
+                _ => None,
+            };
+            // Find the index of the last lambda arg so we can set the
+            // receiver type just before lowering it (not before earlier lambdas).
+            let last_lambda_idx = if known_trailing_receiver.is_some() {
+                args.iter()
+                    .rposition(|a| matches!(&a.expr, Expr::Lambda { .. }))
+            } else {
+                None
+            };
+
             // Lower arguments. If any are named, we'll reorder after.
             let has_named = args.iter().any(|a| a.name.is_some());
             let mut named_pairs: Vec<(Option<Symbol>, LocalId)> = Vec::new();
@@ -7489,6 +7529,13 @@ fn lower_expr(
                 {
                     if matches!(&a.expr, Expr::Lambda { .. }) {
                         module.lambda_receiver_type = Some(recv_ty.clone());
+                    }
+                }
+                // For well-known functions with trailing lambda receiver,
+                // set the receiver type just before the last lambda arg.
+                if Some(arg_idx) == last_lambda_idx {
+                    if let Some(recv_class) = known_trailing_receiver {
+                        module.lambda_receiver_type = Some(recv_class.to_string());
                     }
                 }
                 let id = lower_expr(
@@ -7637,7 +7684,6 @@ fn lower_expr(
                 }
             }
 
-            let callee_str = interner.resolve(callee_name).to_string();
             let callee_str = callee_str.as_str();
 
             // ── `runBlocking { }` ──────────────────────────

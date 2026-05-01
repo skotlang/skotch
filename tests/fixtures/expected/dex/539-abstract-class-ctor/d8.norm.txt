@@ -1,0 +1,108 @@
+dex_version   035
+strings       42
+types         12
+methods       14
+classes       4
+
+--- strings ---
+  ""
+  "()Ljava/lang/String;"
+  "(Ljava/lang/String;)V"
+  "<init>"
+  "L"
+  "LAnimal;"
+  "LCat;"
+  "LDog;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "Meow"
+  "Rex"
+  "V"
+  "VL"
+  "VLL"
+  "Whiskers"
+  "Woof"
+  "[Ljava/lang/String;"
+  "c"
+  "checkNotNullParameter"
+  "d"
+  "d1"
+  "d2"
+  "getName"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "sound"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\n\u{2}\u{8}\u{5}\u{8}&\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{8}\u{10}\u{8}\u{1a}\u{2}0\u{3}H&R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{e}\n\u{2}\u{8}\u{3}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{8}\u{10}\u{6}\u{1a}\u{2}0\u{3}H\u{16}"
+
+--- types ---
+  LAnimal;
+  LCat;
+  LDog;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LAnimal;.<init>(Ljava/lang/String;)V
+  LAnimal;.getName()Ljava/lang/String;
+  LAnimal;.sound()Ljava/lang/String;
+  LCat;.<init>(Ljava/lang/String;)V
+  LCat;.getName()Ljava/lang/String;
+  LCat;.sound()Ljava/lang/String;
+  LDog;.<init>(Ljava/lang/String;)V
+  LDog;.getName()Ljava/lang/String;
+  LDog;.sound()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LAnimal;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;)V flags=0x10001 regs=3 ins=2 outs=2 insns=11
+  method       getName()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       sound()Ljava/lang/String; flags=0x0401 regs=0 ins=0 outs=0 insns=0
+
+--- class[1] ---
+  descriptor   LCat;
+  super        LAnimal;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;)V flags=0x10001 regs=3 ins=2 outs=2 insns=9
+  method       sound()Ljava/lang/String; flags=0x0001 regs=2 ins=1 outs=0 insns=3
+
+--- class[2] ---
+  descriptor   LDog;
+  super        LAnimal;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;)V flags=0x10001 regs=3 ins=2 outs=2 insns=9
+  method       sound()Ljava/lang/String; flags=0x0001 regs=2 ins=1 outs=0 insns=3
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=4 ins=0 outs=2 insns=51
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

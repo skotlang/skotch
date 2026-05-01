@@ -1,0 +1,114 @@
+dex_version   035
+strings       58
+types         21
+methods       17
+classes       1
+
+--- strings ---
+  ""
+  "<init>"
+  "="
+  "I"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Number;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/Iterator;"
+  "Ljava/util/Map$Entry;"
+  "Ljava/util/Map;"
+  "Ljava/util/Set;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/Pair;"
+  "Lkotlin/TuplesKt;"
+  "Lkotlin/collections/MapsKt;"
+  "V"
+  "VL"
+  "Z"
+  "[Ljava/lang/String;"
+  "[Lkotlin/Pair;"
+  "a"
+  "append"
+  "b"
+  "c"
+  "d1"
+  "d2"
+  "entrySet"
+  "getKey"
+  "getValue"
+  "hasNext"
+  "input.kt"
+  "intValue"
+  "iterator"
+  "k"
+  "key"
+  "main"
+  "map"
+  "mapOf"
+  "mv"
+  "next"
+  "out"
+  "println"
+  "to"
+  "toString"
+  "value"
+  "valueOf"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Number;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/Iterator;
+  Ljava/util/Map$Entry;
+  Ljava/util/Map;
+  Ljava/util/Set;
+  Lkotlin/Metadata;
+  Lkotlin/Pair;
+  Lkotlin/TuplesKt;
+  Lkotlin/collections/MapsKt;
+  V
+  Z
+  [Ljava/lang/String;
+  [Lkotlin/Pair;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Number;.intValue()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Ljava/util/Map$Entry;.getKey()Ljava/lang/Object;
+  Ljava/util/Map$Entry;.getValue()Ljava/lang/Object;
+  Ljava/util/Map;.entrySet()Ljava/util/Set;
+  Ljava/util/Set;.iterator()Ljava/util/Iterator;
+  Lkotlin/TuplesKt;.to(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;
+  Lkotlin/collections/MapsKt;.mapOf([Lkotlin/Pair;)Ljava/util/Map;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=6 ins=0 outs=2 insns=112
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
