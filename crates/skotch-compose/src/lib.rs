@@ -248,8 +248,6 @@ fn patch_static_calls_to_composable(
     module: &mut MirModule,
     composable_fids: &std::collections::HashSet<u32>,
 ) {
-    use skotch_mir::MirConst;
-
     // Patch calls in top-level functions.
     for func in &mut module.functions {
         patch_calls_in_function(func, composable_fids);
@@ -288,7 +286,7 @@ fn patch_calls_in_function(
                     let last_is_int = args
                         .last()
                         .and_then(|a| func.locals.get(a.0 as usize))
-                        .map_or(false, |ty| matches!(ty, Ty::Int));
+                        .is_some_and(|ty| matches!(ty, Ty::Int));
                     if last_is_int {
                         continue; // likely already patched
                     }
@@ -317,11 +315,10 @@ fn patch_calls_in_function(
             };
             block.stmts.insert(si + 1, changed_stmt);
             // Now the call is at si + 2. Append the new locals to its args.
-            if let MStmt::Assign { value, .. } = &mut block.stmts[si + 2] {
-                if let Rvalue::Call { args, .. } = value {
-                    args.push(composer_id);
-                    args.push(changed_id);
-                }
+            let MStmt::Assign { value, .. } = &mut block.stmts[si + 2];
+            if let Rvalue::Call { args, .. } = value {
+                args.push(composer_id);
+                args.push(changed_id);
             }
         }
     }
