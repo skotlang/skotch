@@ -121,6 +121,32 @@ pub fn is_jvm_interface(class_name: &str) -> bool {
 /// method descriptors in the MIR lowerer).
 /// Map a `Ty` to a JVM descriptor string for use in parameter positions.
 /// `Unit` maps to `Lkotlin/Unit;` (not `V`, which is only valid as return type).
+/// Look up the best method descriptor for a composable function call.
+/// Prefers overloads whose descriptor contains "Composer" (composable),
+/// trying various param counts to account for default parameters.
+fn lookup_composable_descriptor(
+    class_path: &str,
+    method_name: &str,
+    user_arg_count: usize,
+) -> Option<String> {
+    // Try a range of param counts: the composable overload has at least
+    // user_args + 2 ($composer + $changed), potentially more with
+    // default params ($default bitmask) and the default params themselves.
+    for extra in &[2, 3, 4, 5, 6, 7, 8] {
+        if let Some(d) = skotch_classinfo::lookup_method_descriptor(
+            class_path,
+            method_name,
+            user_arg_count + extra,
+        ) {
+            if d.contains("Composer") {
+                return Some(d);
+            }
+        }
+    }
+    // No composable overload found — try exact match.
+    skotch_classinfo::lookup_method_descriptor(class_path, method_name, user_arg_count)
+}
+
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
     match ty {
         Ty::Bool => "Z".to_string(),
@@ -9812,34 +9838,26 @@ fn lower_expr(
                         // Class-level function: the class IS the wrapper.
                         jvm_class.clone()
                     };
-                    // Try to look up the actual method descriptor from the
-                    // classpath. Also try with +2 params for @Composable
-                    // functions (which have extra $composer/$changed args).
-                    let desc = skotch_classinfo::lookup_method_descriptor(
-                        &wrapper_class,
-                        callee_str,
-                        arg_locals.len(),
-                    )
-                    .or_else(|| {
-                        // Composable functions have +2 params ($composer, $changed).
-                        skotch_classinfo::lookup_method_descriptor(
-                            &wrapper_class,
-                            callee_str,
-                            arg_locals.len() + 2,
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        let arg_types: Vec<Ty> = arg_locals
-                            .iter()
-                            .map(|l| fb.mf.locals[l.0 as usize].clone())
-                            .collect();
-                        let mut d = String::from("(");
-                        for ty in &arg_types {
-                            d.push_str(&jvm_type_string_for_ty(ty));
-                        }
-                        d.push_str(")Ljava/lang/Object;");
-                        d
-                    });
+                    // Look up the method descriptor, preferring composable
+                    // overloads. Composable functions have extra params:
+                    //   +2: $composer + $changed
+                    //   +3: $composer + $changed + $default
+                    //   +N: default params + $composer + $changed + $default
+                    // Search with a preference for descriptors containing "Composer".
+                    let desc =
+                        lookup_composable_descriptor(&wrapper_class, callee_str, arg_locals.len())
+                            .unwrap_or_else(|| {
+                                let arg_types: Vec<Ty> = arg_locals
+                                    .iter()
+                                    .map(|l| fb.mf.locals[l.0 as usize].clone())
+                                    .collect();
+                                let mut d = String::from("(");
+                                for ty in &arg_types {
+                                    d.push_str(&jvm_type_string_for_ty(ty));
+                                }
+                                d.push_str(")Ljava/lang/Object;");
+                                d
+                            });
                     // If the descriptor has more params than we have args
                     // (composable functions with $composer/$changed), forward
                     // the $composer/$changed from the enclosing scope.
