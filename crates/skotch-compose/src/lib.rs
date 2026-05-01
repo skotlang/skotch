@@ -291,8 +291,6 @@ fn patch_calls_in_function(
                     args,
                 } => {
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
-                    // Missing $composer + $changed (and possibly $default mask).
-                    // The descriptor has Composer param but args are short by 2+.
                     desc_params > args.len()
                         && desc_params <= args.len() + 3
                         && descriptor.contains("Composer;")

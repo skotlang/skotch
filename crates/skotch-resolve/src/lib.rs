@@ -266,12 +266,26 @@ pub fn gather_declarations(
                         continue;
                     }
                     let name = interner.resolve(f.name).to_string();
-                    let descriptor = build_descriptor(
+                    let mut descriptor = build_descriptor(
                         &f.params,
                         f.return_ty.as_ref(),
                         f.receiver_ty.as_ref(),
                         interner,
                     );
+                    // @Composable functions get $composer/$changed params added
+                    // by the compose transform. Include them in the descriptor
+                    // so cross-file call sites use the correct param count.
+                    let is_composable = f
+                        .annotations
+                        .iter()
+                        .any(|a| interner.resolve(a.name) == "Composable");
+                    if is_composable {
+                        // Insert Composer + Int before the closing ')'.
+                        if let Some(close_paren) = descriptor.rfind(')') {
+                            descriptor
+                                .insert_str(close_paren, "Landroidx/compose/runtime/Composer;I");
+                        }
+                    }
                     let return_ty = f
                         .return_ty
                         .as_ref()
@@ -282,11 +296,16 @@ pub fn gather_declarations(
                         .iter()
                         .map(|p| type_ref_to_ty(&p.ty, interner))
                         .collect();
+                    let param_count = if is_composable {
+                        f.params.len() + 2 // +$composer +$changed
+                    } else {
+                        f.params.len()
+                    };
                     let ext = ExternalFunDecl {
                         owner_class: fq_wrapper.clone(),
                         descriptor,
                         return_ty,
-                        param_count: f.params.len(),
+                        param_count,
                         param_tys,
                         is_suspend: f.is_suspend,
                         is_extension: f.receiver_ty.is_some(),
@@ -916,7 +935,8 @@ impl<'a> Resolver<'a> {
                         // context (classpath, import map, lambda receiver scope)
                         // to resolve identifiers. Using PossibleExternal instead
                         // of Error avoids triggering `has_null_stubs()` stubbing.
-                        self.diags.push(Diagnostic::error(
+                        // Use warning level: MIR lowering may still resolve it.
+                        self.diags.push(Diagnostic::warning(
                             *span,
                             format!("unresolved identifier `{name_str}`"),
                         ));

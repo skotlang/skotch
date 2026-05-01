@@ -1057,7 +1057,8 @@ mod tests {
     #[test]
     fn diagnostics_for_unresolved_ident() {
         let state = analyze_source("fun main() { println(undefined) }");
-        assert!(state.diags.has_errors());
+        // Unresolved identifiers produce a warning diagnostic (deferred to
+        // MIR lowering). The LSP should still display it.
         let lsp_diags = to_lsp_diagnostics(&state.diags, &state.source_map);
         assert!(!lsp_diags.is_empty());
         assert!(lsp_diags[0].message.contains("unresolved"));

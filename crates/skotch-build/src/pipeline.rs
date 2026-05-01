@@ -1798,7 +1798,10 @@ fn compile_multi_module_classes(
             classes.extend(file_classes);
         }
 
-        let err_count = mod_diags.len();
+        let err_count = mod_diags
+            .iter()
+            .filter(|d| d.severity == skotch_diagnostics::Severity::Error)
+            .count();
         if mod_diags.has_errors() {
             let diag_text = render(&mod_diags, &mod_sm);
             eprint!("{diag_text}");
@@ -2190,7 +2193,11 @@ fn build_multi_module(
                     );
                     let file_classes = skotch_backend_jvm::compile_module(&mir, &mod_interner);
                     mir_modules.push(mir);
-                    let new_errors = mod_diags.len() - pre_errors;
+                    let new_errors = mod_diags
+                        .iter()
+                        .filter(|d| d.severity == skotch_diagnostics::Severity::Error)
+                        .count()
+                        .saturating_sub(pre_errors);
                     if !file_classes.is_empty() {
                         eprintln!(
                             "    [{}] {} classes ({} errors)",
