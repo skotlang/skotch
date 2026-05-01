@@ -911,12 +911,15 @@ impl<'a> Resolver<'a> {
                         if is_possible_external(name_str) {
                             return DefId::PossibleExternal(*name);
                         }
-                        // Defer ALL unresolved identifiers to MIR lowering.
-                        // The MIR lowering pass has more context (classpath,
-                        // import map, lambda receiver scope) to resolve
-                        // identifiers that are out of scope here. This avoids
-                        // premature error emission that causes `has_null_stubs()`
-                        // to stub out entire function bodies.
+                        // Emit diagnostic but defer to MIR lowering via
+                        // PossibleExternal (not Error). MIR lowering has more
+                        // context (classpath, import map, lambda receiver scope)
+                        // to resolve identifiers. Using PossibleExternal instead
+                        // of Error avoids triggering `has_null_stubs()` stubbing.
+                        self.diags.push(Diagnostic::error(
+                            *span,
+                            format!("unresolved identifier `{name_str}`"),
+                        ));
                         DefId::PossibleExternal(*name)
                     })
                 });
