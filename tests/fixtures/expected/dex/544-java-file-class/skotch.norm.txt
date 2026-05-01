@@ -1,6 +1,6 @@
 dex_version   035
-strings       21
-types         9
+strings       22
+types         10
 methods       8
 classes       1
 
@@ -14,6 +14,7 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
+  "Ljava/net/URI;"
   "V"
   "VL"
   "VZ"
@@ -34,6 +35,7 @@ classes       1
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
+  Ljava/net/URI;
   V
   Z
   [Ljava/lang/String;
@@ -41,7 +43,7 @@ classes       1
 --- methods ---
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
-  Ljava/io/File;.<init>(Ljava/lang/String;)V
+  Ljava/io/File;.<init>(Ljava/net/URI;)V
   Ljava/io/File;.exists()Z
   Ljava/io/File;.getName()Ljava/lang/String;
   Ljava/io/File;.isDirectory()Z

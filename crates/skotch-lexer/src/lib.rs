@@ -278,8 +278,11 @@ impl<'a> Lexer<'a> {
             b',' => Some(TokenKind::Comma),
             b';' => Some(TokenKind::Semi),
             b':' => Some(TokenKind::Colon),
-            b'.' if self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_digit() => {
+            b'.' if self.pos + 1 < self.bytes.len()
+                && self.bytes[self.pos + 1].is_ascii_digit() =>
+            {
                 // `.3f` — float literal without leading zero.
+                self.pos += 1; // advance past '.'
                 self.lex_dot_number();
                 return;
             }

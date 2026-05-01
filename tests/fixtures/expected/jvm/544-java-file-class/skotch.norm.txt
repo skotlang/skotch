@@ -9,7 +9,7 @@ method        main ([Ljava/lang/String;)V 0x0009
     0004 new Class(java/io/File)
     0007 dup
     0008 aload 1
-    0010 invokespecial Method(java/io/File.<init>:(Ljava/lang/String;)V)
+    0010 invokespecial Method(java/io/File.<init>:(Ljava/net/URI;)V)
     0013 astore 2
     0015 aload 2
     0017 checkcast Class(java/io/File)

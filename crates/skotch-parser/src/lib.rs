@@ -76,6 +76,33 @@ impl<'a> Parser<'a> {
         self.tokens[self.pos].kind
     }
 
+    /// Returns true if the token at `pos + offset` can serve as an
+    /// identifier — either a real `Ident` or a Kotlin soft keyword
+    /// (`data`, `open`, `sealed`, etc.) that is valid as a name in
+    /// expression/argument context.
+    fn is_name_token_at(&self, offset: usize) -> bool {
+        match self.peek_kind_at(offset) {
+            TokenKind::Ident => true,
+            TokenKind::KwData
+            | TokenKind::KwEnum
+            | TokenKind::KwSealed
+            | TokenKind::KwOpen
+            | TokenKind::KwAbstract
+            | TokenKind::KwOverride
+            | TokenKind::KwInline
+            | TokenKind::KwOperator
+            | TokenKind::KwInfix
+            | TokenKind::KwSuspend
+            | TokenKind::KwLateinit
+            | TokenKind::KwTailrec
+            | TokenKind::KwVararg
+            | TokenKind::KwConst
+            | TokenKind::KwConstructor
+            | TokenKind::KwInit => true,
+            _ => false,
+        }
+    }
+
     #[allow(dead_code)]
     fn peek_kind_at(&self, offset: usize) -> TokenKind {
         self.tokens
@@ -2675,7 +2702,10 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         self.expect(TokenKind::KwIn, "'in' after loop variable");
         self.skip_trivia();
-        let range_start = self.parse_expr();
+        // Use parse_equality (not parse_expr) for the range start so that
+        // infix keywords `until`/`downTo` are NOT consumed as part of the
+        // start expression — the for-loop parser needs them as range operators.
+        let range_start = self.parse_equality();
         self.skip_trivia();
 
         // Determine if this is a range-based for or a collection-based for-in.
@@ -2723,7 +2753,9 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::DotDot, "'..' or 'until' or 'downTo' for range");
             };
             self.skip_trivia();
-            let range_end = self.parse_expr();
+            // Use parse_equality so `step` (an infix function) is NOT consumed
+            // as part of the range end expression.
+            let range_end = self.parse_equality();
             self.skip_trivia();
             // Optional `step N` after the range end.
             let step = if self.peek_kind() == TokenKind::Ident {
@@ -2945,7 +2977,17 @@ impl<'a> Parser<'a> {
             };
             let is_infix = matches!(
                 text.as_str(),
-                "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr" | "contains" | "zip"
+                "to" | "and"
+                    | "or"
+                    | "xor"
+                    | "shl"
+                    | "shr"
+                    | "ushr"
+                    | "contains"
+                    | "zip"
+                    | "until"
+                    | "downTo"
+                    | "step"
             );
             if is_infix && self.peek_kind_at(1) != TokenKind::LParen {
                 let kw_span = self.peek_span();
@@ -3250,18 +3292,46 @@ impl<'a> Parser<'a> {
                             if self.peek_kind() != TokenKind::RParen {
                                 loop {
                                     self.skip_trivia();
-                                    let value = self.parse_expr();
-                                    args.push(CallArg {
-                                        name: None,
-                                        expr: value,
-                                    });
+                                    // Named argument: `name = expr`
+                                    let named = self.is_name_token_at(0)
+                                        && self.peek_kind_at(1) == TokenKind::Eq;
+                                    if named {
+                                        let name_idx = self.pos;
+                                        self.bump();
+                                        let name_sym = self.intern_ident_at(name_idx);
+                                        self.bump(); // consume '='
+                                        self.skip_trivia();
+                                        let value = self.parse_expr();
+                                        args.push(CallArg {
+                                            name: Some(name_sym),
+                                            expr: value,
+                                        });
+                                    } else {
+                                        let value = self.parse_expr();
+                                        args.push(CallArg {
+                                            name: None,
+                                            expr: value,
+                                        });
+                                    }
                                     self.skip_trivia();
                                     if !self.eat(TokenKind::Comma) {
+                                        break;
+                                    }
+                                    self.skip_trivia();
+                                    if self.peek_kind() == TokenKind::RParen {
                                         break;
                                     }
                                 }
                             }
                             let rp = self.expect(TokenKind::RParen, ")");
+                            // Trailing lambda after type-args call.
+                            if self.peek_kind() == TokenKind::LBrace {
+                                let lambda = self.parse_lambda_expr();
+                                args.push(CallArg {
+                                    name: None,
+                                    expr: lambda,
+                                });
+                            }
                             let span = expr.span().merge(rp);
                             expr = Expr::Call {
                                 callee: Box::new(expr),
@@ -3284,9 +3354,9 @@ impl<'a> Parser<'a> {
                         loop {
                             self.skip_trivia();
                             // Check for named argument: `name = expr`
-                            // Peek: Ident followed by Eq (not EqEq)
-                            let named = self.peek_kind() == TokenKind::Ident
-                                && self.peek_kind_at(1) == TokenKind::Eq;
+                            // Peek: Ident (or soft keyword) followed by Eq (not EqEq)
+                            let named =
+                                self.is_name_token_at(0) && self.peek_kind_at(1) == TokenKind::Eq;
                             if named {
                                 let name_idx = self.pos;
                                 self.bump(); // consume ident
@@ -3367,6 +3437,7 @@ impl<'a> Parser<'a> {
                     } else if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword()
                     {
                         // Foo::member — member reference, desugar to lambda
+                        // `{ $ref_arg -> Foo.member($ref_arg) }`
                         let idx = self.pos;
                         let fn_span = self.peek_span();
                         self.bump();
@@ -3374,7 +3445,11 @@ impl<'a> Parser<'a> {
                         let span = expr.span().merge(fn_span);
                         let param_name = self.interner.intern("$ref_arg");
                         let call = Expr::Call {
-                            callee: Box::new(Expr::Ident(fn_name, fn_span)),
+                            callee: Box::new(Expr::Field {
+                                receiver: Box::new(expr.clone()),
+                                name: fn_name,
+                                span: fn_span,
+                            }),
                             args: vec![CallArg {
                                 name: None,
                                 expr: Expr::Ident(param_name, fn_span),
@@ -3585,6 +3660,31 @@ impl<'a> Parser<'a> {
                     is_suspend: false,
                     span: full_span,
                 }
+            }
+            // Soft keywords usable as identifiers in expression context.
+            // In Kotlin, `data`, `open`, `sealed`, `inner`, `override`, etc.
+            // are context-sensitive — they act as keywords only before `class`,
+            // `fun`, etc. and as plain identifiers everywhere else.
+            TokenKind::KwData
+            | TokenKind::KwEnum
+            | TokenKind::KwSealed
+            | TokenKind::KwOpen
+            | TokenKind::KwAbstract
+            | TokenKind::KwOverride
+            | TokenKind::KwInline
+            | TokenKind::KwOperator
+            | TokenKind::KwInfix
+            | TokenKind::KwSuspend
+            | TokenKind::KwLateinit
+            | TokenKind::KwTailrec
+            | TokenKind::KwVararg
+            | TokenKind::KwConst
+            | TokenKind::KwConstructor
+            | TokenKind::KwInit => {
+                let idx = self.pos;
+                self.bump();
+                let sym = self.intern_ident_at(idx);
+                Expr::Ident(sym, span)
             }
             other => {
                 self.diags.push(Diagnostic::error(
@@ -3899,16 +3999,21 @@ impl<'a> Parser<'a> {
         // Try to parse params: `x: Int, y: String -> ...`
         if self.peek_kind() == TokenKind::Ident {
             // Scan ahead for `->` to confirm this is a lambda.
+            // Track both paren and brace depth — a `->` inside a nested
+            // lambda `{ annotation -> ... }` must NOT match as our arrow.
             let mut scan = self.pos;
-            let mut depth = 0;
+            let mut paren_depth = 0;
+            let mut brace_depth = 0;
             while scan < self.tokens.len() {
                 match self.tokens[scan].kind {
-                    TokenKind::Arrow if depth == 0 => {
+                    TokenKind::Arrow if paren_depth == 0 && brace_depth == 0 => {
                         is_lambda = true;
                         break;
                     }
-                    TokenKind::LParen => depth += 1,
-                    TokenKind::RParen => depth -= 1,
+                    TokenKind::LParen => paren_depth += 1,
+                    TokenKind::RParen => paren_depth -= 1,
+                    TokenKind::LBrace => brace_depth += 1,
+                    TokenKind::RBrace if brace_depth > 0 => brace_depth -= 1,
                     TokenKind::RBrace | TokenKind::Eof => break,
                     _ => {}
                 }

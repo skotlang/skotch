@@ -72,6 +72,21 @@ pub fn compose_transform(module: &mut MirModule) {
         }
     }
 
+    // After transforming composable functions (which adds $composer/$changed
+    // params), update ALL call sites in the module that call composable
+    // functions via CallKind::Static. These calls were lowered before the
+    // transform and have the original arg count — they need the extra args.
+    let composable_fid_set: std::collections::HashSet<u32> = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| is_composable(f))
+        .map(|(i, _)| i as u32)
+        .collect();
+    if !composable_fid_set.is_empty() {
+        patch_static_calls_to_composable(module, &composable_fid_set);
+    }
+
     // Patch lambda classes that serve as @Composable content blocks.
     // The Compose runtime expects @Composable lambdas to implement
     // Function2<Composer, Int, Unit> (or Function3 for lambdas with
@@ -216,6 +231,96 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
                             args[n - 1] = changed_local;
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// After the Compose transform adds $composer/$changed params to composable
+/// functions, update all `CallKind::Static(fid)` call sites that target
+/// those functions. These calls were lowered by MIR lowering BEFORE the
+/// transform, so they have the original (pre-transform) arg count.
+///
+/// For each such call, append a null $composer placeholder and a zero
+/// $changed placeholder to the args list.
+fn patch_static_calls_to_composable(
+    module: &mut MirModule,
+    composable_fids: &std::collections::HashSet<u32>,
+) {
+    use skotch_mir::MirConst;
+
+    // Patch calls in top-level functions.
+    for func in &mut module.functions {
+        patch_calls_in_function(func, composable_fids);
+    }
+    // Patch calls in class methods (including lambda invoke methods).
+    for class in &mut module.classes {
+        for method in &mut class.methods {
+            patch_calls_in_function(method, composable_fids);
+        }
+    }
+}
+
+fn patch_calls_in_function(
+    func: &mut MirFunction,
+    composable_fids: &std::collections::HashSet<u32>,
+) {
+    use skotch_mir::MirConst;
+
+    for block in &mut func.blocks {
+        // Collect patches to apply (we can't borrow stmts mutably while iterating).
+        let mut patches: Vec<(usize, LocalId, LocalId)> = Vec::new();
+        for (si, stmt) in block.stmts.iter().enumerate() {
+            let MStmt::Assign { value, .. } = stmt;
+            if let Rvalue::Call {
+                kind: CallKind::Static(fid),
+                args,
+            } = value
+            {
+                if composable_fids.contains(&fid.0) {
+                    // Check if args already include $composer/$changed
+                    // (avoid double-patching). The expected param count after
+                    // transform is original + 2. If args.len() is already at
+                    // or above that, skip.
+                    // We can't easily check the expected count here, so just
+                    // check if the last arg type is Int ($changed marker).
+                    let last_is_int = args
+                        .last()
+                        .and_then(|a| func.locals.get(a.0 as usize))
+                        .map_or(false, |ty| matches!(ty, Ty::Int));
+                    if last_is_int {
+                        continue; // likely already patched
+                    }
+                    // Create placeholder locals for $composer and $changed.
+                    let composer_id = LocalId(func.locals.len() as u32);
+                    func.locals
+                        .push(Ty::Class("androidx/compose/runtime/Composer".to_string()));
+                    let changed_id = LocalId(func.locals.len() as u32);
+                    func.locals.push(Ty::Int);
+                    patches.push((si, composer_id, changed_id));
+                }
+            }
+        }
+        // Apply patches in reverse order to maintain statement indices.
+        for (si, composer_id, changed_id) in patches.into_iter().rev() {
+            // Insert Const(Null) assignment for $composer before the call.
+            let composer_stmt = MStmt::Assign {
+                dest: composer_id,
+                value: Rvalue::Const(MirConst::Null),
+            };
+            block.stmts.insert(si, composer_stmt);
+            // Insert Const(Int(0)) for $changed.
+            let changed_stmt = MStmt::Assign {
+                dest: changed_id,
+                value: Rvalue::Const(MirConst::Int(0)),
+            };
+            block.stmts.insert(si + 1, changed_stmt);
+            // Now the call is at si + 2. Append the new locals to its args.
+            if let MStmt::Assign { value, .. } = &mut block.stmts[si + 2] {
+                if let Rvalue::Call { args, .. } = value {
+                    args.push(composer_id);
+                    args.push(changed_id);
                 }
             }
         }

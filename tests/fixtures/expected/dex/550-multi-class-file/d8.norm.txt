@@ -1,0 +1,103 @@
+dex_version   035
+strings       43
+types         12
+methods       14
+classes       3
+
+--- strings ---
+  ""
+  " says Meow!"
+  " says Woof!"
+  "()Ljava/lang/String;"
+  "(Ljava/lang/String;)V"
+  "<init>"
+  "L"
+  "LCat;"
+  "LDog;"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "Rex"
+  "V"
+  "VL"
+  "VLL"
+  "Whiskers"
+  "[Ljava/lang/String;"
+  "append"
+  "bark"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "getName"
+  "input.kt"
+  "k"
+  "main"
+  "meow"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "toString"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\n\u{2}\u{8}\u{5}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{6}\u{10}\u{8}\u{1a}\u{2}0\u{3}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+
+--- types ---
+  LCat;
+  LDog;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LCat;.<init>(Ljava/lang/String;)V
+  LCat;.getName()Ljava/lang/String;
+  LCat;.meow()Ljava/lang/String;
+  LDog;.<init>(Ljava/lang/String;)V
+  LDog;.bark()Ljava/lang/String;
+  LDog;.getName()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LCat;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;)V flags=0x10001 regs=3 ins=2 outs=2 insns=11
+  method       getName()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       meow()Ljava/lang/String; flags=0x0011 regs=3 ins=1 outs=2 insns=22
+
+--- class[1] ---
+  descriptor   LDog;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;)V flags=0x10001 regs=3 ins=2 outs=2 insns=11
+  method       bark()Ljava/lang/String; flags=0x0011 regs=3 ins=1 outs=2 insns=22
+  method       getName()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[2] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=2 ins=0 outs=2 insns=33
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
