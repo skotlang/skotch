@@ -211,18 +211,93 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
     // to `kotlin/Pair`.
     // Enums are real classes now.
     if module.enum_names.contains(resolved_name) {
-        return Ty::Class(resolved_name.to_string());
+        // Use the FQ name from the module's class list if available.
+        let fq = fq_class_name(resolved_name, module);
+        return Ty::Class(fq);
     }
     // User-defined class or interface.
     if module.classes.iter().any(|c| c.name == resolved_name) {
-        return Ty::Class(resolved_name.to_string());
+        let fq = fq_class_name(resolved_name, module);
+        return Ty::Class(fq);
     }
     // Map well-known Kotlin collection/stdlib type names to their
     // fully-qualified JVM internal names.
     if let Some(jvm_name) = well_known_class_name(resolved_name) {
         return Ty::Class(jvm_name.to_string());
     }
+    // Cross-file class (from PackageSymbolTable).
+    if let Some((jvm_name, _, _)) = module.cross_file_classes.get(resolved_name) {
+        return Ty::Class(jvm_name.clone());
+    }
     Ty::Any
+}
+
+/// Get the fully-qualified JVM name for a user-defined class.
+/// If the class name already contains '/', it's already FQ.
+/// Otherwise, derive from the module's wrapper_class package prefix.
+fn fq_class_name(simple_name: &str, module: &MirModule) -> String {
+    if simple_name.contains('/') {
+        return simple_name.to_string();
+    }
+    // Check if any class in the module has this name and a FQ path.
+    for c in &module.classes {
+        if c.name == simple_name && c.name.contains('/') {
+            return c.name.clone();
+        }
+    }
+    // Derive from wrapper_class: "com/example/FooKt" → "com/example/"
+    let prefix = module
+        .wrapper_class
+        .rfind('/')
+        .map(|i| &module.wrapper_class[..=i])
+        .unwrap_or("");
+    format!("{prefix}{simple_name}")
+}
+
+/// Infer the type of a class property from its init expression.
+/// Used when no explicit type annotation is provided.
+fn infer_property_type(init: &skotch_syntax::Expr, interner: &Interner, module: &MirModule) -> Ty {
+    use skotch_syntax::Expr;
+    match init {
+        Expr::IntLit(_, _) => Ty::Int,
+        Expr::LongLit(_, _) => Ty::Long,
+        Expr::DoubleLit(_, _) => Ty::Double,
+        Expr::FloatLit(_, _) => Ty::Float,
+        Expr::BoolLit(_, _) => Ty::Bool,
+        Expr::CharLit(_, _) => Ty::Char,
+        Expr::NullLit(_) => Ty::Any,
+        // String literals and templates → String type.
+        Expr::StringTemplate(_, _) => Ty::String,
+        // Constructor calls: `ClassName(args)` → Ty::Class(ClassName)
+        Expr::Call { callee, .. } => {
+            if let Expr::Ident(name, _) = callee.as_ref() {
+                let name_str = interner.resolve(*name);
+                // If name starts with uppercase, it's likely a constructor.
+                if name_str.starts_with(|c: char| c.is_uppercase()) {
+                    let resolved = resolve_type(name_str, module);
+                    if !matches!(resolved, Ty::Int) {
+                        return resolved;
+                    }
+                    // If resolve_type returned Int (unknown), treat as Any
+                    // since constructors always return reference types.
+                    return Ty::Any;
+                }
+                // For function calls (lowercase), the return type is unknown
+                // without type inference — use Any as a safe default.
+                Ty::Any
+            } else {
+                Ty::Any
+            }
+        }
+        // Field access like `_flow.asStateFlow()` → Any (reference)
+        Expr::Field { .. } | Expr::SafeCall { .. } => Ty::Any,
+        // Lambda expression → function type (reference)
+        Expr::Lambda { .. } => Ty::Any,
+        // Identifier reference → Any (could be anything)
+        Expr::Ident(_, _) => Ty::Any,
+        // Default for anything else
+        _ => Ty::Any,
+    }
 }
 
 /// Map well-known Kotlin source-level class names to their JVM internal names
@@ -1261,7 +1336,154 @@ pub fn lower_file(
         .collect();
     module.classes.extend(class_cont_classes);
 
+    // Post-process: fully-qualify short class names in all Ty::Class values.
+    // This ensures descriptors use valid JVM internal names (e.g.,
+    // "com/example/Message" instead of "Message") which d8 requires.
+    fq_qualify_module_types(&mut module);
+
     module
+}
+
+/// Fully-qualify all short class names in the module's types.
+/// Short names (without '/') are resolved using the module's wrapper_class
+/// package prefix and cross_file_classes lookup.
+fn fq_qualify_module_types(module: &mut MirModule) {
+    let prefix = module
+        .wrapper_class
+        .rfind('/')
+        .map(|i| module.wrapper_class[..=i].to_string())
+        .unwrap_or_default();
+
+    // Collect known same-file class names for quick lookup.
+    let same_file_classes: rustc_hash::FxHashSet<String> =
+        module.classes.iter().map(|c| c.name.clone()).collect();
+
+    // Collect cross-file class FQ names.
+    let cross_fq: rustc_hash::FxHashMap<String, String> = module
+        .cross_file_classes
+        .iter()
+        .map(|(k, (jvm, _, _))| (k.clone(), jvm.clone()))
+        .collect();
+
+    let resolve = |name: &str| -> String {
+        if name.contains('/') || name.is_empty() {
+            return name.to_string();
+        }
+        // Check cross-file classes first (higher priority).
+        if let Some(fq) = cross_fq.get(name) {
+            return fq.clone();
+        }
+        // Same-file class: prefix with package.
+        if same_file_classes.contains(name) {
+            return format!("{prefix}{name}");
+        }
+        // Unknown short name: prefix with package (best effort).
+        format!("{prefix}{name}")
+    };
+
+    // Fix types in all functions.
+    for func in &mut module.functions {
+        for ty in &mut func.locals {
+            if let Ty::Class(name) = ty {
+                if !name.contains('/') && !name.is_empty() {
+                    *name = resolve(name);
+                }
+            }
+        }
+    }
+    // Also fix class names in Rvalue values (GetField, PutField, NewInstance, CallKind).
+    #[allow(clippy::collapsible_if, clippy::collapsible_match)]
+    fn fq_rvalues(func: &mut MirFunction, resolve: &dyn Fn(&str) -> String) {
+        use skotch_mir::{CallKind as CK, Rvalue as R};
+        for block in &mut func.blocks {
+            for stmt in &mut block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                match value {
+                    R::GetField { class_name, .. } | R::PutField { class_name, .. } => {
+                        if !class_name.contains('/') && !class_name.is_empty() {
+                            *class_name = resolve(class_name);
+                        }
+                    }
+                    R::NewInstance(name) => {
+                        if !name.contains('/') && !name.is_empty() {
+                            *name = resolve(name);
+                        }
+                    }
+                    R::Call { kind, .. } => match kind {
+                        CK::Constructor(name) => {
+                            if !name.contains('/') && !name.is_empty() {
+                                *name = resolve(name);
+                            }
+                        }
+                        CK::Virtual { class_name, .. } => {
+                            if !class_name.contains('/') && !class_name.is_empty() {
+                                *class_name = resolve(class_name);
+                            }
+                        }
+                        CK::StaticJava { class_name, .. }
+                        | CK::VirtualJava { class_name, .. }
+                        | CK::ConstructorJava { class_name, .. } => {
+                            if !class_name.contains('/') && !class_name.is_empty() {
+                                *class_name = resolve(class_name);
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Fix Rvalues in top-level functions.
+    for func in &mut module.functions {
+        fq_rvalues(func, &resolve);
+    }
+
+    // Fix types in all class constructors, methods, and fields.
+    for class in &mut module.classes {
+        for field in &mut class.fields {
+            if let Ty::Class(name) = &mut field.ty {
+                if !name.contains('/') && !name.is_empty() {
+                    *name = resolve(name);
+                }
+            }
+        }
+        // Constructor locals
+        for ty in &mut class.constructor.locals {
+            if let Ty::Class(name) = ty {
+                if !name.contains('/') && !name.is_empty() {
+                    *name = resolve(name);
+                }
+            }
+        }
+        // Secondary constructors
+        for ctor in &mut class.secondary_constructors {
+            for ty in &mut ctor.locals {
+                if let Ty::Class(name) = ty {
+                    if !name.contains('/') && !name.is_empty() {
+                        *name = resolve(name);
+                    }
+                }
+            }
+        }
+        // Methods
+        for method in &mut class.methods {
+            for ty in &mut method.locals {
+                if let Ty::Class(name) = ty {
+                    if !name.contains('/') && !name.is_empty() {
+                        *name = resolve(name);
+                    }
+                }
+            }
+            fq_rvalues(method, &resolve);
+        }
+        // Constructor Rvalues
+        fq_rvalues(&mut class.constructor, &resolve);
+        for ctor in &mut class.secondary_constructors {
+            fq_rvalues(ctor, &resolve);
+        }
+    }
 }
 
 /// Build the synthetic `ContinuationImpl` subclass for a single-
@@ -7311,6 +7533,8 @@ fn lower_expr(
             // ─── Check for constructor call (class instantiation) ────
             let is_class = module.classes.iter().any(|c| c.name == callee_str);
             if is_class {
+                // Use the fully-qualified JVM name for the class.
+                let fq_name = fq_class_name(&callee_str, module);
                 // Lower as: NewInstance + Constructor call.
                 let mut arg_locals = Vec::new();
                 for a in args {
@@ -7327,15 +7551,15 @@ fn lower_expr(
                     )?;
                     arg_locals.push(id);
                 }
-                let dest = fb.new_local(Ty::Class(callee_str.clone()));
+                let dest = fb.new_local(Ty::Class(fq_name.clone()));
                 fb.push_stmt(MStmt::Assign {
                     dest,
-                    value: Rvalue::NewInstance(callee_str.clone()),
+                    value: Rvalue::NewInstance(fq_name.clone()),
                 });
                 fb.push_stmt(MStmt::Assign {
                     dest,
                     value: Rvalue::Call {
-                        kind: CallKind::Constructor(callee_str),
+                        kind: CallKind::Constructor(fq_name),
                         args: arg_locals,
                     },
                 });
@@ -14194,14 +14418,14 @@ fn lower_class(
         }
     }
     for prop in &c.properties {
-        let ty = prop
-            .ty
-            .as_ref()
-            .map(|tr| {
-                let resolved = resolve_type(interner.resolve(tr.name), module);
-                resolved
-            })
-            .unwrap_or(Ty::Int);
+        let ty = if let Some(tr) = &prop.ty {
+            resolve_type(interner.resolve(tr.name), module)
+        } else if let Some(init_expr) = &prop.init {
+            // Infer type from init expression when no explicit annotation.
+            infer_property_type(init_expr, interner, module)
+        } else {
+            Ty::Any
+        };
         fields.push(MirField {
             name: interner.resolve(prop.name).to_string(),
             ty,

@@ -2023,11 +2023,6 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
                         }
                         return true;
                     }
-                    // Primitive-typed receivers only matter if the class is
-                    // a well-known value type. For objects with type inference
-                    // failures (e.g., MutableState typed as Int), the JVM will
-                    // still execute correctly since the actual runtime value
-                    // IS an object — only the compile-time type is wrong.
                 }
                 // PutField where receiver is a null-Any local.
                 Rvalue::PutField {
@@ -7189,7 +7184,50 @@ fn walk_block(
         let Stmt::Assign { dest, value } = stmt;
         match value {
             Rvalue::Const(c) => {
-                emit_load_const(cp, code, stack, max_stack, c, module);
+                // Fix type mismatches between const value and dest local:
+                // 1. Int(0)/Bool(false) → reference local: emit aconst_null
+                // 2. Null → int/bool local: emit iconst_0
+                // These occur when MIR type inference assigns wrong types
+                // to locals (e.g., MutableStateFlow typed as Int).
+                let dest_ty = &func.locals[dest.0 as usize];
+                let dest_is_primitive = matches!(
+                    dest_ty,
+                    Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char
+                );
+                let dest_is_wide_primitive = matches!(dest_ty, Ty::Long | Ty::Float | Ty::Double);
+                let dest_is_ref =
+                    !dest_is_primitive && !dest_is_wide_primitive && !matches!(dest_ty, Ty::Unit);
+
+                if dest_is_ref && matches!(c, MirConst::Int(0) | MirConst::Bool(false)) {
+                    // Int(0) into reference slot → push null reference
+                    code.push(0x01); // aconst_null
+                    bump(stack, max_stack, 1);
+                } else if dest_is_primitive && matches!(c, MirConst::Null) {
+                    // Null into int/bool slot → push zero
+                    code.push(0x03); // iconst_0
+                    bump(stack, max_stack, 1);
+                } else if dest_is_wide_primitive && matches!(c, MirConst::Null) {
+                    // Null into long/float/double slot → push zero of correct width
+                    match dest_ty {
+                        Ty::Long => {
+                            code.push(0x09);
+                            bump(stack, max_stack, 2);
+                        } // lconst_0
+                        Ty::Float => {
+                            code.push(0x0B);
+                            bump(stack, max_stack, 1);
+                        } // fconst_0
+                        Ty::Double => {
+                            code.push(0x0E);
+                            bump(stack, max_stack, 2);
+                        } // dconst_0
+                        _ => {
+                            emit_load_const(cp, code, stack, max_stack, c, module);
+                        }
+                    }
+                } else {
+                    emit_load_const(cp, code, stack, max_stack, c, module);
+                }
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::Local(src) => {
@@ -7243,6 +7281,71 @@ fn walk_block(
                             let ci = cp.class(name);
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+                // Autobox: when copying from primitive to reference-typed dest,
+                // box the value so the JVM verifier accepts the astore.
+                let src_ty2 = &func.locals[src.0 as usize];
+                let dest_ty2 = &func.locals[dest.0 as usize];
+                let src_is_prim = matches!(
+                    src_ty2,
+                    Ty::Int
+                        | Ty::Bool
+                        | Ty::Byte
+                        | Ty::Short
+                        | Ty::Char
+                        | Ty::Long
+                        | Ty::Float
+                        | Ty::Double
+                );
+                let dest_is_ref2 = matches!(
+                    dest_ty2,
+                    Ty::Any | Ty::Class(_) | Ty::String | Ty::Nullable(_)
+                );
+                if src_is_prim && dest_is_ref2 {
+                    match src_ty2 {
+                        Ty::Int => {
+                            let m = cp.methodref(
+                                "java/lang/Integer",
+                                "valueOf",
+                                "(I)Ljava/lang/Integer;",
+                            );
+                            code.push(0xB8);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Bool => {
+                            let m = cp.methodref(
+                                "java/lang/Boolean",
+                                "valueOf",
+                                "(Z)Ljava/lang/Boolean;",
+                            );
+                            code.push(0xB8);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Long => {
+                            let m =
+                                cp.methodref("java/lang/Long", "valueOf", "(J)Ljava/lang/Long;");
+                            code.push(0xB8);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                            bump(stack, max_stack, -1); // long→Long: 2 slots → 1
+                        }
+                        Ty::Float => {
+                            let m =
+                                cp.methodref("java/lang/Float", "valueOf", "(F)Ljava/lang/Float;");
+                            code.push(0xB8);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
+                        Ty::Double => {
+                            let m = cp.methodref(
+                                "java/lang/Double",
+                                "valueOf",
+                                "(D)Ljava/lang/Double;",
+                            );
+                            code.push(0xB8);
+                            code.write_u16::<BigEndian>(m).unwrap();
+                            bump(stack, max_stack, -1); // double→Double: 2 slots → 1
                         }
                         _ => {}
                     }
