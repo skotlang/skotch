@@ -12136,15 +12136,14 @@ fn lower_expr(
                 });
                 d
             } else {
-                // Fallback: generic field access.
+                // For scope function names (let, also, run, apply), the
+                // actual dispatch happens at the Call level. Just pass
+                // through the receiver value — don't emit a broken
+                // empty-class GetField.
                 let d = fb.new_local(Ty::Any);
                 fb.push_stmt(MStmt::Assign {
                     dest: d,
-                    value: Rvalue::GetField {
-                        receiver: recv_unwrapped,
-                        class_name: String::new(),
-                        field_name,
-                    },
+                    value: Rvalue::Local(recv_unwrapped),
                 });
                 d
             };
