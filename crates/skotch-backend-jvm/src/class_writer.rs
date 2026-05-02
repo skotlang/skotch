@@ -4273,7 +4273,29 @@ fn emit_mir_segment(
         let Stmt::Assign { dest, value } = stmt;
         match value {
             Rvalue::Const(c) => {
-                emit_const(code, cp, module, c, func);
+                // If storing Int(0) or Bool(false) into a reference-typed local,
+                // emit aconst_null instead of iconst_0. This handles cases where
+                // the MIR has placeholder values for object params (e.g., compose
+                // arg padding where $default=0 but the param expects a reference).
+                let dest_ty = &func.locals[dest.0 as usize];
+                let is_ref_type = !matches!(
+                    dest_ty,
+                    Ty::Int
+                        | Ty::Bool
+                        | Ty::Byte
+                        | Ty::Short
+                        | Ty::Char
+                        | Ty::Long
+                        | Ty::Float
+                        | Ty::Double
+                        | Ty::Unit
+                );
+                let is_zero_like = matches!(c, MirConst::Int(0) | MirConst::Bool(false));
+                if is_ref_type && is_zero_like {
+                    code.push(0x01); // aconst_null
+                } else {
+                    emit_const(code, cp, module, c, func);
+                }
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
             Rvalue::Local(src) => {
