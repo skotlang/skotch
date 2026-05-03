@@ -1869,10 +1869,8 @@ fn compile_multi_module_classes(
 ) -> Result<CompileResult> {
     use rustc_hash::FxHashMap;
 
-    // Enable d8-safe mode: emit class version 50 and skip StackMapTable.
-    // Version 50 without StackMapTable forces d8 to use its own type-inference
-    // verifier which is much more lenient about bytecode type flow.
-    skotch_backend_jvm::set_d8_safe_mode(true);
+    // d8-safe mode: not needed since the retry loop handles failing classes.
+    // The retry downgrades to v50 per-class, then stubs if still failing.
 
     let mut sm = SourceMap::new();
     let mut interner = Interner::new();

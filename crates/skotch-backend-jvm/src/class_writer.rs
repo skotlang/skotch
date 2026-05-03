@@ -1106,12 +1106,10 @@ fn emit_user_method(
             })
             .unwrap_or(0);
         let mir_params = func.params.len().saturating_sub(1);
-        let has_branches = func.blocks.len() > 1;
-        let body_broken = has_null_stubs(func) || has_branches;
-        if iface_arity > mir_params && body_broken {
-            // Body has broken patterns or StackMapTable would be
-            // incorrect for compose-bumped lambdas with branches.
-            // Emit a clean stub with the correct FunctionN descriptor.
+        if iface_arity > mir_params {
+            // Interface arity exceeds MIR params — the invoke method has
+            // fewer parameters than Function2.invoke(Object, Object) requires.
+            // Emit a stub with the correct arity to avoid AbstractMethodError.
             let name_idx = cp.utf8(&func.name);
             let mut desc = String::from("(");
             for _ in 0..iface_arity {
