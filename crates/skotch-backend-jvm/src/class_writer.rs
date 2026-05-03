@@ -2103,6 +2103,56 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
             }
         }
     }
+    // Additional checks: empty class names and null-as-array-index.
+    for block in &func.blocks {
+        let mut null_locals_2 = std::collections::HashSet::new();
+        for stmt in &block.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            if matches!(value, Rvalue::Const(MirConst::Null))
+                && matches!(func.locals.get(dest.0 as usize), Some(Ty::Any))
+            {
+                null_locals_2.insert(dest.0);
+            }
+            match value {
+                Rvalue::GetField { class_name, .. } | Rvalue::PutField { class_name, .. } => {
+                    if class_name.is_empty() {
+                        if report {
+                            eprintln!("    reason: empty class name in field ref");
+                        }
+                        return true;
+                    }
+                }
+                Rvalue::Call {
+                    kind: skotch_mir::CallKind::StaticJava { class_name: cn, .. },
+                    ..
+                }
+                | Rvalue::Call {
+                    kind: skotch_mir::CallKind::VirtualJava { class_name: cn, .. },
+                    ..
+                }
+                | Rvalue::Call {
+                    kind: skotch_mir::CallKind::ConstructorJava { class_name: cn, .. },
+                    ..
+                } => {
+                    if cn.is_empty() {
+                        if report {
+                            eprintln!("    reason: empty class name in call");
+                        }
+                        return true;
+                    }
+                }
+                Rvalue::ArrayLoad { index, .. } | Rvalue::ArrayStore { index, .. } => {
+                    if null_locals_2.contains(&index.0) {
+                        if report {
+                            eprintln!("    reason: null local used as array index");
+                        }
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     false
 }
 
