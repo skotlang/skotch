@@ -19,7 +19,7 @@ pub mod jvm {
     pub const CLASS_FILE_MAGIC: u32 = 0xCAFE_BABE;
 
     /// Default for newly emitted classes.
-    pub const DEFAULT_CLASS_FILE_MAJOR: u16 = CLASS_FILE_MAJOR_JAVA_17;
+    pub const DEFAULT_CLASS_FILE_MAJOR: u16 = CLASS_FILE_MAJOR_JAVA_8;
 }
 
 /// DEX file format constants.

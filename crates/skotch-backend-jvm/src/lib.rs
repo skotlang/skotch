@@ -27,3 +27,4 @@ mod class_writer;
 mod constant_pool;
 
 pub use class_writer::compile_module;
+pub use class_writer::set_d8_safe_mode;
