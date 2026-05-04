@@ -295,7 +295,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // populate the CP with the entries the goldens expect.)
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
 
-    let effective_suspend_lambda = class.is_suspend_lambda;
+    // Only use suspend lambda shell if the class ACTUALLY extends
+    // SuspendLambda/ContinuationImpl. Some lambda classes have
+    // is_suspend_lambda=true but super=Object (from compose bumping).
+    let effective_suspend_lambda = class.is_suspend_lambda
+        && class
+            .super_class
+            .as_ref()
+            .is_some_and(|s| s.contains("SuspendLambda") || s.contains("ContinuationImpl"));
 
     if effective_suspend_lambda {
         // SESSION 7: suspend lambdas use a custom 5-method shell
@@ -495,6 +502,39 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         skotch_config::jvm::DEFAULT_CLASS_FILE_MAJOR
     })
     .unwrap();
+    // Compute bridge needs BEFORE CP is serialized.
+    let iface_arity_early = class.interfaces.iter().find_map(|i| {
+        i.strip_prefix("kotlin/jvm/functions/Function")
+            .and_then(|n| n.parse::<usize>().ok())
+    });
+    let needs_bridge_early = if let Some(arity) = iface_arity_early {
+        let mir_has_matching_invoke = class
+            .methods
+            .iter()
+            .any(|m| m.name == "invoke" && m.params.len().saturating_sub(1) == arity);
+        let is_real_suspend = effective_suspend_lambda
+            && class
+                .super_class
+                .as_ref()
+                .is_some_and(|s| s.contains("ContinuationImpl") || s.contains("SuspendLambda"));
+        !mir_has_matching_invoke && !is_real_suspend && arity > 0
+    } else {
+        false
+    };
+    // Pre-register bridge method CP entries so they're included in the CP.
+    let bridge_cp = if needs_bridge_early {
+        let invoke_name = cp2.utf8("invoke");
+        let mut desc = String::from("(");
+        for _ in 0..iface_arity_early.unwrap_or(0) {
+            desc.push_str("Ljava/lang/Object;");
+        }
+        desc.push_str(")Ljava/lang/Object;");
+        let invoke_desc = cp2.utf8(&desc);
+        let code_name = cp2.utf8("Code");
+        Some((invoke_name, invoke_desc, code_name))
+    } else {
+        None
+    };
     out2.write_u16::<BigEndian>(cp2.count()).unwrap();
     cp2.write_to(&mut out2);
     out2.write_u16::<BigEndian>(class_flags).unwrap();
@@ -513,10 +553,34 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         out2.write_u16::<BigEndian>(*d).unwrap();
         out2.write_u16::<BigEndian>(0).unwrap();
     }
-    out2.write_u16::<BigEndian>(method_blobs2.len() as u16)
+    let bridge_count = if needs_bridge_early { 1u16 } else { 0 };
+    out2.write_u16::<BigEndian>(method_blobs2.len() as u16 + bridge_count)
         .unwrap();
     for blob in &method_blobs2 {
         out2.extend_from_slice(blob);
+    }
+    // Emit the bridge invoke method: aconst_null; areturn.
+    if let (true, Some(arity), Some((invoke_name, invoke_desc, code_name))) =
+        (needs_bridge_early, iface_arity_early, bridge_cp)
+    {
+        let mut bridge = Vec::new();
+        bridge.write_u16::<BigEndian>(ACC_PUBLIC).unwrap(); // access
+        bridge.write_u16::<BigEndian>(invoke_name).unwrap();
+        bridge.write_u16::<BigEndian>(invoke_desc).unwrap();
+        bridge.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+        bridge.write_u16::<BigEndian>(code_name).unwrap();
+        let code_bytes: &[u8] = &[0x01, 0xB0]; // aconst_null; areturn
+        let attr_len = 2 + 2 + 4 + code_bytes.len() as u32 + 2 + 2;
+        bridge.write_u32::<BigEndian>(attr_len).unwrap();
+        bridge.write_u16::<BigEndian>(1).unwrap(); // max_stack
+        bridge.write_u16::<BigEndian>((arity + 1) as u16).unwrap(); // max_locals
+        bridge
+            .write_u32::<BigEndian>(code_bytes.len() as u32)
+            .unwrap();
+        bridge.write_all(code_bytes).unwrap();
+        bridge.write_u16::<BigEndian>(0).unwrap(); // exception_table
+        bridge.write_u16::<BigEndian>(0).unwrap(); // code_attributes
+        out2.extend_from_slice(&bridge);
     }
     out2.write_u16::<BigEndian>(1).unwrap(); // attributes_count
     out2.write_u16::<BigEndian>(sf_name2).unwrap();
