@@ -523,16 +523,15 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 .methods
                 .iter()
                 .any(|m| m.name == "invoke" && m.params.len().saturating_sub(1) == arity);
-            let has_int_params =
-                class
-                    .methods
-                    .iter()
-                    .find(|m| m.name == "invoke")
-                    .map_or(false, |m| {
-                        m.params.iter().skip(1).any(|p| {
-                            matches!(m.locals.get(p.0 as usize), Some(Ty::Int) | Some(Ty::Bool))
-                        })
-                    });
+            let has_int_params = class
+                .methods
+                .iter()
+                .find(|m| m.name == "invoke")
+                .is_some_and(|m| {
+                    m.params.iter().skip(1).any(|p| {
+                        matches!(m.locals.get(p.0 as usize), Some(Ty::Int) | Some(Ty::Bool))
+                    })
+                });
             let needs = (!mir_has_matching || has_int_params) && arity > 0;
             if class.name.contains("$Lambda$") {
                 eprintln!("[BRIDGE-CHECK] {} arity={arity} suspend={is_real_suspend} mir_match={mir_has_matching} int_params={has_int_params} needs={needs}", class.name);
@@ -9342,9 +9341,17 @@ mod tests {
     #[test]
     fn emit_empty_main_starts_with_magic_and_v61() {
         let bytes = class_bytes("fun main() {}");
-        // CAFEBABE 0000 003D
+        // CAFEBABE 0000 0034 (major 52 = Java 8)
         assert_eq!(&bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
-        assert_eq!(&bytes[4..8], &[0x00, 0x00, 0x00, 0x3D]); // major 61
+        assert_eq!(
+            &bytes[4..8],
+            &[
+                0x00,
+                0x00,
+                0x00,
+                skotch_config::jvm::DEFAULT_CLASS_FILE_MAJOR as u8
+            ]
+        );
     }
 
     #[test]
