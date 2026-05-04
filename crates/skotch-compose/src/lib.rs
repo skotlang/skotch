@@ -138,6 +138,8 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
         // map to JVM slots after `this` + captured-field slots.
         for method in &mut class.methods {
             if method.name == "invoke" {
+                // Add $composer param as Composer — the typed invoke descriptor
+                // uses the Composer class directly. The bridge handles Object→Composer.
                 let composer_id = LocalId(method.locals.len() as u32);
                 method
                     .locals
@@ -145,14 +147,15 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                 method.params.push(composer_id);
                 method.param_names.push("$composer".to_string());
 
+                // Add $changed param as Ty::Int — the typed invoke descriptor
+                // uses int directly, matching how the body uses $changed.
+                // The bridge invoke(Object, Object)Object handles the
+                // Object→int unboxing for the FunctionN interface.
                 let changed_id = LocalId(method.locals.len() as u32);
                 method.locals.push(Ty::Int);
                 method.params.push(changed_id);
                 method.param_names.push("$changed".to_string());
 
-                // Post-process: in StaticJava calls where a Const(Null)
-                // arg precedes an Int arg (the $composer/$changed pattern
-                // from arg padding), replace with the real param locals.
                 thread_composer_args(method, composer_id, changed_id);
             }
         }

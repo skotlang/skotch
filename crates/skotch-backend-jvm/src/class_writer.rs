@@ -508,30 +508,82 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             .and_then(|n| n.parse::<usize>().ok())
     });
     let needs_bridge_early = if let Some(arity) = iface_arity_early {
-        let mir_has_matching_invoke = class
-            .methods
-            .iter()
-            .any(|m| m.name == "invoke" && m.params.len().saturating_sub(1) == arity);
         let is_real_suspend = effective_suspend_lambda
             && class
                 .super_class
                 .as_ref()
                 .is_some_and(|s| s.contains("ContinuationImpl") || s.contains("SuspendLambda"));
-        !mir_has_matching_invoke && !is_real_suspend && arity > 0
+        if is_real_suspend {
+            false // suspend lambda shell handles its own bridge
+        } else {
+            // Need bridge if: arity doesn't match MIR, OR invoke has Int params
+            // (from compose transform). Both cases use typed descriptor for the
+            // real invoke, so the bridge provides the erased invoke for FunctionN.
+            let mir_has_matching = class
+                .methods
+                .iter()
+                .any(|m| m.name == "invoke" && m.params.len().saturating_sub(1) == arity);
+            let has_int_params =
+                class
+                    .methods
+                    .iter()
+                    .find(|m| m.name == "invoke")
+                    .map_or(false, |m| {
+                        m.params.iter().skip(1).any(|p| {
+                            matches!(m.locals.get(p.0 as usize), Some(Ty::Int) | Some(Ty::Bool))
+                        })
+                    });
+            let needs = (!mir_has_matching || has_int_params) && arity > 0;
+            if class.name.contains("$Lambda$") {
+                eprintln!("[BRIDGE-CHECK] {} arity={arity} suspend={is_real_suspend} mir_match={mir_has_matching} int_params={has_int_params} needs={needs}", class.name);
+            }
+            needs
+        }
     } else {
         false
     };
     // Pre-register bridge method CP entries so they're included in the CP.
+    // The bridge: invoke(Object, Object)Object → casts params, delegates to typed invoke.
     let bridge_cp = if needs_bridge_early {
         let invoke_name = cp2.utf8("invoke");
-        let mut desc = String::from("(");
+        let mut erased_desc = String::from("(");
         for _ in 0..iface_arity_early.unwrap_or(0) {
-            desc.push_str("Ljava/lang/Object;");
+            erased_desc.push_str("Ljava/lang/Object;");
         }
-        desc.push_str(")Ljava/lang/Object;");
-        let invoke_desc = cp2.utf8(&desc);
+        erased_desc.push_str(")Ljava/lang/Object;");
+        let erased_desc_idx = cp2.utf8(&erased_desc);
         let code_name = cp2.utf8("Code");
-        Some((invoke_name, invoke_desc, code_name))
+
+        // Build the typed invoke descriptor from the MIR invoke method's params.
+        let typed_desc = if let Some(invoke_fn) = class.methods.iter().find(|m| m.name == "invoke")
+        {
+            let mut d = String::from("(");
+            for &p in invoke_fn.params.iter().skip(1) {
+                let ty = &invoke_fn.locals[p.0 as usize];
+                d.push_str(&jvm_param_type_string(ty));
+            }
+            d.push(')');
+            d.push_str(&jvm_type_string(&invoke_fn.return_ty));
+            d
+        } else {
+            erased_desc.clone()
+        };
+        // Methodref for the typed invoke (this.invoke(Composer, int)V etc.)
+        let typed_mr = cp2.methodref(&class.name, "invoke", &typed_desc);
+        // Composer class for checkcast
+        let composer_class = cp2.class("androidx/compose/runtime/Composer");
+        // Integer.intValue() for unboxing $changed
+        let intvalue_mr = cp2.methodref("java/lang/Integer", "intValue", "()I");
+
+        Some((
+            invoke_name,
+            erased_desc_idx,
+            code_name,
+            typed_mr,
+            typed_desc.clone(),
+            composer_class,
+            intvalue_mr,
+        ))
     } else {
         None
     };
@@ -559,25 +611,59 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     for blob in &method_blobs2 {
         out2.extend_from_slice(blob);
     }
-    // Emit the bridge invoke method: aconst_null; areturn.
-    if let (true, Some(arity), Some((invoke_name, invoke_desc, code_name))) =
-        (needs_bridge_early, iface_arity_early, bridge_cp)
+    // Emit the bridge invoke(Object, Object)Object that delegates to the
+    // typed invoke(Composer, int)V. This matches kotlinc's behavior:
+    //   aload_0            // this
+    //   aload_1            // Object → checkcast Composer
+    //   checkcast Composer
+    //   aload_2            // Object → checkcast Integer → intValue()
+    //   checkcast Integer
+    //   invokevirtual Integer.intValue()I
+    //   invokevirtual this.invoke(Composer, int)V
+    //   aconst_null        // return null (Unit)
+    //   areturn
+    if let (
+        true,
+        Some(_arity),
+        Some((
+            invoke_name,
+            erased_desc_idx,
+            code_name,
+            typed_mr,
+            _typed_desc,
+            composer_class,
+            intvalue_mr,
+        )),
+    ) = (needs_bridge_early, iface_arity_early, bridge_cp)
     {
+        let mut code: Vec<u8> = Vec::new();
+        code.push(0x2A); // aload_0 (this)
+        code.push(0x2B); // aload_1 (Object — $composer)
+        code.push(0xC0); // checkcast Composer
+        code.write_u16::<BigEndian>(composer_class).unwrap();
+        code.push(0x2C); // aload_2 (Object — $changed boxed)
+        code.push(0xC0); // checkcast Integer
+        let integer_class = cp2.class("java/lang/Integer");
+        code.write_u16::<BigEndian>(integer_class).unwrap();
+        code.push(0xB6); // invokevirtual Integer.intValue()I
+        code.write_u16::<BigEndian>(intvalue_mr).unwrap();
+        code.push(0xB6); // invokevirtual this.invoke(Composer, int)V
+        code.write_u16::<BigEndian>(typed_mr).unwrap();
+        code.push(0x01); // aconst_null (return Unit as null)
+        code.push(0xB0); // areturn
+
         let mut bridge = Vec::new();
-        bridge.write_u16::<BigEndian>(ACC_PUBLIC).unwrap(); // access
+        bridge.write_u16::<BigEndian>(ACC_PUBLIC | 0x1040).unwrap(); // ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC
         bridge.write_u16::<BigEndian>(invoke_name).unwrap();
-        bridge.write_u16::<BigEndian>(invoke_desc).unwrap();
+        bridge.write_u16::<BigEndian>(erased_desc_idx).unwrap();
         bridge.write_u16::<BigEndian>(1).unwrap(); // attributes_count
         bridge.write_u16::<BigEndian>(code_name).unwrap();
-        let code_bytes: &[u8] = &[0x01, 0xB0]; // aconst_null; areturn
-        let attr_len = 2 + 2 + 4 + code_bytes.len() as u32 + 2 + 2;
+        let attr_len = 2 + 2 + 4 + code.len() as u32 + 2 + 2;
         bridge.write_u32::<BigEndian>(attr_len).unwrap();
-        bridge.write_u16::<BigEndian>(1).unwrap(); // max_stack
-        bridge.write_u16::<BigEndian>((arity + 1) as u16).unwrap(); // max_locals
-        bridge
-            .write_u32::<BigEndian>(code_bytes.len() as u32)
-            .unwrap();
-        bridge.write_all(code_bytes).unwrap();
+        bridge.write_u16::<BigEndian>(4).unwrap(); // max_stack
+        bridge.write_u16::<BigEndian>(3).unwrap(); // max_locals (this + 2 Object params)
+        bridge.write_u32::<BigEndian>(code.len() as u32).unwrap();
+        bridge.write_all(&code).unwrap();
         bridge.write_u16::<BigEndian>(0).unwrap(); // exception_table
         bridge.write_u16::<BigEndian>(0).unwrap(); // code_attributes
         out2.extend_from_slice(&bridge);
@@ -1149,29 +1235,34 @@ fn emit_user_method(
     code_attr_name_idx: u16,
     is_init: bool,
 ) -> Vec<u8> {
-    // For lambda invoke methods with erased descriptors: if ANY non-this
-    // param is Int/Bool, the body uses iload on what the JVM delivers as
-    // Object → VerifyError on ART. Stub these methods.
-    let lambda_invoke_has_prim_params = !is_init
-        && func.name == "invoke"
-        && class_name.contains("$Lambda$")
-        && func.params.iter().skip(1).any(|p| {
-            matches!(
-                func.locals.get(p.0 as usize),
-                Some(Ty::Int) | Some(Ty::Bool)
-            )
-        });
+    // For compose-bumped lambda invoke methods, skip the stub check —
+    // the typed invoke + bridge pattern ensures valid bytecode.
+    let is_compose_lambda_invoke =
+        !is_init && func.name == "invoke" && class_name.contains("$Lambda$") && {
+            let iface_arity = module
+                .classes
+                .iter()
+                .find(|c| c.name == class_name)
+                .and_then(|c| {
+                    c.interfaces.iter().find_map(|i| {
+                        i.strip_prefix("kotlin/jvm/functions/Function")
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                })
+                .unwrap_or(0);
+            let mir_params = func.params.len().saturating_sub(1);
+            iface_arity != mir_params && mir_params > 0
+        };
 
-    // If the function has unresolved calls, type-flow issues, or lambda
-    // invoke primitive param issues, emit a stub.
+    // If the function has unresolved calls or type-flow issues, emit a stub.
+    // Skip for compose-bumped lambda invoke (their typed invoke has correct types).
     if !is_init
-        && (has_null_stubs_why(func, class_name)
-            || has_type_flow_issues(func)
-            || lambda_invoke_has_prim_params)
+        && !is_compose_lambda_invoke
+        && (has_null_stubs_why(func, class_name) || has_type_flow_issues(func))
     {
-        // For lambda invoke methods, the stub MUST use the erased descriptor
-        // (all Object params) to match the FunctionN interface. Otherwise
-        // the JVM/ART gets AbstractMethodError.
+        // For lambda invoke methods: if a bridge will be added (typed invoke
+        // + erased bridge), use the TYPED descriptor for the stub. Otherwise
+        // use the erased descriptor to directly implement FunctionN.
         if func.name == "invoke" && class_name.contains("$Lambda$") {
             let iface_arity = module
                 .classes
@@ -1184,13 +1275,28 @@ fn emit_user_method(
                     })
                 })
                 .unwrap_or(0);
+            let mir_params = func.params.len().saturating_sub(1);
             if iface_arity > 0 {
                 let name_idx = cp.utf8("invoke");
-                let mut desc = String::from("(");
-                for _ in 0..iface_arity {
-                    desc.push_str("Ljava/lang/Object;");
-                }
-                desc.push_str(")Ljava/lang/Object;");
+                let desc = if iface_arity != mir_params && mir_params > 0 {
+                    // Bridge will be added → use typed descriptor for stub.
+                    let mut d = String::from("(");
+                    for &p in func.params.iter().skip(1) {
+                        let ty = &func.locals[p.0 as usize];
+                        d.push_str(&jvm_param_type_string(ty));
+                    }
+                    d.push(')');
+                    d.push_str(&jvm_type_string(&func.return_ty));
+                    d
+                } else {
+                    // No bridge → use erased descriptor.
+                    let mut d = String::from("(");
+                    for _ in 0..iface_arity {
+                        d.push_str("Ljava/lang/Object;");
+                    }
+                    d.push_str(")Ljava/lang/Object;");
+                    d
+                };
                 let desc_idx = cp.utf8(&desc);
                 let code_attr = cp.utf8("Code");
                 let mut blob = Vec::new();
@@ -1329,29 +1435,48 @@ fn emit_user_method(
         if let Some(pd) = parent_desc {
             pd
         } else {
-            // For lambda invoke methods, derive descriptor from the
-            // FunctionN interface the class implements.
             if func.name == "invoke" && class_name.contains("$Lambda$") {
-                // Find the FunctionN arity from the class interfaces.
-                let arity = module
+                let iface_arity = module
                     .classes
                     .iter()
                     .find(|c| c.name == class_name)
                     .and_then(|c| {
-                        c.interfaces.iter().find_map(|iface| {
-                            iface
-                                .strip_prefix("kotlin/jvm/functions/Function")
+                        c.interfaces.iter().find_map(|i| {
+                            i.strip_prefix("kotlin/jvm/functions/Function")
                                 .and_then(|n| n.parse::<usize>().ok())
                         })
                     })
                     .unwrap_or(0);
-                // Build erased descriptor: all params are Object.
-                let mut d = String::from("(");
-                for _ in 0..arity {
-                    d.push_str("Ljava/lang/Object;");
+                let mir_params = func.params.len().saturating_sub(1);
+                // Use typed descriptor when the body has Int-typed params
+                // (from compose $changed) — erased descriptor would mismatch.
+                let has_int_params = func.params.iter().skip(1).any(|p| {
+                    matches!(
+                        func.locals.get(p.0 as usize),
+                        Some(Ty::Int) | Some(Ty::Bool)
+                    )
+                });
+                if has_int_params || (iface_arity != mir_params && mir_params > 0) {
+                    // Compose lambda: use TYPED descriptor.
+                    // A bridge invoke(Object, Object)Object is added by
+                    // compile_user_class to satisfy the FunctionN interface.
+                    let mut d = String::from("(");
+                    for &p in func.params.iter().skip(1) {
+                        let ty = &func.locals[p.0 as usize];
+                        d.push_str(&jvm_param_type_string(ty));
+                    }
+                    d.push(')');
+                    d.push_str(&jvm_type_string(&func.return_ty));
+                    d
+                } else {
+                    // Regular lambda: use ERASED descriptor to match FunctionN.
+                    let mut d = String::from("(");
+                    for _ in 0..iface_arity {
+                        d.push_str("Ljava/lang/Object;");
+                    }
+                    d.push_str(")Ljava/lang/Object;");
+                    d
                 }
-                d.push_str(")Ljava/lang/Object;");
-                d
             } else {
                 let mut d = String::from("(");
                 for &p in func.params.iter().skip(1) {
