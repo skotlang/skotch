@@ -267,7 +267,7 @@ fn patch_calls_in_function(
 
     for block in &mut func.blocks {
         // Collect patches to apply (we can't borrow stmts mutably while iterating).
-        let mut patches: Vec<(usize, LocalId, Option<LocalId>, Option<LocalId>)> = Vec::new();
+        let mut patches: Vec<(usize, Vec<LocalId>)> = Vec::new();
         for (si, stmt) in block.stmts.iter().enumerate() {
             let MStmt::Assign { value, .. } = stmt;
             let needs_patch = match value {
@@ -346,75 +346,64 @@ fn patch_calls_in_function(
                     if missing == 0 {
                         continue;
                     }
-                    // Add exactly `missing` args. The pattern is:
-                    // missing=2: $composer (null) + $changed (0)
-                    // missing=3: $composer (null) + $changed (0) + $default (0)
-                    // missing=1: just $composer (null) — unusual but safe
-                    let composer_id = LocalId(func.locals.len() as u32);
-                    func.locals
-                        .push(Ty::Class("androidx/compose/runtime/Composer".to_string()));
-                    let changed_id = if missing >= 2 {
+                    // Add exactly `missing` args. For composable functions with
+                    // default params, the pattern may be:
+                    //   user_defaults... + $composer + $changed [+ $default_mask]
+                    // We fill ALL missing slots with null/0 placeholders.
+                    let mut extra_ids: Vec<LocalId> = Vec::new();
+                    for i in 0..missing {
+                        let is_last = i == missing - 1;
+                        let is_second_last = i == missing - 2;
+                        let is_third_last = i == missing - 3;
+                        let ty = if is_second_last {
+                            // $composer position (second from end if missing>=2)
+                            Ty::Class("androidx/compose/runtime/Composer".to_string())
+                        } else {
+                            // All other positions: Int for $changed/$default, Any for user defaults
+                            if is_last || is_third_last {
+                                Ty::Int // $changed or $default
+                            } else {
+                                Ty::Any // user default placeholder (null)
+                            }
+                        };
                         let id = LocalId(func.locals.len() as u32);
-                        func.locals.push(Ty::Int);
-                        Some(id)
-                    } else {
-                        None
-                    };
-                    let default_id = if missing >= 3 {
-                        let id = LocalId(func.locals.len() as u32);
-                        func.locals.push(Ty::Int);
-                        Some(id)
-                    } else {
-                        None
-                    };
-                    patches.push((si, composer_id, changed_id, default_id));
+                        func.locals.push(ty);
+                        extra_ids.push(id);
+                    }
+                    patches.push((si, extra_ids));
                 }
             }
         }
         // Apply patches in reverse order to maintain statement indices.
-        for (si, composer_id, changed_id, default_id) in patches.into_iter().rev() {
-            // Insert assignment statements for the new args before the call.
+        for (si, extra_ids) in patches.into_iter().rev() {
+            // Insert assignment statements for all extra args before the call.
             let mut insert_count = 0;
-            // $composer = null
-            block.stmts.insert(
-                si,
-                MStmt::Assign {
-                    dest: composer_id,
-                    value: Rvalue::Const(MirConst::Null),
-                },
-            );
-            insert_count += 1;
-            // $changed = 0 (if missing >= 2)
-            if let Some(cid) = changed_id {
+            for (i, &id) in extra_ids.iter().enumerate() {
+                let is_composer = i + 2 == extra_ids.len() && extra_ids.len() >= 2;
+                let val = if is_composer {
+                    Rvalue::Const(MirConst::Null) // $composer = null
+                } else {
+                    let ty = &func.locals[id.0 as usize];
+                    if matches!(ty, Ty::Any | Ty::Class(_)) {
+                        Rvalue::Const(MirConst::Null)
+                    } else {
+                        Rvalue::Const(MirConst::Int(0))
+                    }
+                };
                 block.stmts.insert(
                     si + insert_count,
                     MStmt::Assign {
-                        dest: cid,
-                        value: Rvalue::Const(MirConst::Int(0)),
+                        dest: id,
+                        value: val,
                     },
                 );
                 insert_count += 1;
             }
-            // $default = 0 (if missing >= 3)
-            if let Some(def_id) = default_id {
-                block.stmts.insert(
-                    si + insert_count,
-                    MStmt::Assign {
-                        dest: def_id,
-                        value: Rvalue::Const(MirConst::Int(0)),
-                    },
-                );
-                insert_count += 1;
-            }
-            // Append the new locals to the call's args.
+            // Append all extra locals to the call's args.
             let MStmt::Assign { value, .. } = &mut block.stmts[si + insert_count];
             if let Rvalue::Call { args, .. } = value {
-                args.push(composer_id);
-                if let Some(cid) = changed_id {
-                    args.push(cid);
-                }
-                if let Some(def_id) = default_id {
-                    args.push(def_id);
+                for &id in &extra_ids {
+                    args.push(id);
                 }
             }
         }

@@ -1391,6 +1391,40 @@ fn fq_qualify_module_types(module: &mut MirModule) {
             }
         }
     }
+    /// Fully-qualify class names inside a JVM descriptor string.
+    /// Replaces `LFoo;` with `Lcom/example/.../Foo;` for short names.
+    fn fq_descriptor(desc: &mut String, resolve: &dyn Fn(&str) -> String) {
+        let mut result = String::with_capacity(desc.len());
+        let bytes = desc.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'L' {
+                let start = i + 1;
+                let end = desc[start..]
+                    .find(';')
+                    .map(|p| start + p)
+                    .unwrap_or(bytes.len());
+                let class_name = &desc[start..end];
+                if !class_name.contains('/')
+                    && !class_name.is_empty()
+                    && class_name.as_bytes()[0].is_ascii_uppercase()
+                {
+                    let resolved = resolve(class_name);
+                    result.push('L');
+                    result.push_str(&resolved);
+                    result.push(';');
+                } else {
+                    result.push_str(&desc[i..end + 1]);
+                }
+                i = end + 1;
+            } else {
+                result.push(bytes[i] as char);
+                i += 1;
+            }
+        }
+        *desc = result;
+    }
+
     // Also fix class names in Rvalue values (GetField, PutField, NewInstance, CallKind).
     #[allow(clippy::collapsible_if, clippy::collapsible_match)]
     fn fq_rvalues(func: &mut MirFunction, resolve: &dyn Fn(&str) -> String) {
@@ -1420,12 +1454,27 @@ fn fq_qualify_module_types(module: &mut MirModule) {
                                 *class_name = resolve(class_name);
                             }
                         }
-                        CK::StaticJava { class_name, .. }
-                        | CK::VirtualJava { class_name, .. }
-                        | CK::ConstructorJava { class_name, .. } => {
+                        CK::StaticJava {
+                            class_name,
+                            descriptor,
+                            ..
+                        }
+                        | CK::VirtualJava {
+                            class_name,
+                            descriptor,
+                            ..
+                        }
+                        | CK::ConstructorJava {
+                            class_name,
+                            descriptor,
+                            ..
+                        } => {
                             if !class_name.contains('/') && !class_name.is_empty() {
                                 *class_name = resolve(class_name);
                             }
+                            // Also FQ-resolve class names inside the descriptor string.
+                            // Pattern: L<ShortName>; where ShortName starts uppercase and has no /.
+                            fq_descriptor(descriptor, resolve);
                         }
                         _ => {}
                     },

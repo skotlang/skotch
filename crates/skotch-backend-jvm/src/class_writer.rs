@@ -1149,14 +1149,75 @@ fn emit_user_method(
     code_attr_name_idx: u16,
     is_init: bool,
 ) -> Vec<u8> {
-    // If the function has unresolved calls or type-flow issues, emit a stub.
-    if !is_init && (has_null_stubs(func) || has_type_flow_issues(func)) {
+    // For lambda invoke methods with erased descriptors: if ANY non-this
+    // param is Int/Bool, the body uses iload on what the JVM delivers as
+    // Object → VerifyError on ART. Stub these methods.
+    let lambda_invoke_has_prim_params = !is_init
+        && func.name == "invoke"
+        && class_name.contains("$Lambda$")
+        && func.params.iter().skip(1).any(|p| {
+            matches!(
+                func.locals.get(p.0 as usize),
+                Some(Ty::Int) | Some(Ty::Bool)
+            )
+        });
+
+    // If the function has unresolved calls, type-flow issues, or lambda
+    // invoke primitive param issues, emit a stub.
+    if !is_init
+        && (has_null_stubs_why(func, class_name)
+            || has_type_flow_issues(func)
+            || lambda_invoke_has_prim_params)
+    {
+        // For lambda invoke methods, the stub MUST use the erased descriptor
+        // (all Object params) to match the FunctionN interface. Otherwise
+        // the JVM/ART gets AbstractMethodError.
+        if func.name == "invoke" && class_name.contains("$Lambda$") {
+            let iface_arity = module
+                .classes
+                .iter()
+                .find(|c| c.name == class_name)
+                .and_then(|c| {
+                    c.interfaces.iter().find_map(|i| {
+                        i.strip_prefix("kotlin/jvm/functions/Function")
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                })
+                .unwrap_or(0);
+            if iface_arity > 0 {
+                let name_idx = cp.utf8("invoke");
+                let mut desc = String::from("(");
+                for _ in 0..iface_arity {
+                    desc.push_str("Ljava/lang/Object;");
+                }
+                desc.push_str(")Ljava/lang/Object;");
+                let desc_idx = cp.utf8(&desc);
+                let code_attr = cp.utf8("Code");
+                let mut blob = Vec::new();
+                blob.write_u16::<BigEndian>(ACC_PUBLIC).unwrap();
+                blob.write_u16::<BigEndian>(name_idx).unwrap();
+                blob.write_u16::<BigEndian>(desc_idx).unwrap();
+                blob.write_u16::<BigEndian>(1).unwrap();
+                blob.write_u16::<BigEndian>(code_attr).unwrap();
+                let code_bytes: &[u8] = &[0x01, 0xB0]; // aconst_null; areturn
+                blob.write_u32::<BigEndian>(2 + 2 + 4 + code_bytes.len() as u32 + 2 + 2)
+                    .unwrap();
+                blob.write_u16::<BigEndian>(1).unwrap(); // max_stack
+                blob.write_u16::<BigEndian>((iface_arity + 1) as u16)
+                    .unwrap();
+                blob.write_u32::<BigEndian>(code_bytes.len() as u32)
+                    .unwrap();
+                blob.write_all(code_bytes).unwrap();
+                blob.write_u16::<BigEndian>(0).unwrap();
+                blob.write_u16::<BigEndian>(0).unwrap();
+                return blob;
+            }
+        }
         return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC);
     }
     // Lambda invoke methods whose interface was bumped by the Compose
     // transform (Function0→Function2). If the body has broken patterns
-    // (null stubs, wrong field types), emit a stub with the correct
-    // Function2 descriptor. Otherwise keep the original body.
+    // emit a stub with the correct FunctionN descriptor.
     if !is_init && func.name == "invoke" && class_name.contains("$Lambda$") {
         let iface_arity = module
             .classes
@@ -2072,6 +2133,7 @@ fn emit_method_body(
 /// Detect if a MIR function contains patterns from unresolved calls that
 /// would produce invalid bytecode. Returns true if the function should
 /// be emitted as a safe return-default stub instead.
+#[allow(dead_code)]
 fn has_null_stubs(func: &MirFunction) -> bool {
     has_null_stubs_inner(func, false)
 }
@@ -2303,7 +2365,7 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
             }
         }
     }
-    // No additional issues found.
+    // (Lambda invoke primitive-param check is done at the call site with class_name context.)
     false
 }
 
@@ -2441,7 +2503,7 @@ fn emit_method(
     // emit a safe stub body that simply returns the default value for the
     // return type. This produces valid bytecode that d8 always accepts.
     // Never stub `main` — it must always have a real body.
-    if func.name != "main" && (has_null_stubs(func) || has_type_flow_issues(func)) {
+    if func.name != "main" && (has_null_stubs_why(func, class_name) || has_type_flow_issues(func)) {
         return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC | ACC_STATIC);
     }
     // Coroutine transform. If the MIR lowerer
