@@ -532,11 +532,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                         matches!(m.locals.get(p.0 as usize), Some(Ty::Int) | Some(Ty::Bool))
                     })
                 });
-            let needs = (!mir_has_matching || has_int_params) && arity > 0;
-            if class.name.contains("$Lambda$") {
-                eprintln!("[BRIDGE-CHECK] {} arity={arity} suspend={is_real_suspend} mir_match={mir_has_matching} int_params={has_int_params} needs={needs}", class.name);
-            }
-            needs
+            (!mir_has_matching || has_int_params) && arity > 0
         }
     } else {
         false

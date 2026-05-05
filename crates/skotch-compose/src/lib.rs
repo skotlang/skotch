@@ -156,7 +156,12 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                 method.params.push(changed_id);
                 method.param_names.push("$changed".to_string());
 
-                thread_composer_args(method, composer_id, changed_id);
+                // Note: thread_composer_args is intentionally NOT called here.
+                // The MIR lowering and compose arg patching already place
+                // the correct $composer/$changed values in composable call
+                // args. Calling thread_composer_args would create duplicates
+                // by replacing user-default null placeholders with $composer.
+                let _ = (composer_id, changed_id);
             }
         }
     }
@@ -164,6 +169,9 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
 
 /// Replace null $composer and zero $changed placeholders in composable
 /// function calls with references to the actual lambda invoke params.
+/// NOTE: Currently disabled — the MIR lowering and compose arg patching
+/// already handle placing the correct $composer/$changed values.
+#[allow(dead_code, clippy::needless_range_loop)]
 fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed_local: LocalId) {
     use skotch_mir::MirConst;
     // First, find which locals hold Const(Null) that are used as
@@ -219,17 +227,22 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
             {
                 let n = args.len();
                 if n >= 2 {
-                    // Check if the descriptor has Composer + int as last 2 params.
                     let desc_has_composer = descriptor.contains("Composer;")
                         || descriptor.contains("Ljava/lang/Object;I)");
                     if desc_has_composer {
-                        // Replace second-to-last arg if it's a null placeholder.
-                        if null_locals.contains(&args[n - 2].0) {
-                            args[n - 2] = composer_local;
-                        }
-                        // Replace last arg if it's a zero placeholder.
-                        if zero_locals.contains(&args[n - 1].0) {
-                            args[n - 1] = changed_local;
+                        // Replace null-placeholder args with real $composer,
+                        // and zero-placeholder args with real $changed.
+                        // Skip args that are ALREADY the real param locals
+                        // (the MIR lowering may have placed them already).
+                        for i in 0..n {
+                            if args[i] == composer_local || args[i] == changed_local {
+                                continue; // already the real param
+                            }
+                            if null_locals.contains(&args[i].0) {
+                                args[i] = composer_local;
+                            } else if zero_locals.contains(&args[i].0) {
+                                args[i] = changed_local;
+                            }
                         }
                     }
                 }
