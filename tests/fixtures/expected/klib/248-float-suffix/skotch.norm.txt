@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -16,9 +16,9 @@ unique_name=inputkt
       "name": "main",
       "params": [],
       "locals": [
-        "Double",
-        "Double",
-        "Double",
+        "Float",
+        "Float",
+        "Float",
         "Unit"
       ],
       "blocks": [
@@ -29,7 +29,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "Double": 3.14
+                    "Float": 3.14
                   }
                 }
               }

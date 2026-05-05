@@ -1,4 +1,4 @@
-class_version major=61 minor=0
+class_version major=52 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031

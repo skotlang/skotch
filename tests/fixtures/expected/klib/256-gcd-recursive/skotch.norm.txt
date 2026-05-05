@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -30,6 +30,8 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
+        "Any",
+        "Any",
         "Int"
       ],
       "blocks": [
@@ -139,11 +141,49 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      7
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      10
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Call": {
+                    "kind": {
                       "Static": 0
                     },
                     "args": [
-                      7,
-                      10
+                      11,
+                      12
                     ]
                   }
                 }
@@ -151,7 +191,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 13
           }
         }
       ],

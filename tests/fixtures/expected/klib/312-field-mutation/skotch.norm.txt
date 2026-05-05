@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -23,11 +23,13 @@ unique_name=inputkt
         {
           "Class": "Box"
         },
+        "Int",
         {
           "Class": "Box"
         },
         "Int",
         "Unit",
+        "Int",
         {
           "Class": "Box"
         },
@@ -87,13 +89,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "Int": 5
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 4,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 5
@@ -103,7 +115,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -113,18 +125,10 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      4,
+                      5
                     ]
                   }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 2
                 }
               }
             },
@@ -142,6 +146,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -150,29 +172,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      6,
-                      7
+                      8,
+                      9
                     ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "GetField": {
-                    "receiver": 9,
-                    "class_name": "Box",
-                    "field_name": "value"
                   }
                 }
               }
@@ -181,10 +183,30 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "GetField": {
+                    "receiver": 11,
+                    "class_name": "Box",
+                    "field_name": "value"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
+                      12
                     ]
                   }
                 }

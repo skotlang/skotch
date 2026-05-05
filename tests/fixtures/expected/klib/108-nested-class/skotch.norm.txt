@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -16,6 +16,7 @@ unique_name=inputkt
       "name": "main",
       "params": [],
       "locals": [
+        "Int",
         "Int",
         {
           "Class": "Container$Item"
@@ -46,21 +47,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "NewInstance": "Container$Item"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Constructor": "Container$Item"
-                    },
-                    "args": [
-                      0
-                    ]
+                  "Const": {
+                    "Int": 42
                   }
                 }
               }
@@ -69,7 +57,22 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "NewInstance": "Container$Item"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Container$Item"
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -85,8 +88,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
+                  "Local": 3
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
                   "GetField": {
-                    "receiver": 3,
+                    "receiver": 4,
                     "class_name": "Container$Item",
                     "field_name": "value"
                   }
@@ -95,12 +106,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      5
                     ]
                   }
                 }

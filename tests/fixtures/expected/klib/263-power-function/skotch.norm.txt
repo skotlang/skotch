@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -31,6 +31,8 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
+        "Any",
+        "Any",
         "Int",
         "Int"
       ],
@@ -153,11 +155,14 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 0
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
                     },
                     "args": [
-                      8,
-                      11
+                      8
                     ]
                   }
                 }
@@ -167,17 +172,52 @@ unique_name=inputkt
               "Assign": {
                 "dest": 13,
                 "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      11
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      12,
+                      13
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
                   "BinOp": {
                     "op": "MulI",
                     "lhs": 7,
-                    "rhs": 12
+                    "rhs": 14
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 13
+            "ReturnValue": 15
           }
         }
       ],

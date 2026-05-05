@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -22,6 +22,7 @@ unique_name=inputkt
         {
           "Class": "Service"
         },
+        "String",
         {
           "Class": "Service"
         },
@@ -69,13 +70,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "String": 0
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
                 "value": {
                   "Const": {
                     "String": 0
@@ -85,7 +96,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -95,8 +106,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2,
-                      3
+                      3,
+                      4
                     ]
                   }
                 }
@@ -104,7 +115,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Local": 1
                 }
@@ -112,10 +123,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 7,
                 "value": {
                   "GetField": {
-                    "receiver": 5,
+                    "receiver": 6,
                     "class_name": "Service",
                     "field_name": "name"
                   }
@@ -124,12 +135,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 8,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      6
+                      7
                     ]
                   }
                 }

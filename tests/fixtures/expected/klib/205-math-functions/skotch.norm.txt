@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -440,7 +440,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 0
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "abs",
+                        "descriptor": "(I)I"
+                      }
                     },
                     "args": [
                       2
@@ -471,7 +475,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 0
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "abs",
+                        "descriptor": "(I)I"
+                      }
                     },
                     "args": [
                       5
@@ -790,7 +798,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 0
+                      "StaticJava": {
+                        "class_name": "java/lang/Math",
+                        "method_name": "abs",
+                        "descriptor": "(I)I"
+                      }
                     },
                     "args": [
                       0

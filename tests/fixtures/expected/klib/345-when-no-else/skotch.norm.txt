@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -29,11 +29,17 @@ unique_name=inputkt
           "Class": "S"
         },
         "Bool",
+        {
+          "Class": "A"
+        },
         "String",
         {
           "Class": "S"
         },
         "Bool",
+        {
+          "Class": "B"
+        },
         "String"
       ],
       "blocks": [
@@ -88,6 +94,14 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
                   "Const": {
                     "String": 0
                   }
@@ -98,7 +112,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 5
+                  "Local": 6
                 }
               }
             }
@@ -111,7 +125,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 6,
+                "dest": 7,
                 "value": {
                   "Local": 0
                 }
@@ -119,10 +133,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 8,
                 "value": {
                   "InstanceOf": {
-                    "obj": 6,
+                    "obj": 7,
                     "type_descriptor": "B"
                   }
                 }
@@ -131,7 +145,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 7,
+              "cond": 8,
               "then_block": 4,
               "else_block": 5
             }
@@ -141,7 +155,15 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 8,
+                "dest": 9,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
                 "value": {
                   "Const": {
                     "String": 1
@@ -153,7 +175,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 8
+                  "Local": 10
                 }
               }
             }

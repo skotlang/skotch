@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.10.0
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -25,6 +25,8 @@ unique_name=inputkt
         {
           "Class": "Color"
         },
+        "Int",
+        "Int",
         {
           "Class": "Color"
         },
@@ -114,7 +116,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 4
+                  "Const": {
+                    "Int": 128
+                  }
                 }
               }
             },
@@ -132,9 +136,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Const": {
-                    "Int": 128
-                  }
+                  "Local": 4
                 }
               }
             },
@@ -142,10 +144,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "GetField": {
-                    "receiver": 5,
-                    "class_name": "Color",
-                    "field_name": "r"
+                  "Const": {
+                    "Int": 128
                   }
                 }
               }
@@ -164,6 +164,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
+                  "GetField": {
+                    "receiver": 7,
+                    "class_name": "Color",
+                    "field_name": "r"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
                   "Const": {
                     "Int": 128
                   }
@@ -172,7 +184,17 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 12,
+                "value": {
+                  "Const": {
+                    "Int": 128
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
                 "value": {
                   "Call": {
                     "kind": {
@@ -182,10 +204,10 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      5,
-                      8,
-                      9,
-                      10
+                      7,
+                      10,
+                      11,
+                      12
                     ]
                   }
                 }
@@ -193,28 +215,28 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 12
-                }
-              }
-            },
-            {
-              "Assign": {
                 "dest": 14,
+                "value": {
+                  "Local": 13
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Local": 14
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      13
+                      15
                     ]
                   }
                 }

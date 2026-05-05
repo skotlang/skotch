@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -353,8 +353,9 @@ unique_name=inputkt
             {
               "Class": "kotlin/coroutines/Continuation"
             },
+            "Any",
             {
-              "Class": "kotlinx/coroutines/GlobalScope"
+              "Class": "kotlinx/coroutines/CoroutineScope"
             },
             {
               "Class": "kotlin/coroutines/CoroutineContext"
@@ -433,10 +434,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "GetStaticField": {
-                        "class_name": "kotlinx/coroutines/GlobalScope",
-                        "field_name": "INSTANCE",
-                        "descriptor": "Lkotlinx/coroutines/GlobalScope;"
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "InputKt$Lambda$0",
+                        "field_name": "p$0"
                       }
                     }
                   }
@@ -445,7 +446,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 6,
                     "value": {
-                      "Const": "Null"
+                      "CheckCast": {
+                        "obj": 5,
+                        "target_class": "kotlinx/coroutines/CoroutineScope"
+                      }
                     }
                   }
                 },
@@ -461,6 +465,14 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 8,
                     "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 9,
+                    "value": {
                       "CheckCast": {
                         "obj": 3,
                         "target_class": "kotlin/jvm/functions/Function2"
@@ -470,7 +482,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 9,
+                    "dest": 10,
                     "value": {
                       "Const": {
                         "Int": 3
@@ -480,7 +492,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 10,
+                    "dest": 11,
                     "value": {
                       "Const": "Null"
                     }
@@ -488,7 +500,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 11,
+                    "dest": 12,
                     "value": {
                       "Call": {
                         "kind": {
@@ -499,12 +511,12 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          5,
                           6,
                           7,
                           8,
                           9,
-                          10
+                          10,
+                          11
                         ]
                       }
                     }
@@ -512,7 +524,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 12,
+                    "dest": 13,
                     "value": {
                       "Const": {
                         "Long": 200
@@ -522,7 +534,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 13,
+                    "dest": 14,
                     "value": {
                       "Const": "Null"
                     }
@@ -530,15 +542,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 14,
+                    "dest": 15,
                     "value": {
                       "Call": {
                         "kind": {
                           "Static": 1
                         },
                         "args": [
-                          12,
-                          13
+                          13,
+                          14
                         ]
                       }
                     }
@@ -546,7 +558,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 14
+                "ReturnValue": 15
               }
             }
           ],
@@ -562,17 +574,17 @@ unique_name=inputkt
             "sites": [
               {
                 "block_idx": 0,
-                "stmt_idx": 14,
+                "stmt_idx": 15,
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  12
+                  13
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 14
+                "result_local": 15
               }
             ],
             "is_instance_method": false

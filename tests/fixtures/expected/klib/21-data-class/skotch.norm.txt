@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -901,7 +901,9 @@ unique_name=inputkt
           "id": 13,
           "name": "copy",
           "params": [
-            0
+            0,
+            1,
+            2
           ],
           "locals": [
             {
@@ -916,30 +918,6 @@ unique_name=inputkt
           "blocks": [
             {
               "stmts": [
-                {
-                  "Assign": {
-                    "dest": 1,
-                    "value": {
-                      "GetField": {
-                        "receiver": 0,
-                        "class_name": "Point",
-                        "field_name": "x"
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 2,
-                    "value": {
-                      "GetField": {
-                        "receiver": 0,
-                        "class_name": "Point",
-                        "field_name": "y"
-                      }
-                    }
-                  }
-                },
                 {
                   "Assign": {
                     "dest": 3,

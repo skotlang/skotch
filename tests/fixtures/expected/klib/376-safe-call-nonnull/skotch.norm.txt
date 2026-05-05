@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -16,7 +16,9 @@ unique_name=inputkt
       "name": "main",
       "params": [],
       "locals": [
-        "String",
+        {
+          "Nullable": "String"
+        },
         {
           "Nullable": "String"
         },
@@ -37,11 +39,18 @@ unique_name=inputkt
         {
           "Nullable": "String"
         },
+        {
+          "Nullable": "Any"
+        },
+        "Bool",
+        {
+          "Class": "java/lang/NullPointerException"
+        },
         "String",
         "String",
         "Unit",
         {
-          "Nullable": "Any"
+          "Nullable": "String"
         },
         {
           "Nullable": "String"
@@ -221,13 +230,75 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 10
+                  "Const": "Null"
                 }
               }
             },
             {
               "Assign": {
                 "dest": 12,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 10,
+                    "rhs": 11
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 12,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "NewInstance": "java/lang/NullPointerException"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 13,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "ConstructorJava": {
+                        "class_name": "java/lang/NullPointerException",
+                        "descriptor": "()V"
+                      }
+                    },
+                    "args": []
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Throw": 13
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Local": 10
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
                 "value": {
                   "Call": {
                     "kind": {
@@ -238,38 +309,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      11
+                      14
                     ]
                   }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Const": "Null"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Local": 14
                 }
               }
             },
@@ -277,7 +319,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
-                  "Local": 15
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      15
+                    ]
+                  }
                 }
               }
             },
@@ -293,10 +340,34 @@ unique_name=inputkt
               "Assign": {
                 "dest": 18,
                 "value": {
+                  "Local": 17
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Local": 18
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
                   "BinOp": {
                     "op": "CmpNe",
-                    "lhs": 16,
-                    "rhs": 17
+                    "lhs": 19,
+                    "rhs": 20
                   }
                 }
               }
@@ -304,9 +375,9 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 18,
-              "then_block": 4,
-              "else_block": 5
+              "cond": 21,
+              "then_block": 6,
+              "else_block": 7
             }
           }
         },
@@ -314,15 +385,15 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 20,
+                "dest": 23,
                 "value": {
-                  "Local": 16
+                  "Local": 19
                 }
               }
             },
             {
               "Assign": {
-                "dest": 21,
+                "dest": 24,
                 "value": {
                   "Call": {
                     "kind": {
@@ -332,7 +403,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      20
+                      23
                     ]
                   }
                 }
@@ -340,7 +411,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 22,
+                "dest": 25,
                 "value": {
                   "Call": {
                     "kind": {
@@ -351,7 +422,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      21
+                      24
                     ]
                   }
                 }
@@ -359,22 +430,22 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 19,
+                "dest": 22,
                 "value": {
-                  "Local": 22
+                  "Local": 25
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 6
+            "Goto": 8
           }
         },
         {
           "stmts": [
             {
               "Assign": {
-                "dest": 19,
+                "dest": 22,
                 "value": {
                   "Const": "Null"
                 }
@@ -382,19 +453,19 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "Goto": 6
+            "Goto": 8
           }
         },
         {
           "stmts": [
             {
               "Assign": {
-                "dest": 23,
+                "dest": 26,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      19
+                      22
                     ]
                   }
                 }

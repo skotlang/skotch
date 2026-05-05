@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -77,10 +77,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Config",
-                    "field_name": "greeting"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Config",
+                        "method_name": "getGreeting"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -110,10 +116,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "GetField": {
-                    "receiver": 5,
-                    "class_name": "Config",
-                    "field_name": "greeting"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Config",
+                        "method_name": "getGreeting"
+                      }
+                    },
+                    "args": [
+                      5
+                    ]
                   }
                 }
               }
@@ -335,9 +347,155 @@ unique_name=inputkt
         {
           "name": "greeting",
           "ty": "String"
+        },
+        {
+          "name": "greeting$initialized",
+          "ty": "Bool"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getGreeting",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Config"
+            },
+            "Bool",
+            "String",
+            "Unit",
+            "String",
+            "Unit",
+            "Bool",
+            "Unit",
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Config",
+                        "field_name": "greeting$initialized"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Branch": {
+                  "cond": 1,
+                  "then_block": 2,
+                  "else_block": 1
+                }
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Const": {
+                        "String": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Call": {
+                        "kind": "Println",
+                        "args": [
+                          2
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 4,
+                    "value": {
+                      "Const": {
+                        "String": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 5,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Config",
+                        "field_name": "greeting",
+                        "value": 4
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": {
+                        "Bool": true
+                      }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 7,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Config",
+                        "field_name": "greeting$initialized",
+                        "value": 6
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "Goto": 2
+              }
+            },
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 8,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Config",
+                        "field_name": "greeting"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 8
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -347,10 +505,7 @@ unique_name=inputkt
         "locals": [
           {
             "Class": "Config"
-          },
-          "String",
-          "Unit",
-          "String"
+          }
         ],
         "blocks": [
           {
@@ -366,52 +521,6 @@ unique_name=inputkt
                       "args": [
                         0
                       ]
-                    }
-                  }
-                }
-              },
-              {
-                "Assign": {
-                  "dest": 1,
-                  "value": {
-                    "Const": {
-                      "String": 0
-                    }
-                  }
-                }
-              },
-              {
-                "Assign": {
-                  "dest": 2,
-                  "value": {
-                    "Call": {
-                      "kind": "Println",
-                      "args": [
-                        1
-                      ]
-                    }
-                  }
-                }
-              },
-              {
-                "Assign": {
-                  "dest": 3,
-                  "value": {
-                    "Const": {
-                      "String": 1
-                    }
-                  }
-                }
-              },
-              {
-                "Assign": {
-                  "dest": 0,
-                  "value": {
-                    "PutField": {
-                      "receiver": 0,
-                      "class_name": "Config",
-                      "field_name": "greeting",
-                      "value": 3
                     }
                   }
                 }

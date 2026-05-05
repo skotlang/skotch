@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -27,12 +27,14 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
+        "Any",
         "Int",
         "Int",
         "Int",
         "Int",
         "Int",
         "Int",
+        "Any",
         "Int",
         "Int"
       ],
@@ -139,7 +141,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 0
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
                     },
                     "args": [
                       8
@@ -152,8 +158,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Const": {
-                    "Int": 1
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      9
+                    ]
                   }
                 }
               }
@@ -162,10 +173,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "BinOp": {
-                    "op": "AddI",
-                    "lhs": 9,
-                    "rhs": 10
+                  "Const": {
+                    "Int": 1
                   }
                 }
               }
@@ -174,13 +183,25 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "AddI",
+                    "lhs": 10,
+                    "rhs": 11
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 13,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -190,27 +211,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 14,
+                "dest": 15,
                 "value": {
                   "BinOp": {
                     "op": "SubI",
-                    "lhs": 12,
-                    "rhs": 13
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Static": 0
-                    },
-                    "args": [
-                      14
-                    ]
+                    "lhs": 13,
+                    "rhs": 14
                   }
                 }
               }
@@ -219,17 +225,51 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      15
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 0
+                    },
+                    "args": [
+                      16
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
                   "BinOp": {
                     "op": "AddI",
-                    "lhs": 11,
-                    "rhs": 15
+                    "lhs": 12,
+                    "rhs": 17
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 16
+            "ReturnValue": 18
           }
         }
       ],

@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -23,6 +23,7 @@ unique_name=inputkt
         {
           "Class": "Builder"
         },
+        "String",
         {
           "Class": "Builder"
         },
@@ -78,13 +79,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "String": 1
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 4,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 1
@@ -94,7 +105,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -104,8 +115,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      4,
+                      5
                     ]
                   }
                 }
@@ -113,12 +124,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      6
                     ]
                   }
                 }

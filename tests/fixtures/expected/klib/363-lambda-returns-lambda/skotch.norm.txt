@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -29,12 +29,10 @@ unique_name=inputkt
         "Int",
         "Any",
         "Any",
-        "Int",
         "Unit",
         "Int",
         "Any",
         "Any",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -178,13 +176,7 @@ unique_name=inputkt
                 "dest": 9,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "intValue",
-                        "descriptor": "()I"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
                       8
                     ]
@@ -196,19 +188,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
                   "Const": {
                     "Int": 10
                   }
@@ -217,7 +196,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 12,
+                "dest": 11,
                 "value": {
                   "Call": {
                     "kind": {
@@ -228,6 +207,25 @@ unique_name=inputkt
                       }
                     },
                     "args": [
+                      10
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "kotlin/jvm/functions/Function1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      5,
                       11
                     ]
                   }
@@ -239,47 +237,9 @@ unique_name=inputkt
                 "dest": 13,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "kotlin/jvm/functions/Function1",
-                        "method_name": "invoke"
-                      }
-                    },
-                    "args": [
-                      5,
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "intValue",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      13
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
                     "kind": "Println",
                     "args": [
-                      14
+                      12
                     ]
                   }
                 }

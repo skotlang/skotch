@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -80,6 +80,7 @@ unique_name=inputkt
           "Class": "Transform"
         },
         "Int",
+        "Int",
         {
           "Class": "Transform"
         },
@@ -93,7 +94,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
+                  "Local": 1
                 }
               }
             },
@@ -101,13 +102,21 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Local": 0
                 }
               }
             },
             {
               "Assign": {
                 "dest": 4,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -117,8 +126,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2,
-                      3
+                      3,
+                      4
                     ]
                   }
                 }
@@ -126,7 +135,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 5
           }
         }
       ],

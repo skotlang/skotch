@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -23,6 +23,7 @@ unique_name=inputkt
         {
           "Class": "Logger"
         },
+        "String",
         {
           "Class": "Logger"
         },
@@ -77,13 +78,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "String": 4
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 4,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 4
@@ -93,7 +104,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -103,8 +114,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      4,
+                      5
                     ]
                   }
                 }

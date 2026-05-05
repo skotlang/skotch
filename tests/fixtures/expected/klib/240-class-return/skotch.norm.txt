@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -105,12 +105,12 @@ unique_name=inputkt
         {
           "Class": "Pair"
         },
-        "Any",
+        "Int",
         "Unit",
         {
           "Class": "Pair"
         },
-        "Any",
+        "Int",
         "Unit"
       ],
       "blocks": [
@@ -172,17 +172,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/Pair",
-                        "method_name": "getFirst",
-                        "descriptor": "()Ljava/lang/Object;"
-                      }
-                    },
-                    "args": [
-                      4
-                    ]
+                  "GetField": {
+                    "receiver": 4,
+                    "class_name": "Pair",
+                    "field_name": "first"
                   }
                 }
               }
@@ -212,17 +205,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/Pair",
-                        "method_name": "getSecond",
-                        "descriptor": "()Ljava/lang/Object;"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
+                  "GetField": {
+                    "receiver": 7,
+                    "class_name": "Pair",
+                    "field_name": "second"
                   }
                 }
               }

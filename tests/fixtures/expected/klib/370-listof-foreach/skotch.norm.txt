@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -37,10 +37,13 @@ unique_name=inputkt
           "Class": "java/util/List"
         },
         {
+          "Class": "InputKt$Lambda$0"
+        },
+        {
           "Class": "java/util/List"
         },
         {
-          "Class": "InputKt$Lambda$0"
+          "Class": "InputKt$Lambda$1"
         },
         {
           "Class": "java/util/Iterator"
@@ -255,21 +258,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
                   "NewInstance": "InputKt$Lambda$0"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 17,
+                "dest": 16,
                 "value": {
                   "Call": {
                     "kind": {
@@ -282,7 +277,36 @@ unique_name=inputkt
             },
             {
               "Assign": {
+                "dest": 17,
+                "value": {
+                  "Local": 15
+                }
+              }
+            },
+            {
+              "Assign": {
                 "dest": 18,
+                "value": {
+                  "NewInstance": "InputKt$Lambda$1"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "InputKt$Lambda$1"
+                    },
+                    "args": []
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
                 "value": {
                   "Call": {
                     "kind": {
@@ -293,7 +317,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      16
+                      17
                     ]
                   }
                 }
@@ -308,7 +332,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 19,
+                "dest": 20,
                 "value": {
                   "Call": {
                     "kind": {
@@ -319,7 +343,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      18
+                      19
                     ]
                   }
                 }
@@ -328,7 +352,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 19,
+              "cond": 20,
               "then_block": 2,
               "else_block": 3
             }
@@ -338,7 +362,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 20,
+                "dest": 21,
                 "value": {
                   "Call": {
                     "kind": {
@@ -349,7 +373,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      18
+                      19
                     ]
                   }
                 }
@@ -357,18 +381,18 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 21,
+                "dest": 22,
                 "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
-                        "class_name": "InputKt$Lambda$0",
+                        "class_name": "InputKt$Lambda$1",
                         "method_name": "invoke"
                       }
                     },
                     "args": [
-                      17,
-                      20
+                      18,
+                      21
                     ]
                   }
                 }
@@ -640,6 +664,99 @@ unique_name=inputkt
         "locals": [
           {
             "Class": "InputKt$Lambda$0"
+          }
+        ],
+        "blocks": [
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 0,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "Constructor": "java/lang/Object"
+                      },
+                      "args": [
+                        0
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": "Return"
+          }
+        ],
+        "return_ty": "Unit"
+      }
+    },
+    {
+      "name": "InputKt$Lambda$1",
+      "super_class": null,
+      "is_open": false,
+      "is_abstract": false,
+      "is_interface": false,
+      "interfaces": [
+        "kotlin/jvm/functions/Function1"
+      ],
+      "fields": [],
+      "methods": [
+        {
+          "id": 1009,
+          "name": "invoke",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "InputKt$Lambda$1"
+            },
+            "Any",
+            "Any",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "Local": 1
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 3,
+                    "value": {
+                      "Call": {
+                        "kind": "Println",
+                        "args": [
+                          2
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        }
+      ],
+      "constructor": {
+        "id": 0,
+        "name": "<init>",
+        "params": [
+          0
+        ],
+        "locals": [
+          {
+            "Class": "InputKt$Lambda$1"
           }
         ],
         "blocks": [

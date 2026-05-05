@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -18,10 +18,13 @@ unique_name=inputkt
       "locals": [
         "String",
         "String",
+        "Int",
         "String",
         "Int",
         "String",
         "Unit",
+        "Int",
+        "Int",
         "String",
         "Int",
         "Int",
@@ -56,13 +59,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "Int": 7
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
                 "value": {
                   "Const": {
                     "Int": 7
@@ -72,7 +85,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -83,20 +96,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2,
-                      3
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
+                      3,
                       4
                     ]
                   }
@@ -107,7 +107,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
                 }
               }
             },
@@ -135,20 +140,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "substring",
-                        "descriptor": "(II)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      6,
-                      7,
-                      8
-                    ]
-                  }
+                  "Local": 1
                 }
               }
             },
@@ -156,11 +148,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      9
-                    ]
+                  "Const": {
+                    "Int": 0
                   }
                 }
               }
@@ -169,7 +158,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "Int": 5
+                  }
                 }
               }
             },
@@ -181,11 +172,13 @@ unique_name=inputkt
                     "kind": {
                       "VirtualJava": {
                         "class_name": "java/lang/String",
-                        "method_name": "trim",
-                        "descriptor": "()Ljava/lang/String;"
+                        "method_name": "substring",
+                        "descriptor": "(II)Ljava/lang/String;"
                       }
                     },
                     "args": [
+                      9,
+                      10,
                       11
                     ]
                   }
@@ -200,6 +193,46 @@ unique_name=inputkt
                     "kind": "Println",
                     "args": [
                       12
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "trim",
+                        "descriptor": "()Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      14
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      15
                     ]
                   }
                 }

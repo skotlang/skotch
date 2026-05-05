@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -23,12 +23,14 @@ unique_name=inputkt
         {
           "Class": "Multiplier"
         },
+        "Int",
         {
           "Class": "Multiplier"
         },
         "Int",
         "Int",
         "Unit",
+        "Int",
         {
           "Class": "Multiplier"
         },
@@ -84,13 +86,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "Int": 7
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 4,
+                "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 7
@@ -100,7 +112,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -110,20 +122,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
+                      4,
                       5
                     ]
                   }
@@ -134,7 +133,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      6
+                    ]
+                  }
                 }
               }
             },
@@ -152,6 +156,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
+                  "Local": 2
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "Int": 10
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -160,8 +182,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      7,
-                      8
+                      9,
+                      10
                     ]
                   }
                 }
@@ -169,12 +191,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 10,
+                "dest": 12,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      9
+                      11
                     ]
                   }
                 }

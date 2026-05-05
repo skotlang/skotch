@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.9.0
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -328,6 +328,9 @@ unique_name=inputkt
           "Int",
           "Int",
           "Bool",
+          {
+            "Class": "java/lang/IllegalArgumentException"
+          },
           "Unit"
         ],
         "blocks": [
@@ -392,6 +395,47 @@ unique_name=inputkt
                 }
               }
             ],
+            "terminator": {
+              "Branch": {
+                "cond": 4,
+                "then_block": 2,
+                "else_block": 1
+              }
+            }
+          },
+          {
+            "stmts": [
+              {
+                "Assign": {
+                  "dest": 5,
+                  "value": {
+                    "NewInstance": "java/lang/IllegalArgumentException"
+                  }
+                }
+              },
+              {
+                "Assign": {
+                  "dest": 5,
+                  "value": {
+                    "Call": {
+                      "kind": {
+                        "ConstructorJava": {
+                          "class_name": "java/lang/IllegalArgumentException",
+                          "descriptor": "()V"
+                        }
+                      },
+                      "args": []
+                    }
+                  }
+                }
+              }
+            ],
+            "terminator": {
+              "Throw": 5
+            }
+          },
+          {
+            "stmts": [],
             "terminator": "Return"
           }
         ],

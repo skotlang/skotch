@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -27,6 +27,7 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
+        "Any",
         "Bool"
       ],
       "blocks": [
@@ -132,7 +133,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Static": 1
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
                     },
                     "args": [
                       8
@@ -140,10 +145,25 @@ unique_name=inputkt
                   }
                 }
               }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 1
+                    },
+                    "args": [
+                      9
+                    ]
+                  }
+                }
+              }
             }
           ],
           "terminator": {
-            "ReturnValue": 9
+            "ReturnValue": 10
           }
         }
       ],

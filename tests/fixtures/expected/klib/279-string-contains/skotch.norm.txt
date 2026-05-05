@@ -2,7 +2,7 @@
 abi_version=0.1.0
 builtins_platform=NATIVE
 compiler=skotch
-compiler_version=0.8.3
+compiler_version=0.40.1
 depends=stdlib
 native_targets=macos_arm64
 unique_name=inputkt
@@ -20,16 +20,20 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "Bool",
-        "Unit",
-        "String",
         "String",
         "Bool",
         "Unit",
         "String",
         "String",
+        "String",
         "Bool",
         "Unit",
+        "String",
+        "String",
+        "String",
+        "Bool",
+        "Unit",
+        "String",
         "String",
         "String",
         "Bool",
@@ -60,13 +64,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "String": 1
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 3,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
                 "value": {
                   "Const": {
                     "String": 1
@@ -76,7 +90,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -87,20 +101,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2,
-                      3
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
+                      3,
                       4
                     ]
                   }
@@ -111,7 +112,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
                 }
               }
             },
@@ -129,6 +135,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -138,37 +162,29 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      6,
-                      7
+                      8,
+                      9
                     ]
                   }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 1
                 }
               }
             },
             {
               "Assign": {
                 "dest": 11,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      10
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
                 "value": {
                   "Const": {
                     "String": 3
@@ -178,7 +194,25 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 12,
+                "dest": 13,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
                 "value": {
                   "Call": {
                     "kind": {
@@ -189,40 +223,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      10,
-                      11
+                      13,
+                      14
                     ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Const": {
-                    "String": 4
                   }
                 }
               }
@@ -232,15 +235,8 @@ unique_name=inputkt
                 "dest": 16,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "endsWith",
-                        "descriptor": "(Ljava/lang/String;)Z"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
-                      14,
                       15
                     ]
                   }
@@ -251,10 +247,58 @@ unique_name=inputkt
               "Assign": {
                 "dest": 17,
                 "value": {
+                  "Const": {
+                    "String": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Local": 1
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Const": {
+                    "String": 4
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "endsWith",
+                        "descriptor": "(Ljava/lang/String;)Z"
+                      }
+                    },
+                    "args": [
+                      18,
+                      19
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      16
+                      20
                     ]
                   }
                 }
