@@ -1,39 +1,35 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=10
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=9
     0000 bipush 10
-    0002 istore 1
-    0004 new Class(Outer)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(Outer.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 checkcast Class(Outer)
-    0020 astore 3
-    0022 iconst_5
-    0023 istore 4
-    0025 iconst_5
-    0026 istore 5
-    0028 new Class(Outer$Inner)
-    0031 dup
-    0032 aload 3
-    0034 iload 5
-    0036 invokespecial Method(Outer$Inner.<init>:(LOuter;I)V)
-    0039 astore 6
-    0041 aload 6
-    0043 checkcast Class(Outer$Inner)
-    0046 astore 7
-    0048 aload 7
-    0050 checkcast Class(Outer$Inner)
-    0053 astore 8
-    0055 aload 8
-    0057 invokevirtual Method(Outer$Inner.sum:()I)
-    0060 istore 9
-    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0065 iload 9
-    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0070 return
+    0002 istore_0
+    0003 new Class(Outer)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(Outer.<init>:(I)V)
+    0011 checkcast Class(Outer)
+    0014 astore_2
+    0015 iconst_5
+    0016 istore_3
+    0017 iconst_5
+    0018 istore 4
+    0020 new Class(Outer$Inner)
+    0023 dup
+    0024 aload_2
+    0025 iload 4
+    0027 invokespecial Method(Outer$Inner.<init>:(LOuter;I)V)
+    0030 checkcast Class(Outer$Inner)
+    0033 checkcast Class(Outer$Inner)
+    0036 invokevirtual Method(Outer$Inner.sum:()I)
+    0039 istore 8
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload 8
+    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0049 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

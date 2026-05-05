@@ -1,57 +1,45 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        addOne (I)I 0x0009
+method        addOne (I)I 0x0019
   code        max_stack=2 max_locals=4
-    0000 iload 0
-    0002 istore 1
-    0004 iconst_1
-    0005 istore 2
-    0007 iload 1
-    0009 iload 2
-    0011 iadd
-    0012 istore 3
-    0014 iload 3
-    0016 op_0xAC
-method        double (I)I 0x0009
+    0000 iload_0
+    0001 istore_1
+    0002 iconst_1
+    0003 istore_2
+    0004 iload_1
+    0005 iload_2
+    0006 iadd
+    0007 op_0xAC
+method        double (I)I 0x0019
   code        max_stack=2 max_locals=4
-    0000 iload 0
-    0002 istore 1
-    0004 iconst_2
-    0005 istore 2
-    0007 iload 1
-    0009 iload 2
-    0011 imul
-    0012 istore 3
-    0014 iload 3
-    0016 op_0xAC
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=9
+    0000 iload_0
+    0001 istore_1
+    0002 iconst_2
+    0003 istore_2
+    0004 iload_1
+    0005 iload_2
+    0006 imul
+    0007 op_0xAC
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=8
     0000 iconst_5
-    0001 istore 1
-    0003 iload 1
-    0005 invokestatic Method(InputKt.double:(I)I)
-    0008 istore 2
-    0010 iload 2
-    0012 invokestatic Method(InputKt.addOne:(I)I)
-    0015 istore 3
-    0017 iload 3
-    0019 istore 4
-    0021 iload 4
-    0023 istore 5
-    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0028 iload 5
-    0030 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0033 iconst_3
-    0034 istore 6
-    0036 iload 6
-    0038 invokestatic Method(InputKt.addOne:(I)I)
-    0041 istore 7
-    0043 iload 7
-    0045 invokestatic Method(InputKt.double:(I)I)
-    0048 istore 8
-    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0053 iload 8
-    0055 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0058 return
+    0001 invokestatic Method(InputKt.double:(I)I)
+    0004 invokestatic Method(InputKt.addOne:(I)I)
+    0007 istore 4
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 iload 4
+    0014 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0017 iconst_3
+    0018 invokestatic Method(InputKt.addOne:(I)I)
+    0021 invokestatic Method(InputKt.double:(I)I)
+    0024 istore 7
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload 7
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1,40 +1,36 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=10
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=9
     0000 bipush 42
-    0002 istore 1
-    0004 iload 1
-    0006 istore 2
-    0008 sipush 1000
-    0011 istore 3
-    0013 iload 3
-    0015 istore 4
-    0017 ldc float(3.14)
-    0019 op_0x38
-    0020 iconst_2
-    0021 op_0x17
-    0022 iconst_2
-    0023 op_0x38
-    0024 iconst_3
-    0025 iload 2
-    0027 istore 7
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload 7
-    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0037 iload 4
-    0039 istore 8
-    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0044 iload 8
-    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0049 op_0x17
-    0050 iconst_3
-    0051 op_0x38
-    0052 op_0x09
-    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0056 op_0x17
-    0057 op_0x09
-    0058 invokevirtual Method(java/io/PrintStream.println:(F)V)
-    0061 return
+    0002 istore_1
+    0003 sipush 1000
+    0006 istore_3
+    0007 ldc float(3.14)
+    0009 op_0x38
+    0010 iconst_2
+    0011 iload_1
+    0012 istore 6
+    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0017 iload 6
+    0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0022 iload_3
+    0023 istore 7
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload 7
+    0030 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0033 op_0x17
+    0034 iconst_2
+    0035 op_0x38
+    0036 iconst_5
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 op_0x17
+    0041 iconst_5
+    0042 invokevirtual Method(java/io/PrintStream.println:(F)V)
+    0045 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

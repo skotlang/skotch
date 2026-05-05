@@ -1,70 +1,68 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0009
+method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=10
-    0000 aload 0
-    0002 astore 1
-    0004 goto 7
-    0007 ldc "Saturday"
-    0009 astore 2
-    0011 aload 1
-    0013 aload 2
-    0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0018 istore 3
-    0020 iload 3
-    0022 ifeq 36
-    0025 ldc "weekend"
-    0027 astore 4
-    0029 aload 4
-    0031 astore 5
-    0033 goto 76
-    0036 ldc "Sunday"
-    0038 astore 6
-    0040 aload 1
-    0042 aload 6
-    0044 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0047 istore 7
-    0049 iload 7
-    0051 ifeq 65
-    0054 ldc "weekend"
-    0056 astore 8
-    0058 aload 8
-    0060 astore 5
-    0062 goto 76
-    0065 ldc "weekday"
-    0067 astore 9
-    0069 aload 9
-    0071 astore 5
-    0073 goto 76
-    0076 aload 5
-    0078 areturn
+    0000 aload_0
+    0001 astore_1
+    0002 goto 5
+    0005 ldc "Saturday"
+    0007 astore_2
+    0008 aload_1
+    0009 aload_2
+    0010 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0013 istore_3
+    0014 iload_3
+    0015 ifeq 29
+    0018 ldc "weekend"
+    0020 astore 4
+    0022 aload 4
+    0024 astore 5
+    0026 goto 68
+    0029 ldc "Sunday"
+    0031 astore 6
+    0033 aload_1
+    0034 aload 6
+    0036 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0039 istore 7
+    0041 iload 7
+    0043 ifeq 57
+    0046 ldc "weekend"
+    0048 astore 8
+    0050 aload 8
+    0052 astore 5
+    0054 goto 68
+    0057 ldc "weekday"
+    0059 astore 9
+    0061 aload 9
+    0063 astore 5
+    0065 goto 68
+    0068 aload 5
+    0070 areturn
     sub_attr  StackMapTable (76 bytes)
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=7
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=6
     0000 ldc "Monday"
-    0002 astore 1
-    0004 aload 1
-    0006 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
-    0009 astore 2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 aload 2
-    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0019 ldc "Saturday"
-    0021 astore 3
-    0023 aload 3
-    0025 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
-    0028 astore 4
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 aload 4
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0038 ldc "Sunday"
-    0040 astore 5
-    0042 aload 5
-    0044 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
-    0047 astore 6
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 aload 6
-    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0057 return
+    0002 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
+    0005 astore_1
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 aload_1
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0013 ldc "Saturday"
+    0015 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
+    0018 astore_3
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 aload_3
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0026 ldc "Sunday"
+    0028 invokestatic Method(InputKt.dayType:(Ljava/lang/String;)Ljava/lang/String;)
+    0031 astore 5
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload 5
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0041 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

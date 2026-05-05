@@ -1,78 +1,78 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        describe (LResult;)Ljava/lang/String; 0x0009
+method        describe (LResult;)Ljava/lang/String; 0x0019
   code        max_stack=1 max_locals=12
     0000 iconst_1
-    0001 istore 1
-    0003 goto 6
-    0006 aload 0
-    0008 checkcast Class(Result)
-    0011 astore 2
-    0013 aload 2
-    0015 instanceof Class(Ok)
-    0018 istore 3
-    0020 iload 3
-    0022 ifeq 43
-    0025 aload 0
-    0027 checkcast Class(Ok)
-    0030 astore 4
-    0032 ldc "ok"
-    0034 astore 5
-    0036 aload 5
-    0038 astore 6
-    0040 goto 91
-    0043 aload 0
-    0045 checkcast Class(Result)
-    0048 astore 7
-    0050 aload 7
-    0052 instanceof Class(Err)
-    0055 istore 8
-    0057 iload 8
-    0059 ifeq 80
-    0062 aload 0
-    0064 checkcast Class(Err)
-    0067 astore 9
-    0069 ldc "err"
-    0071 astore 10
-    0073 aload 10
-    0075 astore 6
-    0077 goto 91
-    0080 ldc "unknown"
-    0082 astore 11
-    0084 aload 11
-    0086 astore 6
-    0088 goto 91
-    0091 aload 6
-    0093 areturn
+    0001 istore_1
+    0002 goto 5
+    0005 aload_0
+    0006 checkcast Class(Result)
+    0009 astore_2
+    0010 aload_2
+    0011 instanceof Class(Ok)
+    0014 istore_3
+    0015 iload_3
+    0016 ifeq 36
+    0019 aload_0
+    0020 checkcast Class(Ok)
+    0023 astore 4
+    0025 ldc "ok"
+    0027 astore 5
+    0029 aload 5
+    0031 astore 6
+    0033 goto 82
+    0036 aload_0
+    0037 checkcast Class(Result)
+    0040 astore 7
+    0042 aload 7
+    0044 instanceof Class(Err)
+    0047 istore 8
+    0049 iload 8
+    0051 ifeq 71
+    0054 aload_0
+    0055 checkcast Class(Err)
+    0058 astore 9
+    0060 ldc "err"
+    0062 astore 10
+    0064 aload 10
+    0066 astore 6
+    0068 goto 82
+    0071 ldc "unknown"
+    0073 astore 11
+    0075 aload 11
+    0077 astore 6
+    0079 goto 82
+    0082 aload 6
+    0084 areturn
     sub_attr  StackMapTable (69 bytes)
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=7
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=6
     0000 bipush 42
-    0002 istore 1
-    0004 new Class(Ok)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(Ok.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0020 astore 3
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 aload 3
-    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0030 ldc "fail"
-    0032 astore 4
-    0034 new Class(Err)
-    0037 dup
-    0038 aload 4
-    0040 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
-    0043 astore 5
-    0045 aload 5
-    0047 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0050 astore 6
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 aload 6
-    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0060 return
+    0002 istore_0
+    0003 new Class(Ok)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(Ok.<init>:(I)V)
+    0011 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0014 astore_2
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 aload_2
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0022 ldc "fail"
+    0024 astore_3
+    0025 new Class(Err)
+    0028 dup
+    0029 aload_3
+    0030 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
+    0033 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0036 astore 5
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 aload 5
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0046 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -63,6 +63,7 @@ const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
 const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
+const ACC_SYNTHETIC: u16 = 0x1000;
 
 /// A branch target inside a single block's codegen (from comparison patterns).
 /// The comparison `if_icmpXX +7 / iconst_0 / goto +4 / iconst_1` creates
@@ -230,6 +231,13 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
         append_method_annotations(&mut blob, func, &mut cp);
         method_blobs.push(blob);
+
+        // For no-arg main(), kotlinc emits a synthetic bridge
+        // main([Ljava/lang/String;)V that just calls the no-arg version.
+        if func.name == "main" && func.params.is_empty() {
+            let bridge = emit_main_bridge(class_name, &mut cp, code_attr_name_idx);
+            method_blobs.push(bridge);
+        }
     }
 
     let mut out: Vec<u8> = Vec::with_capacity(1024);
@@ -1565,8 +1573,11 @@ fn emit_method_body(
 
     match &kind {
         MethodKind::Static => {
-            if func.name == "main" {
+            if func.name == "main" && !func.params.is_empty() {
+                // main(args: Array<String>) — reserve slot 0 for the String[] arg
                 next_slot = 1;
+            } else if func.name == "main" {
+                // No-arg main()V — no hidden params, locals start at 0
             } else {
                 for &p in &func.params {
                     slots.insert(p.0, next_slot);
@@ -1935,6 +1946,12 @@ fn emit_method_body(
         code[patch.offset_pos + 1] = bytes[1];
     }
 
+    // Pass 3: Peephole optimization — elide adjacent store+load of same slot.
+    // Only safe when there are no branch targets (jumps would be invalidated).
+    if patches.is_empty() && cmp_targets.is_empty() {
+        peephole_elide_store_load(&mut code);
+    }
+
     let max_locals = next_slot as u16;
 
     // ── StackMapTable ────────────────────────────────────────────────
@@ -1948,8 +1965,10 @@ fn emit_method_body(
     // stack = [].
     let initial_locals_count: u16 = match &kind {
         MethodKind::Static => {
-            if func.name == "main" {
-                1
+            if func.name == "main" && func.params.is_empty() {
+                0 // no-arg main()V has no locals in the initial frame
+            } else if func.name == "main" {
+                1 // main(args: Array<String>) has String[] at slot 0
             } else {
                 func.params.len() as u16
             }
@@ -2214,10 +2233,8 @@ fn emit_method_body(
 
     // Build the Code attribute.
     let mut code_attr = Vec::<u8>::new();
-    code_attr
-        .write_u16::<BigEndian>(max_stack.max(1) as u16)
-        .unwrap();
-    code_attr.write_u16::<BigEndian>(max_locals.max(1)).unwrap();
+    code_attr.write_u16::<BigEndian>(max_stack as u16).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
     code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
     code_attr.write_all(&code).unwrap();
     emit_exception_table(&mut code_attr, &func.exception_handlers, &block_offsets, cp);
@@ -2624,7 +2641,12 @@ fn emit_method(
     // return type. This produces valid bytecode that d8 always accepts.
     // Never stub `main` — it must always have a real body.
     if func.name != "main" && (has_null_stubs_why(func, class_name) || has_type_flow_issues(func)) {
-        return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC | ACC_STATIC);
+        return emit_stub_method(
+            func,
+            cp,
+            code_attr_name_idx,
+            ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
+        );
     }
     // Coroutine transform. If the MIR lowerer
     // marked this `suspend fun` with a state-machine descriptor,
@@ -2643,7 +2665,7 @@ fn emit_method(
         );
     }
     let descriptor = jvm_descriptor(func);
-    let access_flags = ACC_PUBLIC | ACC_STATIC;
+    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -2660,6 +2682,50 @@ fn emit_method(
             kind: MethodKind::Static,
         },
     )
+}
+
+/// Emit the synthetic `main([Ljava/lang/String;)V` bridge method that
+/// kotlinc generates for no-arg `fun main()`. The bridge just calls
+/// `invokestatic ThisClass.main:()V` and returns.
+fn emit_main_bridge(class_name: &str, cp: &mut ConstantPool, code_attr_name_idx: u16) -> Vec<u8> {
+    let name_idx = cp.utf8("main");
+    let descriptor_idx = cp.utf8("([Ljava/lang/String;)V");
+    // invokestatic ThisClass.main:()V
+    let method_ref_idx = cp.methodref(class_name, "main", "()V");
+
+    // Bytecode: invokestatic (3 bytes) + return (1 byte) = 4 bytes
+    let code_bytes: Vec<u8> = {
+        let mut code = Vec::new();
+        code.push(0xB8); // invokestatic
+        code.write_u16::<BigEndian>(method_ref_idx).unwrap();
+        code.push(0xB1); // return
+        code
+    };
+
+    let max_stack: u16 = 0;
+    let max_locals: u16 = 1; // slot 0 = String[] arg (unused)
+    let code_len = code_bytes.len() as u32;
+    let attr_len = 2 + 2 + 4 + code_len + 2 + 2; // max_stack + max_locals + code_length + code + exception_table_length + attributes_count
+
+    let mut blob = Vec::new();
+    // access_flags: ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC = 0x1009
+    blob.write_u16::<BigEndian>(ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC)
+        .unwrap();
+    blob.write_u16::<BigEndian>(name_idx).unwrap();
+    blob.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    blob.write_u16::<BigEndian>(1).unwrap(); // attributes_count (Code)
+
+    // Code attribute
+    blob.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    blob.write_u32::<BigEndian>(attr_len).unwrap();
+    blob.write_u16::<BigEndian>(max_stack).unwrap();
+    blob.write_u16::<BigEndian>(max_locals).unwrap();
+    blob.write_u32::<BigEndian>(code_len).unwrap();
+    blob.extend_from_slice(&code_bytes);
+    blob.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count (no StackMapTable)
+
+    blob
 }
 
 /// Emit a `ldc`/`ldc_w` instruction, picking the narrow form when
@@ -4999,14 +5065,6 @@ fn emit_mir_segment(
                     if let Some(&a) = args.first() {
                         emit_load_mir_local(code, func, local_slot, a);
                         let arg_ty = &func.locals[a.0 as usize];
-                        // After coroutine resume, String-typed
-                        // locals have JVM type Object.  Emit checkcast so
-                        // the verifier accepts println(String).
-                        if matches!(arg_ty, Ty::String) {
-                            let ci = cp.class("java/lang/String");
-                            code.push(0xC0); // checkcast
-                            code.write_u16::<BigEndian>(ci).unwrap();
-                        }
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
                             Ty::Char => "(C)V",
@@ -5014,7 +5072,7 @@ fn emit_mir_segment(
                             Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
-                            Ty::String => "(Ljava/lang/String;)V",
+                            // kotlinc uses println(Object) for all reference types
                             _ => "(Ljava/lang/Object;)V",
                         };
                         let mr = cp.methodref("java/io/PrintStream", "println", descriptor);
@@ -5140,7 +5198,7 @@ fn emit_mir_segment(
                     code.push(0xB6); // invokevirtual toString
                     code.write_u16::<BigEndian>(to_str).unwrap();
                     let println =
-                        cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/String;)V");
+                        cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/Object;)V");
                     code.push(0xB6); // invokevirtual println
                     code.write_u16::<BigEndian>(println).unwrap();
                 }
@@ -5297,15 +5355,29 @@ fn emit_load_mir_local(
         .get(&local.0)
         .copied()
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
-    let op: u8 = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => 0x15,
-        Ty::Float => 0x17, // fload
-        Ty::Long => 0x16,
-        Ty::Double => 0x18,
-        _ => 0x19, // aload
+    emit_typed_load(code, ty, slot);
+}
+
+/// Emit a load instruction for the given type and slot, using compact
+/// single-byte forms for slots 0..=3 (matching kotlinc's output).
+fn emit_typed_load(code: &mut Vec<u8>, ty: &Ty, slot: u8) {
+    // Base opcodes for the generic (2-byte) form:
+    //   iload=0x15, lload=0x16, fload=0x17, dload=0x18, aload=0x19
+    // Compact forms: base_compact + slot (for slot 0..=3)
+    //   iload_0=0x1A, lload_0=0x1E, fload_0=0x22, dload_0=0x26, aload_0=0x2A
+    let (generic_op, compact_base) = match ty {
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x15u8, 0x1Au8),
+        Ty::Long => (0x16, 0x1E),
+        Ty::Float => (0x17, 0x22),
+        Ty::Double => (0x18, 0x26),
+        _ => (0x19, 0x2A), // aload
     };
-    code.push(op);
-    code.push(slot);
+    if slot <= 3 {
+        code.push(compact_base + slot);
+    } else {
+        code.push(generic_op);
+        code.push(slot);
+    }
 }
 
 fn emit_store_mir_local(
@@ -5321,15 +5393,29 @@ fn emit_store_mir_local(
     let slot = *local_slot
         .get(&local.0)
         .unwrap_or_else(|| panic!("no slot for MIR local {:?}", local));
-    let op: u8 = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => 0x36,
-        Ty::Float => 0x38, // fstore
-        Ty::Long => 0x37,
-        Ty::Double => 0x39,
-        _ => 0x3A, // astore
+    emit_typed_store(code, ty, slot);
+}
+
+/// Emit a store instruction for the given type and slot, using compact
+/// single-byte forms for slots 0..=3 (matching kotlinc's output).
+fn emit_typed_store(code: &mut Vec<u8>, ty: &Ty, slot: u8) {
+    // Base opcodes for the generic (2-byte) form:
+    //   istore=0x36, lstore=0x37, fstore=0x38, dstore=0x39, astore=0x3A
+    // Compact forms: base_compact + slot (for slot 0..=3)
+    //   istore_0=0x3B, lstore_0=0x3F, fstore_0=0x43, dstore_0=0x47, astore_0=0x4B
+    let (generic_op, compact_base) = match ty {
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x36u8, 0x3Bu8),
+        Ty::Long => (0x37, 0x3F),
+        Ty::Float => (0x38, 0x43),
+        Ty::Double => (0x39, 0x47),
+        _ => (0x3A, 0x4B), // astore
     };
-    code.push(op);
-    code.push(slot);
+    if slot <= 3 {
+        code.push(compact_base + slot);
+    } else {
+        code.push(generic_op);
+        code.push(slot);
+    }
 }
 
 /// Emit the post-resume sequence that consumes the
@@ -7472,6 +7558,11 @@ fn emit_lambda_invoke_suspend_stub(
 }
 
 fn jvm_descriptor(func: &MirFunction) -> String {
+    if func.name == "main" && func.params.is_empty() {
+        // No-arg main: the body method has descriptor ()V.
+        // A synthetic bridge main([String)V is emitted separately.
+        return "()V".to_string();
+    }
     if func.name == "main" {
         return "([Ljava/lang/String;)V".to_string();
     }
@@ -8422,10 +8513,10 @@ fn walk_block(
                     let _ = stack;
 
                     let println =
-                        cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/String;)V");
+                        cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/Object;)V");
                     code.push(0xB6); // invokevirtual
                     code.write_u16::<BigEndian>(println).unwrap();
-                    bump(stack, max_stack, -2); // pops [PS, String]
+                    bump(stack, max_stack, -2); // pops [PS, Object]
                     let _ = dest;
                 }
                 CallKind::StaticJava {
@@ -9086,15 +9177,12 @@ fn store_local(
         return;
     }
     let slot = slot_for_ty(slots, next_slot, local, ty);
-    let (opcode, width) = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x36u8, 1), // istore
-        Ty::Float => (0x38, 1),                                              // fstore
-        Ty::Long => (0x37, 2),   // lstore (takes 2 stack slots)
-        Ty::Double => (0x39, 2), // dstore
-        _ => (0x3A, 1),          // astore
+    let width: i32 = if matches!(ty, Ty::Long | Ty::Double) {
+        2
+    } else {
+        1
     };
-    code.push(opcode);
-    code.push(slot);
+    emit_typed_store(code, ty, slot);
     *stack -= width;
 }
 
@@ -9131,15 +9219,12 @@ fn load_local(
             s
         }
     };
-    let (opcode, width) = match ty {
-        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => (0x15u8, 1), // iload
-        Ty::Float => (0x17, 1),                                              // fload
-        Ty::Long => (0x16, 2),   // lload (pushes 2 stack slots)
-        Ty::Double => (0x18, 2), // dload
-        _ => (0x19, 1),          // aload
+    let width: i32 = if matches!(ty, Ty::Long | Ty::Double) {
+        2
+    } else {
+        1
     };
-    code.push(opcode);
-    code.push(slot);
+    emit_typed_load(code, ty, slot);
     bump(stack, max_stack, width);
 }
 
@@ -9153,23 +9238,358 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
     }
 }
 
+/// Peephole optimization: remove adjacent `Xstore_N; Xload_N` pairs from
+/// bytecode. The net effect of storing a value and immediately loading it
+/// back is a no-op (value remains on stack). This matches kotlinc's code
+/// generation which avoids unnecessary locals.
+///
+/// Only call this when there are NO branch targets in the code — removing
+/// bytes would invalidate jump offsets.
+fn peephole_elide_store_load(code: &mut Vec<u8>) {
+    // We may need multiple passes since removing one pair can create new
+    // adjacent pairs (e.g., astore_1; aload_1; astore_2; aload_2 → after
+    // removing the first pair, astore_2; aload_2 becomes exposed).
+    loop {
+        let mut removals: Vec<(usize, usize)> = Vec::new(); // (start, len) of bytes to remove
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
+                // Only safe to remove if this slot is never loaded again
+                // elsewhere in the method (the adjacent load we're removing
+                // is the ONLY use).
+                let pair_end = i + store_len + load_len;
+                if !slot_loaded_elsewhere(code, slot, pair_end) {
+                    removals.push((i, store_len + load_len));
+                    i += store_len + load_len;
+                    continue;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+
+        if removals.is_empty() {
+            break;
+        }
+
+        // Remove in reverse order to preserve earlier offsets.
+        for &(start, len) in removals.iter().rev() {
+            code.drain(start..start + len);
+        }
+    }
+}
+
+/// Try to decode a store instruction at `pos` and check if the next instruction
+/// is a matching load. Returns (slot, store_len, expected_load_type, load_len).
+fn decode_store_load_pair(code: &[u8], pos: usize) -> Option<(u8, usize, u8, usize)> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    // Compact store forms (1 byte): Xstore_N
+    // Returns (slot, store_instruction_len, corresponding_load_type, load_instruction_len)
+    match op {
+        // istore_0..3
+        0x3B..=0x3E => {
+            let slot = op - 0x3B;
+            let load_start = pos + 1;
+            if load_start < code.len() && code[load_start] == 0x1A + slot {
+                // Next is iload_N (compact)
+                return Some((slot, 1, 0x15, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x15
+                && code[load_start + 1] == slot
+            {
+                // Next is iload N (generic)
+                return Some((slot, 1, 0x15, 2));
+            }
+            None
+        }
+        // lstore_0..3
+        0x3F..=0x42 => {
+            let slot = op - 0x3F;
+            let load_start = pos + 1;
+            if load_start < code.len() && code[load_start] == 0x1E + slot {
+                return Some((slot, 1, 0x16, 1));
+            }
+            None
+        }
+        // fstore_0..3
+        0x43..=0x46 => {
+            let slot = op - 0x43;
+            let load_start = pos + 1;
+            if load_start < code.len() && code[load_start] == 0x22 + slot {
+                return Some((slot, 1, 0x17, 1));
+            }
+            None
+        }
+        // dstore_0..3
+        0x47..=0x4A => {
+            let slot = op - 0x47;
+            let load_start = pos + 1;
+            if load_start < code.len() && code[load_start] == 0x26 + slot {
+                return Some((slot, 1, 0x18, 1));
+            }
+            None
+        }
+        // astore_0..3
+        0x4B..=0x4E => {
+            let slot = op - 0x4B;
+            let load_start = pos + 1;
+            if load_start < code.len() && code[load_start] == 0x2A + slot {
+                // Next is aload_N (compact)
+                return Some((slot, 1, 0x19, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x19
+                && code[load_start + 1] == slot
+            {
+                // Next is aload N (generic)
+                return Some((slot, 1, 0x19, 2));
+            }
+            None
+        }
+        // Generic 2-byte store forms: Xstore <slot>
+        0x36 => {
+            // istore
+            if pos + 1 >= code.len() {
+                return None;
+            }
+            let slot = code[pos + 1];
+            let load_start = pos + 2;
+            if slot <= 3 && load_start < code.len() && code[load_start] == 0x1A + slot {
+                return Some((slot, 2, 0x15, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x15
+                && code[load_start + 1] == slot
+            {
+                return Some((slot, 2, 0x15, 2));
+            }
+            None
+        }
+        0x37 => {
+            // lstore
+            if pos + 1 >= code.len() {
+                return None;
+            }
+            let slot = code[pos + 1];
+            let load_start = pos + 2;
+            if slot <= 3 && load_start < code.len() && code[load_start] == 0x1E + slot {
+                return Some((slot, 2, 0x16, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x16
+                && code[load_start + 1] == slot
+            {
+                return Some((slot, 2, 0x16, 2));
+            }
+            None
+        }
+        0x38 => {
+            // fstore
+            if pos + 1 >= code.len() {
+                return None;
+            }
+            let slot = code[pos + 1];
+            let load_start = pos + 2;
+            if slot <= 3 && load_start < code.len() && code[load_start] == 0x22 + slot {
+                return Some((slot, 2, 0x17, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x17
+                && code[load_start + 1] == slot
+            {
+                return Some((slot, 2, 0x17, 2));
+            }
+            None
+        }
+        0x39 => {
+            // dstore
+            if pos + 1 >= code.len() {
+                return None;
+            }
+            let slot = code[pos + 1];
+            let load_start = pos + 2;
+            if slot <= 3 && load_start < code.len() && code[load_start] == 0x26 + slot {
+                return Some((slot, 2, 0x18, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x18
+                && code[load_start + 1] == slot
+            {
+                return Some((slot, 2, 0x18, 2));
+            }
+            None
+        }
+        0x3A => {
+            // astore
+            if pos + 1 >= code.len() {
+                return None;
+            }
+            let slot = code[pos + 1];
+            let load_start = pos + 2;
+            if slot <= 3 && load_start < code.len() && code[load_start] == 0x2A + slot {
+                return Some((slot, 2, 0x19, 1));
+            }
+            if load_start + 1 < code.len()
+                && code[load_start] == 0x19
+                && code[load_start + 1] == slot
+            {
+                return Some((slot, 2, 0x19, 2));
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Check if `slot` is loaded anywhere in `code[from..]`.
+/// Used by the peephole to verify a store+load removal is safe.
+fn slot_loaded_elsewhere(code: &[u8], slot: u8, from: usize) -> bool {
+    let mut i = from;
+    while i < code.len() {
+        let op = code[i];
+        // Compact load forms for slot 0..3
+        if slot <= 3 {
+            // iload_N, lload_N, fload_N, dload_N, aload_N
+            if op == 0x1A + slot  // iload_0..3
+                || op == 0x1E + slot  // lload_0..3
+                || op == 0x22 + slot  // fload_0..3
+                || op == 0x26 + slot  // dload_0..3
+                || op == 0x2A + slot
+            // aload_0..3
+            {
+                return true;
+            }
+        }
+        // Generic 2-byte load forms
+        if (0x15..=0x19).contains(&op) && i + 1 < code.len() && code[i + 1] == slot {
+            return true;
+        }
+        // Also check if the slot is stored to again (iinc counts as a use too)
+        if op == 0x84 && i + 1 < code.len() && code[i + 1] == slot {
+            return true; // iinc references the slot
+        }
+        i += instruction_len(code, i);
+    }
+    false
+}
+
+/// Get the byte length of the instruction at `pos` in the code array.
+fn instruction_len(code: &[u8], pos: usize) -> usize {
+    if pos >= code.len() {
+        return 1;
+    }
+    match code[pos] {
+        // 1-byte instructions (no operands)
+        0x00..=0x0F // nop, aconst_null, iconst_m1..iconst_5, lconst_0..dconst_1
+        | 0x1A..=0x35 // xload_0..xload_3, xaload
+        | 0x3B..=0x56 // xstore_0..xstore_3, xastore
+        | 0x57..=0x5F // pop, pop2, dup*, swap
+        | 0x60..=0x83 // math ops (iadd..lxor, but NOT iinc=0x84)
+        | 0x85..=0x93 // type conversion (i2l..checkcast)
+        | 0x94..=0x98 // lcmp, fcmp*, dcmp*
+        | 0xAC..=0xB1 // xreturn, return
+        | 0xBE | 0xBF // arraylength, athrow
+        => 1,
+        // iinc: 2 operand bytes
+        0x84 => 3,
+        // 1-operand-byte instructions
+        0x10 // bipush
+        | 0x12 // ldc
+        | 0x15..=0x19 // xload <slot>
+        | 0x36..=0x3A // xstore <slot>
+        | 0xA9 // ret
+        | 0xBC // newarray
+        => 2,
+        // 2-operand-byte instructions
+        0x11 // sipush
+        | 0x13 | 0x14 // ldc_w, ldc2_w
+        | 0x99..=0xA8 // if*, goto, jsr
+        | 0xB2..=0xB5 // getstatic..putfield
+        | 0xB6..=0xB8 // invokevirtual..invokestatic
+        | 0xBB // new
+        | 0xBD // anewarray
+        | 0xC0 | 0xC1 // checkcast, instanceof
+        | 0xC6 | 0xC7 // ifnull, ifnonnull
+        => 3,
+        // invokeinterface: 4 operand bytes
+        0xB9 => 5,
+        // invokedynamic: 4 operand bytes
+        0xBA => 5,
+        // multianewarray: 3 operand bytes
+        0xC5 => 4,
+        // wide prefix: depends on following opcode
+        0xC4 => {
+            if pos + 1 < code.len() && code[pos + 1] == 0x84 {
+                6 // wide iinc
+            } else {
+                4 // wide load/store
+            }
+        }
+        // tableswitch, lookupswitch: variable — just return 1 to advance
+        0xAA | 0xAB => 1,
+        _ => 1,
+    }
+}
+
 /// Scan bytecode from `start` to `end` for istore/astore instructions,
 /// marking the corresponding slots as live in `assigned`.
 fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned: &mut [bool]) {
     let mut i = start;
     while i < end {
         let op = code[i];
-        if (op == 0x36 || op == 0x3A) && i + 1 < end {
+        // Generic 2-byte store forms: istore/lstore/fstore/dstore/astore
+        if (op == 0x36 || op == 0x37 || op == 0x38 || op == 0x39 || op == 0x3A) && i + 1 < end {
             let slot = code[i + 1] as usize;
             if slot < max_slots {
                 assigned[slot] = true;
             }
             i += 2;
+        }
+        // Compact store forms (1 byte, slot encoded in opcode)
+        else if (0x3B..=0x3E).contains(&op) {
+            // istore_0..istore_3
+            let slot = (op - 0x3B) as usize;
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+            i += 1;
+        } else if (0x3F..=0x42).contains(&op) {
+            // lstore_0..lstore_3
+            let slot = (op - 0x3F) as usize;
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+            i += 1;
+        } else if (0x43..=0x46).contains(&op) {
+            // fstore_0..fstore_3
+            let slot = (op - 0x43) as usize;
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+            i += 1;
+        } else if (0x47..=0x4A).contains(&op) {
+            // dstore_0..dstore_3
+            let slot = (op - 0x47) as usize;
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+            i += 1;
+        } else if (0x4B..=0x4E).contains(&op) {
+            // astore_0..astore_3
+            let slot = (op - 0x4B) as usize;
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+            i += 1;
         } else {
             i += 1;
             #[allow(clippy::match_overlapping_arm)]
             match op {
-                0x10 | 0x12 | 0x15 | 0x19 | 0xBC => i += 1,
+                // Generic 2-byte load forms + other 1-operand ops
+                0x10 | 0x12 | 0x15 | 0x16 | 0x17 | 0x18 | 0x19 | 0xBC => i += 1,
                 0x11 | 0x13 | 0x14 | 0x99 | 0x9A | 0xA7 | 0xB2 | 0xB6 | 0xB7 | 0xB8 | 0xBB => {
                     i += 2
                 }
@@ -9192,7 +9612,8 @@ fn write_slot_verif(
     slot_to_local: &[Option<u32>],
     func: &MirFunction,
 ) {
-    if slot == 0 && func.name == "main" {
+    if slot == 0 && func.name == "main" && !func.params.is_empty() {
+        // main(args: Array<String>) — slot 0 is the String[] arg
         out.push(7); // Object_variable_info
         let idx = cp.class("[Ljava/lang/String;");
         out.write_u16::<BigEndian>(idx).unwrap();

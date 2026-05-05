@@ -1,71 +1,63 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=23
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=22
     0000 ldc "World"
-    0002 astore 1
-    0004 aload 1
-    0006 astore 2
-    0008 ldc "Hello, "
-    0010 astore 3
-    0012 aload 2
-    0014 astore 4
-    0016 aload 3
-    0018 aload 4
-    0020 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0023 astore 5
-    0025 ldc "!"
-    0027 astore 6
-    0029 aload 5
-    0031 aload 6
-    0033 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0036 astore 7
-    0038 aload 7
-    0040 astore 8
-    0042 aload 8
-    0044 astore 9
-    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0049 aload 9
-    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0054 bipush 7
-    0056 istore 10
-    0058 iload 10
-    0060 istore 11
-    0062 ldc "x="
-    0064 astore 12
-    0066 iload 11
-    0068 istore 13
-    0070 aload 12
-    0072 iload 13
-    0074 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0077 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0080 astore 14
-    0082 ldc ", x*x="
-    0084 astore 15
-    0086 aload 14
+    0002 astore_1
+    0003 ldc "Hello, "
+    0005 astore_2
+    0006 aload_1
+    0007 astore_3
+    0008 aload_2
+    0009 aload_3
+    0010 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0013 astore 4
+    0015 ldc "!"
+    0017 astore 5
+    0019 aload 4
+    0021 aload 5
+    0023 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0026 astore 8
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 aload 8
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0036 bipush 7
+    0038 istore 10
+    0040 ldc "x="
+    0042 astore 11
+    0044 iload 10
+    0046 istore 12
+    0048 aload 11
+    0050 iload 12
+    0052 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0055 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0058 astore 13
+    0060 ldc ", x*x="
+    0062 astore 14
+    0064 aload 13
+    0066 aload 14
+    0068 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0071 astore 15
+    0073 iload 10
+    0075 istore 16
+    0077 iload 10
+    0079 istore 17
+    0081 iload 16
+    0083 iload 17
+    0085 imul
+    0086 istore 18
     0088 aload 15
-    0090 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0093 astore 16
-    0095 iload 11
-    0097 istore 17
-    0099 iload 11
-    0101 istore 18
-    0103 iload 17
-    0105 iload 18
-    0107 imul
-    0108 istore 19
-    0110 aload 16
-    0112 iload 19
-    0114 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0117 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0120 astore 20
-    0122 aload 20
-    0124 astore 21
-    0126 aload 21
-    0128 astore 22
-    0130 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0133 aload 22
-    0135 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0138 return
+    0090 iload 18
+    0092 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0095 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0098 astore 21
+    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0103 aload 21
+    0105 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0108 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1106,7 +1106,8 @@ mod tests {
 
     #[test]
     fn emit_arithmetic_uses_add_mul() {
-        let ll = build("fun main() { println(1 + 2 * 3) }");
+        // Use variables to prevent constant folding (1 + 2 * 3 folds to 7).
+        let ll = build("fun main() { val a = 2; val b = 3; println(1 + a * b) }");
         assert!(ll.contains(" mul i32 "));
         assert!(ll.contains(" add i32 "));
     }

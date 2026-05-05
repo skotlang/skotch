@@ -1,47 +1,41 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=15
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=14
     0000 ldc "Hello"
-    0002 astore 1
-    0004 ldc ", "
-    0006 astore 2
-    0008 aload 1
-    0010 aload 2
-    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0015 astore 3
-    0017 ldc "world!"
-    0019 astore 4
-    0021 aload 3
-    0023 aload 4
-    0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0028 astore 5
-    0030 aload 5
-    0032 astore 6
-    0034 aload 6
-    0036 astore 7
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 aload 7
-    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0046 ldc "Kotlin"
-    0048 astore 8
-    0050 aload 8
-    0052 astore 9
-    0054 ldc "I love "
-    0056 astore 10
-    0058 aload 9
-    0060 astore 11
-    0062 aload 10
-    0064 aload 11
-    0066 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0069 astore 12
-    0071 aload 12
-    0073 astore 13
-    0075 aload 13
-    0077 astore 14
-    0079 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0082 aload 14
-    0084 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0087 return
+    0002 astore_0
+    0003 ldc ", "
+    0005 astore_1
+    0006 aload_0
+    0007 aload_1
+    0008 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0011 astore_2
+    0012 ldc "world!"
+    0014 astore_3
+    0015 aload_2
+    0016 aload_3
+    0017 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0020 astore 6
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload 6
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0030 ldc "Kotlin"
+    0032 astore 8
+    0034 ldc "I love "
+    0036 astore 9
+    0038 aload 8
+    0040 astore 10
+    0042 aload 9
+    0044 aload 10
+    0046 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0049 astore 13
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 aload 13
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0059 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

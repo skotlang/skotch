@@ -1,46 +1,46 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=12
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=11
     0000 bipush 100
-    0002 istore 1
-    0004 new Class(BankAccount)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(BankAccount.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 checkcast Class(BankAccount)
-    0020 astore 3
-    0022 bipush 50
-    0024 istore 4
-    0026 aload 3
-    0028 checkcast Class(BankAccount)
-    0031 astore 5
-    0033 bipush 50
-    0035 istore 6
-    0037 aload 5
-    0039 iload 6
-    0041 invokevirtual Method(BankAccount.deposit:(I)V)
-    0044 bipush 30
-    0046 istore 7
-    0048 aload 3
-    0050 checkcast Class(BankAccount)
-    0053 astore 8
-    0055 bipush 30
-    0057 istore 9
-    0059 aload 8
-    0061 iload 9
-    0063 invokevirtual Method(BankAccount.withdraw:(I)V)
-    0066 aload 3
-    0068 checkcast Class(BankAccount)
-    0071 astore 10
-    0073 aload 10
-    0075 getfield Field(BankAccount.balance:I)
-    0078 istore 11
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 iload 11
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 return
+    0002 istore_0
+    0003 new Class(BankAccount)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(BankAccount.<init>:(I)V)
+    0011 checkcast Class(BankAccount)
+    0014 astore_2
+    0015 bipush 50
+    0017 istore_3
+    0018 aload_2
+    0019 checkcast Class(BankAccount)
+    0022 astore 4
+    0024 bipush 50
+    0026 istore 5
+    0028 aload 4
+    0030 iload 5
+    0032 invokevirtual Method(BankAccount.deposit:(I)V)
+    0035 bipush 30
+    0037 istore 6
+    0039 aload_2
+    0040 checkcast Class(BankAccount)
+    0043 astore 7
+    0045 bipush 30
+    0047 istore 8
+    0049 aload 7
+    0051 iload 8
+    0053 invokevirtual Method(BankAccount.withdraw:(I)V)
+    0056 aload_2
+    0057 checkcast Class(BankAccount)
+    0060 getfield Field(BankAccount.balance:I)
+    0063 istore 10
+    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0068 iload 10
+    0070 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0073 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

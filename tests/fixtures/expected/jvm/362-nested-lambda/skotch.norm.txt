@@ -1,38 +1,36 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=9
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=8
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0007 astore 1
-    0009 aload 1
-    0011 checkcast Class(InputKt$Lambda$0)
-    0014 astore 2
-    0016 iconst_5
-    0017 istore 3
-    0019 iload 3
-    0021 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0024 astore 4
-    0026 aload 2
-    0028 aload 4
-    0030 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0033 astore 5
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 aload 5
-    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0043 bipush 20
-    0045 istore 6
-    0047 iload 6
-    0049 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0052 astore 7
-    0054 aload 2
-    0056 aload 7
-    0058 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0061 astore 8
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 aload 8
-    0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0071 return
+    0007 checkcast Class(InputKt$Lambda$0)
+    0010 astore_1
+    0011 iconst_5
+    0012 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0015 astore_3
+    0016 aload_1
+    0017 aload_3
+    0018 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0021 astore 4
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 aload 4
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 bipush 20
+    0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0036 astore 6
+    0038 aload_1
+    0039 aload 6
+    0041 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0044 astore 7
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 aload 7
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0054 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

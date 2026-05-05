@@ -1,28 +1,30 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=7
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=6
     0000 new Class($Object$1)
     0003 dup
     0004 invokespecial Method($Object$1.<init>:()V)
-    0007 astore 1
-    0009 aload 1
-    0011 checkcast Class(Handler)
-    0014 astore 2
-    0016 ldc "test"
-    0018 astore 3
-    0020 aload 2
-    0022 checkcast Class(Handler)
-    0025 astore 4
-    0027 ldc "test"
+    0007 checkcast Class(Handler)
+    0010 astore_1
+    0011 ldc "test"
+    0013 astore_2
+    0014 aload_1
+    0015 checkcast Class(Handler)
+    0018 astore_3
+    0019 ldc "test"
+    0021 astore 4
+    0023 aload_3
+    0024 aload 4
+    0026 invokevirtual Method(Handler.handle:(Ljava/lang/String;)Ljava/lang/String;)
     0029 astore 5
-    0031 aload 4
-    0033 aload 5
-    0035 invokevirtual Method(Handler.handle:(Ljava/lang/String;)Ljava/lang/String;)
-    0038 astore 6
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 aload 6
-    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0048 return
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 aload 5
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0039 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

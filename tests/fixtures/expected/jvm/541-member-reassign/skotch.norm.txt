@@ -1,59 +1,53 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=14
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=13
     0000 bipush 10
-    0002 istore 1
-    0004 new Class(Box)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(Box.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 checkcast Class(Box)
-    0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(Box)
-    0027 astore 4
-    0029 aload 4
-    0031 getfield Field(Box.value:I)
+    0002 istore_0
+    0003 new Class(Box)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(Box.<init>:(I)V)
+    0011 checkcast Class(Box)
+    0014 astore_2
+    0015 aload_2
+    0016 checkcast Class(Box)
+    0019 getfield Field(Box.value:I)
+    0022 istore 4
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 iload 4
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 bipush 42
     0034 istore 5
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 iload 5
-    0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0044 bipush 42
-    0046 istore 6
-    0048 aload 3
-    0050 checkcast Class(Box)
-    0053 astore 7
-    0055 bipush 42
-    0057 istore 8
-    0059 aload 7
-    0061 iload 8
-    0063 invokevirtual Method(Box.update:(I)V)
-    0066 aload 3
-    0068 checkcast Class(Box)
-    0071 astore 9
-    0073 aload 9
-    0075 getfield Field(Box.value:I)
-    0078 istore 10
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 iload 10
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 aload 3
-    0090 checkcast Class(Box)
-    0093 astore 11
-    0095 aload 11
-    0097 invokevirtual Method(Box.doubleIt:()V)
-    0100 aload 3
-    0102 checkcast Class(Box)
-    0105 astore 12
-    0107 aload 12
-    0109 getfield Field(Box.value:I)
-    0112 istore 13
-    0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0117 iload 13
-    0119 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0122 return
+    0036 aload_2
+    0037 checkcast Class(Box)
+    0040 astore 6
+    0042 bipush 42
+    0044 istore 7
+    0046 aload 6
+    0048 iload 7
+    0050 invokevirtual Method(Box.update:(I)V)
+    0053 aload_2
+    0054 checkcast Class(Box)
+    0057 getfield Field(Box.value:I)
+    0060 istore 9
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 iload 9
+    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0070 aload_2
+    0071 checkcast Class(Box)
+    0074 invokevirtual Method(Box.doubleIt:()V)
+    0077 aload_2
+    0078 checkcast Class(Box)
+    0081 getfield Field(Box.value:I)
+    0084 istore 12
+    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0089 iload 12
+    0091 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0094 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

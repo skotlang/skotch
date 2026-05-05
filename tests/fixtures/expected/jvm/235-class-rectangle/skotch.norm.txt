@@ -1,47 +1,43 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=11
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=10
     0000 iconst_5
-    0001 istore 1
-    0003 iconst_3
-    0004 istore 2
-    0006 new Class(Rectangle)
-    0009 dup
-    0010 iload 1
-    0012 iload 2
-    0014 invokespecial Method(Rectangle.<init>:(II)V)
-    0017 astore 3
-    0019 aload 3
-    0021 checkcast Class(Rectangle)
-    0024 astore 4
-    0026 aload 4
-    0028 checkcast Class(Rectangle)
-    0031 astore 5
-    0033 aload 5
-    0035 invokevirtual Method(Rectangle.area:()I)
-    0038 istore 6
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 iload 6
-    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0048 aload 4
-    0050 checkcast Class(Rectangle)
-    0053 astore 7
-    0055 aload 7
-    0057 invokevirtual Method(Rectangle.perimeter:()I)
-    0060 istore 8
-    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0065 iload 8
-    0067 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0070 aload 4
-    0072 checkcast Class(Rectangle)
-    0075 astore 9
-    0077 aload 9
-    0079 getfield Field(Rectangle.width:I)
-    0082 istore 10
-    0084 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0087 iload 10
-    0089 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0092 return
+    0001 istore_0
+    0002 iconst_3
+    0003 istore_1
+    0004 new Class(Rectangle)
+    0007 dup
+    0008 iload_0
+    0009 iload_1
+    0010 invokespecial Method(Rectangle.<init>:(II)V)
+    0013 checkcast Class(Rectangle)
+    0016 astore_3
+    0017 aload_3
+    0018 checkcast Class(Rectangle)
+    0021 invokevirtual Method(Rectangle.area:()I)
+    0024 istore 5
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload 5
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 aload_3
+    0035 checkcast Class(Rectangle)
+    0038 invokevirtual Method(Rectangle.perimeter:()I)
+    0041 istore 7
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 iload 7
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 aload_3
+    0052 checkcast Class(Rectangle)
+    0055 getfield Field(Rectangle.width:I)
+    0058 istore 9
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 iload 9
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0068 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

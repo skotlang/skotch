@@ -4414,6 +4414,102 @@ fn lower_val_stmt(
     true
 }
 
+/// Try to evaluate an integer constant expression at compile time.
+/// Handles integer literals and nested binary arithmetic on integers.
+fn try_eval_int(e: &Expr) -> Option<i32> {
+    match e {
+        Expr::IntLit(v, _) => Some(*v as i32),
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let l = try_eval_int(lhs)?;
+            let r = try_eval_int(rhs)?;
+            match op {
+                BinOp::Add => Some(l.wrapping_add(r)),
+                BinOp::Sub => Some(l.wrapping_sub(r)),
+                BinOp::Mul => Some(l.wrapping_mul(r)),
+                BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
+                BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
+                _ => None,
+            }
+        }
+        Expr::Unary {
+            op: skotch_syntax::UnaryOp::Neg,
+            operand,
+            ..
+        } => {
+            let v = try_eval_int(operand)?;
+            Some(v.wrapping_neg())
+        }
+        Expr::Paren(inner, _) => try_eval_int(inner),
+        _ => None,
+    }
+}
+
+/// Try to constant-fold a binary expression with Int operands.
+fn try_const_fold_int(lhs: &Expr, rhs: &Expr, op: &BinOp) -> Option<i32> {
+    if !matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+    ) {
+        return None;
+    }
+    let l = try_eval_int(lhs)?;
+    let r = try_eval_int(rhs)?;
+    match op {
+        BinOp::Add => Some(l.wrapping_add(r)),
+        BinOp::Sub => Some(l.wrapping_sub(r)),
+        BinOp::Mul => Some(l.wrapping_mul(r)),
+        BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
+        BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
+        _ => None,
+    }
+}
+
+/// Try to evaluate a long constant expression at compile time.
+fn try_eval_long(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::LongLit(v, _) => Some(*v),
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let l = try_eval_long(lhs)?;
+            let r = try_eval_long(rhs)?;
+            match op {
+                BinOp::Add => Some(l.wrapping_add(r)),
+                BinOp::Sub => Some(l.wrapping_sub(r)),
+                BinOp::Mul => Some(l.wrapping_mul(r)),
+                BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
+                BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
+                _ => None,
+            }
+        }
+        Expr::Paren(inner, _) => try_eval_long(inner),
+        _ => None,
+    }
+}
+
+/// Try to constant-fold a binary expression with Long operands.
+fn try_const_fold_long(lhs: &Expr, rhs: &Expr, op: &BinOp) -> Option<i64> {
+    if !matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+    ) {
+        return None;
+    }
+    // Only fold if at least one operand is a Long literal (otherwise it's an Int expression)
+    let has_long = matches!(lhs, Expr::LongLit(..)) || matches!(rhs, Expr::LongLit(..));
+    if !has_long {
+        return None;
+    }
+    let l = try_eval_long(lhs)?;
+    let r = try_eval_long(rhs)?;
+    match op {
+        BinOp::Add => Some(l.wrapping_add(r)),
+        BinOp::Sub => Some(l.wrapping_sub(r)),
+        BinOp::Mul => Some(l.wrapping_mul(r)),
+        BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
+        BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
+        _ => None,
+    }
+}
+
 /// Lower an expression and return the local that holds its value.
 /// Returns `None` if lowering hit an unsupported construct.
 #[allow(clippy::too_many_arguments)]
@@ -4709,6 +4805,26 @@ fn lower_expr(
                 });
                 fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
                 return Some(result);
+            }
+
+            // ── Constant folding for integer arithmetic ──────────────
+            // If both operands are compile-time integer constants, evaluate
+            // at compile time (matching kotlinc's behavior).
+            if let Some(folded) = try_const_fold_int(lhs, rhs, op) {
+                let dest = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Int(folded)),
+                });
+                return Some(dest);
+            }
+            if let Some(folded) = try_const_fold_long(lhs, rhs, op) {
+                let dest = fb.new_local(Ty::Long);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Long(folded)),
+                });
+                return Some(dest);
             }
 
             let l = lower_expr(
@@ -16385,23 +16501,11 @@ mod tests {
         let (m, d) = lower("fun main() { println(1 + 2 * 3) }");
         assert!(d.is_empty(), "{:?}", d);
         let bb = &m.functions[0].blocks[0];
+        // Constant folding: 1 + 2 * 3 = 7 at compile time
         assert!(bb.stmts.iter().any(|s| matches!(
             s,
             MStmt::Assign {
-                value: Rvalue::BinOp {
-                    op: MBinOp::AddI,
-                    ..
-                },
-                ..
-            }
-        )));
-        assert!(bb.stmts.iter().any(|s| matches!(
-            s,
-            MStmt::Assign {
-                value: Rvalue::BinOp {
-                    op: MBinOp::MulI,
-                    ..
-                },
+                value: Rvalue::Const(MirConst::Int(7)),
                 ..
             }
         )));

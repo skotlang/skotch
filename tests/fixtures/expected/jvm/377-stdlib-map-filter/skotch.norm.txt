@@ -1,123 +1,115 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=32
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=31
     0000 iconst_1
-    0001 istore 1
-    0003 iconst_2
-    0004 istore 2
-    0006 iconst_3
-    0007 istore 3
-    0009 iconst_4
-    0010 istore 4
-    0012 iconst_5
-    0013 istore 5
-    0015 iconst_5
-    0016 istore 6
-    0018 iload 6
-    0020 op_0xBD
-    0021 nop
-    0022 iconst_1
-    0023 astore 7
-    0025 iconst_0
-    0026 istore 8
-    0028 iload 1
-    0030 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0033 astore 9
-    0035 aload 7
-    0037 iload 8
-    0039 aload 9
-    0041 op_0x53
-    0042 iconst_1
-    0043 istore 10
-    0045 iload 2
-    0047 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0050 astore 11
-    0052 aload 7
-    0054 iload 10
-    0056 aload 11
-    0058 op_0x53
-    0059 iconst_2
-    0060 istore 12
-    0062 iload 3
-    0064 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0067 astore 13
-    0069 aload 7
-    0071 iload 12
-    0073 aload 13
-    0075 op_0x53
-    0076 iconst_3
-    0077 istore 14
-    0079 iload 4
-    0081 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0084 astore 15
-    0086 aload 7
-    0088 iload 14
-    0090 aload 15
-    0092 op_0x53
-    0093 iconst_4
-    0094 istore 16
-    0096 iload 5
-    0098 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0101 astore 17
-    0103 aload 7
-    0105 iload 16
-    0107 aload 17
-    0109 op_0x53
-    0110 aload 7
-    0112 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0115 astore 18
+    0001 istore_0
+    0002 iconst_2
+    0003 istore_1
+    0004 iconst_3
+    0005 istore_2
+    0006 iconst_4
+    0007 istore_3
+    0008 iconst_5
+    0009 istore 4
+    0011 iconst_5
+    0012 op_0xBD
+    0013 nop
+    0014 iconst_1
+    0015 astore 6
+    0017 iconst_0
+    0018 istore 7
+    0020 iload_0
+    0021 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0024 astore 8
+    0026 aload 6
+    0028 iload 7
+    0030 aload 8
+    0032 op_0x53
+    0033 iconst_1
+    0034 istore 9
+    0036 iload_1
+    0037 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0040 astore 10
+    0042 aload 6
+    0044 iload 9
+    0046 aload 10
+    0048 op_0x53
+    0049 iconst_2
+    0050 istore 11
+    0052 iload_2
+    0053 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0056 astore 12
+    0058 aload 6
+    0060 iload 11
+    0062 aload 12
+    0064 op_0x53
+    0065 iconst_3
+    0066 istore 13
+    0068 iload_3
+    0069 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0072 astore 14
+    0074 aload 6
+    0076 iload 13
+    0078 aload 14
+    0080 op_0x53
+    0081 iconst_4
+    0082 istore 15
+    0084 iload 4
+    0086 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0089 astore 16
+    0091 aload 6
+    0093 iload 15
+    0095 aload 16
+    0097 op_0x53
+    0098 aload 6
+    0100 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0103 checkcast Class(java/util/List)
+    0106 astore 18
+    0108 new Class(InputKt$Lambda$0)
+    0111 dup
+    0112 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0115 astore 19
     0117 aload 18
     0119 checkcast Class(java/util/List)
-    0122 astore 19
-    0124 new Class(InputKt$Lambda$0)
+    0122 astore 20
+    0124 new Class(InputKt$Lambda$1)
     0127 dup
-    0128 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0131 astore 20
-    0133 aload 19
-    0135 checkcast Class(java/util/List)
-    0138 astore 21
-    0140 new Class(InputKt$Lambda$1)
-    0143 dup
-    0144 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0147 astore 22
-    0149 aload 21
-    0151 aload 22
-    0153 invokestatic Method(kotlin/collections/CollectionsKt.map:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
-    0156 astore 23
-    0158 aload 23
-    0160 checkcast Class(java/util/List)
-    0163 astore 24
-    0165 aload 24
+    0128 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0131 astore 21
+    0133 aload 20
+    0135 aload 21
+    0137 invokestatic Method(kotlin/collections/CollectionsKt.map:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0140 checkcast Class(java/util/List)
+    0143 checkcast Class(java/util/List)
+    0146 astore 24
+    0148 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0151 aload 24
+    0153 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0156 new Class(InputKt$Lambda$2)
+    0159 dup
+    0160 invokespecial Method(InputKt$Lambda$2.<init>:()V)
+    0163 astore 25
+    0165 aload 18
     0167 checkcast Class(java/util/List)
-    0170 astore 25
-    0172 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0175 aload 25
-    0177 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0180 new Class(InputKt$Lambda$2)
-    0183 dup
-    0184 invokespecial Method(InputKt$Lambda$2.<init>:()V)
-    0187 astore 26
-    0189 aload 19
+    0170 astore 26
+    0172 new Class(InputKt$Lambda$3)
+    0175 dup
+    0176 invokespecial Method(InputKt$Lambda$3.<init>:()V)
+    0179 astore 27
+    0181 aload 26
+    0183 aload 27
+    0185 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0188 checkcast Class(java/util/List)
     0191 checkcast Class(java/util/List)
-    0194 astore 27
-    0196 new Class(InputKt$Lambda$3)
-    0199 dup
-    0200 invokespecial Method(InputKt$Lambda$3.<init>:()V)
-    0203 astore 28
-    0205 aload 27
-    0207 aload 28
-    0209 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
-    0212 astore 29
-    0214 aload 29
-    0216 checkcast Class(java/util/List)
-    0219 astore 30
-    0221 aload 30
-    0223 checkcast Class(java/util/List)
-    0226 astore 31
-    0228 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0231 aload 31
-    0233 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0236 return
+    0194 astore 30
+    0196 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0199 aload 30
+    0201 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0204 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

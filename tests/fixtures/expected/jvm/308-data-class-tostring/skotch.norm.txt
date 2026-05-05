@@ -1,39 +1,35 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=10
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=9
     0000 ldc "localhost"
-    0002 astore 1
-    0004 sipush 8080
-    0007 istore 2
-    0009 new Class(Config)
-    0012 dup
-    0013 aload 1
-    0015 iload 2
-    0017 invokespecial Method(Config.<init>:(Ljava/lang/String;I)V)
-    0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(Config)
-    0027 astore 4
+    0002 astore_0
+    0003 sipush 8080
+    0006 istore_1
+    0007 new Class(Config)
+    0010 dup
+    0011 aload_0
+    0012 iload_1
+    0013 invokespecial Method(Config.<init>:(Ljava/lang/String;I)V)
+    0016 checkcast Class(Config)
+    0019 astore_3
+    0020 aload_3
+    0021 checkcast Class(Config)
+    0024 astore 4
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0029 aload 4
-    0031 checkcast Class(Config)
-    0034 astore 5
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 aload 5
-    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0044 aload 4
-    0046 checkcast Class(Config)
-    0049 astore 6
-    0051 aload 6
-    0053 invokevirtual Method(Config.toString:()Ljava/lang/String;)
-    0056 astore 7
-    0058 aload 7
-    0060 astore 8
-    0062 aload 8
-    0064 astore 9
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 aload 9
-    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0074 return
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 aload_3
+    0035 checkcast Class(Config)
+    0038 invokevirtual Method(Config.toString:()Ljava/lang/String;)
+    0041 astore 8
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 aload 8
+    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0051 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

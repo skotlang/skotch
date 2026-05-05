@@ -827,3 +827,109 @@ fn suspend_runtime_wiring_shape() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+// ── kotlinc parity tracking ────────────────────────────────────────────
+//
+// This test compares skotch's normalized output against kotlinc's
+// normalized output for ALL fixtures that have both goldens. It does
+// NOT fail on mismatches — instead it prints a parity report showing
+// how many fixtures match exactly vs. diverge, and what the most
+// common differences are. This serves as a progress tracker toward
+// the goal of exact bytecode parity with kotlinc.
+
+#[test]
+fn kotlinc_parity_report() {
+    let inputs_dir = workspace_root().join("tests/fixtures/inputs");
+    let jvm_dir = workspace_root().join("tests/fixtures/expected/jvm");
+
+    let mut total = 0u32;
+    let mut matching = 0u32;
+    let mut method_count_diff = 0u32;
+    let mut version_diff = 0u32;
+    let mut access_diff = 0u32;
+    let mut code_diff = 0u32;
+
+    let Ok(entries) = std::fs::read_dir(&inputs_dir) else {
+        return;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    names.sort();
+
+    for name in &names {
+        let kotlinc_norm = jvm_dir.join(name).join("kotlinc.norm.txt");
+        let skotch_norm = jvm_dir.join(name).join("skotch.norm.txt");
+        if !kotlinc_norm.exists() || !skotch_norm.exists() {
+            continue;
+        }
+        total += 1;
+
+        let kotlinc_text = std::fs::read_to_string(&kotlinc_norm)
+            .unwrap()
+            .replace('\r', "");
+        let skotch_text = std::fs::read_to_string(&skotch_norm)
+            .unwrap()
+            .replace('\r', "");
+
+        if kotlinc_text == skotch_text {
+            matching += 1;
+            continue;
+        }
+
+        // Categorize the differences.
+        let k_lines: Vec<&str> = kotlinc_text.lines().collect();
+        let s_lines: Vec<&str> = skotch_text.lines().collect();
+
+        let k_methods = k_lines.iter().filter(|l| l.starts_with("method")).count();
+        let s_methods = s_lines.iter().filter(|l| l.starts_with("method")).count();
+        if k_methods != s_methods {
+            method_count_diff += 1;
+        }
+
+        let k_ver = k_lines.iter().find(|l| l.starts_with("class_version"));
+        let s_ver = s_lines.iter().find(|l| l.starts_with("class_version"));
+        if k_ver != s_ver {
+            version_diff += 1;
+        }
+
+        let k_access: Vec<&&str> = k_lines
+            .iter()
+            .filter(|l| l.contains("access_flags") || (l.starts_with("method") && l.contains("0x")))
+            .collect();
+        let s_access: Vec<&&str> = s_lines
+            .iter()
+            .filter(|l| l.contains("access_flags") || (l.starts_with("method") && l.contains("0x")))
+            .collect();
+        if k_access != s_access {
+            access_diff += 1;
+        }
+
+        let k_code: Vec<&&str> = k_lines.iter().filter(|l| l.starts_with("    ")).collect();
+        let s_code: Vec<&&str> = s_lines.iter().filter(|l| l.starts_with("    ")).collect();
+        if k_code != s_code {
+            code_diff += 1;
+        }
+    }
+
+    eprintln!("\n=== kotlinc parity report ===");
+    eprintln!("  Total fixtures with both goldens: {total}");
+    eprintln!(
+        "  Exact matches:                    {matching} ({:.0}%)",
+        if total > 0 {
+            matching as f64 / total as f64 * 100.0
+        } else {
+            0.0
+        }
+    );
+    eprintln!("  Divergent:                        {}", total - matching);
+    eprintln!("    - class version differs:        {version_diff}");
+    eprintln!("    - method count differs:         {method_count_diff}");
+    eprintln!("    - access flags differ:          {access_diff}");
+    eprintln!("    - bytecode differs:             {code_diff}");
+    eprintln!("=============================\n");
+
+    // This test always passes — it's informational.
+    // As parity improves, we can tighten to assert matching == total.
+}

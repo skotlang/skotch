@@ -1,56 +1,56 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=17
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=16
     0000 new Class(java/lang/StringBuilder)
     0003 dup
     0004 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0007 astore 1
-    0009 aload 1
-    0011 checkcast Class(java/lang/StringBuilder)
-    0014 astore 2
-    0016 ldc "Hello"
-    0018 astore 3
-    0020 aload 2
-    0022 checkcast Class(java/lang/StringBuilder)
-    0025 astore 4
-    0027 ldc "Hello"
+    0007 checkcast Class(java/lang/StringBuilder)
+    0010 astore_1
+    0011 ldc "Hello"
+    0013 astore_2
+    0014 aload_1
+    0015 checkcast Class(java/lang/StringBuilder)
+    0018 astore_3
+    0019 ldc "Hello"
+    0021 astore 4
+    0023 aload_3
+    0024 aload 4
+    0026 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
     0029 astore 5
-    0031 aload 4
-    0033 aload 5
-    0035 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
-    0038 astore 6
-    0040 ldc ", "
-    0042 astore 7
-    0044 aload 2
-    0046 checkcast Class(java/lang/StringBuilder)
-    0049 astore 8
-    0051 ldc ", "
-    0053 astore 9
-    0055 aload 8
-    0057 aload 9
-    0059 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
-    0062 astore 10
+    0031 ldc ", "
+    0033 astore 6
+    0035 aload_1
+    0036 checkcast Class(java/lang/StringBuilder)
+    0039 astore 7
+    0041 ldc ", "
+    0043 astore 8
+    0045 aload 7
+    0047 aload 8
+    0049 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
+    0052 astore 9
+    0054 ldc "World"
+    0056 astore 10
+    0058 aload_1
+    0059 checkcast Class(java/lang/StringBuilder)
+    0062 astore 11
     0064 ldc "World"
-    0066 astore 11
-    0068 aload 2
-    0070 checkcast Class(java/lang/StringBuilder)
-    0073 astore 12
-    0075 ldc "World"
-    0077 astore 13
-    0079 aload 12
-    0081 aload 13
-    0083 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
-    0086 astore 14
-    0088 aload 2
-    0090 checkcast Class(java/lang/StringBuilder)
-    0093 astore 15
-    0095 aload 15
-    0097 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0100 astore 16
-    0102 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0105 aload 16
-    0107 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0110 return
+    0066 astore 12
+    0068 aload 11
+    0070 aload 12
+    0072 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;)
+    0075 astore 13
+    0077 aload_1
+    0078 checkcast Class(java/lang/StringBuilder)
+    0081 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0084 astore 15
+    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0089 aload 15
+    0091 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0094 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

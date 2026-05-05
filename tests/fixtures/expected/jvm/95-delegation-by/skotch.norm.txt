@@ -1,27 +1,25 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=6
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=5
     0000 bipush 10
-    0002 istore 1
-    0004 new Class(BaseImpl)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(BaseImpl.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 checkcast Class(BaseImpl)
-    0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(BaseImpl)
-    0027 astore 4
-    0029 new Class(Derived)
-    0032 dup
-    0033 aload 4
-    0035 invokespecial Method(Derived.<init>:(LBase;)V)
-    0038 astore 5
-    0040 aload 5
-    0042 invokevirtual Method(Derived.print:()V)
-    0045 return
+    0002 istore_0
+    0003 new Class(BaseImpl)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(BaseImpl.<init>:(I)V)
+    0011 checkcast Class(BaseImpl)
+    0014 checkcast Class(BaseImpl)
+    0017 astore_3
+    0018 new Class(Derived)
+    0021 dup
+    0022 aload_3
+    0023 invokespecial Method(Derived.<init>:(LBase;)V)
+    0026 invokevirtual Method(Derived.print:()V)
+    0029 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

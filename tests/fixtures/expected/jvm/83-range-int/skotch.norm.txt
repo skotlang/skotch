@@ -1,66 +1,64 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=4 max_locals=17
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=16
     0000 iconst_1
-    0001 istore 1
-    0003 bipush 10
-    0005 istore 2
-    0007 new Class(kotlin/ranges/IntRange)
-    0010 dup
-    0011 iload 1
-    0013 iload 2
-    0015 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
-    0018 astore 3
-    0020 aload 3
+    0001 istore_0
+    0002 bipush 10
+    0004 istore_1
+    0005 new Class(kotlin/ranges/IntRange)
+    0008 dup
+    0009 iload_0
+    0010 iload_1
+    0011 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
+    0014 checkcast Class(kotlin/ranges/IntRange)
+    0017 astore_3
+    0018 iconst_5
+    0019 istore 4
+    0021 aload_3
     0022 checkcast Class(kotlin/ranges/IntRange)
-    0025 astore 4
+    0025 astore 5
     0027 iconst_5
-    0028 istore 5
-    0030 aload 4
-    0032 checkcast Class(kotlin/ranges/IntRange)
-    0035 astore 6
-    0037 iconst_5
-    0038 istore 7
-    0040 aload 6
+    0028 istore 6
+    0030 aload 5
+    0032 iload 6
+    0034 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0037 istore 7
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0042 iload 7
-    0044 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
-    0047 istore 8
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 iload 8
-    0054 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0044 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0047 bipush 11
+    0049 istore 8
+    0051 aload_3
+    0052 checkcast Class(kotlin/ranges/IntRange)
+    0055 astore 9
     0057 bipush 11
-    0059 istore 9
-    0061 aload 4
-    0063 checkcast Class(kotlin/ranges/IntRange)
-    0066 astore 10
-    0068 bipush 11
-    0070 istore 11
-    0072 aload 10
-    0074 iload 11
-    0076 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
-    0079 istore 12
-    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0084 iload 12
-    0086 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0089 aload 4
-    0091 checkcast Class(kotlin/ranges/IntRange)
-    0094 astore 13
-    0096 aload 13
-    0098 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
-    0101 istore 14
-    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0106 iload 14
-    0108 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0111 aload 4
-    0113 checkcast Class(kotlin/ranges/IntRange)
-    0116 astore 15
-    0118 aload 15
-    0120 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
-    0123 istore 16
-    0125 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0128 iload 16
-    0130 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0133 return
+    0059 istore 10
+    0061 aload 9
+    0063 iload 10
+    0065 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0068 istore 11
+    0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0073 iload 11
+    0075 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0078 aload_3
+    0079 checkcast Class(kotlin/ranges/IntRange)
+    0082 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
+    0085 istore 13
+    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0090 iload 13
+    0092 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0095 aload_3
+    0096 checkcast Class(kotlin/ranges/IntRange)
+    0099 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
+    0102 istore 15
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 iload 15
+    0109 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0112 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

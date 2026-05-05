@@ -1,38 +1,36 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=5
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=4
     0000 bipush 42
-    0002 istore 1
-    0004 new Class(Holder)
-    0007 dup
-    0008 iload 1
-    0010 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0013 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
-    0016 astore 2
-    0018 aload 2
-    0020 invokestatic Method(InputKt.printHolder:(LHolder;)V)
-    0023 ldc "hello"
-    0025 astore 3
-    0027 new Class(Holder)
-    0030 dup
-    0031 aload 3
-    0033 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
-    0036 astore 4
-    0038 aload 4
-    0040 invokestatic Method(InputKt.printHolder:(LHolder;)V)
-    0043 return
-method        printHolder (LHolder;)V 0x0009
+    0002 istore_0
+    0003 new Class(Holder)
+    0006 dup
+    0007 iload_0
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
+    0014 invokestatic Method(InputKt.printHolder:(LHolder;)V)
+    0017 ldc "hello"
+    0019 astore_2
+    0020 new Class(Holder)
+    0023 dup
+    0024 aload_2
+    0025 invokespecial Method(Holder.<init>:(Ljava/lang/Object;)V)
+    0028 invokestatic Method(InputKt.printHolder:(LHolder;)V)
+    0031 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        printHolder (LHolder;)V 0x0019
   code        max_stack=2 max_locals=3
-    0000 aload 0
-    0002 checkcast Class(Holder)
-    0005 astore 1
-    0007 aload 1
-    0009 getfield Field(Holder.value:Ljava/lang/Object;)
-    0012 astore 2
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 aload 2
-    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0022 return
+    0000 aload_0
+    0001 checkcast Class(Holder)
+    0004 getfield Field(Holder.value:Ljava/lang/Object;)
+    0007 astore_2
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 aload_2
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 return

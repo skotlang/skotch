@@ -1,50 +1,52 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=15
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=14
     0000 ldc "banana"
-    0002 astore 1
-    0004 aload 1
-    0006 astore 2
+    0002 astore_1
+    0003 ldc "ana"
+    0005 astore_2
+    0006 aload_1
+    0007 astore_3
     0008 ldc "ana"
-    0010 astore 3
-    0012 aload 2
-    0014 astore 4
-    0016 ldc "ana"
-    0018 astore 5
-    0020 aload 4
-    0022 aload 5
-    0024 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
-    0027 istore 6
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload 6
-    0034 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0037 ldc "a"
-    0039 astore 7
-    0041 aload 2
-    0043 astore 8
-    0045 ldc "a"
-    0047 astore 9
-    0049 aload 8
-    0051 aload 9
-    0053 invokevirtual Method(java/lang/String.lastIndexOf:(Ljava/lang/String;)I)
-    0056 istore 10
-    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0061 iload 10
-    0063 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0066 ldc "xyz"
-    0068 astore 11
-    0070 aload 2
-    0072 astore 12
-    0074 ldc "xyz"
-    0076 astore 13
-    0078 aload 12
-    0080 aload 13
-    0082 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
-    0085 istore 14
-    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0090 iload 14
-    0092 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0095 return
+    0010 astore 4
+    0012 aload_3
+    0013 aload 4
+    0015 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
+    0018 istore 5
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload 5
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 ldc "a"
+    0030 astore 6
+    0032 aload_1
+    0033 astore 7
+    0035 ldc "a"
+    0037 astore 8
+    0039 aload 7
+    0041 aload 8
+    0043 invokevirtual Method(java/lang/String.lastIndexOf:(Ljava/lang/String;)I)
+    0046 istore 9
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 iload 9
+    0053 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0056 ldc "xyz"
+    0058 astore 10
+    0060 aload_1
+    0061 astore 11
+    0063 ldc "xyz"
+    0065 astore 12
+    0067 aload 11
+    0069 aload 12
+    0071 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
+    0074 istore 13
+    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0079 iload 13
+    0081 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0084 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

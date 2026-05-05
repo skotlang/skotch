@@ -1,220 +1,204 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        AUTUMN ()LSeason; 0x0009
+method        AUTUMN ()LSeason; 0x0019
   code        max_stack=3 max_locals=2
     0000 new Class(Season)
     0003 dup
     0004 ldc "AUTUMN"
-    0006 astore 1
-    0008 aload 1
-    0010 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
-    0013 astore 0
-    0015 aload 0
-    0017 areturn
-method        SPRING ()LSeason; 0x0009
+    0006 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
+    0009 areturn
+method        SPRING ()LSeason; 0x0019
   code        max_stack=3 max_locals=2
     0000 new Class(Season)
     0003 dup
     0004 ldc "SPRING"
-    0006 astore 1
-    0008 aload 1
-    0010 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
-    0013 astore 0
-    0015 aload 0
-    0017 areturn
-method        SUMMER ()LSeason; 0x0009
+    0006 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
+    0009 areturn
+method        SUMMER ()LSeason; 0x0019
   code        max_stack=3 max_locals=2
     0000 new Class(Season)
     0003 dup
     0004 ldc "SUMMER"
-    0006 astore 1
-    0008 aload 1
-    0010 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
-    0013 astore 0
-    0015 aload 0
-    0017 areturn
-method        Season$valueOf (Ljava/lang/String;)LSeason; 0x0009
+    0006 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
+    0009 areturn
+method        Season$valueOf (Ljava/lang/String;)LSeason; 0x0019
   code        max_stack=5 max_locals=14
     0000 ldc "SPRING"
-    0002 astore 1
-    0004 aload 0
-    0006 aload 1
-    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0011 istore 2
-    0013 iload 2
-    0015 ifeq 81
-    0018 goto 107
-    0021 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0024 astore 3
-    0026 aload 3
-    0028 areturn
-    0029 ldc "WINTER"
-    0031 astore 4
-    0033 aload 0
-    0035 aload 4
-    0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0040 istore 5
-    0042 iload 5
-    0044 ifeq 21
-    0047 invokestatic Method(InputKt.WINTER:()LSeason;)
-    0050 astore 6
-    0052 aload 6
-    0054 areturn
-    0055 ldc "AUTUMN"
-    0057 astore 7
-    0059 aload 0
-    0061 aload 7
-    0063 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0066 istore 8
-    0068 iload 8
-    0070 ifeq 29
-    0073 invokestatic Method(InputKt.AUTUMN:()LSeason;)
-    0076 astore 9
-    0078 aload 9
-    0080 areturn
-    0081 ldc "SUMMER"
-    0083 astore 10
-    0085 aload 0
-    0087 aload 10
-    0089 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0092 istore 11
-    0094 iload 11
-    0096 ifeq 55
-    0099 invokestatic Method(InputKt.SUMMER:()LSeason;)
-    0102 astore 12
-    0104 aload 12
-    0106 areturn
-    0107 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0110 astore 13
-    0112 aload 13
-    0114 areturn
+    0002 astore_1
+    0003 aload_0
+    0004 aload_1
+    0005 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0008 istore_2
+    0009 iload_2
+    0010 ifeq 72
+    0013 goto 97
+    0016 invokestatic Method(InputKt.SPRING:()LSeason;)
+    0019 astore_3
+    0020 aload_3
+    0021 areturn
+    0022 ldc "WINTER"
+    0024 astore 4
+    0026 aload_0
+    0027 aload 4
+    0029 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0032 istore 5
+    0034 iload 5
+    0036 ifeq 16
+    0039 invokestatic Method(InputKt.WINTER:()LSeason;)
+    0042 astore 6
+    0044 aload 6
+    0046 areturn
+    0047 ldc "AUTUMN"
+    0049 astore 7
+    0051 aload_0
+    0052 aload 7
+    0054 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0057 istore 8
+    0059 iload 8
+    0061 ifeq 22
+    0064 invokestatic Method(InputKt.AUTUMN:()LSeason;)
+    0067 astore 9
+    0069 aload 9
+    0071 areturn
+    0072 ldc "SUMMER"
+    0074 astore 10
+    0076 aload_0
+    0077 aload 10
+    0079 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0082 istore 11
+    0084 iload 11
+    0086 ifeq 47
+    0089 invokestatic Method(InputKt.SUMMER:()LSeason;)
+    0092 astore 12
+    0094 aload 12
+    0096 areturn
+    0097 invokestatic Method(InputKt.SPRING:()LSeason;)
+    0100 astore 13
+    0102 aload 13
+    0104 areturn
     sub_attr  StackMapTable (111 bytes)
-method        Season$values ()Ljava/util/ArrayList; 0x0009
+method        Season$values ()Ljava/util/ArrayList; 0x0019
   code        max_stack=2 max_locals=9
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
-    0007 astore 0
-    0009 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0012 astore 1
-    0014 aload 0
-    0016 aload 1
-    0018 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0021 istore 2
-    0023 invokestatic Method(InputKt.SUMMER:()LSeason;)
-    0026 astore 3
-    0028 aload 0
-    0030 aload 3
-    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0035 istore 4
-    0037 invokestatic Method(InputKt.AUTUMN:()LSeason;)
-    0040 astore 5
-    0042 aload 0
-    0044 aload 5
-    0046 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0049 istore 6
-    0051 invokestatic Method(InputKt.WINTER:()LSeason;)
-    0054 astore 7
-    0056 aload 0
-    0058 aload 7
-    0060 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0063 istore 8
-    0065 aload 0
-    0067 areturn
-method        WINTER ()LSeason; 0x0009
+    0007 astore_0
+    0008 invokestatic Method(InputKt.SPRING:()LSeason;)
+    0011 astore_1
+    0012 aload_0
+    0013 aload_1
+    0014 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0017 istore_2
+    0018 invokestatic Method(InputKt.SUMMER:()LSeason;)
+    0021 astore_3
+    0022 aload_0
+    0023 aload_3
+    0024 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0027 istore 4
+    0029 invokestatic Method(InputKt.AUTUMN:()LSeason;)
+    0032 astore 5
+    0034 aload_0
+    0035 aload 5
+    0037 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0040 istore 6
+    0042 invokestatic Method(InputKt.WINTER:()LSeason;)
+    0045 astore 7
+    0047 aload_0
+    0048 aload 7
+    0050 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0053 istore 8
+    0055 aload_0
+    0056 areturn
+method        WINTER ()LSeason; 0x0019
   code        max_stack=3 max_locals=2
     0000 new Class(Season)
     0003 dup
     0004 ldc "WINTER"
-    0006 astore 1
-    0008 aload 1
-    0010 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
-    0013 astore 0
-    0015 aload 0
-    0017 areturn
-method        describe (Ljava/lang/String;)Ljava/lang/String; 0x0009
+    0006 invokespecial Method(Season.<init>:(Ljava/lang/String;)V)
+    0009 areturn
+method        describe (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=16
-    0000 aload 0
-    0002 astore 1
-    0004 goto 7
-    0007 ldc "SPRING"
-    0009 astore 2
-    0011 aload 1
-    0013 aload 2
-    0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0018 istore 3
-    0020 iload 3
-    0022 ifeq 36
-    0025 ldc "flowers bloom"
-    0027 astore 4
-    0029 aload 4
-    0031 astore 5
-    0033 goto 134
-    0036 ldc "SUMMER"
-    0038 astore 6
-    0040 aload 1
-    0042 aload 6
-    0044 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0047 istore 7
-    0049 iload 7
-    0051 ifeq 65
-    0054 ldc "sun shines"
-    0056 astore 8
-    0058 aload 8
-    0060 astore 5
-    0062 goto 134
-    0065 ldc "AUTUMN"
-    0067 astore 9
-    0069 aload 1
-    0071 aload 9
-    0073 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0076 istore 10
-    0078 iload 10
-    0080 ifeq 94
-    0083 ldc "leaves fall"
-    0085 astore 11
-    0087 aload 11
-    0089 astore 5
-    0091 goto 134
-    0094 ldc "WINTER"
-    0096 astore 12
-    0098 aload 1
-    0100 aload 12
-    0102 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0105 istore 13
-    0107 iload 13
-    0109 ifeq 123
-    0112 ldc "snow falls"
-    0114 astore 14
-    0116 aload 14
-    0118 astore 5
-    0120 goto 134
-    0123 ldc "unknown"
-    0125 astore 15
-    0127 aload 15
-    0129 astore 5
-    0131 goto 134
-    0134 aload 5
-    0136 areturn
+    0000 aload_0
+    0001 astore_1
+    0002 goto 5
+    0005 ldc "SPRING"
+    0007 astore_2
+    0008 aload_1
+    0009 aload_2
+    0010 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0013 istore_3
+    0014 iload_3
+    0015 ifeq 29
+    0018 ldc "flowers bloom"
+    0020 astore 4
+    0022 aload 4
+    0024 astore 5
+    0026 goto 124
+    0029 ldc "SUMMER"
+    0031 astore 6
+    0033 aload_1
+    0034 aload 6
+    0036 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0039 istore 7
+    0041 iload 7
+    0043 ifeq 57
+    0046 ldc "sun shines"
+    0048 astore 8
+    0050 aload 8
+    0052 astore 5
+    0054 goto 124
+    0057 ldc "AUTUMN"
+    0059 astore 9
+    0061 aload_1
+    0062 aload 9
+    0064 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0067 istore 10
+    0069 iload 10
+    0071 ifeq 85
+    0074 ldc "leaves fall"
+    0076 astore 11
+    0078 aload 11
+    0080 astore 5
+    0082 goto 124
+    0085 ldc "WINTER"
+    0087 astore 12
+    0089 aload_1
+    0090 aload 12
+    0092 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0095 istore 13
+    0097 iload 13
+    0099 ifeq 113
+    0102 ldc "snow falls"
+    0104 astore 14
+    0106 aload 14
+    0108 astore 5
+    0110 goto 124
+    0113 ldc "unknown"
+    0115 astore 15
+    0117 aload 15
+    0119 astore 5
+    0121 goto 124
+    0124 aload 5
+    0126 areturn
     sub_attr  StackMapTable (137 bytes)
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=5
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=4
     0000 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0003 astore 1
-    0005 aload 1
-    0007 invokestatic Method(InputKt.describe:(Ljava/lang/String;)Ljava/lang/String;)
-    0010 astore 2
-    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 aload 2
-    0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0020 invokestatic Method(InputKt.WINTER:()LSeason;)
-    0023 astore 3
-    0025 aload 3
-    0027 invokestatic Method(InputKt.describe:(Ljava/lang/String;)Ljava/lang/String;)
-    0030 astore 4
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 aload 4
-    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0040 return
+    0003 invokestatic Method(InputKt.describe:(Ljava/lang/String;)Ljava/lang/String;)
+    0006 astore_1
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 aload_1
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0014 invokestatic Method(InputKt.WINTER:()LSeason;)
+    0017 invokestatic Method(InputKt.describe:(Ljava/lang/String;)Ljava/lang/String;)
+    0020 astore_3
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 aload_3
+    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
+    0028 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

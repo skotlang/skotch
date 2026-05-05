@@ -1,30 +1,30 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=6
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=5
     0000 iconst_5
-    0001 istore 1
-    0003 new Class(Square)
-    0006 dup
-    0007 iload 1
-    0009 invokespecial Method(Square.<init>:(I)V)
-    0012 astore 2
-    0014 aload 2
-    0016 invokevirtual Method(Square.area:()I)
-    0019 istore 3
-    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload 3
-    0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0029 new Class(Square)
-    0032 dup
-    0033 invokespecial Method(Square.<init>:()V)
-    0036 astore 4
-    0038 aload 4
-    0040 invokevirtual Method(Square.area:()I)
-    0043 istore 5
-    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 iload 5
-    0050 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0053 return
+    0001 istore_0
+    0002 new Class(Square)
+    0005 dup
+    0006 iload_0
+    0007 invokespecial Method(Square.<init>:(I)V)
+    0010 invokevirtual Method(Square.area:()I)
+    0013 istore_2
+    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0017 iload_2
+    0018 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0021 new Class(Square)
+    0024 dup
+    0025 invokespecial Method(Square.<init>:()V)
+    0028 invokevirtual Method(Square.area:()I)
+    0031 istore 4
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 iload 4
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

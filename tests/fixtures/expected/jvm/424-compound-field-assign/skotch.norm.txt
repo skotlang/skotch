@@ -1,80 +1,74 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=3 max_locals=21
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=20
     0000 bipush 10
-    0002 istore 1
-    0004 new Class(Counter)
-    0007 dup
-    0008 iload 1
-    0010 invokespecial Method(Counter.<init>:(I)V)
-    0013 astore 2
-    0015 aload 2
-    0017 checkcast Class(Counter)
-    0020 astore 3
-    0022 aload 3
-    0024 checkcast Class(Counter)
-    0027 astore 4
-    0029 aload 3
-    0031 checkcast Class(Counter)
-    0034 astore 5
-    0036 aload 5
-    0038 getfield Field(Counter.n:I)
-    0041 istore 6
-    0043 iconst_5
-    0044 istore 7
-    0046 iload 6
-    0048 iload 7
-    0050 iadd
-    0051 istore 8
-    0053 aload 4
-    0055 iload 8
-    0057 putfield Field(Counter.n:I)
-    0060 aload 3
-    0062 checkcast Class(Counter)
-    0065 astore 9
-    0067 aload 3
-    0069 checkcast Class(Counter)
-    0072 astore 10
-    0074 aload 10
-    0076 getfield Field(Counter.n:I)
-    0079 istore 11
-    0081 iconst_2
-    0082 istore 12
-    0084 iload 11
-    0086 iload 12
-    0088 isub
-    0089 istore 13
-    0091 aload 9
-    0093 iload 13
-    0095 putfield Field(Counter.n:I)
-    0098 aload 3
-    0100 checkcast Class(Counter)
-    0103 astore 14
-    0105 aload 3
-    0107 checkcast Class(Counter)
-    0110 astore 15
-    0112 aload 15
-    0114 getfield Field(Counter.n:I)
-    0117 istore 16
-    0119 iconst_3
-    0120 istore 17
-    0122 iload 16
-    0124 iload 17
-    0126 imul
-    0127 istore 18
-    0129 aload 14
-    0131 iload 18
-    0133 putfield Field(Counter.n:I)
-    0136 aload 3
-    0138 checkcast Class(Counter)
-    0141 astore 19
-    0143 aload 19
-    0145 getfield Field(Counter.n:I)
-    0148 istore 20
-    0150 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0153 iload 20
-    0155 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0158 return
+    0002 istore_0
+    0003 new Class(Counter)
+    0006 dup
+    0007 iload_0
+    0008 invokespecial Method(Counter.<init>:(I)V)
+    0011 checkcast Class(Counter)
+    0014 astore_2
+    0015 aload_2
+    0016 checkcast Class(Counter)
+    0019 astore_3
+    0020 aload_2
+    0021 checkcast Class(Counter)
+    0024 getfield Field(Counter.n:I)
+    0027 istore 5
+    0029 iconst_5
+    0030 istore 6
+    0032 iload 5
+    0034 iload 6
+    0036 iadd
+    0037 istore 7
+    0039 aload_3
+    0040 iload 7
+    0042 putfield Field(Counter.n:I)
+    0045 aload_2
+    0046 checkcast Class(Counter)
+    0049 astore 8
+    0051 aload_2
+    0052 checkcast Class(Counter)
+    0055 getfield Field(Counter.n:I)
+    0058 istore 10
+    0060 iconst_2
+    0061 istore 11
+    0063 iload 10
+    0065 iload 11
+    0067 isub
+    0068 istore 12
+    0070 aload 8
+    0072 iload 12
+    0074 putfield Field(Counter.n:I)
+    0077 aload_2
+    0078 checkcast Class(Counter)
+    0081 astore 13
+    0083 aload_2
+    0084 checkcast Class(Counter)
+    0087 getfield Field(Counter.n:I)
+    0090 istore 15
+    0092 iconst_3
+    0093 istore 16
+    0095 iload 15
+    0097 iload 16
+    0099 imul
+    0100 istore 17
+    0102 aload 13
+    0104 iload 17
+    0106 putfield Field(Counter.n:I)
+    0109 aload_2
+    0110 checkcast Class(Counter)
+    0113 getfield Field(Counter.n:I)
+    0116 istore 19
+    0118 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0121 iload 19
+    0123 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0126 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

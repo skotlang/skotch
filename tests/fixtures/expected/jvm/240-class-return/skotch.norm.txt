@@ -1,50 +1,46 @@
-class_version major=52 minor=0
+class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        main ([Ljava/lang/String;)V 0x0009
-  code        max_stack=2 max_locals=9
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=8
     0000 bipush 10
-    0002 istore 1
-    0004 bipush 20
-    0006 istore 2
-    0008 iload 1
-    0010 iload 2
-    0012 invokestatic Method(InputKt.makePair:(II)LPair;)
-    0015 astore 3
-    0017 aload 3
-    0019 checkcast Class(Pair)
-    0022 astore 4
-    0024 aload 4
-    0026 checkcast Class(Pair)
-    0029 astore 5
-    0031 aload 5
-    0033 getfield Field(Pair.first:I)
-    0036 istore 6
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 iload 6
-    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0046 aload 4
-    0048 checkcast Class(Pair)
-    0051 astore 7
-    0053 aload 7
-    0055 getfield Field(Pair.second:I)
-    0058 istore 8
-    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0063 iload 8
-    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0068 return
-method        makePair (II)LPair; 0x0009
+    0002 istore_0
+    0003 bipush 20
+    0005 istore_1
+    0006 iload_0
+    0007 iload_1
+    0008 invokestatic Method(InputKt.makePair:(II)LPair;)
+    0011 checkcast Class(Pair)
+    0014 astore_3
+    0015 aload_3
+    0016 checkcast Class(Pair)
+    0019 getfield Field(Pair.first:I)
+    0022 istore 5
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 iload 5
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 aload_3
+    0033 checkcast Class(Pair)
+    0036 getfield Field(Pair.second:I)
+    0039 istore 7
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload 7
+    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0049 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        makePair (II)LPair; 0x0019
   code        max_stack=4 max_locals=5
-    0000 iload 0
-    0002 istore 2
-    0004 iload 1
-    0006 istore 3
-    0008 new Class(Pair)
-    0011 dup
-    0012 iload 2
-    0014 iload 3
-    0016 invokespecial Method(Pair.<init>:(II)V)
-    0019 astore 4
-    0021 aload 4
-    0023 areturn
+    0000 iload_0
+    0001 istore_2
+    0002 iload_1
+    0003 istore_3
+    0004 new Class(Pair)
+    0007 dup
+    0008 iload_2
+    0009 iload_3
+    0010 invokespecial Method(Pair.<init>:(II)V)
+    0013 areturn

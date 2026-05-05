@@ -18,8 +18,8 @@ pub mod jvm {
     /// `cafebabe` magic.
     pub const CLASS_FILE_MAGIC: u32 = 0xCAFE_BABE;
 
-    /// Default for newly emitted classes.
-    pub const DEFAULT_CLASS_FILE_MAJOR: u16 = CLASS_FILE_MAJOR_JAVA_8;
+    /// Default for newly emitted classes — matches kotlinc's output (Java 17).
+    pub const DEFAULT_CLASS_FILE_MAJOR: u16 = CLASS_FILE_MAJOR_JAVA_17;
 }
 
 /// DEX file format constants.
