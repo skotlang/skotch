@@ -19,27 +19,12 @@ unique_name=inputkt
         {
           "Class": "Counter"
         },
-        {
-          "Class": "Counter"
-        },
-        {
-          "Class": "Counter"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Counter"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Counter"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Counter"
-        },
         "Int",
         "Unit"
       ],
@@ -71,22 +56,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Const": {
                     "Int": 5
                   }
@@ -95,7 +64,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": {
@@ -105,7 +74,32 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2,
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "GetField": {
+                    "receiver": 0,
+                    "class_name": "Counter",
+                    "field_name": "count"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
                       3
                     ]
                   }
@@ -116,47 +110,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "GetField": {
-                    "receiver": 5,
-                    "class_name": "Counter",
-                    "field_name": "count"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
                   "Const": {
                     "Int": -1
                   }
@@ -165,7 +118,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 10,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -175,8 +128,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      8,
-                      9
+                      0,
+                      5
                     ]
                   }
                 }
@@ -184,18 +137,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
+                "dest": 7,
                 "value": {
                   "GetField": {
-                    "receiver": 11,
+                    "receiver": 0,
                     "class_name": "Counter",
                     "field_name": "count"
                   }
@@ -204,12 +149,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 13,
+                "dest": 8,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      12
+                      7
                     ]
                   }
                 }
@@ -219,7 +164,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,
@@ -437,9 +385,7 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            "Int",
             "Bool",
-            "Int",
             "Int",
             "Unit"
           ],
@@ -474,14 +420,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "Const": {
                         "Int": 0
                       }
@@ -490,12 +428,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "BinOp": {
                         "op": "CmpGe",
-                        "lhs": 4,
-                        "rhs": 5
+                        "lhs": 1,
+                        "rhs": 4
                       }
                     }
                   }
@@ -503,7 +441,7 @@ unique_name=inputkt
               ],
               "terminator": {
                 "Branch": {
-                  "cond": 6,
+                  "cond": 5,
                   "then_block": 1,
                   "else_block": 2
                 }
@@ -513,17 +451,9 @@ unique_name=inputkt
               "stmts": [
                 {
                   "Assign": {
-                    "dest": 8,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 8
+                      "Local": 1
                     }
                   }
                 }
@@ -542,7 +472,7 @@ unique_name=inputkt
               "stmts": [
                 {
                   "Assign": {
-                    "dest": 9,
+                    "dest": 7,
                     "value": {
                       "PutField": {
                         "receiver": 0,

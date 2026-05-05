@@ -3,77 +3,51 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=16
+  code        max_stack=3 max_locals=6
     0000 iconst_5
     0001 istore_0
     0002 iload_0
-    0003 istore_1
-    0004 iload_1
-    0005 istore_2
-    0006 iconst_0
-    0007 istore_3
-    0008 iload_2
-    0009 iload_3
-    0010 op_0xA3
-    0011 nop
-    0012 iconst_4
-    0013 iconst_0
-    0014 goto 18
-    0017 iconst_1
-    0018 istore 4
-    0020 iload 4
-    0022 istore 5
-    0024 iload_1
-    0025 istore 6
-    0027 iconst_2
-    0028 istore 7
-    0030 iload 6
-    0032 iload 7
-    0034 irem
-    0035 istore 8
-    0037 iconst_0
-    0038 istore 9
-    0040 iload 8
-    0042 iload 9
-    0044 op_0x9F
-    0045 nop
-    0046 iconst_4
-    0047 iconst_0
-    0048 goto 52
-    0051 iconst_1
-    0052 istore 10
-    0054 iload 10
-    0056 istore 11
-    0058 ldc "positive: "
-    0060 astore 12
-    0062 iload 5
-    0064 istore 13
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 new Class(java/lang/StringBuilder)
-    0072 dup
-    0073 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0076 aload 12
-    0078 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0081 iload 13
-    0083 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
-    0086 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0089 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0092 ldc "even: "
-    0094 astore 14
-    0096 iload 11
-    0098 istore 15
-    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0103 new Class(java/lang/StringBuilder)
-    0106 dup
-    0107 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0110 aload 14
-    0112 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0115 iload 15
-    0117 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
-    0120 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0123 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0126 return
-    sub_attr  StackMapTable (60 bytes)
+    0003 ifle 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 istore_1
+    0012 iload_0
+    0013 iconst_2
+    0014 irem
+    0015 istore_2
+    0016 iload_2
+    0017 ifne 24
+    0020 iconst_1
+    0021 goto 25
+    0024 iconst_0
+    0025 istore_3
+    0026 ldc "positive: "
+    0028 astore 4
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 new Class(java/lang/StringBuilder)
+    0036 dup
+    0037 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0040 aload 4
+    0042 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0045 iload_1
+    0046 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
+    0049 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0055 ldc "even: "
+    0057 astore 5
+    0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0062 new Class(java/lang/StringBuilder)
+    0065 dup
+    0066 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0069 aload 5
+    0071 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0074 iload_3
+    0075 invokevirtual Method(java/lang/StringBuilder.append:(Z)Ljava/lang/StringBuilder;)
+    0078 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0081 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0084 return
+    sub_attr  StackMapTable (15 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

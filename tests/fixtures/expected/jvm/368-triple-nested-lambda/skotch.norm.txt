@@ -3,23 +3,20 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=1
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0007 checkcast Class(InputKt$Lambda$0)
-    0010 astore_1
-    0011 iconst_1
-    0012 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0015 astore_3
-    0016 aload_1
-    0017 aload_3
-    0018 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0021 astore 4
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 aload 4
-    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0031 return
+    0007 astore_0
+    0008 iconst_1
+    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0012 aload_0
+    0013 swap
+    0014 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

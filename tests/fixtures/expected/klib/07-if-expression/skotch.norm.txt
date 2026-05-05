@@ -20,8 +20,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -102,26 +100,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      1
                     ]
                   }
                 }
@@ -131,7 +113,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,

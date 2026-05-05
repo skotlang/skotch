@@ -12,12 +12,12 @@ method        main ()V 0x0019
     0010 aload_0
     0011 invokevirtual Method(Dog.getName:()Ljava/lang/String;)
     0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 op_0x5F
+    0017 swap
     0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0021 aload_0
     0022 invokevirtual Method(Dog.sound:()Ljava/lang/String;)
     0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0028 op_0x5F
+    0028 swap
     0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0032 new Class(Cat)
     0035 dup
@@ -27,12 +27,12 @@ method        main ()V 0x0019
     0042 aload_1
     0043 invokevirtual Method(Cat.getName:()Ljava/lang/String;)
     0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0049 op_0x5F
+    0049 swap
     0050 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0053 aload_1
     0054 invokevirtual Method(Cat.sound:()Ljava/lang/String;)
     0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 op_0x5F
+    0060 swap
     0061 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0064 return
 method        main ([Ljava/lang/String;)V 0x1009

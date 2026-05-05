@@ -261,8 +261,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Int",
-        "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -272,33 +270,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "BinOp": {
                     "op": "MulI",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 0
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 3
+            "ReturnValue": 1
           }
         }
       ],

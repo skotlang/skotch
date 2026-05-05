@@ -21,8 +21,6 @@ unique_name=inputkt
         "Double",
         "Double",
         "Double",
-        "Double",
-        "Double",
         "Double"
       ],
       "blocks": [
@@ -32,7 +30,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "MulD",
+                    "lhs": 0,
+                    "rhs": 0
+                  }
                 }
               }
             },
@@ -40,7 +42,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "Double": 3.14159
+                  }
                 }
               }
             },
@@ -55,32 +59,10 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Const": {
-                    "Double": 3.14159
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "BinOp": {
-                    "op": "MulD",
-                    "lhs": 3,
-                    "rhs": 4
-                  }
-                }
-              }
             }
           ],
           "terminator": {
-            "ReturnValue": 5
+            "ReturnValue": 3
           }
         }
       ],

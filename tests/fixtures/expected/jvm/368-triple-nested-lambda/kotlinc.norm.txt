@@ -40,7 +40,7 @@ method        main$lambda$0 (I)I 0x001A
     0012 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0017 checkcast Class(java/lang/Number)
     0020 invokevirtual Method(java/lang/Number.intValue:()I)
-    0023 op_0xAC
+    0023 ireturn
 method        main$lambda$0$0 (II)I 0x001A
   code        max_stack=2 max_locals=3
     0000 iload_0
@@ -57,7 +57,7 @@ method        main$lambda$0$0 (II)I 0x001A
     0013 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0018 checkcast Class(java/lang/Number)
     0021 invokevirtual Method(java/lang/Number.intValue:()I)
-    0024 op_0xAC
+    0024 ireturn
 method        main$lambda$0$0$0 (III)I 0x001A
   code        max_stack=2 max_locals=3
     0000 iload_0
@@ -65,5 +65,5 @@ method        main$lambda$0$0$0 (III)I 0x001A
     0002 iadd
     0003 iload_2
     0004 iadd
-    0005 op_0xAC
+    0005 ireturn
 class_attr    BootstrapMethods (32 bytes)

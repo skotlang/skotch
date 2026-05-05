@@ -37,7 +37,8 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "is_private": true
     },
     {
       "id": 1,

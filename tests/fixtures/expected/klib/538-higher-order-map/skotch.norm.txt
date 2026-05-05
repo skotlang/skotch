@@ -23,7 +23,6 @@ unique_name=inputkt
           "Class": "kotlin/jvm/functions/Function1"
         },
         "Int",
-        "Int",
         "Any",
         "Any"
       ],
@@ -34,14 +33,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": {
                       "StaticJava": {
@@ -51,7 +42,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      1
                     ]
                   }
                 }
@@ -59,7 +50,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": {
@@ -70,7 +61,7 @@ unique_name=inputkt
                     },
                     "args": [
                       0,
-                      3
+                      2
                     ]
                   }
                 }
@@ -78,7 +69,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],
@@ -105,7 +96,6 @@ unique_name=inputkt
           "Class": "kotlin/jvm/functions/Function1"
         },
         "String",
-        "String",
         "Any",
         "Any"
       ],
@@ -124,14 +114,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -141,7 +123,7 @@ unique_name=inputkt
                     },
                     "args": [
                       0,
-                      3
+                      2
                     ]
                   }
                 }
@@ -149,7 +131,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],
@@ -174,14 +156,10 @@ unique_name=inputkt
         },
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit",
         {
           "Class": "InputKt$Lambda$1"
         },
-        "String",
-        "String",
         "String",
         "String",
         "Unit"
@@ -240,26 +218,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -267,7 +229,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "NewInstance": "InputKt$Lambda$1"
                 }
@@ -275,7 +237,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": {
@@ -288,7 +250,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 2
@@ -298,15 +260,15 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
                       "Static": 1
                     },
                     "args": [
-                      6,
-                      7
+                      4,
+                      5
                     ]
                   }
                 }
@@ -314,28 +276,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 9
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
+                      6
                     ]
                   }
                 }
@@ -345,7 +291,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2,
+        6
+      ]
     },
     {
       "id": 3,
@@ -558,7 +508,6 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$0"
             },
             "Any",
-            "Any",
             "Int",
             "Int",
             "Int",
@@ -571,14 +520,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "Int": 2
                       }
@@ -587,7 +528,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "Call": {
                         "kind": {
@@ -598,7 +539,7 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          2
+                          1
                         ]
                       }
                     }
@@ -606,19 +547,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "BinOp": {
                         "op": "MulI",
-                        "lhs": 4,
-                        "rhs": 3
+                        "lhs": 3,
+                        "rhs": 2
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": {
@@ -629,7 +570,7 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          5
+                          4
                         ]
                       }
                     }
@@ -637,7 +578,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 6
+                "ReturnValue": 5
               }
             }
           ],
@@ -707,7 +648,6 @@ unique_name=inputkt
             "String",
             "String",
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -735,25 +675,17 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "BinOp": {
                         "op": "ConcatStr",
                         "lhs": 3,
-                        "rhs": 4
+                        "rhs": 2
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "Const": {
                         "String": 1
@@ -763,19 +695,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 7,
+                    "dest": 6,
                     "value": {
                       "BinOp": {
                         "op": "ConcatStr",
-                        "lhs": 5,
-                        "rhs": 6
+                        "lhs": 4,
+                        "rhs": 5
                       }
                     }
                   }
                 }
               ],
               "terminator": {
-                "ReturnValue": 7
+                "ReturnValue": 6
               }
             }
           ],

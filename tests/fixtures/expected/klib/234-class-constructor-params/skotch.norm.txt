@@ -21,22 +21,10 @@ unique_name=inputkt
         {
           "Class": "Point"
         },
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Point"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Point"
-        },
         "Int",
         "Unit"
       ],
@@ -91,22 +79,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -115,8 +87,33 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      2
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "Point",
+                    "field_name": "x"
                   }
                 }
               }
@@ -138,49 +135,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
                   "GetField": {
-                    "receiver": 7,
-                    "class_name": "Point",
-                    "field_name": "x"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "GetField": {
-                    "receiver": 10,
+                    "receiver": 2,
                     "class_name": "Point",
                     "field_name": "y"
                   }
@@ -189,12 +145,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 12,
+                "dest": 8,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      11
+                      7
                     ]
                   }
                 }
@@ -204,7 +160,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 1,
@@ -425,10 +384,6 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            "Int",
-            "Int",
-            "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -462,7 +417,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 1
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 1,
+                        "rhs": 1
+                      }
                     }
                   }
                 },
@@ -470,7 +429,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 1
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 2,
+                        "rhs": 2
+                      }
                     }
                   }
                 },
@@ -479,49 +442,9 @@ unique_name=inputkt
                     "dest": 5,
                     "value": {
                       "BinOp": {
-                        "op": "MulI",
+                        "op": "AddI",
                         "lhs": 3,
                         "rhs": 4
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 8,
-                    "value": {
-                      "BinOp": {
-                        "op": "MulI",
-                        "lhs": 6,
-                        "rhs": 7
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
-                      "BinOp": {
-                        "op": "AddI",
-                        "lhs": 5,
-                        "rhs": 8
                       }
                     }
                   }
@@ -554,7 +477,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 9
+                "ReturnValue": 5
               }
             }
           ],

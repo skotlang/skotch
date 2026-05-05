@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=4
     0000 bipush 10
     0002 istore_0
     0003 iconst_2
@@ -11,57 +11,47 @@ method        main ()V 0x0019
     0005 iload_0
     0006 iload_1
     0007 invokestatic Method(InputKt.safeDivide:(II)Ljava/lang/String;)
-    0010 astore_2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 aload_2
-    0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0018 bipush 10
-    0020 istore_3
-    0021 iconst_0
-    0022 istore 4
-    0024 iload_3
-    0025 iload 4
-    0027 invokestatic Method(InputKt.safeDivide:(II)Ljava/lang/String;)
-    0030 astore 5
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 aload 5
-    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0040 return
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 swap
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 bipush 10
+    0019 istore_2
+    0020 iconst_0
+    0021 istore 3
+    0023 iload_2
+    0024 iload 3
+    0026 invokestatic Method(InputKt.safeDivide:(II)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safeDivide (II)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=8
     0000 goto 3
     0003 iload_0
-    0004 istore_2
-    0005 iload_1
-    0006 istore_3
-    0007 iload_2
-    0008 iload_3
-    0009 idiv
-    0010 istore 4
-    0012 iload 4
-    0014 istore 5
-    0016 ldc "Result: "
-    0018 astore 6
-    0020 iload 5
-    0022 istore 7
-    0024 aload 6
-    0026 iload 7
-    0028 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0031 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0034 astore 8
-    0036 aload 8
-    0038 astore 9
-    0040 goto 56
-    0043 astore 10
-    0045 ldc "Error"
-    0047 astore 11
-    0049 aload 11
-    0051 astore 9
-    0053 goto 56
-    0056 aload 9
-    0058 areturn
-    sub_attr  StackMapTable (42 bytes)
+    0004 iload_1
+    0005 idiv
+    0006 istore_2
+    0007 ldc "Result: "
+    0009 astore_3
+    0010 aload_3
+    0011 iload_2
+    0012 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0015 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0018 astore 4
+    0020 aload 4
+    0022 astore 5
+    0024 goto 40
+    0027 astore 6
+    0029 ldc "Error"
+    0031 astore 7
+    0033 aload 7
+    0035 astore 5
+    0037 goto 40
+    0040 aload 5
+    0042 areturn
+    sub_attr  StackMapTable (30 bytes)

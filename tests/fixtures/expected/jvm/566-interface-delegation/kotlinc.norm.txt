@@ -20,7 +20,7 @@ method        main ()V 0x0019
     0026 aload_1
     0027 invokevirtual Method(PrefixLogger.level:()Ljava/lang/String;)
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 op_0x5F
+    0033 swap
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0037 return
 method        main ([Ljava/lang/String;)V 0x1009

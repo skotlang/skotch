@@ -3,80 +3,69 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
-    0000 iload_0
+  code        max_stack=2 max_locals=10
+    0000 iconst_0
     0001 istore_1
-    0002 iconst_0
-    0003 istore_2
-    0004 iload_1
-    0005 iload_2
-    0006 op_0xA1
-    0007 nop
-    0008 iconst_4
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 30
-    0019 ldc "negative"
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 26
+    0017 ldc "negative"
+    0019 astore_3
+    0020 aload_3
     0021 astore 4
-    0023 aload 4
-    0025 astore 5
-    0027 goto 58
-    0030 iload_0
-    0031 istore 6
-    0033 iconst_0
-    0034 istore 7
-    0036 iload 6
-    0038 iload 7
-    0040 op_0x9F
-    0041 nop
-    0042 iconst_4
-    0043 iconst_0
-    0044 goto 48
-    0047 iconst_1
-    0048 istore 8
-    0050 iload 8
-    0052 ifeq 72
-    0055 goto 61
-    0058 aload 5
-    0060 areturn
-    0061 ldc "zero"
-    0063 astore 9
-    0065 aload 9
-    0067 astore 10
-    0069 goto 83
-    0072 ldc "positive"
-    0074 astore 11
-    0076 aload 11
-    0078 astore 10
-    0080 goto 83
-    0083 aload 10
-    0085 astore 5
-    0087 goto 58
-    sub_attr  StackMapTable (132 bytes)
+    0023 goto 50
+    0026 iconst_0
+    0027 istore 5
+    0029 iload_0
+    0030 iload 5
+    0032 if_icmpne 39
+    0035 iconst_1
+    0036 goto 40
+    0039 iconst_0
+    0040 istore 6
+    0042 iload 6
+    0044 ifeq 64
+    0047 goto 53
+    0050 aload 4
+    0052 areturn
+    0053 ldc "zero"
+    0055 astore 7
+    0057 aload 7
+    0059 astore 8
+    0061 goto 75
+    0064 ldc "positive"
+    0066 astore 9
+    0068 aload 9
+    0070 astore 8
+    0072 goto 75
+    0075 aload 8
+    0077 astore 4
+    0079 goto 50
+    sub_attr  StackMapTable (56 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=0
     0000 bipush -5
     0002 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
-    0005 astore_1
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 aload_1
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0013 iconst_0
-    0014 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
-    0017 astore_3
-    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 aload_3
-    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0025 bipush 42
-    0027 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
-    0030 astore 5
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 aload 5
-    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0040 return
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 iconst_0
+    0013 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 swap
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 bipush 42
+    0025 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 swap
+    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0035 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

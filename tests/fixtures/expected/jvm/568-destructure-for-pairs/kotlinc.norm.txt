@@ -49,11 +49,11 @@ method        main ()V 0x0019
     0083 iload 4
     0085 op_0xBA
     0086 nop
-    0087 op_0x48
+    0087 dstore_1
     0088 nop
     0089 nop
     0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0093 op_0x5F
+    0093 swap
     0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0097 goto 43
     0100 return

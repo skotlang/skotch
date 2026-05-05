@@ -21,26 +21,14 @@ unique_name=inputkt
         {
           "Class": "Shape"
         },
-        {
-          "Class": "Shape"
-        },
         "String",
-        {
-          "Class": "Shape"
-        },
         "Bool",
         {
           "Class": "Circle"
         },
         "String",
-        {
-          "Class": "Circle"
-        },
         "String",
         "String",
-        {
-          "Class": "Shape"
-        },
         "Bool",
         {
           "Class": "Square"
@@ -49,18 +37,31 @@ unique_name=inputkt
       ],
       "blocks": [
         {
+          "stmts": [],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
           "stmts": [
             {
               "Assign": {
-                "dest": 1,
+                "dest": 2,
                 "value": {
-                  "Local": 0
+                  "InstanceOf": {
+                    "obj": 0,
+                    "type_descriptor": "Circle"
+                  }
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 1
+            "Branch": {
+              "cond": 2,
+              "then_block": 2,
+              "else_block": 3
+            }
           }
         },
         {
@@ -77,36 +78,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "InstanceOf": {
-                    "obj": 3,
-                    "type_descriptor": "Circle"
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Branch": {
-              "cond": 4,
-              "then_block": 2,
-              "else_block": 3
-            }
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "Const": {
                     "String": 0
                   }
@@ -115,18 +86,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
+                "dest": 5,
                 "value": {
                   "GetField": {
-                    "receiver": 7,
+                    "receiver": 3,
                     "class_name": "Circle",
                     "field_name": "name"
                   }
@@ -135,19 +98,74 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 6,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 6,
-                    "rhs": 8
+                    "lhs": 4,
+                    "rhs": 5
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 2,
+                "dest": 1,
+                "value": {
+                  "Local": 6
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "InstanceOf": {
+                    "obj": 0,
+                    "type_descriptor": "Square"
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 7,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Local": 0
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 1,
                 "value": {
                   "Local": 9
                 }
@@ -162,70 +180,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "InstanceOf": {
-                    "obj": 10,
-                    "type_descriptor": "Square"
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Branch": {
-              "cond": 11,
-              "then_block": 4,
-              "else_block": 5
-            }
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 13
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 6
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 2,
+                "dest": 1,
                 "value": {
                   "Const": "Null"
                 }
@@ -239,7 +194,7 @@ unique_name=inputkt
         {
           "stmts": [],
           "terminator": {
-            "ReturnValue": 2
+            "ReturnValue": 1
           }
         }
       ],

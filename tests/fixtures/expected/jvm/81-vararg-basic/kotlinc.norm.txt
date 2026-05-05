@@ -6,7 +6,7 @@ method        main ()V 0x0019
   code        max_stack=3 max_locals=1
     0000 iconst_5
     0001 op_0xBC
-    0002 op_0x0A
+    0002 lconst_1
     0003 astore_0
     0004 aload_0
     0005 iconst_0
@@ -53,9 +53,9 @@ method        sum ([I)I 0x0099
     0012 istore_3
     0013 iload_2
     0014 iload_3
-    0015 op_0xA2
-    0016 nop
-    0017 ldc_w #10780
+    0015 if_icmpge 34
+    0018 aload_0
+    0019 iload_2
     0020 op_0x2E
     0021 istore 4
     0023 iload_1
@@ -67,6 +67,6 @@ method        sum ([I)I 0x0099
     0030 aconst_null
     0031 goto 13
     0034 iload_1
-    0035 op_0xAC
+    0035 ireturn
     sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

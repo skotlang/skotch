@@ -22,12 +22,7 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
         "Bool",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
         "Int",
         "Int",
         "Any",
@@ -41,14 +36,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Const": {
                     "Int": 0
                   }
@@ -57,12 +44,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "BinOp": {
                     "op": "CmpEq",
-                    "lhs": 2,
-                    "rhs": 3
+                    "lhs": 1,
+                    "rhs": 2
                   }
                 }
               }
@@ -70,25 +57,16 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 4,
+              "cond": 3,
               "then_block": 1,
               "else_block": 2
             }
           }
         },
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
-            "ReturnValue": 6
+            "ReturnValue": 0
           }
         },
         {
@@ -101,9 +79,51 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
+                "dest": 5,
+                "value": {
+                  "BinOp": {
+                    "op": "ModI",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      5
+                    ]
+                  }
                 }
               }
             },
@@ -111,79 +131,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "ModI",
-                    "lhs": 8,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      10
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
                   "Call": {
                     "kind": {
                       "Static": 0
                     },
                     "args": [
-                      11,
-                      12
+                      6,
+                      7
                     ]
                   }
                 }
@@ -191,7 +145,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 13
+            "ReturnValue": 8
           }
         }
       ],

@@ -20,7 +20,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Bool",
-        "Int",
         "Unit",
         "String",
         "Unit",
@@ -93,18 +92,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": "Print",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -112,7 +103,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 0
@@ -122,12 +113,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": "Print",
                     "args": [
-                      6
+                      5
                     ]
                   }
                 }
@@ -142,7 +133,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 8,
+                "dest": 7,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -152,12 +143,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 8,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 2,
-                    "rhs": 8
+                    "rhs": 7
                   }
                 }
               }
@@ -166,7 +157,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 9
+                  "Local": 8
                 }
               }
             }
@@ -179,7 +170,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
+                "dest": 9,
                 "value": {
                   "Call": {
                     "kind": "Println",

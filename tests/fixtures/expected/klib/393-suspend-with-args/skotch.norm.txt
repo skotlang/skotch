@@ -22,23 +22,13 @@ unique_name=inputkt
         "String",
         {
           "Class": "kotlin/coroutines/Continuation"
-        },
-        "String"
+        }
       ],
       "blocks": [
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
-            "ReturnValue": 2
+            "ReturnValue": 0
           }
         }
       ],
@@ -66,8 +56,6 @@ unique_name=inputkt
           "Class": "kotlin/coroutines/Continuation"
         },
         "String",
-        "Any",
-        "Any",
         "Any"
       ],
       "blocks": [
@@ -98,26 +86,10 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 2
           }
         }
       ],
@@ -155,7 +127,10 @@ unique_name=inputkt
           }
         ],
         "is_instance_method": false
-      }
+      },
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 2,

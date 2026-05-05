@@ -7,16 +7,12 @@ method        classify (I)Ljava/lang/String; 0x0019
     0000 nop
     0001 iload_0
     0002 bipush 10
-    0004 op_0xA4
-    0005 nop
-    0006 iconst_5
+    0004 if_icmple 12
     0007 ldc "big"
     0009 goto 24
     0012 iload_0
     0013 iconst_3
-    0014 op_0xA4
-    0015 nop
-    0016 iconst_5
+    0014 if_icmple 22
     0017 ldc "medium"
     0019 goto 24
     0022 ldc "small"
@@ -28,17 +24,17 @@ method        main ()V 0x0019
     0000 bipush 15
     0002 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
     0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 op_0x5F
+    0008 swap
     0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0012 iconst_5
     0013 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
     0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0019 op_0x5F
+    0019 swap
     0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0023 iconst_1
     0024 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
     0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 op_0x5F
+    0030 swap
     0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0034 return
 method        main ([Ljava/lang/String;)V 0x1009

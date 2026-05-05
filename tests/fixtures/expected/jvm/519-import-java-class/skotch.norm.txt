@@ -3,42 +3,32 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=6
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
-    0007 checkcast Class(java/util/ArrayList)
+    0007 astore_0
+    0008 ldc "Hello"
     0010 astore_1
     0011 ldc "Hello"
-    0013 astore_2
-    0014 aload_1
-    0015 checkcast Class(java/util/ArrayList)
-    0018 astore_3
-    0019 ldc "Hello"
-    0021 astore 4
-    0023 aload_3
-    0024 aload 4
-    0026 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0031 istore 5
-    0033 ldc "World"
-    0035 astore 6
-    0037 aload_1
-    0038 checkcast Class(java/util/ArrayList)
-    0041 astore 7
-    0043 ldc "World"
-    0045 astore 8
-    0047 aload 7
-    0049 aload 8
-    0051 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0056 istore 9
-    0058 aload_1
-    0059 checkcast Class(java/util/ArrayList)
-    0062 invokevirtual Method(java/util/ArrayList.size:()I)
-    0065 istore 11
-    0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0070 iload 11
-    0072 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0075 return
+    0013 aload_0
+    0014 swap
+    0015 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0020 istore_2
+    0021 ldc "World"
+    0023 astore 3
+    0025 ldc "World"
+    0027 aload_0
+    0028 swap
+    0029 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0034 istore 4
+    0036 aload_0
+    0037 invokevirtual Method(java/util/ArrayList.size:()I)
+    0040 istore 5
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 iload 5
+    0047 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0050 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -42,21 +42,13 @@ unique_name=inputkt
           "Class": "java/util/List"
         },
         {
-          "Class": "java/util/List"
-        },
-        {
-          "Class": "java/util/List"
-        },
-        {
           "Class": "java/util/Iterator"
         },
         "Bool",
         "Any",
-        "Any",
         "Int",
         "Bool",
         "Int",
-        "Any",
         "Unit"
       ],
       "blocks": [
@@ -358,22 +350,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 23,
                 "value": {
-                  "Local": 22
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
-                  "Local": 23
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 25,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -383,7 +359,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      24
+                      22
                     ]
                   }
                 }
@@ -398,7 +374,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 26,
+                "dest": 24,
                 "value": {
                   "Call": {
                     "kind": {
@@ -409,7 +385,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      25
+                      23
                     ]
                   }
                 }
@@ -418,7 +394,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 26,
+              "cond": 24,
               "then_block": 2,
               "else_block": 3
             }
@@ -428,7 +404,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 27,
+                "dest": 25,
                 "value": {
                   "Call": {
                     "kind": {
@@ -439,7 +415,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      25
+                      23
                     ]
                   }
                 }
@@ -447,15 +423,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 28,
-                "value": {
-                  "Local": 27
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 29,
+                "dest": 26,
                 "value": {
                   "Const": {
                     "Int": 3
@@ -465,12 +433,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 30,
+                "dest": 27,
                 "value": {
                   "BinOp": {
                     "op": "CmpEq",
-                    "lhs": 28,
-                    "rhs": 29
+                    "lhs": 25,
+                    "rhs": 26
                   }
                 }
               }
@@ -478,7 +446,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 30,
+              "cond": 27,
               "then_block": 4,
               "else_block": 5
             }
@@ -504,20 +472,12 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 32,
-                "value": {
-                  "Local": 27
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 33,
+                "dest": 29,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      32
+                      25
                     ]
                   }
                 }
@@ -529,7 +489,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        22
+      ]
     },
     {
       "id": 1,

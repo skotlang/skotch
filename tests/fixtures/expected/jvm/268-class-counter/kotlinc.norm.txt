@@ -24,7 +24,7 @@ method        main ()V 0x0019
     0034 aload_0
     0035 invokevirtual Method(Box.description:()Ljava/lang/String;)
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 op_0x5F
+    0041 swap
     0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0045 return
 method        main ([Ljava/lang/String;)V 0x1009

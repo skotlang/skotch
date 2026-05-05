@@ -19,21 +19,11 @@ unique_name=inputkt
         "Double",
         "Double",
         "Double",
-        "Double",
-        "Double",
-        "Double",
+        "Unit",
         "Double",
         "Unit",
         "Double",
-        "Double",
-        "Double",
         "Unit",
-        "Double",
-        "Double",
-        "Double",
-        "Unit",
-        "Double",
-        "Double",
         "Double",
         "Unit"
       ],
@@ -54,14 +44,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Const": {
                     "Double": 2.0
                   }
@@ -70,9 +52,26 @@ unique_name=inputkt
             },
             {
               "Assign": {
+                "dest": 2,
+                "value": {
+                  "BinOp": {
+                    "op": "AddD",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -80,7 +79,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 1
+                  "BinOp": {
+                    "op": "SubD",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
                 }
               }
             },
@@ -88,7 +91,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
                 }
               }
             },
@@ -97,9 +105,9 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "BinOp": {
-                    "op": "AddD",
-                    "lhs": 4,
-                    "rhs": 5
+                    "op": "MulD",
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -121,7 +129,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 1
+                  "BinOp": {
+                    "op": "DivD",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
                 }
               }
             },
@@ -129,112 +141,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "SubD",
-                    "lhs": 8,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "BinOp": {
-                    "op": "MulD",
-                    "lhs": 12,
-                    "rhs": 13
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      14
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
-                "value": {
-                  "BinOp": {
-                    "op": "DivD",
-                    "lhs": 16,
-                    "rhs": 17
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 19,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      18
+                      8
                     ]
                   }
                 }
@@ -244,7 +154,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        1
+      ]
     },
     {
       "id": 1,

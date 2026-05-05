@@ -3,32 +3,26 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=1
     0000 new Class(Config)
     0003 dup
     0004 invokespecial Method(Config.<init>:()V)
-    0007 checkcast Class(Config)
-    0010 astore_1
-    0011 ldc "before access"
-    0013 astore_2
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 aload_2
-    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0021 aload_1
-    0022 checkcast Class(Config)
-    0025 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
-    0028 astore 4
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 aload 4
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0038 aload_1
-    0039 checkcast Class(Config)
-    0042 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
-    0045 astore 6
-    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0050 aload 6
-    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0055 return
+    0007 astore_0
+    0008 ldc "before access"
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 swap
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 aload_0
+    0018 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 swap
+    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0028 aload_0
+    0029 invokevirtual Method(Config.getValue:()Ljava/lang/String;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 swap
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=24
+  code        max_stack=4 max_locals=20
     0000 ldc "x"
     0002 astore_0
     0003 bipush 10
@@ -53,53 +53,43 @@ method        main ()V 0x0019
     0080 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0083 astore 12
     0085 aload 12
-    0087 checkcast Class(java/util/List)
-    0090 astore 13
-    0092 aload 13
-    0094 checkcast Class(java/util/List)
-    0097 astore 14
-    0099 aload 14
-    0101 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0106 astore 15
-    0108 goto 111
-    0111 aload 15
-    0113 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0118 istore 16
-    0120 iload 16
-    0122 ifeq 201
-    0125 aload 15
-    0127 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0087 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0092 astore 13
+    0094 goto 97
+    0097 aload 13
+    0099 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0104 istore 14
+    0106 iload 14
+    0108 ifeq 179
+    0111 aload 13
+    0113 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0118 astore 15
+    0120 aload 15
+    0122 checkcast Class(kotlin/Pair)
+    0125 astore 16
+    0127 aload 16
+    0129 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
     0132 astore 17
-    0134 aload 17
-    0136 checkcast Class(kotlin/Pair)
+    0134 aload 16
+    0136 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
     0139 astore 18
-    0141 aload 18
-    0143 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
-    0146 astore 19
-    0148 aload 18
-    0150 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
-    0153 astore 20
-    0155 aload 19
-    0157 astore 21
-    0159 ldc ": "
-    0161 astore 22
-    0163 aload 20
-    0165 astore 23
-    0167 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0170 new Class(java/lang/StringBuilder)
-    0173 dup
-    0174 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0177 aload 21
-    0179 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0182 aload 22
-    0184 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0187 aload 23
-    0189 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0192 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0195 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0198 goto 111
-    0201 return
-    sub_attr  StackMapTable (93 bytes)
+    0141 ldc ": "
+    0143 astore 19
+    0145 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0148 new Class(java/lang/StringBuilder)
+    0151 dup
+    0152 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0155 aload 17
+    0157 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0160 aload 19
+    0162 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0165 aload 18
+    0167 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0170 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0173 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0176 goto 97
+    0179 return
+    sub_attr  StackMapTable (45 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -20,12 +20,6 @@ unique_name=inputkt
         {
           "Class": "Child"
         },
-        {
-          "Class": "Child"
-        },
-        {
-          "Class": "Child"
-        },
         "Int",
         "Unit"
       ],
@@ -69,24 +63,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "GetField": {
-                    "receiver": 3,
+                    "receiver": 1,
                     "class_name": "Child",
                     "field_name": "y"
                   }
@@ -95,12 +73,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -110,7 +88,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -390,7 +371,6 @@ unique_name=inputkt
           },
           "Int",
           "Int",
-          "Int",
           "Int"
         ],
         "blocks": [
@@ -400,14 +380,6 @@ unique_name=inputkt
                 "Assign": {
                   "dest": 2,
                   "value": {
-                    "Local": 1
-                  }
-                }
-              },
-              {
-                "Assign": {
-                  "dest": 3,
-                  "value": {
                     "Const": {
                       "Int": 2
                     }
@@ -416,12 +388,12 @@ unique_name=inputkt
               },
               {
                 "Assign": {
-                  "dest": 4,
+                  "dest": 3,
                   "value": {
                     "BinOp": {
                       "op": "MulI",
-                      "lhs": 2,
-                      "rhs": 3
+                      "lhs": 1,
+                      "rhs": 2
                     }
                   }
                 }
@@ -436,7 +408,7 @@ unique_name=inputkt
                       },
                       "args": [
                         0,
-                        4
+                        3
                       ]
                     }
                   }

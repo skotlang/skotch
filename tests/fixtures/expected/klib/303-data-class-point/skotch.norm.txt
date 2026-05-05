@@ -21,12 +21,6 @@ unique_name=inputkt
         {
           "Class": "Point"
         },
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         "Unit",
         "Int",
         "Int",
@@ -86,26 +80,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -113,7 +91,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "Int": 3
@@ -123,7 +101,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 4
@@ -133,7 +111,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "NewInstance": "Point"
                 }
@@ -141,15 +119,15 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
                       "Constructor": "Point"
                     },
                     "args": [
-                      6,
-                      7
+                      4,
+                      5
                     ]
                   }
                 }
@@ -157,12 +135,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      6
                     ]
                   }
                 }
@@ -172,7 +150,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 1,

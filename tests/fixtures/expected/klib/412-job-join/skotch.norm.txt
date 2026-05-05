@@ -369,14 +369,8 @@ unique_name=inputkt
             {
               "Class": "kotlinx/coroutines/Job"
             },
-            {
-              "Class": "kotlinx/coroutines/Job"
-            },
             "String",
             "Unit",
-            {
-              "Class": "kotlinx/coroutines/Job"
-            },
             {
               "Class": "kotlin/coroutines/Continuation"
             },
@@ -514,14 +508,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 11,
                     "value": {
-                      "Local": 10
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 12,
-                    "value": {
                       "Const": {
                         "String": 1
                       }
@@ -530,12 +516,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 13,
+                    "dest": 12,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          12
+                          11
                         ]
                       }
                     }
@@ -543,15 +529,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 14,
-                    "value": {
-                      "Local": 11
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 15,
+                    "dest": 13,
                     "value": {
                       "Const": "Null"
                     }
@@ -559,7 +537,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 16,
+                    "dest": 14,
                     "value": {
                       "Call": {
                         "kind": {
@@ -570,8 +548,8 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          14,
-                          15
+                          10,
+                          13
                         ]
                       }
                     }
@@ -579,7 +557,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 17,
+                    "dest": 15,
                     "value": {
                       "Const": {
                         "String": 2
@@ -589,12 +567,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 18,
+                    "dest": 16,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          17
+                          15
                         ]
                       }
                     }
@@ -616,11 +594,11 @@ unique_name=inputkt
             "sites": [
               {
                 "block_idx": 0,
-                "stmt_idx": 16,
+                "stmt_idx": 14,
                 "callee_class": "kotlinx/coroutines/Job",
                 "callee_method": "join",
                 "args": [
-                  14
+                  10
                 ],
                 "arg_tys": [
                   {
@@ -629,11 +607,14 @@ unique_name=inputkt
                 ],
                 "return_ty": "Any",
                 "is_virtual": true,
-                "result_local": 16
+                "result_local": 14
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            10
+          ]
         }
       ],
       "constructor": {

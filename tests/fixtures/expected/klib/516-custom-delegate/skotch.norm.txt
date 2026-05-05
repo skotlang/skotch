@@ -17,11 +17,7 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "String",
-        "String",
-        "String",
         "Unit",
-        "Int",
-        "Int",
         "Int",
         "Unit"
       ],
@@ -42,7 +38,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -50,7 +51,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "Int": 42
+                  }
                 }
               }
             },
@@ -66,51 +69,16 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Const": {
-                    "Int": 42
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        2
+      ]
     },
     {
       "id": 1,

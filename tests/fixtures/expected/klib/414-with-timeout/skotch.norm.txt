@@ -359,8 +359,6 @@ unique_name=inputkt
               "Class": "kotlin/coroutines/Continuation"
             },
             "Any",
-            "Any",
-            "Any",
             "Unit"
           ],
           "blocks": [
@@ -447,26 +445,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 7,
                     "value": {
-                      "Local": 6
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 8,
-                    "value": {
-                      "Local": 7
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          8
+                          6
                         ]
                       }
                     }
@@ -506,7 +488,10 @@ unique_name=inputkt
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            6
+          ]
         }
       ],
       "constructor": {

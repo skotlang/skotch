@@ -38,18 +38,15 @@ method        tax (I)I 0x0019
     0000 nop
     0001 iload_0
     0002 sipush 10000
-    0005 op_0xA3
-    0006 nop
-    0007 iconst_4
+    0005 if_icmpgt 12
     0008 iconst_0
     0009 goto 69
     0012 iload_0
     0013 ldc int(40000)
-    0015 op_0xA3
-    0016 nop
-    0017 sipush 6673
-    0020 op_0x27
-    0021 bipush 100
+    0015 if_icmpgt 32
+    0018 iload_0
+    0019 sipush 10000
+    0022 isub
     0023 bipush 10
     0025 imul
     0026 bipush 100
@@ -57,9 +54,7 @@ method        tax (I)I 0x0019
     0029 goto 69
     0032 iload_0
     0033 ldc int(80000)
-    0035 op_0xA3
-    0036 nop
-    0037 op_0x14
+    0035 if_icmpgt 55
     0038 sipush 3000
     0041 iload_0
     0042 ldc int(40000)
@@ -79,5 +74,5 @@ method        tax (I)I 0x0019
     0065 bipush 100
     0067 idiv
     0068 iadd
-    0069 op_0xAC
+    0069 ireturn
     sub_attr  StackMapTable (7 bytes)

@@ -17,11 +17,7 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "Long",
-        "Long",
-        "Long",
         "Unit",
-        "Long",
-        "Long",
         "Long",
         "Long",
         "Long",
@@ -44,26 +40,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -71,7 +51,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Const": {
                     "Long": 100
@@ -81,23 +61,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
+                "dest": 3,
                 "value": {
                   "Const": {
                     "Long": 0
@@ -107,24 +71,24 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 4,
                 "value": {
                   "BinOp": {
                     "op": "SubL",
-                    "lhs": 7,
-                    "rhs": 6
+                    "lhs": 3,
+                    "rhs": 2
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      4
                     ]
                   }
                 }
@@ -134,7 +98,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        2
+      ]
     },
     {
       "id": 1,

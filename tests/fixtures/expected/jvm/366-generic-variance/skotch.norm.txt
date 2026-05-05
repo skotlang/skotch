@@ -3,35 +3,29 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=10
+  code        max_stack=3 max_locals=2
     0000 ldc "hello"
     0002 astore_0
     0003 new Class(Producer)
     0006 dup
     0007 aload_0
     0008 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
-    0011 checkcast Class(Producer)
-    0014 checkcast Class(Producer)
-    0017 getfield Field(Producer.value:Ljava/lang/Object;)
-    0020 astore 4
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 aload 4
-    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0030 bipush 42
-    0032 istore 5
-    0034 new Class(Producer)
-    0037 dup
-    0038 iload 5
-    0040 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0043 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
-    0046 checkcast Class(Producer)
-    0049 checkcast Class(Producer)
-    0052 getfield Field(Producer.value:Ljava/lang/Object;)
-    0055 astore 9
-    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 aload 9
-    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0065 return
+    0011 getfield Field(Producer.value:Ljava/lang/Object;)
+    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0017 swap
+    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0021 bipush 42
+    0023 istore_1
+    0024 new Class(Producer)
+    0027 dup
+    0028 iload_1
+    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0032 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
+    0035 getfield Field(Producer.value:Ljava/lang/Object;)
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 swap
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

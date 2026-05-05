@@ -21,31 +21,16 @@ unique_name=inputkt
         {
           "Class": "kotlin/ranges/IntRange"
         },
-        {
-          "Class": "kotlin/ranges/IntRange"
-        },
         "Int",
-        {
-          "Class": "kotlin/ranges/IntRange"
-        },
         "Int",
         "Bool",
         "Unit",
         "Int",
-        {
-          "Class": "kotlin/ranges/IntRange"
-        },
         "Int",
         "Bool",
         "Unit",
-        {
-          "Class": "kotlin/ranges/IntRange"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "kotlin/ranges/IntRange"
-        },
         "Int",
         "Unit"
       ],
@@ -103,7 +88,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "Int": 5
+                  }
                 }
               }
             },
@@ -121,7 +108,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/ranges/IntRange",
+                        "method_name": "contains",
+                        "descriptor": "(I)Z"
+                      }
+                    },
+                    "args": [
+                      2,
+                      4
+                    ]
+                  }
                 }
               }
             },
@@ -129,8 +128,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Const": {
-                    "Int": 5
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
                   }
                 }
               }
@@ -138,6 +140,26 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 7,
+                "value": {
+                  "Const": {
+                    "Int": 11
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 11
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
                 "value": {
                   "Call": {
                     "kind": {
@@ -148,32 +170,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      5,
-                      6
+                      2,
+                      8
                     ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "Int": 11
                   }
                 }
               }
@@ -182,7 +181,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      9
+                    ]
+                  }
                 }
               }
             },
@@ -190,8 +194,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Const": {
-                    "Int": 11
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/ranges/IntRange",
+                        "method_name": "getFirst",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -201,15 +214,8 @@ unique_name=inputkt
                 "dest": 12,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/ranges/IntRange",
-                        "method_name": "contains",
-                        "descriptor": "(I)Z"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
-                      10,
                       11
                     ]
                   }
@@ -221,9 +227,15 @@ unique_name=inputkt
                 "dest": 13,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/ranges/IntRange",
+                        "method_name": "getLast",
+                        "descriptor": "()I"
+                      }
+                    },
                     "args": [
-                      12
+                      2
                     ]
                   }
                 }
@@ -233,77 +245,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 14,
                 "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/ranges/IntRange",
-                        "method_name": "getFirst",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      14
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      15
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/ranges/IntRange",
-                        "method_name": "getLast",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      17
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 19,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      18
+                      13
                     ]
                   }
                 }
@@ -313,7 +258,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 1,

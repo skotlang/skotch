@@ -6,11 +6,9 @@ method        fibonacci (I)I 0x0019
   code        max_stack=2 max_locals=5
     0000 iload_0
     0001 iconst_1
-    0002 op_0xA3
-    0003 nop
-    0004 iconst_2
+    0002 if_icmpgt 7
     0005 iload_0
-    0006 op_0xAC
+    0006 ireturn
     0007 iconst_0
     0008 istore_1
     0009 iconst_1
@@ -19,9 +17,7 @@ method        fibonacci (I)I 0x0019
     0012 istore_3
     0013 iload_3
     0014 iload_0
-    0015 op_0xA3
-    0016 nop
-    0017 op_0x18
+    0015 if_icmpgt 39
     0018 iload_1
     0019 iload_2
     0020 iadd
@@ -32,15 +28,13 @@ method        fibonacci (I)I 0x0019
     0027 istore_2
     0028 iload_3
     0029 iload_0
-    0030 op_0x9F
-    0031 nop
-    0032 op_0x09
+    0030 if_icmpeq 39
     0033 op_0x84
     0034 iconst_0
     0035 aconst_null
     0036 goto 18
     0039 iload_2
-    0040 op_0xAC
+    0040 ireturn
     sub_attr  StackMapTable (10 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
@@ -48,9 +42,8 @@ method        main ()V 0x0019
     0001 istore_0
     0002 iload_0
     0003 bipush 11
-    0005 op_0xA2
-    0006 nop
-    0007 iload 26
+    0005 if_icmpge 26
+    0008 iload_0
     0009 invokestatic Method(InputKt.fibonacci:(I)I)
     0012 istore_1
     0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)

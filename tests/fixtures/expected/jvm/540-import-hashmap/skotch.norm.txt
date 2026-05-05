@@ -3,85 +3,69 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=29
+  code        max_stack=3 max_locals=18
     0000 new Class(java/util/HashMap)
     0003 dup
     0004 invokespecial Method(java/util/HashMap.<init>:()V)
-    0007 checkcast Class(java/util/HashMap)
+    0007 astore_0
+    0008 ldc "a"
     0010 astore_1
-    0011 ldc "a"
-    0013 astore_2
-    0014 iconst_1
-    0015 istore_3
-    0016 aload_1
-    0017 checkcast Class(java/util/HashMap)
+    0011 iconst_1
+    0012 istore_2
+    0013 ldc "a"
+    0015 astore_3
+    0016 iconst_1
+    0017 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0020 astore 4
-    0022 ldc "a"
-    0024 astore 5
-    0026 iconst_1
-    0027 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0030 astore 7
-    0032 aload 4
-    0034 aload 5
-    0036 aload 7
-    0038 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0043 astore 8
-    0045 ldc "b"
-    0047 astore 9
-    0049 iconst_2
-    0050 istore 10
-    0052 aload_1
-    0053 checkcast Class(java/util/HashMap)
-    0056 astore 11
-    0058 ldc "b"
-    0060 astore 12
-    0062 iconst_2
-    0063 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0066 astore 14
-    0068 aload 11
-    0070 aload 12
-    0072 aload 14
-    0074 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0079 astore 15
-    0081 ldc "c"
-    0083 astore 16
-    0085 iconst_3
-    0086 istore 17
-    0088 aload_1
-    0089 checkcast Class(java/util/HashMap)
-    0092 astore 18
-    0094 ldc "c"
-    0096 astore 19
-    0098 iconst_3
-    0099 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0102 astore 21
-    0104 aload 18
-    0106 aload 19
-    0108 aload 21
-    0110 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0115 astore 22
-    0117 aload_1
-    0118 checkcast Class(java/util/HashMap)
-    0121 invokevirtual Method(java/util/HashMap.size:()I)
-    0124 istore 24
-    0126 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0129 iload 24
-    0131 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0134 ldc "b"
-    0136 astore 25
-    0138 aload_1
-    0139 checkcast Class(java/util/HashMap)
-    0142 astore 26
-    0144 ldc "b"
-    0146 astore 27
-    0148 aload 26
-    0150 aload 27
-    0152 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0157 astore 28
-    0159 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0162 aload 28
-    0164 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0167 return
+    0022 aload_0
+    0023 aload_3
+    0024 aload 4
+    0026 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0031 astore 5
+    0033 ldc "b"
+    0035 astore 6
+    0037 iconst_2
+    0038 istore 7
+    0040 ldc "b"
+    0042 astore 8
+    0044 iconst_2
+    0045 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0048 astore 9
+    0050 aload_0
+    0051 aload 8
+    0053 aload 9
+    0055 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0060 astore 10
+    0062 ldc "c"
+    0064 astore 11
+    0066 iconst_3
+    0067 istore 12
+    0069 ldc "c"
+    0071 astore 13
+    0073 iconst_3
+    0074 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0077 astore 14
+    0079 aload_0
+    0080 aload 13
+    0082 aload 14
+    0084 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0089 astore 15
+    0091 aload_0
+    0092 invokevirtual Method(java/util/HashMap.size:()I)
+    0095 istore 16
+    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0100 iload 16
+    0102 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0105 ldc "b"
+    0107 astore 17
+    0109 ldc "b"
+    0111 aload_0
+    0112 swap
+    0113 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0118 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0121 swap
+    0122 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0125 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

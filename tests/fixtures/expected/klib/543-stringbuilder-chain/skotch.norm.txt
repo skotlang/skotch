@@ -19,35 +19,17 @@ unique_name=inputkt
         {
           "Class": "java/lang/StringBuilder"
         },
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "String",
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "String",
         "Any",
         "String",
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "String",
         "Any",
         "String",
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "String",
         "Any",
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "String",
         "Unit",
-        {
-          "Class": "java/lang/StringBuilder"
-        },
         "Int",
         "Unit"
       ],
@@ -82,7 +64,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 0
+                  }
                 }
               }
             },
@@ -100,7 +84,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/StringBuilder",
+                        "method_name": "append",
+                        "descriptor": "(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;"
+                      }
+                    },
+                    "args": [
+                      0,
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -109,7 +105,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 0
+                    "String": 1
                   }
                 }
               }
@@ -117,6 +113,16 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -127,19 +133,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      0,
+                      5
                     ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Const": {
-                    "String": 1
                   }
                 }
               }
@@ -148,7 +144,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "String": 2
+                  }
                 }
               }
             },
@@ -157,7 +155,7 @@ unique_name=inputkt
                 "dest": 8,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 2
                   }
                 }
               }
@@ -175,7 +173,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      7,
+                      0,
                       8
                     ]
                   }
@@ -186,62 +184,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/StringBuilder",
-                        "method_name": "append",
-                        "descriptor": "(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;"
-                      }
-                    },
-                    "args": [
-                      11,
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -251,7 +193,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      14
+                      0
                     ]
                   }
                 }
@@ -259,12 +201,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 16,
+                "dest": 11,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      15
+                      10
                     ]
                   }
                 }
@@ -272,15 +214,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
+                "dest": 12,
                 "value": {
                   "Call": {
                     "kind": {
@@ -291,7 +225,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      17
+                      0
                     ]
                   }
                 }
@@ -299,12 +233,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 19,
+                "dest": 13,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      18
+                      12
                     ]
                   }
                 }
@@ -314,7 +248,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

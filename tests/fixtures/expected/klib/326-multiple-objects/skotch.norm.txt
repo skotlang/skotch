@@ -278,7 +278,6 @@ unique_name=inputkt
       "locals": [
         "String",
         "String",
-        "String",
         "Unit"
       ],
       "blocks": [
@@ -298,19 +297,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
                       1,
-                      2
+                      0
                     ]
                   }
                 }

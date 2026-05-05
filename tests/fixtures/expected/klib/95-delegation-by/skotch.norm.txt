@@ -21,12 +21,6 @@ unique_name=inputkt
           "Class": "BaseImpl"
         },
         {
-          "Class": "BaseImpl"
-        },
-        {
-          "Class": "BaseImpl"
-        },
-        {
           "Class": "Derived"
         },
         "Unit"
@@ -71,36 +65,20 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "NewInstance": "Derived"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": {
                       "Constructor": "Derived"
                     },
                     "args": [
-                      3
+                      1
                     ]
                   }
                 }
@@ -108,7 +86,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": {
@@ -118,7 +96,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -128,7 +106,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -378,7 +359,6 @@ unique_name=inputkt
               "Class": "BaseImpl"
             },
             "Int",
-            "Int",
             "Unit"
           ],
           "blocks": [
@@ -400,18 +380,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          2
+                          1
                         ]
                       }
                     }

@@ -10,29 +10,29 @@ method        main ()V 0x0019
     0003 tableswitch default=64 low=1 high=3 1=28 2=40 3=52
     0028 ldc "one"
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 op_0x5F
+    0033 swap
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0037 goto 73
     0040 ldc "two"
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 op_0x5F
+    0045 swap
     0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0049 goto 73
     0052 ldc "three"
     0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 op_0x5F
+    0057 swap
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0061 goto 73
     0064 ldc "other"
     0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 op_0x5F
+    0069 swap
     0070 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0073 nop
     0074 nop
     0075 nop
     0076 ldc "positive"
     0078 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0081 op_0x5F
+    0081 swap
     0082 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0085 return
     sub_attr  StackMapTable (10 bytes)

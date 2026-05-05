@@ -330,6 +330,29 @@ fn stdlib_function_interface(arity: usize) -> String {
 
 /// Check if a method call on a receiver type is a Kotlin stdlib
 /// Convert AST annotations to MIR annotations.
+/// Annotations with `SOURCE` retention are not emitted to bytecode. This
+/// matches kotlinc's behavior for built-in source-only annotations like
+/// `@Suppress`, `@SinceKotlin`, etc. Note that `@Deprecated` IS emitted
+/// (as both a JVM `Deprecated` attribute and a `RuntimeVisibleAnnotations`).
+fn is_source_retention_annotation(name: &str) -> bool {
+    matches!(
+        name,
+        "Suppress"
+            | "SinceKotlin"
+            | "OptIn"
+            | "RequiresOptIn"
+            | "SubclassOptInRequired"
+            | "BuilderInference"
+            | "Experimental"
+            | "kotlin/Suppress"
+            | "kotlin/SinceKotlin"
+            | "kotlin/OptIn"
+            | "kotlin/RequiresOptIn"
+            | "kotlin/BuilderInference"
+            | "kotlin/Experimental"
+    )
+}
+
 fn lower_annotations(
     annotations: &[skotch_syntax::Annotation],
     interner: &Interner,
@@ -337,6 +360,7 @@ fn lower_annotations(
 ) -> Vec<skotch_mir::MirAnnotation> {
     annotations
         .iter()
+        .filter(|a| !is_source_retention_annotation(interner.resolve(a.name)))
         .map(|a| {
             let name = interner.resolve(a.name);
             // First try the well-known annotation registry (JvmStatic, etc.).
@@ -602,6 +626,8 @@ pub fn lower_file(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: fn_annotations,
+                named_locals: Vec::new(),
+                is_private: matches!(f.visibility, skotch_syntax::Visibility::Private),
             });
             fn_pass1_idx += 1;
         }
@@ -640,6 +666,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -691,6 +719,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
             stub.params.push(p_cont);
@@ -724,6 +754,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
             stub.params.push(p_ctx);
@@ -761,6 +793,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -796,6 +830,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -831,6 +867,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -868,6 +906,8 @@ pub fn lower_file(
                 suspend_original_return_ty: Some(Ty::Nullable(Box::new(Ty::Any))),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1051,6 +1091,8 @@ pub fn lower_file(
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
                         annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
                     }
                 };
                 let methods: Vec<MirFunction> = ext_class
@@ -1582,6 +1624,8 @@ fn build_continuation_class(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
     let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
@@ -1626,6 +1670,8 @@ fn build_continuation_class(
         // JVM backend knows to substitute its canonical emitter.
         suspend_state_machine: Some(sm.clone()),
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
     let result_param = invoke.new_local(Ty::Any);
@@ -2195,6 +2241,8 @@ impl FnBuilder {
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
         };
         FnBuilder {
             mf,
@@ -2858,6 +2906,7 @@ fn lower_function(
     };
     let mut fb = FnBuilder::new(fn_idx, name.clone(), return_ty);
     fb.mf.is_suspend = f.is_suspend;
+    fb.mf.is_private = matches!(f.visibility, skotch_syntax::Visibility::Private);
     // Coroutine transform: remember the source-
     // level declared return type of every suspend fun before the
     // CPS rewrite promotes it to `Object`. Callers that invoke
@@ -3097,6 +3146,8 @@ fn lower_function(
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
         };
     }
 }
@@ -3981,6 +4032,8 @@ fn lower_stmt(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -4399,11 +4452,21 @@ fn lower_val_stmt(
     if ty != fb.mf.locals[rhs.0 as usize] {
         fb.mf.locals[rhs.0 as usize] = ty.clone();
     }
-    let dest = fb.new_local(ty);
-    fb.push_stmt(MStmt::Assign {
-        dest,
-        value: Rvalue::Local(rhs),
-    });
+    // For `val` (immutable), we can reuse the rhs local directly,
+    // avoiding an unnecessary copy. For `var`, we must create a fresh
+    // local because writes to the var should not affect the rhs source
+    // (e.g., `var x = y; x = ...` should not change y).
+    let dest = if v.is_var {
+        let d = fb.new_local(ty);
+        fb.push_stmt(MStmt::Assign {
+            dest: d,
+            value: Rvalue::Local(rhs),
+        });
+        d
+    } else {
+        rhs
+    };
+    fb.mf.named_locals.push(dest);
     scope.push((v.name, dest));
     if v.is_var {
         fb.var_syms.insert(v.name);
@@ -4505,6 +4568,83 @@ fn try_const_fold_long(lhs: &Expr, rhs: &Expr, op: &BinOp) -> Option<i64> {
         BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
         _ => None,
     }
+}
+
+/// Try to evaluate an expression as a compile-time string constant.
+/// Returns the string value if the expression is a constant string,
+/// or a string representation of a constant int/long/double/bool.
+fn try_eval_string(e: &Expr) -> Option<String> {
+    match e {
+        Expr::StringLit(s, _) => Some(s.clone()),
+        Expr::IntLit(v, _) => Some(v.to_string()),
+        Expr::LongLit(v, _) => Some(v.to_string()),
+        Expr::DoubleLit(v, _) => Some(format_double_kotlin(*v)),
+        Expr::BoolLit(v, _) => Some(v.to_string()),
+        Expr::Paren(inner, _) => try_eval_string(inner),
+        Expr::Binary { op, lhs, rhs, .. } => {
+            // Allow folding of `intExpr + intExpr` etc. inside templates.
+            if let Some(v) = try_eval_int(e) {
+                return Some(v.to_string());
+            }
+            if let Some(v) = try_eval_long(e) {
+                return Some(v.to_string());
+            }
+            // String concatenation via +
+            if matches!(op, BinOp::Add) {
+                let l = try_eval_string(lhs)?;
+                let r = try_eval_string(rhs)?;
+                return Some(format!("{l}{r}"));
+            }
+            None
+        }
+        Expr::Unary { .. } => {
+            if let Some(v) = try_eval_int(e) {
+                return Some(v.to_string());
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Format a double the way Kotlin's `toString()` does (e.g., `1.0` not `1`).
+fn format_double_kotlin(v: f64) -> String {
+    if v.is_nan() {
+        return "NaN".to_string();
+    }
+    if v.is_infinite() {
+        return if v > 0.0 {
+            "Infinity".to_string()
+        } else {
+            "-Infinity".to_string()
+        };
+    }
+    if v == v.trunc() && v.abs() < 1e16 {
+        // Integer-valued double: kotlin toString prints "1.0"
+        return format!("{v:.1}");
+    }
+    format!("{v}")
+}
+
+/// Try to evaluate a string template at compile time. Returns the
+/// concatenated string if every part is a compile-time constant.
+fn try_const_fold_template(
+    parts: &[skotch_syntax::TemplatePart],
+    _interner: &Interner,
+) -> Option<String> {
+    let mut out = String::new();
+    for p in parts {
+        match p {
+            skotch_syntax::TemplatePart::Text(s, _) => out.push_str(s),
+            skotch_syntax::TemplatePart::Expr(e) => {
+                let s = try_eval_string(e)?;
+                out.push_str(&s);
+            }
+            // Ident references aren't compile-time constants in general.
+            skotch_syntax::TemplatePart::IdentRef(..) => return None,
+        }
+    }
+    Some(out)
 }
 
 /// Lower an expression and return the local that holds its value.
@@ -4614,6 +4754,15 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
+                }
+                // Identity copy elision: when reading a non-mutable val,
+                // we can return the source local directly. For vars, the
+                // value could change later, so we must copy. This matches
+                // kotlinc's behavior of using val values directly from
+                // their source slots.
+                if !fb.var_syms.contains(name) {
+                    let _ = ty;
+                    return Some(src);
                 }
                 let dest = fb.new_local(ty);
                 fb.push_stmt(MStmt::Assign {
@@ -7830,6 +7979,26 @@ fn lower_expr(
                 && matches!(&args[0].expr, Expr::StringTemplate(_, _))
             {
                 if let Expr::StringTemplate(parts, _) = &args[0].expr {
+                    // Constant folding: if the entire template is a
+                    // compile-time constant, lower as `println(<folded>)`
+                    // with a regular string literal argument. Matches kotlinc.
+                    if let Some(folded) = try_const_fold_template(parts, interner) {
+                        let sid = module.intern_string(&folded);
+                        let arg_local = fb.new_local(Ty::String);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: arg_local,
+                            value: Rvalue::Const(MirConst::String(sid)),
+                        });
+                        let dest = fb.new_local(Ty::Unit);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Println,
+                                args: vec![arg_local],
+                            },
+                        });
+                        return Some(dest);
+                    }
                     let mut arg_locals = Vec::with_capacity(parts.len());
                     for part in parts {
                         let id = lower_template_part(
@@ -10570,6 +10739,18 @@ fn lower_expr(
             Some(dest)
         }
         Expr::StringTemplate(parts, _) => {
+            // Constant folding: if all parts are compile-time constants, fold
+            // the entire template to a single string literal at compile time.
+            // This matches kotlinc's behavior.
+            if let Some(folded) = try_const_fold_template(parts, interner) {
+                let sid = module.intern_string(&folded);
+                let dest = fb.new_local(Ty::String);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::String(sid)),
+                });
+                return Some(dest);
+            }
             // Lower string template to a chain of ConcatStr operations.
             // Start with the first part and concatenate the rest.
             let mut result: Option<LocalId> = None;
@@ -12623,6 +12804,8 @@ fn lower_expr(
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -12737,6 +12920,8 @@ fn lower_expr(
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
@@ -13103,6 +13288,8 @@ fn lower_expr(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -13200,6 +13387,8 @@ fn lower_expr(
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
                 };
                 let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
                 susp_init.params.push(susp_this);
@@ -13428,6 +13617,8 @@ fn lower_expr(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -14002,6 +14193,8 @@ fn lower_enum(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -14065,6 +14258,8 @@ fn lower_enum(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -14485,6 +14680,8 @@ fn lower_object(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -14617,6 +14814,8 @@ fn lower_class(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -14838,6 +15037,8 @@ fn lower_class(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             }
         })
         .collect();
@@ -15983,6 +16184,8 @@ fn lower_class(
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -16301,6 +16504,8 @@ fn lower_interface(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -16333,6 +16538,8 @@ fn lower_interface(
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -16385,6 +16592,8 @@ fn lower_interface(
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);

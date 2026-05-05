@@ -21,9 +21,6 @@ unique_name=inputkt
         {
           "Class": "Coin"
         },
-        {
-          "Class": "Coin"
-        },
         "Int"
       ],
       "blocks": [
@@ -33,16 +30,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "GetField": {
-                    "receiver": 1,
+                    "receiver": 0,
                     "class_name": "Coin",
                     "field_name": "cents"
                   }
@@ -51,7 +40,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 2
+            "ReturnValue": 1
           }
         }
       ],

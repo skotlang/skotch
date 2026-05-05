@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=10
+  code        max_stack=4 max_locals=6
     0000 iconst_5
     0001 istore_0
     0002 iconst_3
@@ -13,30 +13,26 @@ method        main ()V 0x0019
     0008 iload_0
     0009 iload_1
     0010 invokespecial Method(Rectangle.<init>:(II)V)
-    0013 checkcast Class(Rectangle)
-    0016 astore_3
-    0017 aload_3
-    0018 checkcast Class(Rectangle)
-    0021 invokevirtual Method(Rectangle.area:()I)
-    0024 istore 5
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 iload 5
-    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0034 aload_3
-    0035 checkcast Class(Rectangle)
-    0038 invokevirtual Method(Rectangle.perimeter:()I)
-    0041 istore 7
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 iload 7
-    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0051 aload_3
-    0052 checkcast Class(Rectangle)
-    0055 getfield Field(Rectangle.width:I)
-    0058 istore 9
-    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0063 iload 9
-    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0068 return
+    0013 astore_2
+    0014 aload_2
+    0015 invokevirtual Method(Rectangle.area:()I)
+    0018 istore_3
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 iload_3
+    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0026 aload_2
+    0027 invokevirtual Method(Rectangle.perimeter:()I)
+    0030 istore 4
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 iload 4
+    0037 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0040 aload_2
+    0041 getfield Field(Rectangle.width:I)
+    0044 istore 5
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 iload 5
+    0051 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0054 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

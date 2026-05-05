@@ -3,25 +3,19 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=7
-    0000 op_0x14
-    0001 nop
-    0002 op_0x0A
-    0003 op_0x47
+  code        max_stack=5 max_locals=5
+    0000 ldc2_w double(100)
+    0003 dstore_0
     0004 new Class(Temperature)
     0007 dup
-    0008 op_0x26
+    0008 dload_0
     0009 invokespecial Method(Temperature.<init>:(D)V)
-    0012 checkcast Class(Temperature)
-    0015 checkcast Class(Temperature)
-    0018 invokevirtual Method(Temperature.getFahrenheit:()D)
-    0021 op_0x39
-    0022 iconst_2
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 op_0x18
-    0027 iconst_2
-    0028 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0031 return
+    0012 invokevirtual Method(Temperature.getFahrenheit:()D)
+    0015 dstore_3
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 dload_3
+    0020 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0023 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

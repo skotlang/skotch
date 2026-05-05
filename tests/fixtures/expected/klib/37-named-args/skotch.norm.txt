@@ -22,8 +22,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -33,7 +31,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
                 }
               }
             },
@@ -41,30 +43,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "MulI",
-                    "lhs": 2,
-                    "rhs": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }

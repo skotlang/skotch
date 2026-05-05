@@ -20,32 +20,14 @@ unique_name=inputkt
         {
           "Class": "Box"
         },
-        {
-          "Class": "Box"
-        },
-        {
-          "Class": "Box"
-        },
         "Int",
         "Unit",
         "Int",
-        {
-          "Class": "Box"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Box"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Box"
-        },
         "Unit",
-        {
-          "Class": "Box"
-        },
         "Int",
         "Unit"
       ],
@@ -89,24 +71,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "GetField": {
-                    "receiver": 3,
+                    "receiver": 1,
                     "class_name": "Box",
                     "field_name": "value"
                   }
@@ -115,13 +81,33 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 42
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "Int": 42
                   }
                 }
               }
@@ -130,8 +116,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Const": {
-                    "Int": 42
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "update"
+                      }
+                    },
+                    "args": [
+                      1,
+                      5
+                    ]
                   }
                 }
               }
@@ -140,7 +135,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 2
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Box",
+                    "field_name": "value"
+                  }
                 }
               }
             },
@@ -148,8 +147,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Const": {
-                    "Int": 42
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
                   }
                 }
               }
@@ -162,12 +164,11 @@ unique_name=inputkt
                     "kind": {
                       "Virtual": {
                         "class_name": "Box",
-                        "method_name": "update"
+                        "method_name": "doubleIt"
                       }
                     },
                     "args": [
-                      7,
-                      8
+                      1
                     ]
                   }
                 }
@@ -177,7 +178,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Local": 2
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Box",
+                    "field_name": "value"
+                  }
                 }
               }
             },
@@ -185,81 +190,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "GetField": {
-                    "receiver": 10,
-                    "class_name": "Box",
-                    "field_name": "value"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      11
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Box",
-                        "method_name": "doubleIt"
-                      }
-                    },
-                    "args": [
-                      13
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
-                  "GetField": {
-                    "receiver": 15,
-                    "class_name": "Box",
-                    "field_name": "value"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      16
+                      10
                     ]
                   }
                 }
@@ -269,7 +203,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -484,7 +421,6 @@ unique_name=inputkt
               "Class": "Box"
             },
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -504,17 +440,9 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 3
+                      "Local": 1
                     }
                   }
                 },
@@ -549,7 +477,6 @@ unique_name=inputkt
             },
             "Int",
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -571,14 +498,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "Int": 2
                       }
@@ -587,12 +506,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "BinOp": {
                         "op": "MulI",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 2
                       }
                     }
                   }
@@ -601,7 +520,7 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 1,
                     "value": {
-                      "Local": 4
+                      "Local": 3
                     }
                   }
                 },

@@ -3,135 +3,119 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        httpStatus (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=19
-    0000 iload_0
-    0001 istore_1
-    0002 goto 5
-    0005 sipush 200
-    0008 istore_2
-    0009 iload_1
-    0010 iload_2
-    0011 op_0x9F
-    0012 nop
-    0013 iconst_4
-    0014 iconst_0
-    0015 goto 19
-    0018 iconst_1
-    0019 istore_3
-    0020 iload_3
-    0021 ifeq 35
-    0024 ldc "OK"
+  code        max_stack=2 max_locals=18
+    0000 goto 3
+    0003 sipush 200
+    0006 istore_1
+    0007 iload_0
+    0008 iload_1
+    0009 if_icmpne 16
+    0012 iconst_1
+    0013 goto 17
+    0016 iconst_0
+    0017 istore_2
+    0018 iload_2
+    0019 ifeq 31
+    0022 ldc "OK"
+    0024 astore_3
+    0025 aload_3
     0026 astore 4
-    0028 aload 4
-    0030 astore 5
-    0032 goto 182
-    0035 sipush 201
-    0038 istore 6
-    0040 iload_1
-    0041 iload 6
-    0043 op_0x9F
-    0044 nop
-    0045 iconst_4
+    0028 goto 178
+    0031 sipush 201
+    0034 istore 5
+    0036 iload_0
+    0037 iload 5
+    0039 if_icmpne 46
+    0042 iconst_1
+    0043 goto 47
     0046 iconst_0
-    0047 goto 51
-    0050 iconst_1
-    0051 istore 7
-    0053 iload 7
-    0055 ifeq 69
-    0058 ldc "Created"
-    0060 astore 8
-    0062 aload 8
-    0064 astore 5
-    0066 goto 182
-    0069 sipush 400
-    0072 istore 9
-    0074 iload_1
-    0075 iload 9
-    0077 op_0x9F
-    0078 nop
-    0079 iconst_4
+    0047 istore 6
+    0049 iload 6
+    0051 ifeq 65
+    0054 ldc "Created"
+    0056 astore 7
+    0058 aload 7
+    0060 astore 4
+    0062 goto 178
+    0065 sipush 400
+    0068 istore 8
+    0070 iload_0
+    0071 iload 8
+    0073 if_icmpne 80
+    0076 iconst_1
+    0077 goto 81
     0080 iconst_0
-    0081 goto 85
-    0084 iconst_1
-    0085 istore 10
-    0087 iload 10
-    0089 ifeq 103
-    0092 ldc "Bad Request"
-    0094 astore 11
-    0096 aload 11
-    0098 astore 5
-    0100 goto 182
-    0103 sipush 404
-    0106 istore 12
-    0108 iload_1
-    0109 iload 12
-    0111 op_0x9F
-    0112 nop
-    0113 iconst_4
+    0081 istore 9
+    0083 iload 9
+    0085 ifeq 99
+    0088 ldc "Bad Request"
+    0090 astore 10
+    0092 aload 10
+    0094 astore 4
+    0096 goto 178
+    0099 sipush 404
+    0102 istore 11
+    0104 iload_0
+    0105 iload 11
+    0107 if_icmpne 114
+    0110 iconst_1
+    0111 goto 115
     0114 iconst_0
-    0115 goto 119
-    0118 iconst_1
-    0119 istore 13
-    0121 iload 13
-    0123 ifeq 137
-    0126 ldc "Not Found"
-    0128 astore 14
-    0130 aload 14
-    0132 astore 5
-    0134 goto 182
-    0137 sipush 500
-    0140 istore 15
-    0142 iload_1
-    0143 iload 15
-    0145 op_0x9F
-    0146 nop
-    0147 iconst_4
+    0115 istore 12
+    0117 iload 12
+    0119 ifeq 133
+    0122 ldc "Not Found"
+    0124 astore 13
+    0126 aload 13
+    0128 astore 4
+    0130 goto 178
+    0133 sipush 500
+    0136 istore 14
+    0138 iload_0
+    0139 iload 14
+    0141 if_icmpne 148
+    0144 iconst_1
+    0145 goto 149
     0148 iconst_0
-    0149 goto 153
-    0152 iconst_1
-    0153 istore 16
-    0155 iload 16
-    0157 ifeq 171
-    0160 ldc "Internal Server Error"
-    0162 astore 17
-    0164 aload 17
-    0166 astore 5
-    0168 goto 182
-    0171 ldc "Unknown"
-    0173 astore 18
-    0175 aload 18
-    0177 astore 5
-    0179 goto 182
-    0182 aload 5
-    0184 areturn
-    sub_attr  StackMapTable (288 bytes)
+    0149 istore 15
+    0151 iload 15
+    0153 ifeq 167
+    0156 ldc "Internal Server Error"
+    0158 astore 16
+    0160 aload 16
+    0162 astore 4
+    0164 goto 178
+    0167 ldc "Unknown"
+    0169 astore 17
+    0171 aload 17
+    0173 astore 4
+    0175 goto 178
+    0178 aload 4
+    0180 areturn
+    sub_attr  StackMapTable (72 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=0
     0000 sipush 200
     0003 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
-    0006 astore_1
-    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 aload_1
-    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0014 sipush 404
-    0017 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
-    0020 astore_3
-    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 aload_3
-    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0028 sipush 500
-    0031 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
-    0034 astore 5
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 aload 5
-    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0044 sipush 999
-    0047 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
-    0050 astore 7
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 aload 7
-    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0060 return
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 sipush 404
+    0016 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 swap
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 sipush 500
+    0029 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 swap
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 sipush 999
+    0042 invokestatic Method(InputKt.httpStatus:(I)Ljava/lang/String;)
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 swap
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0052 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

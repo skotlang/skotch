@@ -23,8 +23,6 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
-        "String",
         "Unit"
       ],
       "blocks": [
@@ -34,14 +32,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Const": {
                     "String": 2
                   }
@@ -50,15 +40,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Const": {
                     "String": 3
@@ -68,15 +50,15 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
+                      1,
                       2,
-                      3,
-                      4,
-                      5
+                      0,
+                      3
                     ]
                   }
                 }

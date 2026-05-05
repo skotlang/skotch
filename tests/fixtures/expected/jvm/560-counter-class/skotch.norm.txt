@@ -3,52 +3,43 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=14
+  code        max_stack=3 max_locals=5
     0000 iconst_0
     0001 istore_0
     0002 new Class(Counter)
     0005 dup
     0006 iload_0
     0007 invokespecial Method(Counter.<init>:(I)V)
-    0010 checkcast Class(Counter)
-    0013 astore_2
-    0014 aload_2
-    0015 checkcast Class(Counter)
-    0018 invokevirtual Method(Counter.increment:()V)
-    0021 aload_2
-    0022 checkcast Class(Counter)
-    0025 invokevirtual Method(Counter.increment:()V)
-    0028 aload_2
-    0029 checkcast Class(Counter)
-    0032 invokevirtual Method(Counter.increment:()V)
-    0035 aload_2
-    0036 checkcast Class(Counter)
-    0039 invokevirtual Method(Counter.value:()I)
-    0042 istore 7
+    0010 astore_1
+    0011 aload_1
+    0012 invokevirtual Method(Counter.increment:()V)
+    0015 aload_1
+    0016 invokevirtual Method(Counter.increment:()V)
+    0019 aload_1
+    0020 invokevirtual Method(Counter.increment:()V)
+    0023 aload_1
+    0024 invokevirtual Method(Counter.value:()I)
+    0027 istore_2
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 iload_2
+    0032 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0035 aload_1
+    0036 invokevirtual Method(Counter.decrement:()V)
+    0039 aload_1
+    0040 invokevirtual Method(Counter.value:()I)
+    0043 istore_3
     0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0047 iload 7
-    0049 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0052 aload_2
-    0053 checkcast Class(Counter)
-    0056 invokevirtual Method(Counter.decrement:()V)
-    0059 aload_2
-    0060 checkcast Class(Counter)
-    0063 invokevirtual Method(Counter.value:()I)
-    0066 istore 10
-    0068 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0071 iload 10
-    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0076 aload_2
-    0077 checkcast Class(Counter)
-    0080 invokevirtual Method(Counter.reset:()V)
-    0083 aload_2
-    0084 checkcast Class(Counter)
-    0087 invokevirtual Method(Counter.value:()I)
-    0090 istore 13
-    0092 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0095 iload 13
-    0097 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0100 return
+    0047 iload_3
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 aload_1
+    0052 invokevirtual Method(Counter.reset:()V)
+    0055 aload_1
+    0056 invokevirtual Method(Counter.value:()I)
+    0059 istore 4
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 iload 4
+    0066 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0069 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

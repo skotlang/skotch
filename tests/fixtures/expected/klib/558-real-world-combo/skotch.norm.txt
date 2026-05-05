@@ -22,14 +22,11 @@ unique_name=inputkt
         "Bool",
         "String",
         "Int",
-        "Int",
         "Bool",
         "String",
         "Int",
-        "Int",
         "Bool",
         "String",
-        "Int",
         "Int",
         "Bool",
         "String",
@@ -59,14 +56,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Const": {
                     "Int": 90
                   }
@@ -75,12 +64,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "BinOp": {
                     "op": "CmpGe",
-                    "lhs": 3,
-                    "rhs": 4
+                    "lhs": 0,
+                    "rhs": 3
                   }
                 }
               }
@@ -88,7 +77,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 5,
+              "cond": 4,
               "then_block": 2,
               "else_block": 3
             }
@@ -98,7 +87,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 5
@@ -110,7 +99,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 6
+                  "Local": 5
                 }
               }
             }
@@ -123,15 +112,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Const": {
                     "Int": 80
@@ -141,12 +122,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "BinOp": {
                     "op": "CmpGe",
-                    "lhs": 7,
-                    "rhs": 8
+                    "lhs": 0,
+                    "rhs": 6
                   }
                 }
               }
@@ -154,7 +135,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 9,
+              "cond": 7,
               "then_block": 4,
               "else_block": 5
             }
@@ -164,7 +145,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
+                "dest": 8,
                 "value": {
                   "Const": {
                     "String": 6
@@ -176,7 +157,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 10
+                  "Local": 8
                 }
               }
             }
@@ -189,15 +170,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
+                "dest": 9,
                 "value": {
                   "Const": {
                     "Int": 70
@@ -207,12 +180,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 13,
+                "dest": 10,
                 "value": {
                   "BinOp": {
                     "op": "CmpGe",
-                    "lhs": 11,
-                    "rhs": 12
+                    "lhs": 0,
+                    "rhs": 9
                   }
                 }
               }
@@ -220,7 +193,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 13,
+              "cond": 10,
               "then_block": 6,
               "else_block": 7
             }
@@ -230,7 +203,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 14,
+                "dest": 11,
                 "value": {
                   "Const": {
                     "String": 7
@@ -242,7 +215,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 14
+                  "Local": 11
                 }
               }
             }
@@ -255,7 +228,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 15,
+                "dest": 12,
                 "value": {
                   "Const": {
                     "String": 8
@@ -267,7 +240,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 15
+                  "Local": 12
                 }
               }
             }
@@ -324,16 +297,9 @@ unique_name=inputkt
           "Class": "java/util/List"
         },
         {
-          "Class": "java/util/List"
-        },
-        {
-          "Class": "java/util/List"
-        },
-        {
           "Class": "java/util/Iterator"
         },
         "Bool",
-        "Any",
         "Any"
       ],
       "blocks": [
@@ -578,22 +544,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 18,
                 "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 19,
-                "value": {
-                  "Local": 18
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 20,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -603,7 +553,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      19
+                      17
                     ]
                   }
                 }
@@ -618,7 +568,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 21,
+                "dest": 19,
                 "value": {
                   "Call": {
                     "kind": {
@@ -629,7 +579,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      20
+                      18
                     ]
                   }
                 }
@@ -638,7 +588,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 21,
+              "cond": 19,
               "then_block": 2,
               "else_block": 3
             }
@@ -648,7 +598,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 22,
+                "dest": 20,
                 "value": {
                   "Call": {
                     "kind": {
@@ -659,17 +609,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      20
+                      18
                     ]
                   }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Local": 22
                 }
               }
             }
@@ -683,7 +625,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        17
+      ]
     },
     {
       "id": 2,

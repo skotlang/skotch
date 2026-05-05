@@ -19,11 +19,7 @@ unique_name=inputkt
         {
           "Class": "InputKt$Lambda$0"
         },
-        {
-          "Class": "InputKt$Lambda$0"
-        },
         "Int",
-        "Any",
         "Any",
         "Any",
         "Int",
@@ -63,7 +59,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "Int": 5
+                  }
                 }
               }
             },
@@ -71,8 +69,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "Int": 5
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -83,13 +90,13 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
+                      "Virtual": {
+                        "class_name": "InputKt$Lambda$0",
+                        "method_name": "invoke"
                       }
                     },
                     "args": [
+                      0,
                       2
                     ]
                   }
@@ -100,33 +107,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "InputKt$Lambda$0",
-                        "method_name": "invoke"
-                      }
-                    },
-                    "args": [
-                      1,
-                      3
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "Const": {
                     "Int": 3
                   }
@@ -135,7 +115,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -145,6 +125,38 @@ unique_name=inputkt
                         "descriptor": "(I)Ljava/lang/Integer;"
                       }
                     },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "kotlin/jvm/functions/Function1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      3,
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
                     "args": [
                       6
                     ]
@@ -156,17 +168,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "kotlin/jvm/functions/Function1",
-                        "method_name": "invoke"
-                      }
-                    },
-                    "args": [
-                      5,
-                      7
-                    ]
+                  "Const": {
+                    "Int": 10
                   }
                 }
               }
@@ -176,7 +179,13 @@ unique_name=inputkt
                 "dest": 9,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
                     "args": [
                       8
                     ]
@@ -188,8 +197,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Const": {
-                    "Int": 10
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "kotlin/jvm/functions/Function1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      3,
+                      9
+                    ]
                   }
                 }
               }
@@ -199,47 +217,9 @@ unique_name=inputkt
                 "dest": 11,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      10
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "kotlin/jvm/functions/Function1",
-                        "method_name": "invoke"
-                      }
-                    },
-                    "args": [
-                      5,
-                      11
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Call": {
                     "kind": "Println",
                     "args": [
-                      12
+                      10
                     ]
                   }
                 }
@@ -249,7 +229,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        3
+      ]
     },
     {
       "id": 1,
@@ -465,12 +449,6 @@ unique_name=inputkt
             "Int",
             {
               "Class": "InputKt$Lambda$1"
-            },
-            {
-              "Class": "InputKt$Lambda$1"
-            },
-            {
-              "Class": "InputKt$Lambda$1"
             }
           ],
           "blocks": [
@@ -517,30 +495,17 @@ unique_name=inputkt
                       }
                     }
                   }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "Local": 4
-                    }
-                  }
                 }
               ],
               "terminator": {
-                "ReturnValue": 5
+                "ReturnValue": 3
               }
             }
           ],
-          "return_ty": "Any"
+          "return_ty": "Any",
+          "named_locals": [
+            3
+          ]
         }
       ],
       "constructor": {
@@ -610,8 +575,6 @@ unique_name=inputkt
             "Any",
             "Int",
             "Int",
-            "Int",
-            "Int",
             "Any"
           ],
           "blocks": [
@@ -652,33 +615,17 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 4,
-                        "rhs": 5
+                        "lhs": 1,
+                        "rhs": 3
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 7,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": {
@@ -689,7 +636,7 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          6
+                          4
                         ]
                       }
                     }
@@ -697,7 +644,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 7
+                "ReturnValue": 5
               }
             }
           ],

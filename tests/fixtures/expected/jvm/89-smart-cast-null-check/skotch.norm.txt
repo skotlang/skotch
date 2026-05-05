@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=1 max_locals=2
+  code        max_stack=1 max_locals=0
     0000 ldc "hello"
     0002 invokestatic Method(InputKt.printLength:(Ljava/lang/Object;)V)
     0005 aconst_null
@@ -14,37 +14,33 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        printLength (Ljava/lang/Object;)V 0x0019
-  code        max_stack=2 max_locals=8
-    0000 aload_0
+  code        max_stack=2 max_locals=6
+    0000 aconst_null
     0001 astore_1
-    0002 aconst_null
-    0003 astore_2
-    0004 aload_1
-    0005 aload_2
-    0006 if_acmpne 13
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 47
-    0019 aload_0
-    0020 checkcast Class(java/lang/String)
-    0023 astore 4
-    0025 aload 4
-    0027 astore 5
-    0029 aload 5
-    0031 invokevirtual Method(java/lang/String.length:()I)
-    0034 istore 6
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 iload 6
-    0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0044 goto 62
-    0047 ldc "null"
-    0049 astore 7
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 aload 7
-    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0059 goto 62
-    0062 return
-    sub_attr  StackMapTable (69 bytes)
+    0002 aload_0
+    0003 aload_1
+    0004 if_acmpeq 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 39
+    0017 aload_0
+    0018 checkcast Class(java/lang/String)
+    0021 astore_3
+    0022 aload_3
+    0023 invokevirtual Method(java/lang/String.length:()I)
+    0026 istore 4
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 iload 4
+    0033 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0036 goto 54
+    0039 ldc "null"
+    0041 astore 5
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 aload 5
+    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0051 goto 54
+    0054 return
+    sub_attr  StackMapTable (15 bytes)

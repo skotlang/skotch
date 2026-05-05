@@ -23,17 +23,11 @@ unique_name=inputkt
         },
         "Bool",
         "String",
-        {
-          "Class": "Result"
-        },
         "Bool",
         {
           "Class": "Ok"
         },
         "String",
-        {
-          "Class": "Result"
-        },
         "Bool",
         {
           "Class": "Err"
@@ -65,16 +59,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "InstanceOf": {
-                    "obj": 3,
+                    "obj": 0,
                     "type_descriptor": "Ok"
                   }
                 }
@@ -83,7 +69,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 4,
+              "cond": 3,
               "then_block": 2,
               "else_block": 3
             }
@@ -93,7 +79,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Local": 0
                 }
@@ -101,7 +87,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 0
@@ -113,13 +99,35 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 6
+                  "Local": 5
                 }
               }
             }
           ],
           "terminator": {
             "Goto": 6
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "InstanceOf": {
+                    "obj": 0,
+                    "type_descriptor": "Err"
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 6,
+              "then_block": 4,
+              "else_block": 5
+            }
           }
         },
         {
@@ -136,36 +144,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "InstanceOf": {
-                    "obj": 7,
-                    "type_descriptor": "Err"
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Branch": {
-              "cond": 8,
-              "then_block": 4,
-              "else_block": 5
-            }
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "Const": {
                     "String": 1
                   }
@@ -176,7 +154,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 10
+                  "Local": 8
                 }
               }
             }
@@ -189,7 +167,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 11,
+                "dest": 9,
                 "value": {
                   "Const": {
                     "String": 2
@@ -201,7 +179,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 11
+                  "Local": 9
                 }
               }
             }

@@ -19,13 +19,7 @@ unique_name=inputkt
         {
           "Class": "Handler"
         },
-        {
-          "Class": "Handler"
-        },
         "String",
-        {
-          "Class": "Handler"
-        },
         "String",
         "String",
         "Unit"
@@ -58,7 +52,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 1
+                  }
                 }
               }
             },
@@ -76,24 +72,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -102,8 +80,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      0,
+                      2
                     ]
                   }
                 }
@@ -111,12 +89,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      3
                     ]
                   }
                 }
@@ -126,7 +104,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,
@@ -404,7 +385,6 @@ unique_name=inputkt
             },
             "String",
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -424,25 +404,17 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "BinOp": {
                         "op": "ConcatStr",
                         "lhs": 2,
-                        "rhs": 3
+                        "rhs": 1
                       }
                     }
                   }
                 }
               ],
               "terminator": {
-                "ReturnValue": 4
+                "ReturnValue": 3
               }
             }
           ],

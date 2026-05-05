@@ -21,13 +21,7 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
-        "String",
         "Unit",
-        "String",
-        "String",
-        "String",
-        "String",
         "String",
         "String",
         "String",
@@ -94,26 +88,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      6
+                      4
                     ]
                   }
                 }
@@ -121,7 +99,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Const": {
                     "String": 3
@@ -131,15 +109,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
+                "dest": 7,
                 "value": {
                   "Const": {
                     "String": 4
@@ -149,48 +119,24 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 9
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
+                "dest": 8,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 10,
-                    "rhs": 11
+                    "lhs": 7,
+                    "rhs": 6
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 12
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Local": 13
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
+                "dest": 9,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      14
+                      8
                     ]
                   }
                 }
@@ -200,7 +146,12 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        4,
+        6,
+        8
+      ]
     },
     {
       "id": 1,

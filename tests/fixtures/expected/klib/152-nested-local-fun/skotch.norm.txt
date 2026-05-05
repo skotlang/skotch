@@ -21,7 +21,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -31,20 +30,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Call": {
                     "kind": {
                       "Static": 9
                     },
                     "args": [
-                      1
+                      0
                     ]
                   }
                 }
@@ -52,7 +43,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -62,19 +53,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
-                    "lhs": 2,
-                    "rhs": 3
+                    "lhs": 1,
+                    "rhs": 2
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],
@@ -379,7 +370,6 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -389,14 +379,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Const": {
                     "Int": 2
                   }
@@ -405,19 +387,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "BinOp": {
                     "op": "MulI",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 3
+            "ReturnValue": 2
           }
         }
       ],

@@ -3,61 +3,51 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        identity (Ljava/lang/Object;)Ljava/lang/Object; 0x0019
-  code        max_stack=1 max_locals=2
+  code        max_stack=1 max_locals=1
     0000 aload_0
     0001 areturn
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=3
     0000 bipush 42
     0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0005 invokestatic Method(InputKt.identity:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0008 astore_2
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 aload_2
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0016 ldc "hello"
-    0018 invokestatic Method(InputKt.identity:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0021 astore 4
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 aload 4
-    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0031 iconst_1
-    0032 istore 5
-    0034 iconst_2
-    0035 istore 6
-    0037 iload 5
-    0039 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0042 astore 7
-    0044 iload 6
-    0046 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0049 astore 8
-    0051 aload 7
-    0053 aload 8
-    0055 invokestatic Method(InputKt.pair:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0058 astore 9
-    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0063 aload 9
-    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0068 return
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 swap
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 ldc "hello"
+    0017 invokestatic Method(InputKt.identity:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 swap
+    0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0027 iconst_1
+    0028 istore 0
+    0030 iconst_2
+    0031 istore 1
+    0033 iload 0
+    0035 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0038 astore 2
+    0040 iload 1
+    0042 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0045 aload 2
+    0047 swap
+    0048 invokestatic Method(InputKt.pair:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 swap
+    0055 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0058 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        pair (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=7
-    0000 aload_0
-    0001 astore_2
-    0002 ldc " and "
-    0004 astore_3
-    0005 aload_2
-    0006 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
-    0009 aload_3
-    0010 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0013 astore 4
-    0015 aload_1
-    0016 astore 5
-    0018 aload 4
-    0020 aload 5
-    0022 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
-    0025 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0028 areturn
+  code        max_stack=2 max_locals=3
+    0000 ldc " and "
+    0002 astore_2
+    0003 aload_0
+    0004 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0007 aload_2
+    0008 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0011 aload_1
+    0012 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0015 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0018 areturn

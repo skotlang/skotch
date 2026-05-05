@@ -3,48 +3,30 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        area (D)D 0x0019
-  code        max_stack=5 max_locals=12
-    0000 op_0x26
-    0001 op_0x49
-    0002 op_0x26
-    0003 op_0x39
-    0004 iconst_1
-    0005 op_0x28
-    0006 op_0x18
-    0007 iconst_1
-    0008 op_0x6B
-    0009 op_0x39
-    0010 iconst_3
-    0011 op_0x14
-    0012 nop
-    0013 op_0x0A
-    0014 op_0x39
-    0015 iconst_5
-    0016 op_0x18
-    0017 iconst_3
-    0018 op_0x18
-    0019 iconst_5
-    0020 op_0x6B
-    0021 op_0xAF
+  code        max_stack=4 max_locals=6
+    0000 dload_0
+    0001 dload_0
+    0002 op_0x6B
+    0003 dstore_2
+    0004 ldc2_w double(3.14159)
+    0007 dstore 4
+    0009 dload_2
+    0010 dload 4
+    0012 op_0x6B
+    0013 dreturn
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=8
-    0000 op_0x14
-    0001 nop
-    0002 op_0x0E
+  code        max_stack=3 max_locals=8
+    0000 ldc2_w double(5)
     0003 invokestatic Method(InputKt.area:(D)D)
-    0006 op_0x49
+    0006 dstore_2
     0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 op_0x28
+    0010 dload_2
     0011 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0014 op_0x14
-    0015 nop
-    0016 op_0x1E
+    0014 ldc2_w double(1)
     0017 invokestatic Method(InputKt.area:(D)D)
-    0020 op_0x39
-    0021 iconst_3
+    0020 dstore 6
     0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 op_0x18
-    0026 iconst_3
+    0025 dload 6
     0027 invokevirtual Method(java/io/PrintStream.println:(D)V)
     0030 return
 method        main ([Ljava/lang/String;)V 0x1009

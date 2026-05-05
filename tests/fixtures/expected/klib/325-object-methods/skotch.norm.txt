@@ -302,8 +302,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Int",
-        "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -313,33 +311,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "BinOp": {
                     "op": "MulI",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 0
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 3
+            "ReturnValue": 1
           }
         }
       ],
@@ -354,9 +336,6 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Int",
-        "Int",
-        "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -366,7 +345,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 0,
+                    "rhs": 0
+                  }
                 }
               }
             },
@@ -374,45 +357,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "BinOp": {
                     "op": "MulI",
                     "lhs": 1,
-                    "rhs": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "BinOp": {
-                    "op": "MulI",
-                    "lhs": 3,
-                    "rhs": 4
+                    "rhs": 0
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 5
+            "ReturnValue": 2
           }
         }
       ],

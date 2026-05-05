@@ -711,11 +711,9 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$0"
             },
             "Any",
-            "Any",
             "Int",
             "Bool",
             "Int",
-            "Any",
             "Unit"
           ],
           "blocks": [
@@ -725,14 +723,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "Int": 3
                       }
@@ -741,12 +731,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "BinOp": {
                         "op": "CmpEq",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 2
                       }
                     }
                   }
@@ -754,7 +744,7 @@ unique_name=inputkt
               ],
               "terminator": {
                 "Branch": {
-                  "cond": 4,
+                  "cond": 3,
                   "then_block": 1,
                   "else_block": 2
                 }
@@ -774,20 +764,12 @@ unique_name=inputkt
               "stmts": [
                 {
                   "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          6
+                          1
                         ]
                       }
                     }

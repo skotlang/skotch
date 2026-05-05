@@ -29,16 +29,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
-        "Int",
         "Int"
       ],
       "blocks": [
@@ -48,7 +38,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 2
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 2,
+                    "rhs": 0
+                  }
                 }
               }
             },
@@ -56,7 +50,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 3,
+                    "rhs": 1
+                  }
                 }
               }
             },
@@ -65,9 +63,9 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
+                    "op": "MulI",
                     "lhs": 4,
-                    "rhs": 5
+                    "rhs": 4
                   }
                 }
               }
@@ -76,7 +74,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 6
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 5,
+                    "rhs": 5
+                  }
                 }
               }
             },
@@ -84,109 +86,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "SubI",
-                    "lhs": 8,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 10
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 7
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 7
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "BinOp": {
-                    "op": "MulI",
-                    "lhs": 12,
-                    "rhs": 13
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "BinOp": {
-                    "op": "MulI",
-                    "lhs": 15,
-                    "rhs": 16
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
-                "value": {
                   "BinOp": {
                     "op": "AddI",
-                    "lhs": 14,
-                    "rhs": 17
+                    "lhs": 6,
+                    "rhs": 7
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 18
+            "ReturnValue": 8
           }
         }
       ],
@@ -203,6 +113,10 @@ unique_name=inputkt
         null,
         null,
         null
+      ],
+      "named_locals": [
+        4,
+        5
       ]
     },
     {

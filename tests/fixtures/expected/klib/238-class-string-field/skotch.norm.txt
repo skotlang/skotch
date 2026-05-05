@@ -21,17 +21,8 @@ unique_name=inputkt
         {
           "Class": "Person"
         },
-        {
-          "Class": "Person"
-        },
-        {
-          "Class": "Person"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Person"
-        },
         "Int",
         "Unit"
       ],
@@ -86,7 +77,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "Person",
+                    "field_name": "name"
+                  }
                 }
               }
             },
@@ -94,7 +89,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -103,9 +103,9 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "GetField": {
-                    "receiver": 4,
+                    "receiver": 2,
                     "class_name": "Person",
-                    "field_name": "name"
+                    "field_name": "age"
                   }
                 }
               }
@@ -122,45 +122,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "GetField": {
-                    "receiver": 7,
-                    "class_name": "Person",
-                    "field_name": "age"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 1,

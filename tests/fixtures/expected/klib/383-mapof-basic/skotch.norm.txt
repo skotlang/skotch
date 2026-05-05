@@ -45,23 +45,11 @@ unique_name=inputkt
         {
           "Class": "java/util/Map"
         },
-        {
-          "Class": "java/util/Map"
-        },
-        {
-          "Class": "java/util/Map"
-        },
         "Unit",
-        {
-          "Class": "java/util/Map"
-        },
         "Int",
         "Any",
         "Any",
         "Unit",
-        {
-          "Class": "java/util/Map"
-        },
         "Int",
         "Unit"
       ],
@@ -376,7 +364,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 21,
                 "value": {
-                  "Local": 20
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      20
+                    ]
+                  }
                 }
               }
             },
@@ -384,7 +377,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 22,
                 "value": {
-                  "Local": 21
+                  "Const": {
+                    "Int": 2
+                  }
                 }
               }
             },
@@ -393,7 +388,13 @@ unique_name=inputkt
                 "dest": 23,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
                     "args": [
                       22
                     ]
@@ -405,7 +406,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 24,
                 "value": {
-                  "Local": 21
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "get",
+                        "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      20,
+                      23
+                    ]
+                  }
                 }
               }
             },
@@ -413,8 +426,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 25,
                 "value": {
-                  "Const": {
-                    "Int": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      24
+                    ]
                   }
                 }
               }
@@ -425,14 +441,14 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "size",
+                        "descriptor": "()I"
                       }
                     },
                     "args": [
-                      25
+                      20
                     ]
                   }
                 }
@@ -443,69 +459,9 @@ unique_name=inputkt
                 "dest": 27,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/Map",
-                        "method_name": "get",
-                        "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
-                      24,
                       26
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 28,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      27
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 29,
-                "value": {
-                  "Local": 21
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 30,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/Map",
-                        "method_name": "size",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      29
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 31,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      30
                     ]
                   }
                 }
@@ -515,7 +471,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        20
+      ]
     },
     {
       "id": 1,

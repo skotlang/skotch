@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=19
+  code        max_stack=3 max_locals=17
     0000 iconst_1
     0001 istore_0
     0002 iconst_2
@@ -47,39 +47,33 @@ method        main ()V 0x0019
     0062 aload 4
     0064 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0067 astore 11
-    0069 aload 11
-    0071 checkcast Class(java/util/List)
-    0074 astore 12
-    0076 new Class(InputKt$Lambda$0)
-    0079 dup
-    0080 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0083 astore 13
-    0085 aload 12
-    0087 checkcast Class(java/util/List)
-    0090 astore 14
-    0092 new Class(InputKt$Lambda$1)
-    0095 dup
-    0096 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0099 astore 15
-    0101 aload 14
-    0103 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0108 astore 16
-    0110 goto 113
-    0113 aload 16
-    0115 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0120 istore 17
-    0122 iload 17
-    0124 ifeq 147
-    0127 aload 16
-    0129 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0134 astore 18
-    0136 aload 15
-    0138 aload 18
-    0140 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0143 pop
-    0144 goto 113
-    0147 return
-    sub_attr  StackMapTable (83 bytes)
+    0069 new Class(InputKt$Lambda$0)
+    0072 dup
+    0073 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0076 astore 12
+    0078 new Class(InputKt$Lambda$1)
+    0081 dup
+    0082 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0085 astore 13
+    0087 aload 11
+    0089 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0094 astore 14
+    0096 goto 99
+    0099 aload 14
+    0101 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0106 istore 15
+    0108 iload 15
+    0110 ifeq 133
+    0113 aload 14
+    0115 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0120 astore 16
+    0122 aload 13
+    0124 aload 16
+    0126 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0129 pop
+    0130 goto 99
+    0133 return
+    sub_attr  StackMapTable (44 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

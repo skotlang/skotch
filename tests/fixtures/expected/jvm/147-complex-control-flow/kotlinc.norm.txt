@@ -10,9 +10,7 @@ method        collatz (I)I 0x0019
     0003 istore_2
     0004 iload_1
     0005 iconst_1
-    0006 op_0x9F
-    0007 nop
-    0008 iload_2
+    0006 if_icmpeq 34
     0009 iload_1
     0010 iconst_2
     0011 irem
@@ -33,7 +31,7 @@ method        collatz (I)I 0x0019
     0030 aconst_null
     0031 goto 4
     0034 iload_2
-    0035 op_0xAC
+    0035 ireturn
     sub_attr  StackMapTable (10 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
@@ -41,9 +39,7 @@ method        main ()V 0x0019
     0001 istore_0
     0002 iload_0
     0003 bipush 11
-    0005 op_0xA2
-    0006 nop
-    0007 iload_0
+    0005 if_icmpge 31
     0008 iload_0
     0009 iload_0
     0010 invokestatic Method(InputKt.collatz:(I)I)
@@ -53,7 +49,7 @@ method        main ()V 0x0019
     0016 nop
     0017 nop
     0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 op_0x5F
+    0021 swap
     0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0025 op_0x84
     0026 nop

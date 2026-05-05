@@ -17,17 +17,12 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "String",
-        "String",
-        "String",
         "Int",
         "Unit",
         "String",
-        "String",
         "Unit",
         "String",
-        "String",
         "Unit",
-        "String",
         "Bool",
         "Unit",
         "String",
@@ -51,7 +46,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "java/lang/String",
+                        "method_name": "length"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -59,7 +64,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -69,13 +79,14 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Virtual": {
+                      "VirtualJava": {
                         "class_name": "java/lang/String",
-                        "method_name": "length"
+                        "method_name": "toUpperCase",
+                        "descriptor": "()Ljava/lang/String;"
                       }
                     },
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -98,7 +109,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "toLowerCase",
+                        "descriptor": "()Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -107,13 +129,7 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "toUpperCase",
-                        "descriptor": "()Ljava/lang/String;"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
                       5
                     ]
@@ -126,9 +142,15 @@ unique_name=inputkt
                 "dest": 7,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "isEmpty",
+                        "descriptor": "()Z"
+                      }
+                    },
                     "args": [
-                      6
+                      0
                     ]
                   }
                 }
@@ -138,7 +160,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
+                  }
                 }
               }
             },
@@ -146,17 +173,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "toLowerCase",
-                        "descriptor": "()Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      8
-                    ]
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -166,7 +184,13 @@ unique_name=inputkt
                 "dest": 10,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "isEmpty",
+                        "descriptor": "()Z"
+                      }
+                    },
                     "args": [
                       9
                     ]
@@ -178,79 +202,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "isEmpty",
-                        "descriptor": "()Z"
-                      }
-                    },
-                    "args": [
-                      11
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "isEmpty",
-                        "descriptor": "()Z"
-                      }
-                    },
-                    "args": [
-                      14
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      15
+                      10
                     ]
                   }
                 }
@@ -260,7 +215,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

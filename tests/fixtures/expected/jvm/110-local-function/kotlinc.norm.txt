@@ -25,9 +25,7 @@ method        main$factorial (I)I 0x001A
   code        max_stack=3 max_locals=1
     0000 iload_0
     0001 iconst_1
-    0002 op_0xA3
-    0003 nop
-    0004 iconst_4
+    0002 if_icmpgt 9
     0005 iconst_1
     0006 goto 17
     0009 iload_0
@@ -36,5 +34,5 @@ method        main$factorial (I)I 0x001A
     0012 isub
     0013 invokestatic Method(InputKt.main$factorial:(I)I)
     0016 imul
-    0017 op_0xAC
+    0017 ireturn
     sub_attr  StackMapTable (5 bytes)

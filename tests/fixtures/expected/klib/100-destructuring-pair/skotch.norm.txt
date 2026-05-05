@@ -24,9 +24,7 @@ unique_name=inputkt
         },
         "Any",
         "Any",
-        "Any",
         "String",
-        "Any",
         "Unit",
         "Int",
         "Int",
@@ -40,11 +38,8 @@ unique_name=inputkt
         "Any",
         "Any",
         "Any",
-        "Any",
         "String",
-        "Any",
         "String",
-        "Any",
         "Unit"
       ],
       "blocks": [
@@ -156,14 +151,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
                   "Const": {
                     "String": 1
                   }
@@ -172,22 +159,14 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
+                      4,
                       6,
-                      7,
-                      8
+                      5
                     ]
                   }
                 }
@@ -195,7 +174,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 10,
+                "dest": 8,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -205,7 +184,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 9,
                 "value": {
                   "Const": {
                     "Int": 2
@@ -215,10 +194,48 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 12,
+                "dest": 10,
                 "value": {
                   "Const": {
                     "Int": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 11,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      8
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 12,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      9
+                    ]
                   }
                 }
               }
@@ -246,16 +263,25 @@ unique_name=inputkt
               "Assign": {
                 "dest": 14,
                 "value": {
+                  "NewInstance": "kotlin/Triple"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
+                      "ConstructorJava": {
+                        "class_name": "kotlin/Triple",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V"
                       }
                     },
                     "args": [
-                      11
+                      11,
+                      12,
+                      13
                     ]
                   }
                 }
@@ -267,14 +293,13 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
+                      "Virtual": {
+                        "class_name": "kotlin/Triple",
+                        "method_name": "component1"
                       }
                     },
                     "args": [
-                      12
+                      14
                     ]
                   }
                 }
@@ -284,25 +309,15 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
-                  "NewInstance": "kotlin/Triple"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
                   "Call": {
                     "kind": {
-                      "ConstructorJava": {
+                      "Virtual": {
                         "class_name": "kotlin/Triple",
-                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V"
+                        "method_name": "component2"
                       }
                     },
                     "args": [
-                      13,
-                      14,
-                      15
+                      14
                     ]
                   }
                 }
@@ -316,11 +331,11 @@ unique_name=inputkt
                     "kind": {
                       "Virtual": {
                         "class_name": "kotlin/Triple",
-                        "method_name": "component1"
+                        "method_name": "component3"
                       }
                     },
                     "args": [
-                      16
+                      14
                     ]
                   }
                 }
@@ -330,16 +345,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 18,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "kotlin/Triple",
-                        "method_name": "component2"
-                      }
-                    },
-                    "args": [
-                      16
-                    ]
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -348,16 +355,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 19,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "kotlin/Triple",
-                        "method_name": "component3"
-                      }
-                    },
-                    "args": [
-                      16
-                    ]
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -366,58 +365,14 @@ unique_name=inputkt
               "Assign": {
                 "dest": 20,
                 "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 21,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 22,
-                "value": {
-                  "Local": 18
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
-                  "Local": 19
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 25,
-                "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      20,
-                      21,
-                      22,
-                      23,
-                      24
+                      15,
+                      18,
+                      16,
+                      19,
+                      17
                     ]
                   }
                 }

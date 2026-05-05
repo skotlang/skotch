@@ -40,5 +40,5 @@ method        main$lambda$0 (I)I 0x001A
     0000 iload_0
     0001 iconst_2
     0002 imul
-    0003 op_0xAC
+    0003 ireturn
 class_attr    BootstrapMethods (12 bytes)

@@ -38,12 +38,6 @@ unique_name=inputkt
           "Class": "java/util/List"
         },
         {
-          "Class": "java/util/List"
-        },
-        {
-          "Class": "java/util/List"
-        },
-        {
           "Class": "java/util/Iterator"
         },
         "Bool",
@@ -53,9 +47,7 @@ unique_name=inputkt
         },
         "Any",
         "Any",
-        "Any",
         "String",
-        "Any",
         "Unit"
       ],
       "blocks": [
@@ -278,22 +270,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 15,
                 "value": {
-                  "Local": 14
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -303,7 +279,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      16
+                      14
                     ]
                   }
                 }
@@ -318,7 +294,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 18,
+                "dest": 16,
                 "value": {
                   "Call": {
                     "kind": {
@@ -329,7 +305,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      17
+                      15
                     ]
                   }
                 }
@@ -338,7 +314,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 18,
+              "cond": 16,
               "then_block": 2,
               "else_block": 3
             }
@@ -348,7 +324,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 19,
+                "dest": 17,
                 "value": {
                   "Call": {
                     "kind": {
@@ -359,7 +335,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      17
+                      15
                     ]
                   }
                 }
@@ -367,10 +343,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 20,
+                "dest": 18,
                 "value": {
                   "CheckCast": {
-                    "obj": 19,
+                    "obj": 17,
                     "target_class": "kotlin/Pair"
                   }
                 }
@@ -378,7 +354,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 21,
+                "dest": 19,
                 "value": {
                   "Call": {
                     "kind": {
@@ -389,7 +365,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      20
+                      18
                     ]
                   }
                 }
@@ -397,7 +373,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 22,
+                "dest": 20,
                 "value": {
                   "Call": {
                     "kind": {
@@ -408,7 +384,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      20
+                      18
                     ]
                   }
                 }
@@ -416,15 +392,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 23,
-                "value": {
-                  "Local": 21
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
+                "dest": 21,
                 "value": {
                   "Const": {
                     "String": 2
@@ -434,22 +402,14 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 25,
-                "value": {
-                  "Local": 22
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 26,
+                "dest": 22,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      23,
-                      24,
-                      25
+                      19,
+                      21,
+                      20
                     ]
                   }
                 }
@@ -465,7 +425,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        14
+      ]
     },
     {
       "id": 1,

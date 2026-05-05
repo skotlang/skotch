@@ -393,6 +393,18 @@ pub struct MirFunction {
     /// Annotations on this function (emitted as RuntimeVisibleAnnotations).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<MirAnnotation>,
+    /// Locals corresponding to source-level `val`/`var` declarations.
+    /// These are "named" locals that should be preserved in the bytecode
+    /// (matching kotlinc's behavior of keeping named locals in slots even
+    /// when they could be optimized away). Anonymous compiler-generated
+    /// temporaries are NOT in this list and may be eliminated by peephole
+    /// optimizations like the swap pattern.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub named_locals: Vec<LocalId>,
+    /// True for `private` source-level functions. The JVM backend emits
+    /// these with `ACC_PRIVATE` instead of `ACC_PUBLIC`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_private: bool,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either

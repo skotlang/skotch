@@ -22,14 +22,10 @@ unique_name=inputkt
           "Nullable": "String"
         },
         {
-          "Nullable": "String"
-        },
-        {
           "Nullable": "Any"
         },
         "Bool",
         "Int",
-        "String",
         "String",
         "String",
         "String",
@@ -43,7 +39,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": "Null"
                 }
               }
             },
@@ -51,18 +47,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": "Null"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "BinOp": {
                     "op": "CmpNe",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -70,7 +58,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 3,
+              "cond": 2,
               "then_block": 1,
               "else_block": 2
             }
@@ -80,7 +68,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Local": 0
                 }
@@ -88,7 +76,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 0
@@ -98,15 +86,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -117,7 +97,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      7
+                      4
                     ]
                   }
                 }
@@ -125,19 +105,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 6,
-                    "rhs": 8
+                    "lhs": 5,
+                    "rhs": 6
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 9
+            "ReturnValue": 7
           }
         },
         {
@@ -150,7 +130,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
+                "dest": 8,
                 "value": {
                   "Const": {
                     "String": 1
@@ -160,7 +140,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 10
+            "ReturnValue": 8
           }
         }
       ],

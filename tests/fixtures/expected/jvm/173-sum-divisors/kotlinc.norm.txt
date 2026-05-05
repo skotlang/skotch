@@ -35,9 +35,7 @@ method        sumDivisors (I)I 0x0019
     0003 istore_2
     0004 iload_2
     0005 iload_0
-    0006 op_0xA3
-    0007 nop
-    0008 op_0x18
+    0006 if_icmpgt 30
     0009 iload_0
     0010 iload_2
     0011 irem
@@ -48,13 +46,11 @@ method        sumDivisors (I)I 0x0019
     0018 istore_1
     0019 iload_2
     0020 iload_0
-    0021 op_0x9F
-    0022 nop
-    0023 op_0x09
+    0021 if_icmpeq 30
     0024 op_0x84
     0025 iconst_m1
     0026 aconst_null
     0027 goto 9
     0030 iload_1
-    0031 op_0xAC
+    0031 ireturn
     sub_attr  StackMapTable (9 bytes)

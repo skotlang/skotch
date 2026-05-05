@@ -21,9 +21,6 @@ unique_name=inputkt
         {
           "Class": "Holder"
         },
-        {
-          "Class": "Holder"
-        },
         "Any",
         "Unit"
       ],
@@ -34,16 +31,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "GetField": {
-                    "receiver": 1,
+                    "receiver": 0,
                     "class_name": "Holder",
                     "field_name": "value"
                   }
@@ -52,12 +41,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      2
+                      1
                     ]
                   }
                 }

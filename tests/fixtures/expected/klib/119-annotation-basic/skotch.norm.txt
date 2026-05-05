@@ -37,21 +37,7 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int",
-      "annotations": [
-        {
-          "descriptor": "Lkotlin/Suppress;",
-          "args": [
-            {
-              "name": "value",
-              "value": {
-                "String": "unused"
-              }
-            }
-          ],
-          "retention": "Runtime"
-        }
-      ]
+      "return_ty": "Int"
     },
     {
       "id": 1,

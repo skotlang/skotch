@@ -3,36 +3,33 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isUrl (Ljava/lang/String;)Z 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=2
     0000 ldc "http"
     0002 astore_1
-    0003 aload_0
-    0004 astore_2
-    0005 ldc "http"
-    0007 astore_3
-    0008 aload_2
-    0009 aload_3
-    0010 invokevirtual Method(java/lang/String.startsWith:(Ljava/lang/String;)Z)
-    0013 op_0xAC
+    0003 ldc "http"
+    0005 aload_0
+    0006 swap
+    0007 invokevirtual Method(java/lang/String.startsWith:(Ljava/lang/String;)Z)
+    0010 ireturn
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=3
     0000 ldc "https://example.com"
     0002 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0005 istore_1
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 iload_1
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0013 ldc "ftp://files.example.com"
     0015 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0018 istore_3
+    0018 istore_1
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 iload_3
+    0022 iload_1
     0023 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0026 ldc "not a url"
     0028 invokestatic Method(InputKt.isUrl:(Ljava/lang/String;)Z)
-    0031 istore 5
+    0031 istore 2
     0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 iload 5
+    0036 iload 2
     0038 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0041 return
 method        main ([Ljava/lang/String;)V 0x1009

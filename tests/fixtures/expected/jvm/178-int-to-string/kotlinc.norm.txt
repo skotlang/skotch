@@ -15,18 +15,18 @@ method        main ()V 0x0019
     0015 iload_0
     0016 op_0xBA
     0017 nop
-    0018 op_0x23
+    0018 fload_1
     0019 nop
     0020 nop
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 op_0x5F
+    0024 swap
     0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0028 iload_0
     0029 iconst_1
     0030 iadd
     0031 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
     0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 op_0x5F
+    0037 swap
     0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0041 return
 method        main ([Ljava/lang/String;)V 0x1009

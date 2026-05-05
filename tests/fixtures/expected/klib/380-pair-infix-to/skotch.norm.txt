@@ -22,22 +22,10 @@ unique_name=inputkt
         {
           "Class": "kotlin/Pair"
         },
-        {
-          "Class": "kotlin/Pair"
-        },
-        {
-          "Class": "kotlin/Pair"
-        },
         "Any",
         "Unit",
-        {
-          "Class": "kotlin/Pair"
-        },
         "Any",
         "Unit",
-        {
-          "Class": "kotlin/Pair"
-        },
         "Unit"
       ],
       "blocks": [
@@ -113,7 +101,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "kotlin/Pair",
+                        "method_name": "getFirst",
+                        "descriptor": "()Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -121,7 +120,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 4
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      4
+                    ]
+                  }
                 }
               }
             },
@@ -133,12 +137,12 @@ unique_name=inputkt
                     "kind": {
                       "VirtualJava": {
                         "class_name": "kotlin/Pair",
-                        "method_name": "getFirst",
+                        "method_name": "getSecond",
                         "descriptor": "()Ljava/lang/Object;"
                       }
                     },
                     "args": [
-                      5
+                      3
                     ]
                   }
                 }
@@ -161,58 +165,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "kotlin/Pair",
-                        "method_name": "getSecond",
-                        "descriptor": "()Ljava/lang/Object;"
-                      }
-                    },
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      11
+                      3
                     ]
                   }
                 }
@@ -222,7 +178,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        3
+      ]
     },
     {
       "id": 1,

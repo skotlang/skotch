@@ -3,51 +3,33 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=16
+  code        max_stack=2 max_locals=5
     0000 ldc "apple"
-    0002 astore_1
+    0002 astore_0
     0003 ldc "banana"
-    0005 astore_3
-    0006 aload_3
-    0007 astore 4
-    0009 aload_1
-    0010 astore 5
-    0012 aload_3
-    0013 astore 6
-    0015 aload 5
-    0017 aload 6
-    0019 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
-    0022 istore 7
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 iload 7
+    0005 astore_1
+    0006 aload_0
+    0007 aload_1
+    0008 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
+    0011 istore_2
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 iload_2
+    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0019 aload_1
+    0020 aload_0
+    0021 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
+    0024 istore_3
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload_3
     0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0032 aload_1
-    0033 astore 8
-    0035 aload_3
-    0036 astore 9
-    0038 aload_1
-    0039 astore 10
-    0041 aload 9
-    0043 aload 10
-    0045 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
-    0048 istore 11
-    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0053 iload 11
-    0055 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0058 aload_1
-    0059 astore 12
-    0061 aload_1
-    0062 astore 13
-    0064 aload_1
-    0065 astore 14
-    0067 aload 13
-    0069 aload 14
-    0071 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
-    0074 istore 15
-    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0079 iload 15
-    0081 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0084 return
+    0032 aload_0
+    0033 aload_0
+    0034 invokevirtual Method(java/lang/String.compareTo:(Ljava/lang/Object;)I)
+    0037 istore 4
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 iload 4
+    0044 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0047 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=30
+  code        max_stack=4 max_locals=26
     0000 ldc "a"
     0002 astore_0
     0003 iconst_1
@@ -71,56 +71,46 @@ method        main ()V 0x0019
     0115 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
     0118 astore 17
     0120 aload 17
-    0122 checkcast Class(java/util/Map)
-    0125 astore 18
-    0127 aload 18
-    0129 checkcast Class(java/util/Map)
-    0132 astore 19
-    0134 aload 19
-    0136 invokeinterface InterfaceMethod(java/util/Map.entrySet:()Ljava/util/Set;)
-    0141 astore 20
-    0143 aload 20
-    0145 invokeinterface InterfaceMethod(java/util/Set.iterator:()Ljava/util/Iterator;)
-    0150 astore 21
-    0152 goto 155
-    0155 aload 21
-    0157 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0162 istore 22
-    0164 iload 22
-    0166 ifeq 249
-    0169 aload 21
-    0171 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0176 astore 23
-    0178 aload 23
-    0180 checkcast Class(java/util/Map$Entry)
-    0183 astore 24
-    0185 aload 24
-    0187 invokeinterface InterfaceMethod(java/util/Map$Entry.getKey:()Ljava/lang/Object;)
-    0192 astore 25
-    0194 aload 24
-    0196 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
-    0201 astore 26
-    0203 aload 25
-    0205 astore 27
-    0207 ldc "="
-    0209 astore 28
-    0211 aload 26
-    0213 astore 29
-    0215 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0218 new Class(java/lang/StringBuilder)
-    0221 dup
-    0222 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0225 aload 27
-    0227 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0230 aload 28
-    0232 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0235 aload 29
-    0237 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0240 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0243 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0246 goto 155
-    0249 return
-    sub_attr  StackMapTable (117 bytes)
+    0122 invokeinterface InterfaceMethod(java/util/Map.entrySet:()Ljava/util/Set;)
+    0127 astore 18
+    0129 aload 18
+    0131 invokeinterface InterfaceMethod(java/util/Set.iterator:()Ljava/util/Iterator;)
+    0136 astore 19
+    0138 goto 141
+    0141 aload 19
+    0143 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0148 istore 20
+    0150 iload 20
+    0152 ifeq 227
+    0155 aload 19
+    0157 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0162 astore 21
+    0164 aload 21
+    0166 checkcast Class(java/util/Map$Entry)
+    0169 astore 22
+    0171 aload 22
+    0173 invokeinterface InterfaceMethod(java/util/Map$Entry.getKey:()Ljava/lang/Object;)
+    0178 astore 23
+    0180 aload 22
+    0182 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
+    0187 astore 24
+    0189 ldc "="
+    0191 astore 25
+    0193 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0196 new Class(java/lang/StringBuilder)
+    0199 dup
+    0200 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0203 aload 23
+    0205 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0208 aload 25
+    0210 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0213 aload 24
+    0215 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0218 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0221 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0224 goto 141
+    0227 return
+    sub_attr  StackMapTable (57 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

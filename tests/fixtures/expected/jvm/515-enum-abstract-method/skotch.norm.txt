@@ -3,14 +3,14 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        MINUS ()LOp; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Op)
     0003 dup
     0004 ldc "MINUS"
     0006 invokespecial Method(Op.<init>:(Ljava/lang/String;)V)
     0009 areturn
 method        Op$apply (LOp;II)I 0x0019
-  code        max_stack=3 max_locals=15
+  code        max_stack=3 max_locals=11
     0000 aload_0
     0001 getfield Field(Op.name:Ljava/lang/String;)
     0004 astore_3
@@ -21,40 +21,32 @@ method        Op$apply (LOp;II)I 0x0019
     0012 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
     0015 istore 5
     0017 iload 5
-    0019 ifeq 38
+    0019 ifeq 30
     0022 iload_1
-    0023 istore 6
-    0025 iload_2
-    0026 istore 7
-    0028 iload 6
-    0030 iload 7
-    0032 iadd
-    0033 istore 8
-    0035 iload 8
-    0037 op_0xAC
-    0038 ldc "MINUS"
-    0040 astore 9
-    0042 aload_3
-    0043 aload 9
-    0045 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0048 istore 10
-    0050 iload 10
-    0052 ifeq 71
-    0055 iload_1
-    0056 istore 11
-    0058 iload_2
-    0059 istore 12
-    0061 iload 11
-    0063 iload 12
-    0065 isub
-    0066 istore 13
-    0068 iload 13
-    0070 op_0xAC
-    0071 iconst_0
-    0072 istore 14
-    0074 iload 14
-    0076 op_0xAC
-    sub_attr  StackMapTable (47 bytes)
+    0023 iload_2
+    0024 iadd
+    0025 istore 6
+    0027 iload 6
+    0029 ireturn
+    0030 ldc "MINUS"
+    0032 astore 7
+    0034 aload_3
+    0035 aload 7
+    0037 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0040 istore 8
+    0042 iload 8
+    0044 ifeq 55
+    0047 iload_1
+    0048 iload_2
+    0049 isub
+    0050 istore 9
+    0052 iload 9
+    0054 ireturn
+    0055 iconst_0
+    0056 istore 10
+    0058 iload 10
+    0060 ireturn
+    sub_attr  StackMapTable (20 bytes)
 method        Op$valueOf (Ljava/lang/String;)LOp; 0x0019
   code        max_stack=3 max_locals=8
     0000 ldc "PLUS"
@@ -86,29 +78,27 @@ method        Op$valueOf (Ljava/lang/String;)LOp; 0x0019
     0050 astore 7
     0052 aload 7
     0054 areturn
-    sub_attr  StackMapTable (49 bytes)
+    sub_attr  StackMapTable (25 bytes)
 method        Op$values ()Ljava/util/ArrayList; 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=3
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 invokestatic Method(InputKt.PLUS:()LOp;)
-    0011 astore_1
-    0012 aload_0
-    0013 aload_1
-    0014 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0017 istore_2
-    0018 invokestatic Method(InputKt.MINUS:()LOp;)
-    0021 astore_3
-    0022 aload_0
-    0023 aload_3
-    0024 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0027 istore 4
-    0029 aload_0
-    0030 areturn
+    0011 aload_0
+    0012 swap
+    0013 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0016 istore_1
+    0017 invokestatic Method(InputKt.MINUS:()LOp;)
+    0020 aload_0
+    0021 swap
+    0022 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0025 istore 2
+    0027 aload_0
+    0028 areturn
 method        PLUS ()LOp; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Op)
     0003 dup
     0004 ldc "PLUS"

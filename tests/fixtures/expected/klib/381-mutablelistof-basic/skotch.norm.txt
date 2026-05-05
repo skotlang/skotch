@@ -33,23 +33,11 @@ unique_name=inputkt
         {
           "Class": "java/util/List"
         },
-        {
-          "Class": "java/util/List"
-        },
         "Int",
-        {
-          "Class": "java/util/List"
-        },
         "Int",
         "Any",
         "Bool",
-        {
-          "Class": "java/util/List"
-        },
         "Unit",
-        {
-          "Class": "java/util/List"
-        },
         "Int",
         "Unit"
       ],
@@ -250,7 +238,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 15,
                 "value": {
-                  "Local": 14
+                  "Const": {
+                    "Int": 4
+                  }
                 }
               }
             },
@@ -268,24 +258,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 17,
                 "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
-                "value": {
-                  "Const": {
-                    "Int": 4
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 19,
-                "value": {
                   "Call": {
                     "kind": {
                       "StaticJava": {
@@ -295,7 +267,40 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      18
+                      16
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/List",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      14,
+                      17
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      14
                     ]
                   }
                 }
@@ -309,13 +314,12 @@ unique_name=inputkt
                     "kind": {
                       "VirtualJava": {
                         "class_name": "java/util/List",
-                        "method_name": "add",
-                        "descriptor": "(Ljava/lang/Object;)Z"
+                        "method_name": "size",
+                        "descriptor": "()I"
                       }
                     },
                     "args": [
-                      17,
-                      19
+                      14
                     ]
                   }
                 }
@@ -325,58 +329,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 21,
                 "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 22,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      21
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/List",
-                        "method_name": "size",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      23
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 25,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      24
+                      20
                     ]
                   }
                 }
@@ -386,7 +342,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        14
+      ]
     },
     {
       "id": 1,

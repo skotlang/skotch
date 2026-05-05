@@ -23,11 +23,7 @@ unique_name=inputkt
         "Int",
         "String",
         "Int",
-        "Int",
-        "Int",
-        "Int",
         "String",
-        "Int",
         "String",
         "Any",
         "String"
@@ -45,41 +41,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "BinOp": {
                     "op": "DivI",
-                    "lhs": 3,
-                    "rhs": 4
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "String": 0
@@ -89,20 +61,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 6
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
+                "dest": 5,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 7,
-                    "rhs": 8
+                    "lhs": 4,
+                    "rhs": 3
                   }
                 }
               }
@@ -111,7 +75,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 9
+                  "Local": 5
                 }
               }
             }
@@ -124,7 +88,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
+                "dest": 6,
                 "value": {
                   "Const": "Null"
                 }
@@ -132,7 +96,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 7,
                 "value": {
                   "Const": {
                     "String": 1
@@ -144,7 +108,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 11
+                  "Local": 7
                 }
               }
             }
@@ -177,6 +141,9 @@ unique_name=inputkt
           "handler_block": 2,
           "catch_type": "java/lang/Exception"
         }
+      ],
+      "named_locals": [
+        3
       ]
     },
     {

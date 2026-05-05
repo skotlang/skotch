@@ -19,17 +19,8 @@ unique_name=inputkt
         {
           "Class": "Config"
         },
-        {
-          "Class": "Config"
-        },
-        {
-          "Class": "Config"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Config"
-        },
         "String",
         "Unit"
       ],
@@ -61,7 +52,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Config",
+                        "method_name": "getGreeting"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -69,7 +70,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -85,7 +91,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -103,51 +109,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Config",
-                        "method_name": "getGreeting"
-                      }
-                    },
-                    "args": [
-                      5
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

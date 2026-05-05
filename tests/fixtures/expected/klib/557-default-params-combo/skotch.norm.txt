@@ -25,8 +25,6 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -36,7 +34,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "String": 2
+                  }
                 }
               }
             },
@@ -44,8 +44,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Const": {
-                    "String": 2
+                  "BinOp": {
+                    "op": "ConcatStr",
+                    "lhs": 1,
+                    "rhs": 2
                   }
                 }
               }
@@ -56,8 +58,8 @@ unique_name=inputkt
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 2,
-                    "rhs": 3
+                    "lhs": 3,
+                    "rhs": 0
                   }
                 }
               }
@@ -66,7 +68,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 3
+                  }
                 }
               }
             },
@@ -81,32 +85,10 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Const": {
-                    "String": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 6,
-                    "rhs": 7
-                  }
-                }
-              }
             }
           ],
           "terminator": {
-            "ReturnValue": 8
+            "ReturnValue": 6
           }
         }
       ],

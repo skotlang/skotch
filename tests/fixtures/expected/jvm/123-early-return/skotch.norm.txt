@@ -3,73 +3,65 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        abs (I)I 0x0019
-  code        max_stack=2 max_locals=8
-    0000 iload_0
+  code        max_stack=2 max_locals=5
+    0000 iconst_0
     0001 istore_1
-    0002 iconst_0
-    0003 istore_2
-    0004 iload_1
-    0005 iload_2
-    0006 op_0xA1
-    0007 nop
-    0008 iconst_4
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 35
-    0019 iload_0
-    0020 istore 4
-    0022 iconst_0
-    0023 istore 5
-    0025 iload 5
-    0027 iload 4
-    0029 isub
-    0030 istore 6
-    0032 iload 6
-    0034 op_0xAC
-    0035 goto 38
-    0038 iload_0
-    0039 istore 7
-    0041 iload 7
-    0043 op_0xAC
-    sub_attr  StackMapTable (45 bytes)
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 27
+    0017 iconst_0
+    0018 istore_3
+    0019 iload_3
+    0020 iload_0
+    0021 isub
+    0022 istore 4
+    0024 iload 4
+    0026 ireturn
+    0027 goto 30
+    0030 iload_0
+    0031 ireturn
+    sub_attr  StackMapTable (13 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=8
     0000 bipush -42
     0002 invokestatic Method(java/lang/Math.abs:(I)I)
-    0005 istore_1
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 iload_1
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 bipush 7
     0015 invokestatic Method(java/lang/Math.abs:(I)I)
-    0018 istore_3
+    0018 istore_1
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 iload_3
+    0022 iload_1
     0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 bipush 10
-    0028 istore 4
+    0028 istore 2
     0030 bipush 20
-    0032 istore 5
-    0034 iload 4
-    0036 iload 5
+    0032 istore 3
+    0034 iload 2
+    0036 iload 3
     0038 invokestatic Method(InputKt.max:(II)I)
-    0041 istore 6
+    0041 istore 4
     0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 iload 6
+    0046 iload 4
     0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0051 bipush 99
-    0053 istore 7
+    0053 istore 5
     0055 iconst_1
-    0056 istore 8
-    0058 iload 7
-    0060 iload 8
+    0056 istore 6
+    0058 iload 5
+    0060 iload 6
     0062 invokestatic Method(InputKt.max:(II)I)
-    0065 istore 9
+    0065 istore 7
     0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0070 iload 9
+    0070 iload 7
     0072 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0075 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -77,29 +69,19 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        max (II)I 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=3
     0000 iload_0
-    0001 istore_2
-    0002 iload_1
-    0003 istore_3
-    0004 iload_2
-    0005 iload_3
-    0006 op_0xA3
-    0007 nop
-    0008 iconst_4
+    0001 iload_1
+    0002 if_icmple 9
+    0005 iconst_1
+    0006 goto 10
     0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore 4
-    0016 iload 4
-    0018 ifeq 27
-    0021 iload_0
-    0022 istore 5
-    0024 iload 5
-    0026 op_0xAC
-    0027 goto 30
-    0030 iload_1
-    0031 istore 6
-    0033 iload 6
-    0035 op_0xAC
-    sub_attr  StackMapTable (49 bytes)
+    0010 istore_2
+    0011 iload_2
+    0012 ifeq 17
+    0015 iload_0
+    0016 ireturn
+    0017 goto 20
+    0020 iload_1
+    0021 ireturn
+    sub_attr  StackMapTable (10 bytes)

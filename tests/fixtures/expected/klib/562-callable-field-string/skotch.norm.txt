@@ -22,12 +22,6 @@ unique_name=inputkt
         {
           "Class": "Greeter"
         },
-        {
-          "Class": "Greeter"
-        },
-        {
-          "Class": "Greeter"
-        },
         "Unit"
       ],
       "blocks": [
@@ -81,22 +75,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -105,7 +83,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3
+                      1
                     ]
                   }
                 }
@@ -115,7 +93,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -340,8 +321,6 @@ unique_name=inputkt
               }
             },
             "Any",
-            "Any",
-            "Any",
             "Unit"
           ],
           "blocks": [
@@ -381,26 +360,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          4
+                          2
                         ]
                       }
                     }
@@ -423,7 +386,10 @@ unique_name=inputkt
               "terminator": "Return"
             }
           ],
-          "return_ty": "Unit"
+          "return_ty": "Unit",
+          "named_locals": [
+            2
+          ]
         }
       ],
       "constructor": {

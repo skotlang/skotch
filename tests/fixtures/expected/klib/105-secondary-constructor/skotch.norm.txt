@@ -365,8 +365,6 @@ unique_name=inputkt
               "Class": "Square"
             },
             "Int",
-            "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -388,26 +386,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "BinOp": {
                         "op": "MulI",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 1
                       }
                     }
                   }
@@ -427,7 +409,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 4
+                "ReturnValue": 2
               }
             }
           ],
@@ -482,7 +464,6 @@ unique_name=inputkt
               "Class": "Square"
             },
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -517,17 +498,9 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 3
+                      "Local": 1
                     }
                   }
                 },

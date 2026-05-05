@@ -34,8 +34,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -154,7 +152,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 17,
+                "dest": 15,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -164,12 +162,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 18,
+                "dest": 16,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 4,
-                    "rhs": 17
+                    "rhs": 15
                   }
                 }
               }
@@ -178,7 +176,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 18
+                  "Local": 16
                 }
               }
             }
@@ -191,7 +189,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 19,
+                "dest": 17,
                 "value": {
                   "Local": 1
                 }
@@ -199,12 +197,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 20,
+                "dest": 18,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      19
+                      17
                     ]
                   }
                 }
@@ -250,7 +248,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 4
+                  "BinOp": {
+                    "op": "MulI",
+                    "lhs": 4,
+                    "rhs": 8
+                  }
                 }
               }
             },
@@ -258,30 +260,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "BinOp": {
-                    "op": "MulI",
-                    "lhs": 11,
-                    "rhs": 12
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 10,
-                    "rhs": 13
+                    "rhs": 11
                   }
                 }
               }
@@ -290,7 +272,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 14
+                  "Local": 12
                 }
               }
             }
@@ -303,7 +285,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 15,
+                "dest": 13,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -313,12 +295,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 16,
+                "dest": 14,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 8,
-                    "rhs": 15
+                    "rhs": 13
                   }
                 }
               }
@@ -327,7 +309,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 16
+                  "Local": 14
                 }
               }
             }
@@ -343,7 +325,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,

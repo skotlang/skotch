@@ -46,9 +46,7 @@ method        maxOf (Ljava/lang/Comparable;Ljava/lang/Comparable;)Ljava/lang/Com
     0012 aload_0
     0013 aload_1
     0014 invokeinterface InterfaceMethod(java/lang/Comparable.compareTo:(Ljava/lang/Object;)I)
-    0019 op_0x9E
-    0020 nop
-    0021 iconst_4
+    0019 ifle 26
     0022 aload_0
     0023 goto 27
     0026 aload_1

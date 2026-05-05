@@ -19,22 +19,22 @@ method        main ()V 0x0019
     0000 iconst_1
     0001 invokestatic Method(InputKt.dayType:(I)Ljava/lang/String;)
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0007 op_0x5F
+    0007 swap
     0008 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0011 iconst_3
     0012 invokestatic Method(InputKt.dayType:(I)Ljava/lang/String;)
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 op_0x5F
+    0018 swap
     0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0022 bipush 7
     0024 invokestatic Method(InputKt.dayType:(I)Ljava/lang/String;)
     0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 op_0x5F
+    0030 swap
     0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0034 iconst_0
     0035 invokestatic Method(InputKt.dayType:(I)Ljava/lang/String;)
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 op_0x5F
+    0041 swap
     0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0045 return
 method        main ([Ljava/lang/String;)V 0x1009

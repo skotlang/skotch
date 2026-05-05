@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=9
+  code        max_stack=4 max_locals=4
     0000 ldc "localhost"
     0002 astore_0
     0003 sipush 8080
@@ -13,22 +13,17 @@ method        main ()V 0x0019
     0011 aload_0
     0012 iload_1
     0013 invokespecial Method(Config.<init>:(Ljava/lang/String;I)V)
-    0016 checkcast Class(Config)
-    0019 astore_3
-    0020 aload_3
-    0021 checkcast Class(Config)
-    0024 astore 4
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 aload 4
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 aload_3
-    0035 checkcast Class(Config)
-    0038 invokevirtual Method(Config.toString:()Ljava/lang/String;)
-    0041 astore 8
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 aload 8
-    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0051 return
+    0016 astore_2
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 aload_2
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 aload_2
+    0025 invokevirtual Method(Config.toString:()Ljava/lang/String;)
+    0028 astore_3
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload_3
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

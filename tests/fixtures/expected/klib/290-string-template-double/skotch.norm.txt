@@ -17,14 +17,10 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "Double",
-        "Double",
         "String",
-        "Double",
         "Unit",
         "Double",
-        "Double",
         "String",
-        "Double",
         "Unit"
       ],
       "blocks": [
@@ -44,14 +40,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Const": {
                     "String": 0
                   }
@@ -60,21 +48,13 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      2,
-                      3
+                      1,
+                      0
                     ]
                   }
                 }
@@ -82,7 +62,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Const": {
                     "Double": 2.71828
@@ -92,15 +72,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "String": 1
@@ -110,21 +82,13 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 6
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      7,
-                      8
+                      4,
+                      3
                     ]
                   }
                 }
@@ -134,7 +98,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        3
+      ]
     },
     {
       "id": 1,

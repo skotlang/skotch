@@ -57,165 +57,156 @@ method        Dir$valueOf (Ljava/lang/String;)LDir; 0x0019
     0100 astore 13
     0102 aload 13
     0104 areturn
-    sub_attr  StackMapTable (111 bytes)
+    sub_attr  StackMapTable (98 bytes)
 method        Dir$values ()Ljava/util/ArrayList; 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=5
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 invokestatic Method(InputKt.NORTH:()LDir;)
-    0011 astore_1
-    0012 aload_0
-    0013 aload_1
-    0014 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0017 istore_2
-    0018 invokestatic Method(InputKt.SOUTH:()LDir;)
-    0021 astore_3
-    0022 aload_0
-    0023 aload_3
-    0024 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0027 istore 4
-    0029 invokestatic Method(InputKt.EAST:()LDir;)
-    0032 astore 5
-    0034 aload_0
-    0035 aload 5
-    0037 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0040 istore 6
-    0042 invokestatic Method(InputKt.WEST:()LDir;)
-    0045 astore 7
+    0011 aload_0
+    0012 swap
+    0013 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0016 istore_1
+    0017 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0020 aload_0
+    0021 swap
+    0022 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0025 istore 2
+    0027 invokestatic Method(InputKt.EAST:()LDir;)
+    0030 aload_0
+    0031 swap
+    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0035 istore 3
+    0037 invokestatic Method(InputKt.WEST:()LDir;)
+    0040 aload_0
+    0041 swap
+    0042 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0045 istore 4
     0047 aload_0
-    0048 aload 7
-    0050 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0053 istore 8
-    0055 aload_0
-    0056 areturn
+    0048 areturn
 method        EAST ()LDir; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Dir)
     0003 dup
     0004 ldc "EAST"
     0006 invokespecial Method(Dir.<init>:(Ljava/lang/String;)V)
     0009 areturn
 method        NORTH ()LDir; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Dir)
     0003 dup
     0004 ldc "NORTH"
     0006 invokespecial Method(Dir.<init>:(Ljava/lang/String;)V)
     0009 areturn
 method        SOUTH ()LDir; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Dir)
     0003 dup
     0004 ldc "SOUTH"
     0006 invokespecial Method(Dir.<init>:(Ljava/lang/String;)V)
     0009 areturn
 method        WEST ()LDir; 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=0
     0000 new Class(Dir)
     0003 dup
     0004 ldc "WEST"
     0006 invokespecial Method(Dir.<init>:(Ljava/lang/String;)V)
     0009 areturn
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=0
     0000 invokestatic Method(InputKt.NORTH:()LDir;)
     0003 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
-    0006 astore_1
-    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 aload_1
-    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0014 invokestatic Method(InputKt.WEST:()LDir;)
-    0017 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
-    0020 astore_3
-    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 aload_3
-    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0028 return
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 invokestatic Method(InputKt.WEST:()LDir;)
+    0016 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 swap
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        move (LDir;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=16
-    0000 aload_0
-    0001 checkcast Class(Dir)
-    0004 astore_1
-    0005 goto 8
-    0008 invokestatic Method(InputKt.NORTH:()LDir;)
-    0011 astore_2
-    0012 aload_1
-    0013 aload_2
-    0014 op_0x5F
-    0015 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0018 op_0x5F
-    0019 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0022 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0025 istore_3
-    0026 iload_3
-    0027 ifeq 41
-    0030 ldc "up"
-    0032 astore 4
-    0034 aload 4
-    0036 astore 5
-    0038 goto 163
-    0041 invokestatic Method(InputKt.SOUTH:()LDir;)
-    0044 astore 6
-    0046 aload_1
-    0047 aload 6
-    0049 op_0x5F
-    0050 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0053 op_0x5F
-    0054 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0057 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0060 istore 7
-    0062 iload 7
-    0064 ifeq 78
-    0067 ldc "down"
-    0069 astore 8
-    0071 aload 8
-    0073 astore 5
-    0075 goto 163
-    0078 invokestatic Method(InputKt.EAST:()LDir;)
-    0081 astore 9
-    0083 aload_1
-    0084 aload 9
-    0086 op_0x5F
-    0087 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0090 op_0x5F
-    0091 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0094 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0097 istore 10
-    0099 iload 10
-    0101 ifeq 115
-    0104 ldc "right"
-    0106 astore 11
-    0108 aload 11
-    0110 astore 5
-    0112 goto 163
-    0115 invokestatic Method(InputKt.WEST:()LDir;)
-    0118 astore 12
-    0120 aload_1
-    0121 aload 12
-    0123 op_0x5F
-    0124 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0127 op_0x5F
-    0128 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0131 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0134 istore 13
-    0136 iload 13
-    0138 ifeq 152
-    0141 ldc "left"
-    0143 astore 14
-    0145 aload 14
-    0147 astore 5
-    0149 goto 163
-    0152 ldc "?"
-    0154 astore 15
-    0156 aload 15
-    0158 astore 5
-    0160 goto 163
-    0163 aload 5
-    0165 areturn
-    sub_attr  StackMapTable (137 bytes)
+  code        max_stack=2 max_locals=15
+    0000 goto 3
+    0003 invokestatic Method(InputKt.NORTH:()LDir;)
+    0006 astore_1
+    0007 aload_0
+    0008 aload_1
+    0009 swap
+    0010 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0013 swap
+    0014 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0017 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0020 istore_2
+    0021 iload_2
+    0022 ifeq 34
+    0025 ldc "up"
+    0027 astore_3
+    0028 aload_3
+    0029 astore 4
+    0031 goto 156
+    0034 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0037 astore 5
+    0039 aload_0
+    0040 aload 5
+    0042 swap
+    0043 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0046 swap
+    0047 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0050 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0053 istore 6
+    0055 iload 6
+    0057 ifeq 71
+    0060 ldc "down"
+    0062 astore 7
+    0064 aload 7
+    0066 astore 4
+    0068 goto 156
+    0071 invokestatic Method(InputKt.EAST:()LDir;)
+    0074 astore 8
+    0076 aload_0
+    0077 aload 8
+    0079 swap
+    0080 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0083 swap
+    0084 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0087 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0090 istore 9
+    0092 iload 9
+    0094 ifeq 108
+    0097 ldc "right"
+    0099 astore 10
+    0101 aload 10
+    0103 astore 4
+    0105 goto 156
+    0108 invokestatic Method(InputKt.WEST:()LDir;)
+    0111 astore 11
+    0113 aload_0
+    0114 aload 11
+    0116 swap
+    0117 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0120 swap
+    0121 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0124 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0127 istore 12
+    0129 iload 12
+    0131 ifeq 145
+    0134 ldc "left"
+    0136 astore 13
+    0138 aload 13
+    0140 astore 4
+    0142 goto 156
+    0145 ldc "?"
+    0147 astore 14
+    0149 aload 14
+    0151 astore 4
+    0153 goto 156
+    0156 aload 4
+    0158 areturn
+    sub_attr  StackMapTable (64 bytes)

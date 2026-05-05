@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=9
+  code        max_stack=3 max_locals=8
     0000 iconst_1
     0001 istore_0
     0002 iconst_2
@@ -12,31 +12,31 @@ method        main ()V 0x0019
     0005 istore_2
     0006 iconst_3
     0007 op_0xBC
-    0008 op_0x0A
-    0009 astore 4
+    0008 lconst_1
+    0009 astore 3
     0011 iconst_0
-    0012 istore 5
-    0014 aload 4
-    0016 iload 5
+    0012 istore 4
+    0014 aload 3
+    0016 iload 4
     0018 iload_0
     0019 op_0x4F
     0020 iconst_1
-    0021 istore 6
-    0023 aload 4
-    0025 iload 6
+    0021 istore 5
+    0023 aload 3
+    0025 iload 5
     0027 iload_1
     0028 op_0x4F
     0029 iconst_2
-    0030 istore 7
-    0032 aload 4
-    0034 iload 7
+    0030 istore 6
+    0032 aload 3
+    0034 iload 6
     0036 iload_2
     0037 op_0x4F
-    0038 aload 4
+    0038 aload 3
     0040 invokestatic Method(InputKt.sum:([I)I)
-    0043 istore 8
+    0043 istore 7
     0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 iload 8
+    0048 iload 7
     0050 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0053 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -44,55 +44,49 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        sum ([I)I 0x0019
-  code        max_stack=2 max_locals=14
+  code        max_stack=2 max_locals=12
     0000 iconst_0
     0001 istore_1
     0002 iload_1
     0003 istore_2
-    0004 aload_0
-    0005 astore_3
-    0006 iconst_0
-    0007 istore 4
-    0009 aload_3
-    0010 op_0xBE
-    0011 istore 5
-    0013 goto 16
-    0016 iload 4
-    0018 iload 5
-    0020 op_0xA1
-    0021 nop
-    0022 iconst_4
+    0004 iconst_0
+    0005 istore_3
+    0006 aload_0
+    0007 op_0xBE
+    0008 istore 4
+    0010 goto 13
+    0013 iload_3
+    0014 iload 4
+    0016 if_icmpge 23
+    0019 iconst_1
+    0020 goto 24
     0023 iconst_0
-    0024 goto 28
-    0027 iconst_1
-    0028 istore 6
-    0030 iload 6
-    0032 ifeq 75
-    0035 aload_3
-    0036 iload 4
-    0038 op_0x2E
-    0039 istore 7
-    0041 iload_2
-    0042 istore 8
-    0044 iload 7
-    0046 istore 9
-    0048 iload 8
-    0050 iload 9
-    0052 iadd
-    0053 istore 10
-    0055 iload 10
-    0057 istore_2
-    0058 iconst_1
-    0059 istore 11
-    0061 iload 4
-    0063 iload 11
-    0065 iadd
-    0066 istore 12
-    0068 iload 12
-    0070 istore 4
-    0072 goto 16
-    0075 iload_2
-    0076 istore 13
-    0078 iload 13
-    0080 op_0xAC
-    sub_attr  StackMapTable (72 bytes)
+    0024 istore 5
+    0026 iload 5
+    0028 ifeq 64
+    0031 aload_0
+    0032 iload_3
+    0033 op_0x2E
+    0034 istore 6
+    0036 iload_2
+    0037 istore 7
+    0039 iload 7
+    0041 iload 6
+    0043 iadd
+    0044 istore 8
+    0046 iload 8
+    0048 istore_2
+    0049 iconst_1
+    0050 istore 9
+    0052 iload_3
+    0053 iload 9
+    0055 iadd
+    0056 istore 10
+    0058 iload 10
+    0060 istore_3
+    0061 goto 13
+    0064 iload_2
+    0065 istore 11
+    0067 iload 11
+    0069 ireturn
+    sub_attr  StackMapTable (23 bytes)

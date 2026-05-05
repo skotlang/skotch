@@ -3,72 +3,66 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        greet (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
-    0000 aload_0
+  code        max_stack=2 max_locals=10
+    0000 aconst_null
     0001 astore_1
-    0002 aconst_null
-    0003 astore_2
-    0004 aload_1
-    0005 aload_2
-    0006 if_acmpne 13
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 43
-    0019 aload_1
-    0020 checkcast Class(java/lang/String)
-    0023 astore 4
-    0025 aload 4
-    0027 astore 5
-    0029 aload 5
-    0031 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0034 astore 6
-    0036 aload 6
-    0038 astore 7
-    0040 goto 49
-    0043 aconst_null
-    0044 astore 7
-    0046 goto 49
-    0049 aconst_null
-    0050 astore 8
-    0052 aload 7
-    0054 aload 8
-    0056 if_acmpne 63
-    0059 iconst_0
-    0060 goto 64
-    0063 iconst_1
-    0064 istore 9
-    0066 iload 9
-    0068 ifeq 78
-    0071 aload 7
-    0073 astore 10
-    0075 goto 89
-    0078 ldc "STRANGER"
-    0080 astore 11
-    0082 aload 11
-    0084 astore 10
-    0086 goto 89
-    0089 aload 10
-    0091 checkcast Class(java/lang/String)
-    0094 areturn
-    sub_attr  StackMapTable (185 bytes)
+    0002 aload_0
+    0003 aload_1
+    0004 if_acmpeq 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 35
+    0017 aload_0
+    0018 checkcast Class(java/lang/String)
+    0021 astore_3
+    0022 aload_3
+    0023 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0026 astore 4
+    0028 aload 4
+    0030 astore 5
+    0032 goto 41
+    0035 aconst_null
+    0036 astore 5
+    0038 goto 41
+    0041 aconst_null
+    0042 astore 6
+    0044 aload 5
+    0046 aload 6
+    0048 if_acmpeq 55
+    0051 iconst_1
+    0052 goto 56
+    0055 iconst_0
+    0056 istore 7
+    0058 iload 7
+    0060 ifeq 70
+    0063 aload 5
+    0065 astore 8
+    0067 goto 81
+    0070 ldc "STRANGER"
+    0072 astore 9
+    0074 aload 9
+    0076 astore 8
+    0078 goto 81
+    0081 aload 8
+    0083 checkcast Class(java/lang/String)
+    0086 areturn
+    sub_attr  StackMapTable (40 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=0
     0000 ldc "world"
     0002 invokestatic Method(InputKt.greet:(Ljava/lang/Object;)Ljava/lang/String;)
-    0005 astore_1
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 aload_1
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0013 aconst_null
-    0014 invokestatic Method(InputKt.greet:(Ljava/lang/Object;)Ljava/lang/String;)
-    0017 astore_3
-    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 aload_3
-    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0025 return
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 aconst_null
+    0013 invokestatic Method(InputKt.greet:(Ljava/lang/Object;)Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 swap
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

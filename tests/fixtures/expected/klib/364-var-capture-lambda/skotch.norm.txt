@@ -24,9 +24,6 @@ unique_name=inputkt
         {
           "Class": "InputKt$Lambda$1"
         },
-        {
-          "Class": "InputKt$Lambda$1"
-        },
         "Unit",
         "Unit",
         "Unit",
@@ -104,7 +101,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "InputKt$Lambda$1",
+                        "method_name": "invoke"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -120,7 +127,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      3
                     ]
                   }
                 }
@@ -138,7 +145,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      3
                     ]
                   }
                 }
@@ -147,24 +154,6 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "InputKt$Lambda$1",
-                        "method_name": "invoke"
-                      }
-                    },
-                    "args": [
-                      4
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
                 "value": {
                   "GetField": {
                     "receiver": 2,
@@ -176,12 +165,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 8,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      7
                     ]
                   }
                 }
@@ -191,7 +180,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1,
+        3
+      ]
     },
     {
       "id": 1,
@@ -478,7 +471,6 @@ unique_name=inputkt
             },
             "Int",
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -512,14 +504,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "Const": {
                         "Int": 1
                       }
@@ -528,12 +512,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 3,
-                        "rhs": 4
+                        "lhs": 2,
+                        "rhs": 3
                       }
                     }
                   }
@@ -546,7 +530,7 @@ unique_name=inputkt
                         "receiver": 1,
                         "class_name": "$Ref$0",
                         "field_name": "element",
-                        "value": 5
+                        "value": 4
                       }
                     }
                   }
@@ -555,7 +539,7 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 5
+                      "Local": 4
                     }
                   }
                 }

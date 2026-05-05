@@ -20,10 +20,7 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Int",
-        "Int",
         "Bool",
-        "Int",
-        "Int",
         "Int",
         "Int",
         "Int",
@@ -38,14 +35,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -54,12 +43,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "BinOp": {
                     "op": "CmpLe",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -67,10 +56,33 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 3,
+              "cond": 2,
               "then_block": 1,
               "else_block": 2
             }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 4
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 3
           }
         },
         {
@@ -84,25 +96,16 @@ unique_name=inputkt
                   }
                 }
               }
-            }
-          ],
-          "terminator": {
-            "ReturnValue": 5
-          }
-        },
-        {
-          "stmts": [],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
+            },
             {
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 0
+                  "BinOp": {
+                    "op": "SubI",
+                    "lhs": 0,
+                    "rhs": 5
+                  }
                 }
               }
             },
@@ -110,42 +113,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "BinOp": {
-                    "op": "SubI",
-                    "lhs": 7,
-                    "rhs": 8
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "Call": {
                     "kind": {
                       "Static": 0
                     },
                     "args": [
-                      9
+                      6
                     ]
                   }
                 }
@@ -153,19 +126,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 8,
                 "value": {
                   "BinOp": {
                     "op": "MulI",
-                    "lhs": 6,
-                    "rhs": 10
+                    "lhs": 0,
+                    "rhs": 7
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 8
           }
         }
       ],

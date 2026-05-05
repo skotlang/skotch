@@ -117,9 +117,7 @@ unique_name=inputkt
           "Class": "kotlin/coroutines/Continuation"
         },
         "Any",
-        "Any",
         "String",
-        "Any",
         "String"
       ],
       "blocks": [
@@ -144,14 +142,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Const": {
                     "String": 1
                   }
@@ -160,27 +150,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 3,
-                    "rhs": 4
+                    "lhs": 2,
+                    "rhs": 1
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 5
+            "ReturnValue": 3
           }
         }
       ],
@@ -212,7 +194,10 @@ unique_name=inputkt
           }
         ],
         "is_instance_method": false
-      }
+      },
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 2,

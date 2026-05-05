@@ -346,8 +346,6 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$0"
             },
             "Bool",
-            "Bool",
-            "Bool",
             "Unit",
             "Long",
             {
@@ -376,27 +374,11 @@ unique_name=inputkt
                       }
                     }
                   }
-                },
-                {
-                  "Assign": {
-                    "dest": 2,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 2
-                    }
-                  }
                 }
               ],
               "terminator": {
                 "Branch": {
-                  "cond": 3,
+                  "cond": 1,
                   "then_block": 1,
                   "else_block": 2
                 }
@@ -406,7 +388,7 @@ unique_name=inputkt
               "stmts": [
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 3,
                     "value": {
                       "Const": {
                         "Long": 10
@@ -416,7 +398,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 4,
                     "value": {
                       "Const": "Null"
                     }
@@ -424,15 +406,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 7,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": {
                           "Static": 1
                         },
                         "args": [
-                          5,
-                          6
+                          3,
+                          4
                         ]
                       }
                     }
@@ -440,7 +422,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 8,
+                    "dest": 6,
                     "value": {
                       "Const": {
                         "String": 0
@@ -450,12 +432,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 9,
+                    "dest": 7,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          8
+                          6
                         ]
                       }
                     }
@@ -463,9 +445,9 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 2,
                     "value": {
-                      "Local": 9
+                      "Local": 7
                     }
                   }
                 }
@@ -478,7 +460,7 @@ unique_name=inputkt
               "stmts": [
                 {
                   "Assign": {
-                    "dest": 10,
+                    "dest": 8,
                     "value": {
                       "Const": {
                         "Long": 20
@@ -488,7 +470,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 11,
+                    "dest": 9,
                     "value": {
                       "Const": "Null"
                     }
@@ -496,15 +478,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 12,
+                    "dest": 10,
                     "value": {
                       "Call": {
                         "kind": {
                           "Static": 1
                         },
                         "args": [
-                          10,
-                          11
+                          8,
+                          9
                         ]
                       }
                     }
@@ -512,15 +494,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 2,
                     "value": {
-                      "Local": 12
+                      "Local": 10
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 13,
+                    "dest": 11,
                     "value": {
                       "Const": {
                         "String": 1
@@ -530,12 +512,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 14,
+                    "dest": 12,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          13
+                          11
                         ]
                       }
                     }
@@ -543,9 +525,9 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 2,
                     "value": {
-                      "Local": 14
+                      "Local": 12
                     }
                   }
                 }
@@ -575,13 +557,13 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  5
+                  3
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 7
+                "result_local": 5
               },
               {
                 "block_idx": 2,
@@ -589,17 +571,20 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  10
+                  8
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 12
+                "result_local": 10
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            1
+          ]
         }
       ],
       "constructor": {

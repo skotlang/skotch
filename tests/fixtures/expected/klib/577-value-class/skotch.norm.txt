@@ -20,16 +20,7 @@ unique_name=inputkt
         {
           "Class": "Password"
         },
-        {
-          "Class": "Password"
-        },
-        {
-          "Class": "Password"
-        },
         "Unit",
-        {
-          "Class": "Password"
-        },
         "String",
         "Unit"
       ],
@@ -73,7 +64,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -81,7 +77,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Password",
+                    "field_name": "value"
+                  }
                 }
               }
             },
@@ -97,45 +97,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "GetField": {
-                    "receiver": 5,
-                    "class_name": "Password",
-                    "field_name": "value"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,

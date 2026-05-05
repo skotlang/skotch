@@ -3,34 +3,33 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=7
+  code        max_stack=3 max_locals=6
     0000 iconst_2
     0001 istore_0
     0002 new Class(Multiplier)
     0005 dup
     0006 iload_0
     0007 invokespecial Method(Multiplier.<init>:(I)V)
-    0010 checkcast Class(Multiplier)
-    0013 astore_2
-    0014 iconst_5
-    0015 istore_3
-    0016 aload_2
-    0017 iload_3
-    0018 invokevirtual Method(Multiplier.invoke:(I)I)
-    0021 istore 4
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 iload 4
-    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0031 bipush 21
-    0033 istore 5
-    0035 aload_2
-    0036 iload 5
-    0038 invokevirtual Method(Multiplier.invoke:(I)I)
-    0041 istore 6
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 iload 6
-    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0051 return
+    0010 astore_1
+    0011 iconst_5
+    0012 istore_2
+    0013 aload_1
+    0014 iload_2
+    0015 invokevirtual Method(Multiplier.invoke:(I)I)
+    0018 istore_3
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 iload_3
+    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0026 bipush 21
+    0028 istore 4
+    0030 aload_1
+    0031 iload 4
+    0033 invokevirtual Method(Multiplier.invoke:(I)I)
+    0036 istore 5
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 iload 5
+    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0046 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

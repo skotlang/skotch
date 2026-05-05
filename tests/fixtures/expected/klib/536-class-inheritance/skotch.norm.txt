@@ -20,22 +20,10 @@ unique_name=inputkt
         {
           "Class": "Square"
         },
-        {
-          "Class": "Square"
-        },
-        {
-          "Class": "Square"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Square"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Square"
-        },
         "String",
         "Unit"
       ],
@@ -79,7 +67,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Square",
+                        "method_name": "area"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -87,7 +85,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -99,11 +102,11 @@ unique_name=inputkt
                     "kind": {
                       "Virtual": {
                         "class_name": "Square",
-                        "method_name": "area"
+                        "method_name": "toString"
                       }
                     },
                     "args": [
-                      3
+                      1
                     ]
                   }
                 }
@@ -126,55 +129,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Square",
-                        "method_name": "toString"
-                      }
-                    },
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "GetField": {
-                    "receiver": 9,
+                    "receiver": 1,
                     "class_name": "Shape",
                     "field_name": "name"
                   }
@@ -183,12 +139,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
+                      6
                     ]
                   }
                 }
@@ -198,7 +154,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -473,7 +432,6 @@ unique_name=inputkt
             "String",
             "String",
             "String",
-            "String",
             "Int",
             "String",
             "String",
@@ -498,14 +456,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "String": 0
                       }
@@ -514,19 +464,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "BinOp": {
                         "op": "ConcatStr",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 2
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "Call": {
                         "kind": {
@@ -544,19 +494,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "BinOp": {
                         "op": "ConcatStr",
-                        "lhs": 4,
-                        "rhs": 5
+                        "lhs": 3,
+                        "rhs": 4
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 7,
+                    "dest": 6,
                     "value": {
                       "Const": {
                         "String": 1
@@ -566,12 +516,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 8,
+                    "dest": 7,
                     "value": {
                       "BinOp": {
                         "op": "ConcatStr",
-                        "lhs": 6,
-                        "rhs": 7
+                        "lhs": 5,
+                        "rhs": 6
                       }
                     }
                   }
@@ -591,7 +541,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 8
+                "ReturnValue": 7
               }
             }
           ],
@@ -674,8 +624,6 @@ unique_name=inputkt
             },
             "Int",
             "String",
-            "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -709,26 +657,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "BinOp": {
                         "op": "MulI",
-                        "lhs": 3,
-                        "rhs": 4
+                        "lhs": 1,
+                        "rhs": 1
                       }
                     }
                   }
@@ -748,7 +680,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 5
+                "ReturnValue": 3
               }
             }
           ],

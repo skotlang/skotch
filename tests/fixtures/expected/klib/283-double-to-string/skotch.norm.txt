@@ -17,12 +17,8 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "Int",
-        "Int",
-        "Int",
         "String",
         "Unit",
-        "Double",
-        "Double",
         "Double",
         "String",
         "Unit"
@@ -44,22 +40,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": {
                       "StaticJava": {
@@ -69,8 +49,31 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      0
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Double": 3.14
                   }
                 }
               }
@@ -80,7 +83,13 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Double",
+                        "method_name": "toString",
+                        "descriptor": "(D)Ljava/lang/String;"
+                      }
+                    },
                     "args": [
                       3
                     ]
@@ -92,55 +101,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Const": {
-                    "Double": 3.14
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 6
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Double",
-                        "method_name": "toString",
-                        "descriptor": "(D)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      4
                     ]
                   }
                 }
@@ -150,7 +114,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        3
+      ]
     },
     {
       "id": 1,

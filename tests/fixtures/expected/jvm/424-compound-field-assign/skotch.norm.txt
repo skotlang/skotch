@@ -3,71 +3,45 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=20
+  code        max_stack=3 max_locals=6
     0000 bipush 10
     0002 istore_0
     0003 new Class(Counter)
     0006 dup
     0007 iload_0
     0008 invokespecial Method(Counter.<init>:(I)V)
-    0011 checkcast Class(Counter)
-    0014 astore_2
-    0015 aload_2
-    0016 checkcast Class(Counter)
-    0019 astore_3
-    0020 aload_2
-    0021 checkcast Class(Counter)
-    0024 getfield Field(Counter.n:I)
-    0027 istore 5
-    0029 iconst_5
-    0030 istore 6
-    0032 iload 5
-    0034 iload 6
-    0036 iadd
-    0037 istore 7
-    0039 aload_3
-    0040 iload 7
-    0042 putfield Field(Counter.n:I)
-    0045 aload_2
-    0046 checkcast Class(Counter)
-    0049 astore 8
-    0051 aload_2
-    0052 checkcast Class(Counter)
-    0055 getfield Field(Counter.n:I)
-    0058 istore 10
-    0060 iconst_2
-    0061 istore 11
-    0063 iload 10
-    0065 iload 11
-    0067 isub
-    0068 istore 12
-    0070 aload 8
-    0072 iload 12
-    0074 putfield Field(Counter.n:I)
-    0077 aload_2
-    0078 checkcast Class(Counter)
-    0081 astore 13
-    0083 aload_2
-    0084 checkcast Class(Counter)
-    0087 getfield Field(Counter.n:I)
-    0090 istore 15
-    0092 iconst_3
-    0093 istore 16
-    0095 iload 15
-    0097 iload 16
-    0099 imul
-    0100 istore 17
-    0102 aload 13
-    0104 iload 17
-    0106 putfield Field(Counter.n:I)
-    0109 aload_2
-    0110 checkcast Class(Counter)
-    0113 getfield Field(Counter.n:I)
-    0116 istore 19
-    0118 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0121 iload 19
-    0123 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0126 return
+    0011 astore_1
+    0012 aload_1
+    0013 getfield Field(Counter.n:I)
+    0016 iconst_5
+    0017 iadd
+    0018 istore_2
+    0019 aload_1
+    0020 iload_2
+    0021 putfield Field(Counter.n:I)
+    0024 aload_1
+    0025 getfield Field(Counter.n:I)
+    0028 iconst_2
+    0029 isub
+    0030 istore 3
+    0032 aload_1
+    0033 iload 3
+    0035 putfield Field(Counter.n:I)
+    0038 aload_1
+    0039 getfield Field(Counter.n:I)
+    0042 iconst_3
+    0043 imul
+    0044 istore 4
+    0046 aload_1
+    0047 iload 4
+    0049 putfield Field(Counter.n:I)
+    0052 aload_1
+    0053 getfield Field(Counter.n:I)
+    0056 istore 5
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 iload 5
+    0063 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0066 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

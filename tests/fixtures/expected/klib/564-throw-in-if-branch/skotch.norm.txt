@@ -20,15 +20,13 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Int",
-        "Int",
         "Bool",
         "Int",
         "String",
         {
           "Class": "java/lang/IllegalArgumentException"
         },
-        "Nothing",
-        "Int"
+        "Nothing"
       ],
       "blocks": [
         {
@@ -36,14 +34,6 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 1,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
                 "value": {
                   "Const": {
                     "Int": 0
@@ -53,12 +43,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "BinOp": {
                     "op": "CmpLt",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -66,7 +56,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 3,
+              "cond": 2,
               "then_block": 1,
               "else_block": 2
             }
@@ -76,10 +66,153 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "NewInstance": "java/lang/IllegalArgumentException"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "ConstructorJava": {
+                        "class_name": "java/lang/IllegalArgumentException",
+                        "descriptor": "(Ljava/lang/String;)V"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Throw": 5
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [],
+          "terminator": {
+            "ReturnValue": 0
+          }
+        }
+      ],
+      "return_ty": "Int",
+      "required_params": 1,
+      "param_names": [
+        "n"
+      ],
+      "param_defaults": [
+        null
+      ]
+    },
+    {
+      "id": 1,
+      "name": "guard",
+      "params": [
+        0
+      ],
+      "locals": [
+        "Int",
+        "Int",
+        "Bool",
+        "Int",
+        "String",
+        "String",
+        {
+          "Class": "java/lang/IllegalArgumentException"
+        },
+        "Nothing"
+      ],
+      "blocks": [
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 1,
+                "value": {
+                  "Const": {
+                    "Int": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpGe",
+                    "lhs": 0,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 2,
+              "then_block": 1,
+              "else_block": 2
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "toString",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 4
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -113,176 +246,6 @@ unique_name=inputkt
           ],
           "terminator": {
             "Throw": 6
-          }
-        },
-        {
-          "stmts": [],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "ReturnValue": 8
-          }
-        }
-      ],
-      "return_ty": "Int",
-      "required_params": 1,
-      "param_names": [
-        "n"
-      ],
-      "param_defaults": [
-        null
-      ]
-    },
-    {
-      "id": 1,
-      "name": "guard",
-      "params": [
-        0
-      ],
-      "locals": [
-        "Int",
-        "Int",
-        "Int",
-        "Bool",
-        "Int",
-        "Int",
-        "String",
-        "String",
-        {
-          "Class": "java/lang/IllegalArgumentException"
-        },
-        "Nothing"
-      ],
-      "blocks": [
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Const": {
-                    "Int": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "BinOp": {
-                    "op": "CmpGe",
-                    "lhs": 1,
-                    "rhs": 2
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Branch": {
-              "cond": 3,
-              "then_block": 1,
-              "else_block": 2
-            }
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "toString",
-                        "descriptor": "(I)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      5
-                    ]
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "ReturnValue": 6
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "NewInstance": "java/lang/IllegalArgumentException"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "ConstructorJava": {
-                        "class_name": "java/lang/IllegalArgumentException",
-                        "descriptor": "(Ljava/lang/String;)V"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Throw": 8
           }
         },
         {

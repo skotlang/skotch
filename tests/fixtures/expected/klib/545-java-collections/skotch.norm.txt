@@ -19,63 +19,33 @@ unique_name=inputkt
         {
           "Class": "java/util/LinkedList"
         },
-        {
-          "Class": "java/util/LinkedList"
-        },
         "String",
-        {
-          "Class": "java/util/LinkedList"
-        },
         "String",
         "Bool",
         "String",
-        {
-          "Class": "java/util/LinkedList"
-        },
         "String",
         "Bool",
-        {
-          "Class": "java/util/LinkedList"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "java/util/LinkedList"
-        },
         "Any",
         "Unit",
         {
           "Class": "java/util/TreeMap"
         },
-        {
-          "Class": "java/util/TreeMap"
-        },
         "String",
         "Int",
-        {
-          "Class": "java/util/TreeMap"
-        },
         "String",
         "Int",
         "Any",
         "Any",
         "String",
         "Int",
-        {
-          "Class": "java/util/TreeMap"
-        },
         "String",
         "Int",
         "Any",
         "Any",
-        {
-          "Class": "java/util/TreeMap"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "java/util/TreeMap"
-        },
         "Any",
         "Unit"
       ],
@@ -110,7 +80,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 0
+                  }
                 }
               }
             },
@@ -128,7 +100,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/List",
+                        "method_name": "add",
+                        "descriptor": "(Ljava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -137,7 +121,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 0
+                    "String": 1
                   }
                 }
               }
@@ -145,6 +129,16 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": {
@@ -155,19 +149,9 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3,
-                      4
+                      0,
+                      5
                     ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Const": {
-                    "String": 1
                   }
                 }
               }
@@ -176,7 +160,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/LinkedList",
+                        "method_name": "size",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -184,8 +179,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Const": {
-                    "String": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
                   }
                 }
               }
@@ -197,14 +195,13 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "VirtualJava": {
-                        "class_name": "java/util/List",
-                        "method_name": "add",
-                        "descriptor": "(Ljava/lang/Object;)Z"
+                        "class_name": "java/util/LinkedList",
+                        "method_name": "getFirst",
+                        "descriptor": "()Ljava/lang/Object;"
                       }
                     },
                     "args": [
-                      7,
-                      8
+                      0
                     ]
                   }
                 }
@@ -214,7 +211,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      9
+                    ]
+                  }
                 }
               }
             },
@@ -222,85 +224,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/LinkedList",
-                        "method_name": "size",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      10
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      11
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/LinkedList",
-                        "method_name": "getFirst",
-                        "descriptor": "()Ljava/lang/Object;"
-                      }
-                    },
-                    "args": [
-                      13
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      14
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
                   "NewInstance": "java/util/TreeMap"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 16,
+                "dest": 11,
                 "value": {
                   "Call": {
                     "kind": {
@@ -316,15 +246,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 16
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
+                "dest": 12,
                 "value": {
                   "Const": {
                     "String": 2
@@ -334,7 +256,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 19,
+                "dest": 13,
                 "value": {
                   "Const": {
                     "Int": 2
@@ -344,15 +266,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 20,
-                "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 21,
+                "dest": 14,
                 "value": {
                   "Const": {
                     "String": 2
@@ -362,7 +276,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 22,
+                "dest": 15,
                 "value": {
                   "Const": {
                     "Int": 2
@@ -372,7 +286,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 23,
+                "dest": 16,
                 "value": {
                   "Call": {
                     "kind": {
@@ -383,6 +297,107 @@ unique_name=inputkt
                       }
                     },
                     "args": [
+                      15
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "put",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      11,
+                      14,
+                      16
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 18,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 19,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 20,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 21,
+                "value": {
+                  "Const": {
+                    "Int": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 22,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      21
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/util/Map",
+                        "method_name": "put",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      11,
+                      20,
                       22
                     ]
                   }
@@ -396,15 +411,13 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "VirtualJava": {
-                        "class_name": "java/util/Map",
-                        "method_name": "put",
-                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                        "class_name": "java/util/TreeMap",
+                        "method_name": "size",
+                        "descriptor": "()I"
                       }
                     },
                     "args": [
-                      20,
-                      21,
-                      23
+                      11
                     ]
                   }
                 }
@@ -414,8 +427,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 25,
                 "value": {
-                  "Const": {
-                    "String": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      24
+                    ]
                   }
                 }
               }
@@ -423,132 +439,6 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 26,
-                "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 27,
-                "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 28,
-                "value": {
-                  "Const": {
-                    "String": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 29,
-                "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 30,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      29
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 31,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/Map",
-                        "method_name": "put",
-                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
-                      }
-                    },
-                    "args": [
-                      27,
-                      28,
-                      30
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 32,
-                "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 33,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/util/TreeMap",
-                        "method_name": "size",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      32
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 34,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      33
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 35,
-                "value": {
-                  "Local": 17
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 36,
                 "value": {
                   "Call": {
                     "kind": {
@@ -559,7 +449,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      35
+                      11
                     ]
                   }
                 }
@@ -567,12 +457,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 37,
+                "dest": 27,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      36
+                      26
                     ]
                   }
                 }
@@ -582,7 +472,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        11
+      ]
     },
     {
       "id": 1,

@@ -27,16 +27,12 @@ unique_name=inputkt
         "Unit",
         "Int",
         "Unit",
-        "Any",
-        "Any",
         "Int",
         "Any",
         "Unit",
-        "Any",
         "Int",
         "Any",
         "Unit",
-        "Any",
         "Int",
         "Any",
         "Unit"
@@ -162,22 +158,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
                   "Const": {
                     "Int": 0
                   }
@@ -186,23 +166,23 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 14,
+                "dest": 12,
                 "value": {
                   "ArrayLoad": {
-                    "array": 12,
-                    "index": 13
+                    "array": 4,
+                    "index": 11
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 15,
+                "dest": 13,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      14
+                      12
                     ]
                   }
                 }
@@ -210,15 +190,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 16,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
+                "dest": 14,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -228,10 +200,44 @@ unique_name=inputkt
             },
             {
               "Assign": {
+                "dest": 15,
+                "value": {
+                  "ArrayLoad": {
+                    "array": 4,
+                    "index": 14
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      15
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 17,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
                 "dest": 18,
                 "value": {
                   "ArrayLoad": {
-                    "array": 16,
+                    "array": 4,
                     "index": 17
                   }
                 }
@@ -249,54 +255,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 20,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 21,
-                "value": {
-                  "Const": {
-                    "Int": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 22,
-                "value": {
-                  "ArrayLoad": {
-                    "array": 20,
-                    "index": 21
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      22
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        4
+      ]
     },
     {
       "id": 1,

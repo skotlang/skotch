@@ -19,7 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Any",
-        "Any",
         "Bool",
         {
           "Nullable": "String"
@@ -33,16 +32,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "InstanceOf": {
-                    "obj": 1,
+                    "obj": 0,
                     "type_descriptor": "java/lang/String"
                   }
                 }
@@ -51,7 +42,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 2,
+              "cond": 1,
               "then_block": 1,
               "else_block": 2
             }
@@ -61,17 +52,17 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Local": 0
                 }
               }
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
-                  "Local": 4
+                  "Local": 3
                 }
               }
             }
@@ -84,7 +75,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "Const": "Null"
                 }
@@ -98,7 +89,7 @@ unique_name=inputkt
         {
           "stmts": [],
           "terminator": {
-            "ReturnValue": 3
+            "ReturnValue": 2
           }
         }
       ],

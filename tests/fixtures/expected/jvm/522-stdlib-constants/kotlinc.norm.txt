@@ -14,11 +14,10 @@ method        main ()V 0x0019
     0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0016 iload_0
     0017 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0020 op_0x14
-    0021 nop
-    0022 iload 63
+    0020 ldc2_w long(9223372036854775807)
+    0023 lstore_0
     0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 op_0x1E
+    0027 lload_0
     0028 invokevirtual Method(java/io/PrintStream.println:(J)V)
     0031 bipush 127
     0033 istore_0

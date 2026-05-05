@@ -303,7 +303,11 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1,
+        3
+      ]
     },
     {
       "id": 1,

@@ -3,27 +3,27 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=7
+  code        max_stack=4 max_locals=6
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 aconst_null
     0005 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
     0008 astore_0
     0009 aconst_null
-    0010 astore_2
+    0010 astore_1
     0011 aload_0
     0012 checkcast Class(kotlin/jvm/functions/Function2)
-    0015 astore_3
+    0015 astore_2
     0016 iconst_1
-    0017 istore 4
+    0017 istore 3
     0019 aconst_null
-    0020 astore 5
-    0022 aload_2
-    0023 aload_3
-    0024 iload 4
-    0026 aload 5
+    0020 astore 4
+    0022 aload_1
+    0023 aload_2
+    0024 iload 3
+    0026 aload 4
     0028 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
-    0031 astore 6
+    0031 astore 5
     0033 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
@@ -36,14 +36,14 @@ method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0004 ifeq 40
     0007 aload_1
     0008 checkcast Class(InputKt$pick$1)
-    0011 astore 16
-    0013 aload 16
+    0011 astore 15
+    0013 aload 15
     0015 getfield Field(InputKt$pick$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
     0021 ifeq 40
-    0024 aload 16
-    0026 aload 16
+    0024 aload 15
+    0026 aload 15
     0028 getfield Field(InputKt$pick$1.label:I)
     0031 ldc int(-2147483648)
     0033 isub
@@ -53,114 +53,102 @@ method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0043 dup
     0044 aload_1
     0045 invokespecial Method(InputKt$pick$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 16
-    0050 aload 16
+    0048 astore 15
+    0050 aload 15
     0052 getfield Field(InputKt$pick$1.result:Ljava/lang/Object;)
-    0055 astore 15
+    0055 astore 14
     0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 17
-    0062 op_0x09
-    0063 op_0x37
-    0064 op_0x09
-    0065 aconst_null
-    0066 astore 7
+    0060 astore 16
+    0062 aconst_null
+    0063 astore 10
+    0065 lconst_0
+    0066 lstore 2
     0068 aconst_null
     0069 astore 13
     0071 aconst_null
-    0072 astore 8
-    0074 iconst_0
-    0075 istore 6
-    0077 iconst_0
-    0078 istore 2
-    0080 iconst_0
-    0081 istore 12
-    0083 aconst_null
-    0084 astore 5
-    0086 aconst_null
-    0087 astore 14
+    0072 astore 12
+    0074 lconst_0
+    0075 lstore 8
+    0077 aconst_null
+    0078 astore 6
+    0080 aconst_null
+    0081 astore 7
+    0083 iconst_0
+    0084 istore 5
+    0086 iconst_0
+    0087 istore 11
     0089 aconst_null
-    0090 astore 11
-    0092 op_0x09
-    0093 op_0x37
-    0094 iconst_0
-    0095 aload 16
-    0097 getfield Field(InputKt$pick$1.label:I)
-    0100 tableswitch default=253 low=0 high=2 0=128 1=197 2=225
-    0128 aload 15
-    0130 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0133 iload_0
-    0134 istore_2
-    0135 iload_2
-    0136 ifeq 164
-    0139 op_0x14
-    0140 nop
-    0141 op_0x32
-    0142 op_0x42
-    0143 op_0x21
-    0144 aload 16
-    0146 iconst_1
-    0147 putfield Field(InputKt$pick$1.label:I)
+    0090 astore 4
+    0092 aload 15
+    0094 getfield Field(InputKt$pick$1.label:I)
+    0097 tableswitch default=247 low=0 high=2 0=124 1=191 2=219
+    0124 aload 14
+    0126 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0129 iload_0
+    0130 ifeq 158
+    0133 ldc2_w long(10)
+    0136 lstore_2
+    0137 lload_2
+    0138 aload 15
+    0140 iconst_1
+    0141 putfield Field(InputKt$pick$1.label:I)
+    0144 aload 15
+    0146 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0149 dup
     0150 aload 16
-    0152 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0155 dup
-    0156 aload 17
-    0158 if_acmpne 204
-    0161 aload 17
-    0163 areturn
-    0164 op_0x14
-    0165 nop
-    0166 op_0x34
-    0167 op_0x37
-    0168 op_0x09
-    0169 op_0x16
-    0170 op_0x09
-    0171 aload 16
-    0173 iconst_2
-    0174 putfield Field(InputKt$pick$1.label:I)
+    0152 if_acmpne 198
+    0155 aload 16
+    0157 areturn
+    0158 ldc2_w long(20)
+    0161 lstore 8
+    0163 lload 8
+    0165 aload 15
+    0167 iconst_2
+    0168 putfield Field(InputKt$pick$1.label:I)
+    0171 aload 15
+    0173 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0176 dup
     0177 aload 16
-    0179 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0182 dup
-    0183 aload 17
-    0185 if_acmpne 232
-    0188 aload 17
+    0179 if_acmpne 226
+    0182 aload 16
+    0184 areturn
+    0185 aconst_null
+    0186 astore 13
+    0188 aload 13
     0190 areturn
-    0191 aconst_null
-    0192 astore 14
-    0194 aload 14
-    0196 areturn
-    0197 aload 15
-    0199 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0202 aload 15
-    0204 pop
-    0205 aconst_null
-    0206 astore 5
-    0208 iconst_1
-    0209 istore 6
-    0211 aload 5
-    0213 astore 7
-    0215 iload 6
-    0217 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0220 astore 8
-    0222 aload 8
-    0224 areturn
-    0225 aload 15
-    0227 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0230 aload 15
-    0232 pop
-    0233 aconst_null
-    0234 astore 11
-    0236 aload 11
-    0238 astore 7
-    0240 iconst_2
-    0241 istore 12
-    0243 iload 12
-    0245 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0248 astore 13
-    0250 aload 13
-    0252 areturn
-    0253 new Class(java/lang/IllegalStateException)
-    0256 dup
-    0257 ldc "call to 'resume' before 'invoke' with coroutine"
-    0259 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0262 athrow
-    sub_attr  StackMapTable (414 bytes)
+    0191 aload 14
+    0193 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0196 aload 14
+    0198 pop
+    0199 aconst_null
+    0200 astore 4
+    0202 iconst_1
+    0203 istore 5
+    0205 aload 4
+    0207 astore 6
+    0209 iload 5
+    0211 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0214 astore 7
+    0216 aload 7
+    0218 areturn
+    0219 aload 14
+    0221 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0224 aload 14
+    0226 pop
+    0227 aconst_null
+    0228 astore 10
+    0230 aload 10
+    0232 astore 6
+    0234 iconst_2
+    0235 istore 11
+    0237 iload 11
+    0239 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0242 astore 12
+    0244 aload 12
+    0246 areturn
+    0247 new Class(java/lang/IllegalStateException)
+    0250 dup
+    0251 ldc "call to 'resume' before 'invoke' with coroutine"
+    0253 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0256 athrow
+    sub_attr  StackMapTable (404 bytes)

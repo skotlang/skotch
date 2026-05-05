@@ -18,14 +18,10 @@ method        main ()V 0x0019
     0013 istore 5
     0015 iload 5
     0017 iconst_5
-    0018 op_0xA2
-    0019 nop
-    0020 op_0x40
+    0018 if_icmpge 82
     0021 iload_0
     0022 iload_1
-    0023 op_0xA4
-    0024 nop
-    0025 op_0x0B
+    0023 if_icmple 34
     0026 iload_0
     0027 istore 6
     0029 iload_1
@@ -34,9 +30,7 @@ method        main ()V 0x0019
     0033 istore_1
     0034 iload_1
     0035 iload_2
-    0036 op_0xA4
-    0037 nop
-    0038 op_0x0B
+    0036 if_icmple 47
     0039 iload_1
     0040 istore 6
     0042 iload_2
@@ -45,9 +39,7 @@ method        main ()V 0x0019
     0046 istore_2
     0047 iload_2
     0048 iload_3
-    0049 op_0xA4
-    0050 nop
-    0051 op_0x0B
+    0049 if_icmple 60
     0052 iload_2
     0053 istore 6
     0055 iload_3
@@ -56,9 +48,7 @@ method        main ()V 0x0019
     0059 istore_3
     0060 iload_3
     0061 iload 4
-    0063 op_0xA4
-    0064 nop
-    0065 op_0x0D
+    0063 if_icmple 76
     0066 iload_3
     0067 istore 6
     0069 iload 4

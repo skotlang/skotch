@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=6
+  code        max_stack=4 max_locals=4
     0000 ldc "Alice"
     0002 astore_0
     0003 bipush 30
@@ -13,24 +13,22 @@ method        main ()V 0x0019
     0010 aload_0
     0011 iload_1
     0012 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
-    0015 astore_2
-    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0019 aload_2
-    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0023 ldc "Bob"
-    0025 astore_3
-    0026 bipush 25
-    0028 istore 4
-    0030 new Class(Person)
-    0033 dup
-    0034 aload_3
-    0035 iload 4
-    0037 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
-    0040 astore 5
-    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 aload 5
-    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0050 return
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 swap
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 ldc "Bob"
+    0024 astore_2
+    0025 bipush 25
+    0027 istore 3
+    0029 new Class(Person)
+    0032 dup
+    0033 aload_2
+    0034 iload 3
+    0036 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 swap
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

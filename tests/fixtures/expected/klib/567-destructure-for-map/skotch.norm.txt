@@ -46,12 +46,6 @@ unique_name=inputkt
           "Class": "java/util/Map"
         },
         {
-          "Class": "java/util/Map"
-        },
-        {
-          "Class": "java/util/Map"
-        },
-        {
           "Class": "java/util/Iterator"
         },
         {
@@ -64,9 +58,7 @@ unique_name=inputkt
         },
         "Any",
         "Any",
-        "Any",
         "String",
-        "Any",
         "Unit"
       ],
       "blocks": [
@@ -378,23 +370,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 21,
-                "value": {
-                  "Local": 20
-                }
-              }
-            },
-            {
-              "Assign": {
                 "dest": 22,
-                "value": {
-                  "Local": 21
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
                 "value": {
                   "Call": {
                     "kind": {
@@ -405,7 +381,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      22
+                      20
                     ]
                   }
                 }
@@ -413,7 +389,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 23,
+                "dest": 21,
                 "value": {
                   "Call": {
                     "kind": {
@@ -424,7 +400,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      24
+                      22
                     ]
                   }
                 }
@@ -439,7 +415,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 25,
+                "dest": 23,
                 "value": {
                   "Call": {
                     "kind": {
@@ -450,7 +426,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      23
+                      21
                     ]
                   }
                 }
@@ -459,7 +435,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 25,
+              "cond": 23,
               "then_block": 2,
               "else_block": 3
             }
@@ -469,7 +445,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 26,
+                "dest": 24,
                 "value": {
                   "Call": {
                     "kind": {
@@ -480,7 +456,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      23
+                      21
                     ]
                   }
                 }
@@ -488,10 +464,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 27,
+                "dest": 25,
                 "value": {
                   "CheckCast": {
-                    "obj": 26,
+                    "obj": 24,
                     "target_class": "java/util/Map$Entry"
                   }
                 }
@@ -499,7 +475,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 28,
+                "dest": 26,
                 "value": {
                   "Call": {
                     "kind": {
@@ -510,7 +486,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      27
+                      25
                     ]
                   }
                 }
@@ -518,7 +494,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 29,
+                "dest": 27,
                 "value": {
                   "Call": {
                     "kind": {
@@ -529,7 +505,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      27
+                      25
                     ]
                   }
                 }
@@ -537,15 +513,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 30,
-                "value": {
-                  "Local": 28
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 31,
+                "dest": 28,
                 "value": {
                   "Const": {
                     "String": 3
@@ -555,22 +523,14 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 32,
-                "value": {
-                  "Local": 29
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 33,
+                "dest": 29,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      30,
-                      31,
-                      32
+                      26,
+                      28,
+                      27
                     ]
                   }
                 }
@@ -586,7 +546,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        20
+      ]
     },
     {
       "id": 1,

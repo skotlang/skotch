@@ -3,24 +3,24 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=3
     0000 ldc "hello"
     0002 invokevirtual Method(java/lang/String.length:()I)
-    0005 istore_1
+    0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 iload_1
+    0009 iload_0
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 ldc ""
     0015 invokevirtual Method(java/lang/String.length:()I)
-    0018 istore_3
+    0018 istore_1
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 iload_3
+    0022 iload_1
     0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 ldc "Kotlin"
     0028 invokevirtual Method(java/lang/String.length:()I)
-    0031 istore 5
+    0031 istore 2
     0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 iload 5
+    0036 iload 2
     0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0041 return
 method        main ([Ljava/lang/String;)V 0x1009

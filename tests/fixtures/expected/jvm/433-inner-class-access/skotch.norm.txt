@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=12
+  code        max_stack=5 max_locals=8
     0000 iconst_3
     0001 istore_0
     0002 iconst_4
@@ -13,30 +13,27 @@ method        main ()V 0x0019
     0008 iload_0
     0009 iload_1
     0010 invokespecial Method(Matrix.<init>:(II)V)
-    0013 checkcast Class(Matrix)
-    0016 astore_3
-    0017 iconst_2
-    0018 istore 4
-    0020 iconst_3
-    0021 istore 5
-    0023 iconst_2
-    0024 istore 6
-    0026 iconst_3
-    0027 istore 7
-    0029 new Class(Matrix$Cell)
-    0032 dup
-    0033 aload_3
-    0034 iload 6
-    0036 iload 7
-    0038 invokespecial Method(Matrix$Cell.<init>:(LMatrix;II)V)
-    0041 checkcast Class(Matrix$Cell)
-    0044 checkcast Class(Matrix$Cell)
-    0047 invokevirtual Method(Matrix$Cell.index:()I)
-    0050 istore 11
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 iload 11
-    0057 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0060 return
+    0013 astore_2
+    0014 iconst_2
+    0015 istore_3
+    0016 iconst_3
+    0017 istore 4
+    0019 iconst_2
+    0020 istore 5
+    0022 iconst_3
+    0023 istore 6
+    0025 new Class(Matrix$Cell)
+    0028 dup
+    0029 aload_2
+    0030 iload 5
+    0032 iload 6
+    0034 invokespecial Method(Matrix$Cell.<init>:(LMatrix;II)V)
+    0037 invokevirtual Method(Matrix$Cell.index:()I)
+    0040 istore 7
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 iload 7
+    0047 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0050 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

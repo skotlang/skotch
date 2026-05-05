@@ -19,21 +19,16 @@ unique_name=inputkt
         "String",
         "String",
         "String",
+        "Bool",
+        "Unit",
         "String",
         "String",
         "Bool",
         "Unit",
         "String",
         "String",
-        "String",
         "Bool",
         "Unit",
-        "String",
-        "String",
-        "String",
-        "Bool",
-        "Unit",
-        "String",
         "String",
         "String",
         "Bool",
@@ -56,7 +51,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 1
+                  }
                 }
               }
             },
@@ -74,7 +71,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "contains",
+                        "descriptor": "(Ljava/lang/CharSequence;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -82,8 +91,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "String": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -92,18 +104,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "contains",
-                        "descriptor": "(Ljava/lang/CharSequence;)Z"
-                      }
-                    },
-                    "args": [
-                      3,
-                      4
-                    ]
+                  "Const": {
+                    "String": 2
                   }
                 }
               }
@@ -112,11 +114,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      5
-                    ]
+                  "Const": {
+                    "String": 2
                   }
                 }
               }
@@ -124,34 +123,6 @@ unique_name=inputkt
             {
               "Assign": {
                 "dest": 7,
-                "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
                 "value": {
                   "Call": {
                     "kind": {
@@ -162,9 +133,42 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      8,
-                      9
+                      0,
+                      6
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      7
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Const": {
+                    "String": 3
                   }
                 }
               }
@@ -174,8 +178,15 @@ unique_name=inputkt
                 "dest": 11,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/String",
+                        "method_name": "startsWith",
+                        "descriptor": "(Ljava/lang/String;)Z"
+                      }
+                    },
                     "args": [
+                      0,
                       10
                     ]
                   }
@@ -186,8 +197,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "Const": {
-                    "String": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      11
+                    ]
                   }
                 }
               }
@@ -196,7 +210,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 13,
                 "value": {
-                  "Local": 1
+                  "Const": {
+                    "String": 4
+                  }
                 }
               }
             },
@@ -205,7 +221,7 @@ unique_name=inputkt
                 "dest": 14,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 4
                   }
                 }
               }
@@ -218,12 +234,12 @@ unique_name=inputkt
                     "kind": {
                       "VirtualJava": {
                         "class_name": "java/lang/String",
-                        "method_name": "startsWith",
+                        "method_name": "endsWith",
                         "descriptor": "(Ljava/lang/String;)Z"
                       }
                     },
                     "args": [
-                      13,
+                      0,
                       14
                     ]
                   }
@@ -242,73 +258,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "Const": {
-                    "String": 4
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 19,
-                "value": {
-                  "Const": {
-                    "String": 4
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 20,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "endsWith",
-                        "descriptor": "(Ljava/lang/String;)Z"
-                      }
-                    },
-                    "args": [
-                      18,
-                      19
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 21,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      20
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

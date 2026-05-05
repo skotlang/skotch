@@ -41,21 +41,14 @@ unique_name=inputkt
         {
           "Class": "java/util/List"
         },
-        {
-          "Class": "java/util/List"
-        },
         "Int",
         "Int",
-        {
-          "Class": "java/util/List"
-        },
         {
           "Class": "java/util/Iterator"
         },
         "Bool",
         "Any",
         "Int",
-        "Any",
         "Int",
         "Int",
         "Int",
@@ -360,14 +353,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 23,
                 "value": {
-                  "Local": 22
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
                   "Const": {
                     "Int": 0
                   }
@@ -376,15 +361,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 25,
-                "value": {
-                  "Local": 24
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 26,
+                "dest": 24,
                 "value": {
                   "Local": 23
                 }
@@ -392,7 +369,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 27,
+                "dest": 25,
                 "value": {
                   "Call": {
                     "kind": {
@@ -403,7 +380,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      26
+                      22
                     ]
                   }
                 }
@@ -418,7 +395,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 28,
+                "dest": 26,
                 "value": {
                   "Call": {
                     "kind": {
@@ -429,7 +406,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      27
+                      25
                     ]
                   }
                 }
@@ -438,7 +415,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 28,
+              "cond": 26,
               "then_block": 2,
               "else_block": 3
             }
@@ -448,7 +425,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 29,
+                "dest": 27,
                 "value": {
                   "Call": {
                     "kind": {
@@ -456,6 +433,33 @@ unique_name=inputkt
                         "class_name": "java/util/Iterator",
                         "method_name": "next",
                         "descriptor": "()Ljava/lang/Object;"
+                      }
+                    },
+                    "args": [
+                      25
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 28,
+                "value": {
+                  "Local": 24
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 29,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "intValue",
+                        "descriptor": "()I"
                       }
                     },
                     "args": [
@@ -469,54 +473,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 30,
                 "value": {
-                  "Local": 25
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 31,
-                "value": {
-                  "Local": 29
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 32,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "intValue",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      31
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 33,
-                "value": {
                   "BinOp": {
                     "op": "AddI",
-                    "lhs": 30,
-                    "rhs": 32
+                    "lhs": 28,
+                    "rhs": 29
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 25,
+                "dest": 24,
                 "value": {
-                  "Local": 33
+                  "Local": 30
                 }
               }
             }
@@ -529,20 +498,20 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 34,
+                "dest": 31,
                 "value": {
-                  "Local": 25
+                  "Local": 24
                 }
               }
             },
             {
               "Assign": {
-                "dest": 35,
+                "dest": 32,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      34
+                      31
                     ]
                   }
                 }
@@ -552,7 +521,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        22,
+        24
+      ]
     },
     {
       "id": 1,

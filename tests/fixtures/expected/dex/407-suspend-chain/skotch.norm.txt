@@ -57,4 +57,4 @@ classes       1
   method       fetchData(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=4 ins=1 outs=2 insns=12
   method       main()V flags=0x0019 regs=7 ins=0 outs=4 insns=17
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       processData(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=6 ins=1 outs=1 insns=9
+  method       processData(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=4 ins=1 outs=1 insns=7

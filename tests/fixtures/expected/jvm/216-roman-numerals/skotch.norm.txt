@@ -3,535 +3,502 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=0
     0000 iconst_1
     0001 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
-    0004 astore_1
-    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 aload_1
-    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0012 iconst_4
-    0013 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
-    0016 astore_3
-    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 aload_3
-    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0024 bipush 9
-    0026 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
-    0029 astore 5
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 aload 5
-    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0039 bipush 42
-    0041 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
-    0044 astore 7
-    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0049 aload 7
-    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0054 sipush 1999
-    0057 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
-    0060 astore 9
-    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0065 aload 9
-    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0070 return
+    0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0007 swap
+    0008 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0011 iconst_4
+    0012 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 swap
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 bipush 9
+    0024 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 swap
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 bipush 42
+    0036 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 swap
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 sipush 1999
+    0049 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 swap
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        toRoman (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=123
+  code        max_stack=2 max_locals=122
     0000 ldc ""
     0002 astore_1
     0003 aload_1
     0004 astore_2
     0005 iload_0
     0006 istore_3
-    0007 iload_3
-    0008 istore 4
-    0010 goto 13
-    0013 iload 4
-    0015 istore 5
-    0017 sipush 1000
-    0020 istore 6
-    0022 iload 5
-    0024 iload 6
-    0026 op_0xA2
-    0027 nop
-    0028 iconst_4
+    0007 goto 10
+    0010 iload_3
+    0011 istore 4
+    0013 sipush 1000
+    0016 istore 5
+    0018 iload 4
+    0020 iload 5
+    0022 if_icmplt 29
+    0025 iconst_1
+    0026 goto 30
     0029 iconst_0
-    0030 goto 34
-    0033 iconst_1
-    0034 istore 7
-    0036 iload 7
-    0038 ifeq 83
-    0041 aload_2
+    0030 istore 6
+    0032 iload 6
+    0034 ifeq 77
+    0037 aload_2
+    0038 astore 7
+    0040 ldc "M"
     0042 astore 8
-    0044 ldc "M"
-    0046 astore 9
-    0048 aload 8
-    0050 aload 9
-    0052 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0055 astore 10
-    0057 aload 10
-    0059 astore_2
-    0060 iload 4
+    0044 aload 7
+    0046 aload 8
+    0048 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0051 astore 9
+    0053 aload 9
+    0055 astore_2
+    0056 iload_3
+    0057 istore 10
+    0059 sipush 1000
     0062 istore 11
-    0064 sipush 1000
-    0067 istore 12
-    0069 iload 11
+    0064 iload 10
+    0066 iload 11
+    0068 isub
+    0069 istore 12
     0071 iload 12
-    0073 isub
-    0074 istore 13
-    0076 iload 13
-    0078 istore 4
-    0080 goto 13
-    0083 goto 86
-    0086 iload 4
-    0088 istore 14
-    0090 sipush 900
-    0093 istore 15
-    0095 iload 14
-    0097 iload 15
-    0099 op_0xA2
-    0100 nop
-    0101 iconst_4
-    0102 iconst_0
-    0103 goto 107
-    0106 iconst_1
-    0107 istore 16
-    0109 iload 16
-    0111 ifeq 156
-    0114 aload_2
-    0115 astore 17
-    0117 ldc "CM"
-    0119 astore 18
-    0121 aload 17
+    0073 istore_3
+    0074 goto 10
+    0077 goto 80
+    0080 iload_3
+    0081 istore 13
+    0083 sipush 900
+    0086 istore 14
+    0088 iload 13
+    0090 iload 14
+    0092 if_icmplt 99
+    0095 iconst_1
+    0096 goto 100
+    0099 iconst_0
+    0100 istore 15
+    0102 iload 15
+    0104 ifeq 147
+    0107 aload_2
+    0108 astore 16
+    0110 ldc "CM"
+    0112 astore 17
+    0114 aload 16
+    0116 aload 17
+    0118 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0121 astore 18
     0123 aload 18
-    0125 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0128 astore 19
-    0130 aload 19
-    0132 astore_2
-    0133 iload 4
-    0135 istore 20
-    0137 sipush 900
-    0140 istore 21
-    0142 iload 20
-    0144 iload 21
-    0146 isub
-    0147 istore 22
-    0149 iload 22
-    0151 istore 4
-    0153 goto 86
-    0156 goto 159
-    0159 iload 4
-    0161 istore 23
-    0163 sipush 500
-    0166 istore 24
-    0168 iload 23
-    0170 iload 24
-    0172 op_0xA2
-    0173 nop
-    0174 iconst_4
-    0175 iconst_0
-    0176 goto 180
-    0179 iconst_1
-    0180 istore 25
-    0182 iload 25
-    0184 ifeq 229
-    0187 aload_2
-    0188 astore 26
-    0190 ldc "D"
-    0192 astore 27
-    0194 aload 26
-    0196 aload 27
-    0198 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0201 astore 28
-    0203 aload 28
-    0205 astore_2
-    0206 iload 4
-    0208 istore 29
-    0210 sipush 500
-    0213 istore 30
-    0215 iload 29
-    0217 iload 30
-    0219 isub
-    0220 istore 31
-    0222 iload 31
-    0224 istore 4
-    0226 goto 159
-    0229 goto 232
-    0232 iload 4
-    0234 istore 32
-    0236 sipush 400
-    0239 istore 33
-    0241 iload 32
-    0243 iload 33
-    0245 op_0xA2
-    0246 nop
-    0247 iconst_4
-    0248 iconst_0
-    0249 goto 253
-    0252 iconst_1
-    0253 istore 34
-    0255 iload 34
-    0257 ifeq 302
-    0260 aload_2
-    0261 astore 35
-    0263 ldc "CD"
-    0265 astore 36
-    0267 aload 35
-    0269 aload 36
-    0271 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0274 astore 37
-    0276 aload 37
-    0278 astore_2
-    0279 iload 4
-    0281 istore 38
-    0283 sipush 400
-    0286 istore 39
-    0288 iload 38
-    0290 iload 39
-    0292 isub
-    0293 istore 40
-    0295 iload 40
-    0297 istore 4
-    0299 goto 232
-    0302 goto 305
-    0305 iload 4
-    0307 istore 41
-    0309 bipush 100
-    0311 istore 42
-    0313 iload 41
-    0315 iload 42
-    0317 op_0xA2
-    0318 nop
-    0319 iconst_4
-    0320 iconst_0
-    0321 goto 325
-    0324 iconst_1
-    0325 istore 43
-    0327 iload 43
-    0329 ifeq 373
-    0332 aload_2
-    0333 astore 44
-    0335 ldc "C"
-    0337 astore 45
-    0339 aload 44
-    0341 aload 45
-    0343 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0346 astore 46
-    0348 aload 46
-    0350 astore_2
-    0351 iload 4
-    0353 istore 47
-    0355 bipush 100
-    0357 istore 48
-    0359 iload 47
-    0361 iload 48
-    0363 isub
-    0364 istore 49
-    0366 iload 49
-    0368 istore 4
-    0370 goto 305
-    0373 goto 376
-    0376 iload 4
-    0378 istore 50
-    0380 bipush 90
-    0382 istore 51
-    0384 iload 50
-    0386 iload 51
-    0388 op_0xA2
-    0389 nop
-    0390 iconst_4
-    0391 iconst_0
-    0392 goto 396
-    0395 iconst_1
-    0396 istore 52
-    0398 iload 52
-    0400 ifeq 444
-    0403 aload_2
-    0404 astore 53
-    0406 ldc "XC"
-    0408 astore 54
-    0410 aload 53
-    0412 aload 54
-    0414 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0417 astore 55
-    0419 aload 55
-    0421 astore_2
-    0422 iload 4
-    0424 istore 56
-    0426 bipush 90
-    0428 istore 57
-    0430 iload 56
-    0432 iload 57
-    0434 isub
-    0435 istore 58
-    0437 iload 58
-    0439 istore 4
-    0441 goto 376
-    0444 goto 447
-    0447 iload 4
-    0449 istore 59
-    0451 bipush 50
-    0453 istore 60
-    0455 iload 59
-    0457 iload 60
-    0459 op_0xA2
-    0460 nop
-    0461 iconst_4
-    0462 iconst_0
-    0463 goto 467
-    0466 iconst_1
-    0467 istore 61
-    0469 iload 61
-    0471 ifeq 515
-    0474 aload_2
-    0475 astore 62
-    0477 ldc "L"
-    0479 astore 63
-    0481 aload 62
-    0483 aload 63
-    0485 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0488 astore 64
-    0490 aload 64
-    0492 astore_2
-    0493 iload 4
-    0495 istore 65
-    0497 bipush 50
-    0499 istore 66
-    0501 iload 65
-    0503 iload 66
-    0505 isub
-    0506 istore 67
-    0508 iload 67
-    0510 istore 4
-    0512 goto 447
-    0515 goto 518
-    0518 iload 4
-    0520 istore 68
-    0522 bipush 40
-    0524 istore 69
-    0526 iload 68
-    0528 iload 69
-    0530 op_0xA2
-    0531 nop
-    0532 iconst_4
-    0533 iconst_0
-    0534 goto 538
-    0537 iconst_1
-    0538 istore 70
-    0540 iload 70
-    0542 ifeq 586
-    0545 aload_2
-    0546 astore 71
-    0548 ldc "XL"
-    0550 astore 72
-    0552 aload 71
-    0554 aload 72
-    0556 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0559 astore 73
-    0561 aload 73
-    0563 astore_2
-    0564 iload 4
-    0566 istore 74
-    0568 bipush 40
-    0570 istore 75
-    0572 iload 74
-    0574 iload 75
-    0576 isub
-    0577 istore 76
-    0579 iload 76
-    0581 istore 4
-    0583 goto 518
-    0586 goto 589
-    0589 iload 4
-    0591 istore 77
-    0593 bipush 10
-    0595 istore 78
-    0597 iload 77
-    0599 iload 78
-    0601 op_0xA2
-    0602 nop
-    0603 iconst_4
-    0604 iconst_0
-    0605 goto 609
-    0608 iconst_1
-    0609 istore 79
-    0611 iload 79
-    0613 ifeq 657
-    0616 aload_2
-    0617 astore 80
-    0619 ldc "X"
-    0621 astore 81
-    0623 aload 80
-    0625 aload 81
-    0627 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0630 astore 82
-    0632 aload 82
-    0634 astore_2
-    0635 iload 4
-    0637 istore 83
-    0639 bipush 10
-    0641 istore 84
-    0643 iload 83
-    0645 iload 84
-    0647 isub
-    0648 istore 85
-    0650 iload 85
-    0652 istore 4
-    0654 goto 589
-    0657 goto 660
-    0660 iload 4
-    0662 istore 86
-    0664 bipush 9
-    0666 istore 87
-    0668 iload 86
-    0670 iload 87
-    0672 op_0xA2
-    0673 nop
-    0674 iconst_4
-    0675 iconst_0
-    0676 goto 680
-    0679 iconst_1
-    0680 istore 88
-    0682 iload 88
-    0684 ifeq 728
-    0687 aload_2
-    0688 astore 89
-    0690 ldc "IX"
-    0692 astore 90
-    0694 aload 89
-    0696 aload 90
-    0698 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0701 astore 91
-    0703 aload 91
-    0705 astore_2
-    0706 iload 4
-    0708 istore 92
-    0710 bipush 9
-    0712 istore 93
-    0714 iload 92
-    0716 iload 93
-    0718 isub
-    0719 istore 94
-    0721 iload 94
-    0723 istore 4
-    0725 goto 660
-    0728 goto 731
-    0731 iload 4
-    0733 istore 95
-    0735 iconst_5
-    0736 istore 96
-    0738 iload 95
-    0740 iload 96
-    0742 op_0xA2
-    0743 nop
-    0744 iconst_4
-    0745 iconst_0
-    0746 goto 750
-    0749 iconst_1
-    0750 istore 97
-    0752 iload 97
-    0754 ifeq 797
-    0757 aload_2
-    0758 astore 98
-    0760 ldc "V"
-    0762 astore 99
-    0764 aload 98
-    0766 aload 99
-    0768 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0771 astore 100
-    0773 aload 100
-    0775 astore_2
-    0776 iload 4
-    0778 istore 101
-    0780 iconst_5
-    0781 istore 102
-    0783 iload 101
-    0785 iload 102
-    0787 isub
-    0788 istore 103
-    0790 iload 103
-    0792 istore 4
-    0794 goto 731
-    0797 goto 800
-    0800 iload 4
-    0802 istore 104
-    0804 iconst_4
-    0805 istore 105
-    0807 iload 104
-    0809 iload 105
-    0811 op_0xA2
-    0812 nop
-    0813 iconst_4
-    0814 iconst_0
-    0815 goto 819
-    0818 iconst_1
-    0819 istore 106
-    0821 iload 106
-    0823 ifeq 866
-    0826 aload_2
-    0827 astore 107
-    0829 ldc "IV"
-    0831 astore 108
-    0833 aload 107
-    0835 aload 108
-    0837 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0840 astore 109
-    0842 aload 109
-    0844 astore_2
-    0845 iload 4
-    0847 istore 110
-    0849 iconst_4
-    0850 istore 111
-    0852 iload 110
-    0854 iload 111
-    0856 isub
-    0857 istore 112
-    0859 iload 112
-    0861 istore 4
-    0863 goto 800
-    0866 goto 869
-    0869 iload 4
-    0871 istore 113
-    0873 iconst_1
-    0874 istore 114
-    0876 iload 113
-    0878 iload 114
-    0880 op_0xA2
-    0881 nop
-    0882 iconst_4
-    0883 iconst_0
-    0884 goto 888
-    0887 iconst_1
-    0888 istore 115
-    0890 iload 115
-    0892 ifeq 935
-    0895 aload_2
-    0896 astore 116
-    0898 ldc "I"
-    0900 astore 117
-    0902 aload 116
-    0904 aload 117
-    0906 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0909 astore 118
-    0911 aload 118
-    0913 astore_2
-    0914 iload 4
-    0916 istore 119
-    0918 iconst_1
-    0919 istore 120
-    0921 iload 119
-    0923 iload 120
-    0925 isub
-    0926 istore 121
-    0928 iload 121
-    0930 istore 4
-    0932 goto 869
-    0935 aload_2
-    0936 astore 122
-    0938 aload 122
-    0940 areturn
-    sub_attr  StackMapTable (3674 bytes)
+    0125 astore_2
+    0126 iload_3
+    0127 istore 19
+    0129 sipush 900
+    0132 istore 20
+    0134 iload 19
+    0136 iload 20
+    0138 isub
+    0139 istore 21
+    0141 iload 21
+    0143 istore_3
+    0144 goto 80
+    0147 goto 150
+    0150 iload_3
+    0151 istore 22
+    0153 sipush 500
+    0156 istore 23
+    0158 iload 22
+    0160 iload 23
+    0162 if_icmplt 169
+    0165 iconst_1
+    0166 goto 170
+    0169 iconst_0
+    0170 istore 24
+    0172 iload 24
+    0174 ifeq 217
+    0177 aload_2
+    0178 astore 25
+    0180 ldc "D"
+    0182 astore 26
+    0184 aload 25
+    0186 aload 26
+    0188 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0191 astore 27
+    0193 aload 27
+    0195 astore_2
+    0196 iload_3
+    0197 istore 28
+    0199 sipush 500
+    0202 istore 29
+    0204 iload 28
+    0206 iload 29
+    0208 isub
+    0209 istore 30
+    0211 iload 30
+    0213 istore_3
+    0214 goto 150
+    0217 goto 220
+    0220 iload_3
+    0221 istore 31
+    0223 sipush 400
+    0226 istore 32
+    0228 iload 31
+    0230 iload 32
+    0232 if_icmplt 239
+    0235 iconst_1
+    0236 goto 240
+    0239 iconst_0
+    0240 istore 33
+    0242 iload 33
+    0244 ifeq 287
+    0247 aload_2
+    0248 astore 34
+    0250 ldc "CD"
+    0252 astore 35
+    0254 aload 34
+    0256 aload 35
+    0258 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0261 astore 36
+    0263 aload 36
+    0265 astore_2
+    0266 iload_3
+    0267 istore 37
+    0269 sipush 400
+    0272 istore 38
+    0274 iload 37
+    0276 iload 38
+    0278 isub
+    0279 istore 39
+    0281 iload 39
+    0283 istore_3
+    0284 goto 220
+    0287 goto 290
+    0290 iload_3
+    0291 istore 40
+    0293 bipush 100
+    0295 istore 41
+    0297 iload 40
+    0299 iload 41
+    0301 if_icmplt 308
+    0304 iconst_1
+    0305 goto 309
+    0308 iconst_0
+    0309 istore 42
+    0311 iload 42
+    0313 ifeq 355
+    0316 aload_2
+    0317 astore 43
+    0319 ldc "C"
+    0321 astore 44
+    0323 aload 43
+    0325 aload 44
+    0327 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0330 astore 45
+    0332 aload 45
+    0334 astore_2
+    0335 iload_3
+    0336 istore 46
+    0338 bipush 100
+    0340 istore 47
+    0342 iload 46
+    0344 iload 47
+    0346 isub
+    0347 istore 48
+    0349 iload 48
+    0351 istore_3
+    0352 goto 290
+    0355 goto 358
+    0358 iload_3
+    0359 istore 49
+    0361 bipush 90
+    0363 istore 50
+    0365 iload 49
+    0367 iload 50
+    0369 if_icmplt 376
+    0372 iconst_1
+    0373 goto 377
+    0376 iconst_0
+    0377 istore 51
+    0379 iload 51
+    0381 ifeq 423
+    0384 aload_2
+    0385 astore 52
+    0387 ldc "XC"
+    0389 astore 53
+    0391 aload 52
+    0393 aload 53
+    0395 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0398 astore 54
+    0400 aload 54
+    0402 astore_2
+    0403 iload_3
+    0404 istore 55
+    0406 bipush 90
+    0408 istore 56
+    0410 iload 55
+    0412 iload 56
+    0414 isub
+    0415 istore 57
+    0417 iload 57
+    0419 istore_3
+    0420 goto 358
+    0423 goto 426
+    0426 iload_3
+    0427 istore 58
+    0429 bipush 50
+    0431 istore 59
+    0433 iload 58
+    0435 iload 59
+    0437 if_icmplt 444
+    0440 iconst_1
+    0441 goto 445
+    0444 iconst_0
+    0445 istore 60
+    0447 iload 60
+    0449 ifeq 491
+    0452 aload_2
+    0453 astore 61
+    0455 ldc "L"
+    0457 astore 62
+    0459 aload 61
+    0461 aload 62
+    0463 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0466 astore 63
+    0468 aload 63
+    0470 astore_2
+    0471 iload_3
+    0472 istore 64
+    0474 bipush 50
+    0476 istore 65
+    0478 iload 64
+    0480 iload 65
+    0482 isub
+    0483 istore 66
+    0485 iload 66
+    0487 istore_3
+    0488 goto 426
+    0491 goto 494
+    0494 iload_3
+    0495 istore 67
+    0497 bipush 40
+    0499 istore 68
+    0501 iload 67
+    0503 iload 68
+    0505 if_icmplt 512
+    0508 iconst_1
+    0509 goto 513
+    0512 iconst_0
+    0513 istore 69
+    0515 iload 69
+    0517 ifeq 559
+    0520 aload_2
+    0521 astore 70
+    0523 ldc "XL"
+    0525 astore 71
+    0527 aload 70
+    0529 aload 71
+    0531 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0534 astore 72
+    0536 aload 72
+    0538 astore_2
+    0539 iload_3
+    0540 istore 73
+    0542 bipush 40
+    0544 istore 74
+    0546 iload 73
+    0548 iload 74
+    0550 isub
+    0551 istore 75
+    0553 iload 75
+    0555 istore_3
+    0556 goto 494
+    0559 goto 562
+    0562 iload_3
+    0563 istore 76
+    0565 bipush 10
+    0567 istore 77
+    0569 iload 76
+    0571 iload 77
+    0573 if_icmplt 580
+    0576 iconst_1
+    0577 goto 581
+    0580 iconst_0
+    0581 istore 78
+    0583 iload 78
+    0585 ifeq 627
+    0588 aload_2
+    0589 astore 79
+    0591 ldc "X"
+    0593 astore 80
+    0595 aload 79
+    0597 aload 80
+    0599 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0602 astore 81
+    0604 aload 81
+    0606 astore_2
+    0607 iload_3
+    0608 istore 82
+    0610 bipush 10
+    0612 istore 83
+    0614 iload 82
+    0616 iload 83
+    0618 isub
+    0619 istore 84
+    0621 iload 84
+    0623 istore_3
+    0624 goto 562
+    0627 goto 630
+    0630 iload_3
+    0631 istore 85
+    0633 bipush 9
+    0635 istore 86
+    0637 iload 85
+    0639 iload 86
+    0641 if_icmplt 648
+    0644 iconst_1
+    0645 goto 649
+    0648 iconst_0
+    0649 istore 87
+    0651 iload 87
+    0653 ifeq 695
+    0656 aload_2
+    0657 astore 88
+    0659 ldc "IX"
+    0661 astore 89
+    0663 aload 88
+    0665 aload 89
+    0667 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0670 astore 90
+    0672 aload 90
+    0674 astore_2
+    0675 iload_3
+    0676 istore 91
+    0678 bipush 9
+    0680 istore 92
+    0682 iload 91
+    0684 iload 92
+    0686 isub
+    0687 istore 93
+    0689 iload 93
+    0691 istore_3
+    0692 goto 630
+    0695 goto 698
+    0698 iload_3
+    0699 istore 94
+    0701 iconst_5
+    0702 istore 95
+    0704 iload 94
+    0706 iload 95
+    0708 if_icmplt 715
+    0711 iconst_1
+    0712 goto 716
+    0715 iconst_0
+    0716 istore 96
+    0718 iload 96
+    0720 ifeq 761
+    0723 aload_2
+    0724 astore 97
+    0726 ldc "V"
+    0728 astore 98
+    0730 aload 97
+    0732 aload 98
+    0734 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0737 astore 99
+    0739 aload 99
+    0741 astore_2
+    0742 iload_3
+    0743 istore 100
+    0745 iconst_5
+    0746 istore 101
+    0748 iload 100
+    0750 iload 101
+    0752 isub
+    0753 istore 102
+    0755 iload 102
+    0757 istore_3
+    0758 goto 698
+    0761 goto 764
+    0764 iload_3
+    0765 istore 103
+    0767 iconst_4
+    0768 istore 104
+    0770 iload 103
+    0772 iload 104
+    0774 if_icmplt 781
+    0777 iconst_1
+    0778 goto 782
+    0781 iconst_0
+    0782 istore 105
+    0784 iload 105
+    0786 ifeq 827
+    0789 aload_2
+    0790 astore 106
+    0792 ldc "IV"
+    0794 astore 107
+    0796 aload 106
+    0798 aload 107
+    0800 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0803 astore 108
+    0805 aload 108
+    0807 astore_2
+    0808 iload_3
+    0809 istore 109
+    0811 iconst_4
+    0812 istore 110
+    0814 iload 109
+    0816 iload 110
+    0818 isub
+    0819 istore 111
+    0821 iload 111
+    0823 istore_3
+    0824 goto 764
+    0827 goto 830
+    0830 iload_3
+    0831 istore 112
+    0833 iconst_1
+    0834 istore 113
+    0836 iload 112
+    0838 iload 113
+    0840 if_icmplt 847
+    0843 iconst_1
+    0844 goto 848
+    0847 iconst_0
+    0848 istore 114
+    0850 iload 114
+    0852 ifeq 893
+    0855 aload_2
+    0856 astore 115
+    0858 ldc "I"
+    0860 astore 116
+    0862 aload 115
+    0864 aload 116
+    0866 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0869 astore 117
+    0871 aload 117
+    0873 astore_2
+    0874 iload_3
+    0875 istore 118
+    0877 iconst_1
+    0878 istore 119
+    0880 iload 118
+    0882 iload 119
+    0884 isub
+    0885 istore 120
+    0887 iload 120
+    0889 istore_3
+    0890 goto 830
+    0893 aload_2
+    0894 astore 121
+    0896 aload 121
+    0898 areturn
+    sub_attr  StackMapTable (1013 bytes)

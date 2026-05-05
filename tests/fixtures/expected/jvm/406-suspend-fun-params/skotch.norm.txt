@@ -9,14 +9,14 @@ method        compute (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x00
     0004 ifeq 40
     0007 aload_1
     0008 checkcast Class(InputKt$compute$1)
-    0011 astore 10
-    0013 aload 10
+    0011 astore 9
+    0013 aload 9
     0015 getfield Field(InputKt$compute$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
     0021 ifeq 40
-    0024 aload 10
-    0026 aload 10
+    0024 aload 9
+    0026 aload 9
     0028 getfield Field(InputKt$compute$1.label:I)
     0031 ldc int(-2147483648)
     0033 isub
@@ -26,85 +26,81 @@ method        compute (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x00
     0043 dup
     0044 aload_1
     0045 invokespecial Method(InputKt$compute$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 10
-    0050 aload 10
+    0048 astore 9
+    0050 aload 9
     0052 getfield Field(InputKt$compute$1.result:Ljava/lang/Object;)
-    0055 astore 9
+    0055 astore 8
     0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 11
-    0062 aload 10
+    0060 astore 10
+    0062 aload 9
     0064 getfield Field(InputKt$compute$1.label:I)
-    0067 tableswitch default=166 low=0 high=1 0=88 1=125
-    0088 aload 9
+    0067 tableswitch default=162 low=0 high=1 0=88 1=125
+    0088 aload 8
     0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0093 op_0x14
-    0094 nop
-    0095 op_0x35
-    0096 op_0x41
-    0097 op_0x20
-    0098 aload 10
+    0093 ldc2_w long(10)
+    0096 lstore_2
+    0097 lload_2
+    0098 aload 9
     0100 iload 0
     0102 putfield Field(InputKt$compute$1.I$0:I)
-    0105 aload 10
+    0105 aload 9
     0107 iconst_1
     0108 putfield Field(InputKt$compute$1.label:I)
-    0111 aload 10
+    0111 aload 9
     0113 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
     0116 dup
-    0117 aload 11
+    0117 aload 10
     0119 if_acmpne 139
-    0122 aload 11
+    0122 aload 10
     0124 areturn
-    0125 aload 10
+    0125 aload 9
     0127 getfield Field(InputKt$compute$1.I$0:I)
     0130 istore 0
-    0132 aload 9
+    0132 aload 8
     0134 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0137 aload 9
+    0137 aload 8
     0139 pop
     0140 aconst_null
     0141 astore 4
-    0143 iload_0
+    0143 iconst_2
     0144 istore 5
-    0146 iconst_2
-    0147 istore 6
-    0149 iload 5
-    0151 iload 6
-    0153 imul
-    0154 istore 7
-    0156 iload 7
-    0158 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0161 astore 8
-    0163 aload 8
-    0165 areturn
-    0166 new Class(java/lang/IllegalStateException)
-    0169 dup
-    0170 ldc "call to 'resume' before 'invoke' with coroutine"
-    0172 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0175 athrow
-    sub_attr  StackMapTable (146 bytes)
+    0146 iload_0
+    0147 iload 5
+    0149 imul
+    0150 istore 6
+    0152 iload 6
+    0154 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0157 astore 7
+    0159 aload 7
+    0161 areturn
+    0162 new Class(java/lang/IllegalStateException)
+    0165 dup
+    0166 ldc "call to 'resume' before 'invoke' with coroutine"
+    0168 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0171 athrow
+    sub_attr  StackMapTable (141 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=7
+  code        max_stack=4 max_locals=6
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 aconst_null
     0005 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
     0008 astore_0
     0009 aconst_null
-    0010 astore_2
+    0010 astore_1
     0011 aload_0
     0012 checkcast Class(kotlin/jvm/functions/Function2)
-    0015 astore_3
+    0015 astore_2
     0016 iconst_1
-    0017 istore 4
+    0017 istore 3
     0019 aconst_null
-    0020 astore 5
-    0022 aload_2
-    0023 aload_3
-    0024 iload 4
-    0026 aload 5
+    0020 astore 4
+    0022 aload_1
+    0023 aload_2
+    0024 iload 3
+    0026 aload 4
     0028 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
-    0031 astore 6
+    0031 astore 5
     0033 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

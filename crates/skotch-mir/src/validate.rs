@@ -405,6 +405,8 @@ mod tests {
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
         }
     }
 

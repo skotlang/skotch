@@ -30,24 +30,12 @@ unique_name=inputkt
         {
           "Class": "Wrapper"
         },
-        {
-          "Class": "Wrapper"
-        },
-        {
-          "Class": "Wrapper"
-        },
         "Int",
         "Int",
         "Unit",
-        {
-          "Class": "Wrapper"
-        },
         "Int",
         "Int",
         "Unit",
-        {
-          "Class": "Wrapper"
-        },
         "Int",
         "Int",
         "Unit"
@@ -196,22 +184,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 12
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -220,7 +192,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 15,
+                "dest": 13,
                 "value": {
                   "Call": {
                     "kind": {
@@ -230,9 +202,32 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      13,
-                      14
+                      11,
+                      12
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      13
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 15,
+                "value": {
+                  "Const": {
+                    "Int": 1
                   }
                 }
               }
@@ -241,11 +236,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      15
-                    ]
+                  "Const": {
+                    "Int": 99
                   }
                 }
               }
@@ -254,7 +246,19 @@ unique_name=inputkt
               "Assign": {
                 "dest": 17,
                 "value": {
-                  "Local": 12
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Wrapper",
+                        "method_name": "set"
+                      }
+                    },
+                    "args": [
+                      11,
+                      15,
+                      16
+                    ]
+                  }
                 }
               }
             },
@@ -272,8 +276,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 19,
                 "value": {
-                  "Const": {
-                    "Int": 99
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Wrapper",
+                        "method_name": "get"
+                      }
+                    },
+                    "args": [
+                      11,
+                      18
+                    ]
                   }
                 }
               }
@@ -283,66 +296,9 @@ unique_name=inputkt
                 "dest": 20,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Wrapper",
-                        "method_name": "set"
-                      }
-                    },
-                    "args": [
-                      17,
-                      18,
-                      19
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 21,
-                "value": {
-                  "Local": 12
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 22,
-                "value": {
-                  "Const": {
-                    "Int": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Wrapper",
-                        "method_name": "get"
-                      }
-                    },
-                    "args": [
-                      21,
-                      22
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
-                  "Call": {
                     "kind": "Println",
                     "args": [
-                      23
+                      19
                     ]
                   }
                 }
@@ -352,7 +308,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        11
+      ]
     },
     {
       "id": 1,
@@ -568,8 +527,6 @@ unique_name=inputkt
             },
             "Int",
             "IntArray",
-            "IntArray",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -591,25 +548,9 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "ArrayLoad": {
-                        "array": 3,
-                        "index": 4
+                        "array": 2,
+                        "index": 1
                       }
                     }
                   }
@@ -629,7 +570,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 5
+                "ReturnValue": 3
               }
             }
           ],
@@ -650,9 +591,6 @@ unique_name=inputkt
             "Int",
             "Int",
             "IntArray",
-            "IntArray",
-            "Int",
-            "Int",
             "Unit"
           ],
           "blocks": [
@@ -674,34 +612,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
                       "ArrayStore": {
-                        "array": 4,
-                        "index": 5,
-                        "value": 6
+                        "array": 3,
+                        "index": 1,
+                        "value": 2
                       }
                     }
                   }

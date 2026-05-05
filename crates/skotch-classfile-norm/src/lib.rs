@@ -503,6 +503,13 @@ fn decode_instruction(
         0x06 => ("iconst_3".into(), 1),
         0x07 => ("iconst_4".into(), 1),
         0x08 => ("iconst_5".into(), 1),
+        0x09 => ("lconst_0".into(), 1),
+        0x0A => ("lconst_1".into(), 1),
+        0x0B => ("fconst_0".into(), 1),
+        0x0C => ("fconst_1".into(), 1),
+        0x0D => ("fconst_2".into(), 1),
+        0x0E => ("dconst_0".into(), 1),
+        0x0F => ("dconst_1".into(), 1),
         0x10 if slice.len() >= 2 => (format!("bipush {}", slice[1] as i8), 2),
         0x11 if slice.len() >= 3 => {
             let v = i16::from_be_bytes([slice[1], slice[2]]);
@@ -516,28 +523,69 @@ fn decode_instruction(
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("ldc_w {}", cp_symbolic(cp, idx)), 3)
         }
+        0x14 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ldc2_w {}", cp_symbolic(cp, idx)), 3)
+        }
         0x15 if slice.len() >= 2 => (format!("iload {}", slice[1]), 2),
+        0x16 if slice.len() >= 2 => (format!("lload {}", slice[1]), 2),
+        0x17 if slice.len() >= 2 => (format!("fload {}", slice[1]), 2),
+        0x18 if slice.len() >= 2 => (format!("dload {}", slice[1]), 2),
         0x19 if slice.len() >= 2 => (format!("aload {}", slice[1]), 2),
         0x1A => ("iload_0".into(), 1),
         0x1B => ("iload_1".into(), 1),
         0x1C => ("iload_2".into(), 1),
         0x1D => ("iload_3".into(), 1),
+        0x1E => ("lload_0".into(), 1),
+        0x1F => ("lload_1".into(), 1),
+        0x20 => ("lload_2".into(), 1),
+        0x21 => ("lload_3".into(), 1),
+        0x22 => ("fload_0".into(), 1),
+        0x23 => ("fload_1".into(), 1),
+        0x24 => ("fload_2".into(), 1),
+        0x25 => ("fload_3".into(), 1),
+        0x26 => ("dload_0".into(), 1),
+        0x27 => ("dload_1".into(), 1),
+        0x28 => ("dload_2".into(), 1),
+        0x29 => ("dload_3".into(), 1),
         0x2A => ("aload_0".into(), 1),
         0x2B => ("aload_1".into(), 1),
         0x2C => ("aload_2".into(), 1),
         0x2D => ("aload_3".into(), 1),
         0x36 if slice.len() >= 2 => (format!("istore {}", slice[1]), 2),
+        0x37 if slice.len() >= 2 => (format!("lstore {}", slice[1]), 2),
+        0x38 if slice.len() >= 2 => (format!("fstore {}", slice[1]), 2),
+        0x39 if slice.len() >= 2 => (format!("dstore {}", slice[1]), 2),
         0x3A if slice.len() >= 2 => (format!("astore {}", slice[1]), 2),
         0x3B => ("istore_0".into(), 1),
         0x3C => ("istore_1".into(), 1),
         0x3D => ("istore_2".into(), 1),
         0x3E => ("istore_3".into(), 1),
         0x4B => ("astore_0".into(), 1),
+        0x3F => ("lstore_0".into(), 1),
+        0x40 => ("lstore_1".into(), 1),
+        0x41 => ("lstore_2".into(), 1),
+        0x42 => ("lstore_3".into(), 1),
+        0x43 => ("fstore_0".into(), 1),
+        0x44 => ("fstore_1".into(), 1),
+        0x45 => ("fstore_2".into(), 1),
+        0x46 => ("fstore_3".into(), 1),
+        0x47 => ("dstore_0".into(), 1),
+        0x48 => ("dstore_1".into(), 1),
+        0x49 => ("dstore_2".into(), 1),
+        0x4A => ("dstore_3".into(), 1),
         0x4C => ("astore_1".into(), 1),
         0x4D => ("astore_2".into(), 1),
         0x4E => ("astore_3".into(), 1),
         0x57 => ("pop".into(), 1),
+        0x58 => ("pop2".into(), 1),
         0x59 => ("dup".into(), 1),
+        0x5A => ("dup_x1".into(), 1),
+        0x5B => ("dup_x2".into(), 1),
+        0x5C => ("dup2".into(), 1),
+        0x5D => ("dup2_x1".into(), 1),
+        0x5E => ("dup2_x2".into(), 1),
+        0x5F => ("swap".into(), 1),
         0x60 => ("iadd".into(), 1),
         0x64 => ("isub".into(), 1),
         0x68 => ("imul".into(), 1),
@@ -552,6 +600,64 @@ fn decode_instruction(
         0x9A if slice.len() >= 3 => {
             let off = i16::from_be_bytes([slice[1], slice[2]]);
             (format!("ifne {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9B if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("iflt {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9C if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifge {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9D if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifgt {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9E if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifle {}", (code_position as i32) + off as i32), 3)
+        }
+        0x9F if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmpeq {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA0 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmpne {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA1 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmplt {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA2 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmpge {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA3 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmpgt {}", (code_position as i32) + off as i32),
+                3,
+            )
+        }
+        0xA4 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("if_icmple {}", (code_position as i32) + off as i32),
+                3,
+            )
         }
         0xA5 if slice.len() >= 3 => {
             let off = i16::from_be_bytes([slice[1], slice[2]]);
@@ -605,6 +711,10 @@ fn decode_instruction(
             }
             (buf, p)
         }
+        0xAC => ("ireturn".into(), 1),
+        0xAD => ("lreturn".into(), 1),
+        0xAE => ("freturn".into(), 1),
+        0xAF => ("dreturn".into(), 1),
         0xB0 => ("areturn".into(), 1),
         0xB1 => ("return".into(), 1),
         0xB2 if slice.len() >= 3 => {

@@ -7,13 +7,13 @@ method        addOne (I)I 0x0019
     0000 iload_0
     0001 iconst_1
     0002 iadd
-    0003 op_0xAC
+    0003 ireturn
 method        double (I)I 0x0019
   code        max_stack=2 max_locals=1
     0000 iload_0
     0001 iconst_2
     0002 imul
-    0003 op_0xAC
+    0003 ireturn
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 iconst_5

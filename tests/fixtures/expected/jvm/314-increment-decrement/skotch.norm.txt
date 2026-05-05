@@ -3,50 +3,34 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=16
+  code        max_stack=2 max_locals=3
     0000 iconst_0
-    0001 istore_1
-    0002 iload_1
-    0003 istore_2
-    0004 iconst_1
-    0005 istore_3
-    0006 iload_2
-    0007 iload_3
+    0001 istore_0
+    0002 iload_0
+    0003 iconst_1
+    0004 iadd
+    0005 istore_0
+    0006 iload_0
+    0007 iconst_1
     0008 iadd
-    0009 istore_1
-    0010 iload_1
-    0011 istore 5
-    0013 iconst_1
-    0014 istore 6
-    0016 iload 5
-    0018 iload 6
-    0020 iadd
-    0021 istore_1
-    0022 iload_1
-    0023 istore 8
-    0025 iconst_1
-    0026 istore 9
-    0028 iload 8
-    0030 iload 9
-    0032 iadd
-    0033 istore_1
-    0034 iload_1
-    0035 istore 11
-    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0040 iload 11
-    0042 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0045 iload_1
-    0046 istore 12
-    0048 iconst_1
-    0049 istore 13
-    0051 iload 12
-    0053 iload 13
-    0055 isub
-    0056 istore 15
-    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0061 iload 15
-    0063 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0066 return
+    0009 istore_0
+    0010 iload_0
+    0011 iconst_1
+    0012 iadd
+    0013 istore_0
+    0014 iload_0
+    0015 istore 1
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 iload 1
+    0022 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0025 iload_0
+    0026 iconst_1
+    0027 isub
+    0028 istore 2
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 iload 2
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

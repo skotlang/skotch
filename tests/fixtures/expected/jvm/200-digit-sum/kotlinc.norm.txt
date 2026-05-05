@@ -5,9 +5,7 @@ access_flags  0x0031
 method        digitSum (I)I 0x0019
   code        max_stack=3 max_locals=3
     0000 iload_0
-    0001 op_0x9C
-    0002 nop
-    0003 iconst_5
+    0001 ifge 9
     0004 iload_0
     0005 op_0x74
     0006 goto 10
@@ -16,9 +14,8 @@ method        digitSum (I)I 0x0019
     0011 iconst_0
     0012 istore_2
     0013 iload_1
-    0014 op_0x9E
-    0015 nop
-    0016 ldc NameAndType(main:()V)
+    0014 ifle 32
+    0017 iload_2
     0018 iload_1
     0019 bipush 10
     0021 irem
@@ -30,7 +27,7 @@ method        digitSum (I)I 0x0019
     0028 istore_1
     0029 goto 13
     0032 iload_2
-    0033 op_0xAC
+    0033 ireturn
     sub_attr  StackMapTable (11 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1

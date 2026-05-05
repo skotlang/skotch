@@ -3,29 +3,24 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=2
     0000 new Class(Counter)
     0003 dup
     0004 invokespecial Method(Counter.<init>:()V)
-    0007 checkcast Class(Counter)
-    0010 astore_1
-    0011 aload_1
-    0012 checkcast Class(Counter)
-    0015 invokevirtual Method(Counter.increment:()V)
-    0018 aload_1
-    0019 checkcast Class(Counter)
-    0022 invokevirtual Method(Counter.increment:()V)
-    0025 aload_1
-    0026 checkcast Class(Counter)
-    0029 invokevirtual Method(Counter.increment:()V)
-    0032 aload_1
-    0033 checkcast Class(Counter)
-    0036 getfield Field(Counter.count:I)
-    0039 istore 6
-    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0044 iload 6
-    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0049 return
+    0007 astore_0
+    0008 aload_0
+    0009 invokevirtual Method(Counter.increment:()V)
+    0012 aload_0
+    0013 invokevirtual Method(Counter.increment:()V)
+    0016 aload_0
+    0017 invokevirtual Method(Counter.increment:()V)
+    0020 aload_0
+    0021 getfield Field(Counter.count:I)
+    0024 istore_1
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload_1
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

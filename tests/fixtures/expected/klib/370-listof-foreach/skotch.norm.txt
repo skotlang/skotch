@@ -34,13 +34,7 @@ unique_name=inputkt
           "Class": "java/util/List"
         },
         {
-          "Class": "java/util/List"
-        },
-        {
           "Class": "InputKt$Lambda$0"
-        },
-        {
-          "Class": "java/util/List"
         },
         {
           "Class": "InputKt$Lambda$1"
@@ -250,21 +244,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 15,
                 "value": {
-                  "Local": 14
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
-                "value": {
                   "NewInstance": "InputKt$Lambda$0"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 16,
+                "dest": 15,
                 "value": {
                   "Call": {
                     "kind": {
@@ -277,15 +263,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
+                "dest": 16,
                 "value": {
                   "NewInstance": "InputKt$Lambda$1"
                 }
@@ -293,7 +271,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 18,
+                "dest": 16,
                 "value": {
                   "Call": {
                     "kind": {
@@ -306,7 +284,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 19,
+                "dest": 17,
                 "value": {
                   "Call": {
                     "kind": {
@@ -317,7 +295,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      17
+                      14
                     ]
                   }
                 }
@@ -332,7 +310,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 20,
+                "dest": 18,
                 "value": {
                   "Call": {
                     "kind": {
@@ -343,7 +321,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      19
+                      17
                     ]
                   }
                 }
@@ -352,7 +330,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 20,
+              "cond": 18,
               "then_block": 2,
               "else_block": 3
             }
@@ -362,7 +340,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 21,
+                "dest": 19,
                 "value": {
                   "Call": {
                     "kind": {
@@ -373,7 +351,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      19
+                      17
                     ]
                   }
                 }
@@ -381,7 +359,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 22,
+                "dest": 20,
                 "value": {
                   "Call": {
                     "kind": {
@@ -391,8 +369,8 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      18,
-                      21
+                      16,
+                      19
                     ]
                   }
                 }
@@ -408,7 +386,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        14
+      ]
     },
     {
       "id": 1,
@@ -621,7 +602,6 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$0"
             },
             "Any",
-            "Any",
             "Unit"
           ],
           "blocks": [
@@ -631,18 +611,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          2
+                          1
                         ]
                       }
                     }
@@ -714,7 +686,6 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$1"
             },
             "Any",
-            "Any",
             "Unit"
           ],
           "blocks": [
@@ -724,18 +695,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          2
+                          1
                         ]
                       }
                     }

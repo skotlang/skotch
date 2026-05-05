@@ -23,7 +23,6 @@ unique_name=inputkt
           "Class": "kotlin/jvm/functions/Function1"
         },
         "Int",
-        "Int",
         "Any",
         "Any"
       ],
@@ -34,14 +33,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": {
                       "StaticJava": {
@@ -51,7 +42,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      1
                     ]
                   }
                 }
@@ -59,7 +50,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": {
@@ -70,7 +61,7 @@ unique_name=inputkt
                     },
                     "args": [
                       0,
-                      3
+                      2
                     ]
                   }
                 }
@@ -78,7 +69,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],
@@ -454,7 +445,6 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            "Int",
             "Any"
           ],
           "blocks": [
@@ -483,14 +473,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "Const": {
                         "Int": 2
                       }
@@ -499,19 +481,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "BinOp": {
                         "op": "MulI",
-                        "lhs": 3,
-                        "rhs": 4
+                        "lhs": 2,
+                        "rhs": 3
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": {
@@ -522,7 +504,7 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          5
+                          4
                         ]
                       }
                     }
@@ -530,7 +512,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 6
+                "ReturnValue": 5
               }
             }
           ],
@@ -599,7 +581,6 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            "Int",
             "Any"
           ],
           "blocks": [
@@ -628,14 +609,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "Const": {
                         "Int": 10
                       }
@@ -644,19 +617,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 3,
-                        "rhs": 4
+                        "lhs": 2,
+                        "rhs": 3
                       }
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "Call": {
                         "kind": {
@@ -667,7 +640,7 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          5
+                          4
                         ]
                       }
                     }
@@ -675,7 +648,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 6
+                "ReturnValue": 5
               }
             }
           ],

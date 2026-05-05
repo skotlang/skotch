@@ -19,12 +19,6 @@ unique_name=inputkt
         {
           "Class": "Hello"
         },
-        {
-          "Class": "Hello"
-        },
-        {
-          "Class": "Hello"
-        },
         "String",
         "Unit"
       ],
@@ -56,22 +50,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -80,7 +58,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -88,12 +66,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      3
+                      1
                     ]
                   }
                 }
@@ -103,7 +81,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

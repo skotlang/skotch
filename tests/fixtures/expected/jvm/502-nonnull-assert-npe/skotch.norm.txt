@@ -3,41 +3,37 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=8
+  code        max_stack=3 max_locals=6
     0000 ldc "hello"
     0002 astore_0
-    0003 aload_0
+    0003 aconst_null
     0004 astore_1
-    0005 aload_1
-    0006 astore_2
-    0007 aconst_null
-    0008 astore_3
-    0009 aload_2
-    0010 aload_3
-    0011 if_acmpeq 18
+    0005 aload_0
+    0006 aload_1
+    0007 if_acmpne 14
+    0010 iconst_1
+    0011 goto 15
     0014 iconst_0
-    0015 goto 19
-    0018 iconst_1
-    0019 istore 4
-    0021 iload 4
-    0023 ifeq 38
-    0026 new Class(java/lang/NullPointerException)
-    0029 dup
-    0030 invokespecial Method(java/lang/NullPointerException.<init>:()V)
-    0033 astore 5
-    0035 aload 5
-    0037 athrow
-    0038 aload_2
-    0039 checkcast Class(java/lang/String)
-    0042 astore 6
-    0044 aload 6
-    0046 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0049 astore 7
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 aload 7
-    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0059 return
-    sub_attr  StackMapTable (61 bytes)
+    0015 istore_2
+    0016 iload_2
+    0017 ifeq 30
+    0020 new Class(java/lang/NullPointerException)
+    0023 dup
+    0024 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0027 astore_3
+    0028 aload_3
+    0029 athrow
+    0030 aload_0
+    0031 checkcast Class(java/lang/String)
+    0034 astore 4
+    0036 aload 4
+    0038 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0041 astore 5
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 aload 5
+    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0051 return
+    sub_attr  StackMapTable (17 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -3,40 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=4
     0000 ldc "Hello, World!"
-    0002 astore_1
-    0003 aload_1
+    0002 astore_0
+    0003 aload_0
     0004 invokevirtual Method(java/lang/String.length:()I)
-    0007 istore_3
+    0007 istore_1
     0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0011 iload_3
+    0011 iload_1
     0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0015 aload_1
+    0015 aload_0
     0016 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0019 astore 5
-    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 aload 5
-    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0029 aload_1
-    0030 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
-    0033 astore 7
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 aload 7
-    0040 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0043 aload_1
-    0044 invokevirtual Method(java/lang/String.isEmpty:()Z)
-    0047 istore 9
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 iload 9
-    0054 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0057 ldc ""
-    0059 invokevirtual Method(java/lang/String.isEmpty:()Z)
-    0062 istore 11
-    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0067 iload 11
-    0069 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0072 return
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 swap
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 aload_0
+    0027 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 aload_0
+    0038 invokevirtual Method(java/lang/String.isEmpty:()Z)
+    0041 istore 2
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 iload 2
+    0048 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0051 ldc ""
+    0053 invokevirtual Method(java/lang/String.isEmpty:()Z)
+    0056 istore 3
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 iload 3
+    0063 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0066 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -18,13 +18,9 @@ unique_name=inputkt
       "locals": [
         "Char",
         "Char",
-        "Char",
-        "Char",
-        "Char",
         "Unit",
         "Char",
         "Unit",
-        "Char",
         "Char",
         "Bool",
         "Unit"
@@ -46,13 +42,51 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "Int": 10
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      0
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Const": {
+                    "Int": 90
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 10
@@ -62,39 +96,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      4
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
                 "dest": 6,
                 "value": {
-                  "Const": {
-                    "Int": 90
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 5
                   }
                 }
               }
@@ -111,55 +118,16 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "Int": 10
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "CmpEq",
-                    "lhs": 8,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      10
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        1
+      ]
     },
     {
       "id": 1,

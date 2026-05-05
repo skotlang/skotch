@@ -23,7 +23,6 @@ unique_name=inputkt
         {
           "Class": "kotlin/coroutines/Continuation"
         },
-        "Bool",
         "Any",
         "Long",
         "Any",
@@ -37,19 +36,10 @@ unique_name=inputkt
       ],
       "blocks": [
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
             "Branch": {
-              "cond": 2,
+              "cond": 0,
               "then_block": 1,
               "else_block": 2
             }
@@ -59,7 +49,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "Const": {
                     "Long": 10
@@ -69,14 +59,14 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": {
                       "Static": 2
                     },
                     "args": [
-                      4,
+                      3,
                       1
                     ]
                   }
@@ -85,7 +75,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -95,9 +85,79 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
-                  "Local": 5
+                  "Local": 4
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "valueOf",
+                        "descriptor": "(I)Ljava/lang/Integer;"
+                      }
+                    },
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "ReturnValue": 9
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Const": {
+                    "Long": 20
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Static": 2
+                    },
+                    "args": [
+                      6,
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 2,
+                "value": {
+                  "Local": 7
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
                 }
               }
             },
@@ -114,7 +174,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      6
+                      8
                     ]
                   }
                 }
@@ -129,77 +189,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Const": {
-                    "Long": 20
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Static": 2
-                    },
-                    "args": [
-                      7,
-                      1
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "Int": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
                 "dest": 11,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "ReturnValue": 11
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 12,
                 "value": {
                   "Const": "Null"
                 }
@@ -207,7 +197,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 12
+            "ReturnValue": 11
           }
         }
       ],
@@ -240,13 +230,13 @@ unique_name=inputkt
             "callee_class": "kotlinx/coroutines/DelayKt",
             "callee_method": "delay",
             "args": [
-              4
+              3
             ],
             "arg_tys": [
               "Long"
             ],
             "return_ty": "Unit",
-            "result_local": 5
+            "result_local": 4
           },
           {
             "block_idx": 2,
@@ -254,13 +244,13 @@ unique_name=inputkt
             "callee_class": "kotlinx/coroutines/DelayKt",
             "callee_method": "delay",
             "args": [
-              7
+              6
             ],
             "arg_tys": [
               "Long"
             ],
             "return_ty": "Unit",
-            "result_local": 8
+            "result_local": 7
           }
         ],
         "is_instance_method": false
@@ -839,13 +829,13 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  4
+                  3
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 5
+                "result_local": 4
               },
               {
                 "block_idx": 2,
@@ -853,13 +843,13 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  7
+                  6
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 8
+                "result_local": 7
               }
             ],
             "is_instance_method": false
@@ -965,13 +955,13 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  4
+                  3
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 5
+                "result_local": 4
               },
               {
                 "block_idx": 2,
@@ -979,13 +969,13 @@ unique_name=inputkt
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  7
+                  6
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 8
+                "result_local": 7
               }
             ],
             "is_instance_method": false

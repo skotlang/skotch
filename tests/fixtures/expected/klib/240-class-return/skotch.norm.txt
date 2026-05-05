@@ -21,8 +21,6 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Int",
-        "Int",
-        "Int",
         {
           "Class": "Pair"
         }
@@ -34,37 +32,21 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "NewInstance": "Pair"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": {
                       "Constructor": "Pair"
                     },
                     "args": [
-                      2,
-                      3
+                      0,
+                      1
                     ]
                   }
                 }
@@ -72,7 +54,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 2
           }
         }
       ],
@@ -99,17 +81,8 @@ unique_name=inputkt
         {
           "Class": "Pair"
         },
-        {
-          "Class": "Pair"
-        },
-        {
-          "Class": "Pair"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Pair"
-        },
         "Int",
         "Unit"
       ],
@@ -156,7 +129,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "Pair",
+                    "field_name": "first"
+                  }
                 }
               }
             },
@@ -164,7 +141,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -173,9 +155,9 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "GetField": {
-                    "receiver": 4,
+                    "receiver": 2,
                     "class_name": "Pair",
-                    "field_name": "first"
+                    "field_name": "second"
                   }
                 }
               }
@@ -192,45 +174,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "GetField": {
-                    "receiver": 7,
-                    "class_name": "Pair",
-                    "field_name": "second"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 2,

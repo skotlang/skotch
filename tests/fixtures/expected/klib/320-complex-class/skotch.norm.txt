@@ -19,33 +19,12 @@ unique_name=inputkt
         {
           "Class": "Stack"
         },
-        {
-          "Class": "Stack"
-        },
-        {
-          "Class": "Stack"
-        },
         "Unit",
-        {
-          "Class": "Stack"
-        },
         "Unit",
-        {
-          "Class": "Stack"
-        },
         "Unit",
-        {
-          "Class": "Stack"
-        },
         "Int",
         "Unit",
-        {
-          "Class": "Stack"
-        },
         "Unit",
-        {
-          "Class": "Stack"
-        },
         "Int",
         "Unit"
       ],
@@ -77,7 +56,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Stack",
+                        "method_name": "push"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -85,7 +74,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Stack",
+                        "method_name": "push"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -101,7 +100,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -111,7 +110,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Stack",
+                        "method_name": "size"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -120,12 +129,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Stack",
-                        "method_name": "push"
-                      }
-                    },
+                    "kind": "Println",
                     "args": [
                       4
                     ]
@@ -137,7 +141,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Stack",
+                        "method_name": "pop"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -149,11 +163,11 @@ unique_name=inputkt
                     "kind": {
                       "Virtual": {
                         "class_name": "Stack",
-                        "method_name": "push"
+                        "method_name": "size"
                       }
                     },
                     "args": [
-                      6
+                      0
                     ]
                   }
                 }
@@ -163,101 +177,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Stack",
-                        "method_name": "size"
-                      }
-                    },
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Stack",
-                        "method_name": "pop"
-                      }
-                    },
-                    "args": [
-                      11
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Stack",
-                        "method_name": "size"
-                      }
-                    },
-                    "args": [
-                      13
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      14
+                      7
                     ]
                   }
                 }
@@ -267,7 +190,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,
@@ -482,7 +408,6 @@ unique_name=inputkt
             },
             "Int",
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -504,14 +429,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "Int": 1
                       }
@@ -520,12 +437,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 2
                       }
                     }
                   }
@@ -534,7 +451,7 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 1,
                     "value": {
-                      "Local": 4
+                      "Local": 3
                     }
                   }
                 },
@@ -569,7 +486,6 @@ unique_name=inputkt
             },
             "Int",
             "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -591,14 +507,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "Const": {
                         "Int": 1
                       }
@@ -607,12 +515,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "BinOp": {
                         "op": "SubI",
-                        "lhs": 2,
-                        "rhs": 3
+                        "lhs": 1,
+                        "rhs": 2
                       }
                     }
                   }
@@ -621,7 +529,7 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 1,
                     "value": {
-                      "Local": 4
+                      "Local": 3
                     }
                   }
                 },
@@ -654,7 +562,6 @@ unique_name=inputkt
             {
               "Class": "Stack"
             },
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -674,14 +581,6 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 2,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 0,
                     "value": {
                       "PutField": {
@@ -695,7 +594,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 2
+                "ReturnValue": 1
               }
             }
           ],

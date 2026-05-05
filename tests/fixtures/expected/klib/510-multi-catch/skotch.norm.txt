@@ -24,9 +24,6 @@ unique_name=inputkt
           "Class": "java/lang/IllegalArgumentException"
         },
         "String",
-        {
-          "Class": "java/lang/IllegalArgumentException"
-        },
         "String",
         "Unit"
       ],
@@ -104,14 +101,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -121,7 +110,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -129,13 +118,13 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
                       3,
-                      5
+                      4
                     ]
                   }
                 }

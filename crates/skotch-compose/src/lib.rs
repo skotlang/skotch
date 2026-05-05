@@ -718,6 +718,8 @@ mod tests {
                 args: vec![],
                 retention: AnnotationRetention::Runtime,
             }],
+            named_locals: Vec::new(),
+            is_private: false,
         }
     }
 

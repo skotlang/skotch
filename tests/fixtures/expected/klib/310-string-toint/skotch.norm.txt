@@ -20,19 +20,13 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit",
         "String",
         "Double",
         "Double",
         "Double",
-        "Double",
-        "Double",
         "Unit",
         "String",
-        "Long",
-        "Long",
         "Long",
         "Long",
         "Long",
@@ -74,22 +68,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Const": {
                     "Int": 8
                   }
@@ -98,12 +76,35 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
-                    "lhs": 3,
-                    "rhs": 4
+                    "lhs": 1,
+                    "rhs": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -113,7 +114,13 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Double",
+                        "method_name": "parseDouble",
+                        "descriptor": "(Ljava/lang/String;)D"
+                      }
+                    },
                     "args": [
                       5
                     ]
@@ -126,7 +133,7 @@ unique_name=inputkt
                 "dest": 7,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "Double": 1.0
                   }
                 }
               }
@@ -135,17 +142,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Double",
-                        "method_name": "parseDouble",
-                        "descriptor": "(Ljava/lang/String;)D"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
+                  "BinOp": {
+                    "op": "AddD",
+                    "lhs": 6,
+                    "rhs": 7
                   }
                 }
               }
@@ -154,48 +154,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 9
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Const": {
-                    "Double": 1.0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "BinOp": {
-                    "op": "AddD",
-                    "lhs": 10,
-                    "rhs": 11
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      12
+                      8
                     ]
                   }
                 }
@@ -203,7 +165,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 14,
+                "dest": 10,
                 "value": {
                   "Const": {
                     "String": 2
@@ -213,7 +175,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 15,
+                "dest": 11,
                 "value": {
                   "Call": {
                     "kind": {
@@ -224,7 +186,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      14
+                      10
                     ]
                   }
                 }
@@ -232,23 +194,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 16,
-                "value": {
-                  "Local": 15
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 17,
-                "value": {
-                  "Local": 16
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 18,
+                "dest": 12,
                 "value": {
                   "Const": {
                     "Long": 2
@@ -258,24 +204,24 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 19,
+                "dest": 13,
                 "value": {
                   "BinOp": {
                     "op": "MulL",
-                    "lhs": 17,
-                    "rhs": 18
+                    "lhs": 11,
+                    "rhs": 12
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 20,
+                "dest": 14,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      19
+                      13
                     ]
                   }
                 }
@@ -285,7 +231,12 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1,
+        6,
+        11
+      ]
     },
     {
       "id": 1,

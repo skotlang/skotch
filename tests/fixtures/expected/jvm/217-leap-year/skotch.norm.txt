@@ -3,106 +3,94 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isLeapYear (I)Z 0x0019
-  code        max_stack=4 max_locals=18
-    0000 iload_0
-    0001 istore_1
-    0002 sipush 400
-    0005 istore_2
-    0006 iload_1
-    0007 iload_2
-    0008 irem
+  code        max_stack=4 max_locals=15
+    0000 sipush 400
+    0003 istore_1
+    0004 iload_0
+    0005 iload_1
+    0006 irem
+    0007 istore_2
+    0008 iconst_0
     0009 istore_3
-    0010 iconst_0
-    0011 istore 4
-    0013 iload_3
-    0014 iload 4
-    0016 op_0x9F
-    0017 nop
-    0018 iconst_4
+    0010 iload_2
+    0011 iload_3
+    0012 if_icmpne 19
+    0015 iconst_1
+    0016 goto 20
     0019 iconst_0
-    0020 goto 24
-    0023 iconst_1
-    0024 istore 5
-    0026 iload 5
-    0028 ifeq 37
-    0031 iconst_1
-    0032 istore 6
-    0034 iload 6
-    0036 op_0xAC
-    0037 goto 40
+    0020 istore 4
+    0022 iload 4
+    0024 ifeq 33
+    0027 iconst_1
+    0028 istore 5
+    0030 iload 5
+    0032 ireturn
+    0033 goto 36
+    0036 bipush 100
+    0038 istore 6
     0040 iload_0
-    0041 istore 7
-    0043 bipush 100
-    0045 istore 8
-    0047 iload 7
-    0049 iload 8
-    0051 irem
-    0052 istore 9
-    0054 iconst_0
-    0055 istore 10
-    0057 iload 9
-    0059 iload 10
-    0061 op_0x9F
-    0062 nop
-    0063 iconst_4
-    0064 iconst_0
-    0065 goto 69
-    0068 iconst_1
-    0069 istore 11
-    0071 iload 11
-    0073 ifeq 82
-    0076 iconst_0
-    0077 istore 12
-    0079 iload 12
-    0081 op_0xAC
-    0082 goto 85
-    0085 iload_0
-    0086 istore 13
-    0088 iconst_4
-    0089 istore 14
+    0041 iload 6
+    0043 irem
+    0044 istore 7
+    0046 iconst_0
+    0047 istore 8
+    0049 iload 7
+    0051 iload 8
+    0053 if_icmpne 60
+    0056 iconst_1
+    0057 goto 61
+    0060 iconst_0
+    0061 istore 9
+    0063 iload 9
+    0065 ifeq 74
+    0068 iconst_0
+    0069 istore 10
+    0071 iload 10
+    0073 ireturn
+    0074 goto 77
+    0077 iconst_4
+    0078 istore 11
+    0080 iload_0
+    0081 iload 11
+    0083 irem
+    0084 istore 12
+    0086 iconst_0
+    0087 istore 13
+    0089 iload 12
     0091 iload 13
-    0093 iload 14
-    0095 irem
-    0096 istore 15
-    0098 iconst_0
-    0099 istore 16
-    0101 iload 15
-    0103 iload 16
-    0105 op_0x9F
-    0106 nop
-    0107 iconst_4
-    0108 iconst_0
-    0109 goto 113
-    0112 iconst_1
-    0113 istore 17
-    0115 iload 17
-    0117 op_0xAC
-    sub_attr  StackMapTable (177 bytes)
+    0093 if_icmpne 100
+    0096 iconst_1
+    0097 goto 101
+    0100 iconst_0
+    0101 istore 14
+    0103 iload 14
+    0105 ireturn
+    sub_attr  StackMapTable (61 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=4
     0000 sipush 2000
     0003 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0006 istore_1
+    0006 istore_0
     0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 iload_1
+    0010 iload_0
     0011 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0014 sipush 1900
     0017 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0020 istore_3
+    0020 istore_1
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload_3
+    0024 iload_1
     0025 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0028 sipush 2024
     0031 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0034 istore 5
+    0034 istore 2
     0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 iload 5
+    0039 iload 2
     0041 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0044 sipush 2023
     0047 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0050 istore 7
+    0050 istore 3
     0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 iload 7
+    0055 iload 3
     0057 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0060 return
 method        main ([Ljava/lang/String;)V 0x1009

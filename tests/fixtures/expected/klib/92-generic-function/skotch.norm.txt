@@ -18,23 +18,13 @@ unique_name=inputkt
         0
       ],
       "locals": [
-        "Any",
         "Any"
       ],
       "blocks": [
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
-            "ReturnValue": 1
+            "ReturnValue": 0
           }
         }
       ],
@@ -57,10 +47,8 @@ unique_name=inputkt
       "locals": [
         "Any",
         "Any",
-        "Any",
         "String",
         "String",
-        "Any",
         "String"
       ],
       "blocks": [
@@ -70,7 +58,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 0
+                  }
                 }
               }
             },
@@ -78,8 +68,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Const": {
-                    "String": 0
+                  "BinOp": {
+                    "op": "ConcatStr",
+                    "lhs": 0,
+                    "rhs": 2
                   }
                 }
               }
@@ -90,35 +82,15 @@ unique_name=inputkt
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 2,
-                    "rhs": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 5
+                    "lhs": 3,
+                    "rhs": 1
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 6
+            "ReturnValue": 4
           }
         }
       ],

@@ -3,52 +3,42 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=14
+  code        max_stack=3 max_locals=4
     0000 ldc "Rex"
     0002 astore_0
     0003 new Class(Dog)
     0006 dup
     0007 aload_0
     0008 invokespecial Method(Dog.<init>:(Ljava/lang/String;)V)
-    0011 checkcast Class(Dog)
-    0014 astore_2
-    0015 aload_2
-    0016 checkcast Class(Dog)
-    0019 getfield Field(Animal.name:Ljava/lang/String;)
-    0022 astore 4
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 aload 4
-    0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0032 aload_2
-    0033 checkcast Class(Dog)
-    0036 invokevirtual Method(Dog.sound:()Ljava/lang/String;)
-    0039 astore 6
-    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0044 aload 6
-    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0049 ldc "Whiskers"
-    0051 astore 7
-    0053 new Class(Cat)
-    0056 dup
-    0057 aload 7
-    0059 invokespecial Method(Cat.<init>:(Ljava/lang/String;)V)
-    0062 checkcast Class(Cat)
-    0065 astore 9
-    0067 aload 9
-    0069 checkcast Class(Cat)
-    0072 getfield Field(Animal.name:Ljava/lang/String;)
-    0075 astore 11
-    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0080 aload 11
-    0082 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0085 aload 9
-    0087 checkcast Class(Cat)
-    0090 invokevirtual Method(Cat.sound:()Ljava/lang/String;)
-    0093 astore 13
-    0095 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0098 aload 13
-    0100 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0103 return
+    0011 astore_1
+    0012 aload_1
+    0013 getfield Field(Animal.name:Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 swap
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 aload_1
+    0024 invokevirtual Method(Dog.sound:()Ljava/lang/String;)
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 swap
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 ldc "Whiskers"
+    0036 astore 2
+    0038 new Class(Cat)
+    0041 dup
+    0042 aload 2
+    0044 invokespecial Method(Cat.<init>:(Ljava/lang/String;)V)
+    0047 astore 3
+    0049 aload 3
+    0051 getfield Field(Animal.name:Ljava/lang/String;)
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 swap
+    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0061 aload 3
+    0063 invokevirtual Method(Cat.sound:()Ljava/lang/String;)
+    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0069 swap
+    0070 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0073 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

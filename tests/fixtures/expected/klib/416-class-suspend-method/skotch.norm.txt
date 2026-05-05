@@ -503,16 +503,8 @@ unique_name=inputkt
               "Class": "Fetcher"
             },
             {
-              "Class": "Fetcher"
-            },
-            {
-              "Class": "Fetcher"
-            },
-            {
               "Class": "kotlin/coroutines/Continuation"
             },
-            "Any",
-            "Any",
             "Any",
             "Unit"
           ],
@@ -544,29 +536,13 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 2
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "Const": "Null"
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 3,
                     "value": {
                       "Call": {
                         "kind": {
@@ -577,8 +553,8 @@ unique_name=inputkt
                           }
                         },
                         "args": [
-                          3,
-                          4
+                          1,
+                          2
                         ]
                       }
                     }
@@ -586,28 +562,12 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "Local": 5
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
-                      "Local": 6
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 8,
+                    "dest": 4,
                     "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          7
+                          3
                         ]
                       }
                     }
@@ -629,11 +589,11 @@ unique_name=inputkt
             "sites": [
               {
                 "block_idx": 0,
-                "stmt_idx": 5,
+                "stmt_idx": 3,
                 "callee_class": "Fetcher",
                 "callee_method": "fetch",
                 "args": [
-                  3
+                  1
                 ],
                 "arg_tys": [
                   {
@@ -642,11 +602,15 @@ unique_name=inputkt
                 ],
                 "return_ty": "Any",
                 "is_virtual": true,
-                "result_local": 5
+                "result_local": 3
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            1,
+            3
+          ]
         }
       ],
       "constructor": {

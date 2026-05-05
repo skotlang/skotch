@@ -19,19 +19,10 @@ unique_name=inputkt
         {
           "Class": "Config"
         },
-        {
-          "Class": "Config"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Config"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Config"
-        },
         "String",
         "Unit"
       ],
@@ -63,7 +54,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 2
+                  }
                 }
               }
             },
@@ -71,8 +64,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "String": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -82,9 +78,14 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Config",
+                        "method_name": "getValue"
+                      }
+                    },
                     "args": [
-                      2
+                      0
                     ]
                   }
                 }
@@ -94,7 +95,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -110,7 +116,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      0
                     ]
                   }
                 }
@@ -128,51 +134,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Config",
-                        "method_name": "getValue"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      8
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,

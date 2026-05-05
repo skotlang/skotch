@@ -21,19 +21,10 @@ unique_name=inputkt
         {
           "Class": "Matrix"
         },
-        {
-          "Class": "Matrix"
-        },
         "Int",
         "Int",
         "Int",
         "Int",
-        {
-          "Class": "Matrix$Cell"
-        },
-        {
-          "Class": "Matrix$Cell"
-        },
         {
           "Class": "Matrix$Cell"
         },
@@ -91,7 +82,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "Int": 2
+                  }
                 }
               }
             },
@@ -100,7 +93,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "Int": 2
+                    "Int": 3
                   }
                 }
               }
@@ -110,7 +103,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Const": {
-                    "Int": 3
+                    "Int": 2
                   }
                 }
               }
@@ -120,7 +113,7 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "Const": {
-                    "Int": 2
+                    "Int": 3
                   }
                 }
               }
@@ -129,17 +122,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Const": {
-                    "Int": 3
-                  }
+                  "NewInstance": "Matrix$Cell"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 7,
                 "value": {
-                  "NewInstance": "Matrix$Cell"
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Matrix$Cell"
+                    },
+                    "args": [
+                      2,
+                      5,
+                      6
+                    ]
+                  }
                 }
               }
             },
@@ -149,11 +149,12 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Constructor": "Matrix$Cell"
+                      "Virtual": {
+                        "class_name": "Matrix$Cell",
+                        "method_name": "index"
+                      }
                     },
                     "args": [
-                      3,
-                      6,
                       7
                     ]
                   }
@@ -164,44 +165,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Local": 8
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 9
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Matrix$Cell",
-                        "method_name": "index"
-                      }
-                    },
-                    "args": [
-                      10
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      11
+                      8
                     ]
                   }
                 }
@@ -211,7 +178,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2,
+        7
+      ]
     },
     {
       "id": 1,
@@ -528,9 +499,6 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            "Int",
-            "Int",
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -612,7 +580,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 7,
                     "value": {
-                      "Local": 2
+                      "BinOp": {
+                        "op": "MulI",
+                        "lhs": 2,
+                        "rhs": 6
+                      }
                     }
                   }
                 },
@@ -620,38 +592,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 8,
                     "value": {
-                      "Local": 6
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
-                      "BinOp": {
-                        "op": "MulI",
-                        "lhs": 7,
-                        "rhs": 8
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 10,
-                    "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 11,
-                    "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 9,
-                        "rhs": 10
+                        "lhs": 7,
+                        "rhs": 3
                       }
                     }
                   }
@@ -697,7 +641,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 11
+                "ReturnValue": 8
               }
             }
           ],

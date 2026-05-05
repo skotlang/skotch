@@ -19,10 +19,6 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
-        "String",
-        "String",
-        "String",
         "Unit"
       ],
       "blocks": [
@@ -50,38 +46,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -91,7 +55,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      5
+                      1
                     ]
                   }
                 }
@@ -99,12 +63,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      6
+                      2
                     ]
                   }
                 }
@@ -114,7 +78,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        1
+      ]
     },
     {
       "id": 1,

@@ -24,9 +24,6 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "Int",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -36,7 +33,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "BinOp": {
+                    "op": "ConcatStr",
+                    "lhs": 1,
+                    "rhs": 0
+                  }
                 }
               }
             },
@@ -44,45 +45,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "BinOp": {
                     "op": "ConcatStr",
                     "lhs": 3,
-                    "rhs": 4
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 5,
-                    "rhs": 6
+                    "rhs": 2
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 7
+            "ReturnValue": 4
           }
         }
       ],

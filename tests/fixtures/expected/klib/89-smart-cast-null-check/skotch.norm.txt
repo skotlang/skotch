@@ -22,14 +22,10 @@ unique_name=inputkt
           "Nullable": "String"
         },
         {
-          "Nullable": "String"
-        },
-        {
           "Nullable": "Any"
         },
         "Bool",
         "Unit",
-        "String",
         "String",
         "Int",
         "Unit",
@@ -43,7 +39,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": "Null"
                 }
               }
             },
@@ -51,18 +47,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": "Null"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
                   "BinOp": {
                     "op": "CmpNe",
-                    "lhs": 1,
-                    "rhs": 2
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -70,7 +58,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 3,
+              "cond": 2,
               "then_block": 1,
               "else_block": 2
             }
@@ -80,7 +68,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Local": 0
                 }
@@ -88,15 +76,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 5
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
@@ -106,8 +86,46 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      6
+                      4
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Local": 6
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Goto": 3
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "Const": {
+                    "String": 0
                   }
                 }
               }
@@ -127,47 +145,9 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "Local": 8
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 10
                 }
               }
             }

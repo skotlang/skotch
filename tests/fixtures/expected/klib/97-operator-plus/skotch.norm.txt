@@ -21,20 +21,8 @@ unique_name=inputkt
         {
           "Class": "Vec2"
         },
-        {
-          "Class": "Vec2"
-        },
         "Int",
         "Int",
-        {
-          "Class": "Vec2"
-        },
-        {
-          "Class": "Vec2"
-        },
-        {
-          "Class": "Vec2"
-        },
         {
           "Class": "Vec2"
         },
@@ -94,14 +82,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Const": {
                     "Int": 3
                   }
@@ -110,7 +90,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "Int": 4
@@ -120,9 +100,25 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "NewInstance": "Vec2"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Vec2"
+                    },
+                    "args": [
+                      3,
+                      4
+                    ]
+                  }
                 }
               }
             },
@@ -132,10 +128,13 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Constructor": "Vec2"
+                      "Virtual": {
+                        "class_name": "Vec2",
+                        "method_name": "plus"
+                      }
                     },
                     "args": [
-                      4,
+                      2,
                       5
                     ]
                   }
@@ -146,53 +145,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Local": 6
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Local": 7
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Vec2",
-                        "method_name": "plus"
-                      }
-                    },
-                    "args": [
-                      8,
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
+                      6
                     ]
                   }
                 }
@@ -202,7 +158,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2,
+        5
+      ]
     },
     {
       "id": 1,
@@ -426,15 +386,7 @@ unique_name=inputkt
             "Int",
             "Int",
             "Int",
-            {
-              "Class": "Vec2"
-            },
             "Int",
-            "Int",
-            "Int",
-            {
-              "Class": "Vec2"
-            },
             "Int",
             "Int",
             {
@@ -472,7 +424,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 2
+                      "GetField": {
+                        "receiver": 1,
+                        "class_name": "Vec2",
+                        "field_name": "x"
+                      }
                     }
                   }
                 },
@@ -480,7 +436,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "Local": 1
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 2,
+                        "rhs": 4
+                      }
                     }
                   }
                 },
@@ -489,9 +449,9 @@ unique_name=inputkt
                     "dest": 6,
                     "value": {
                       "GetField": {
-                        "receiver": 5,
+                        "receiver": 1,
                         "class_name": "Vec2",
-                        "field_name": "x"
+                        "field_name": "y"
                       }
                     }
                   }
@@ -502,7 +462,7 @@ unique_name=inputkt
                     "value": {
                       "BinOp": {
                         "op": "AddI",
-                        "lhs": 4,
+                        "lhs": 3,
                         "rhs": 6
                       }
                     }
@@ -512,61 +472,21 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 8,
                     "value": {
-                      "Local": 3
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 10,
-                    "value": {
-                      "GetField": {
-                        "receiver": 9,
-                        "class_name": "Vec2",
-                        "field_name": "y"
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 11,
-                    "value": {
-                      "BinOp": {
-                        "op": "AddI",
-                        "lhs": 8,
-                        "rhs": 10
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 12,
-                    "value": {
                       "NewInstance": "Vec2"
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 12,
+                    "dest": 8,
                     "value": {
                       "Call": {
                         "kind": {
                           "Constructor": "Vec2"
                         },
                         "args": [
-                          7,
-                          11
+                          5,
+                          7
                         ]
                       }
                     }
@@ -600,7 +520,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 12
+                "ReturnValue": 8
               }
             }
           ],

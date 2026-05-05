@@ -19,7 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "String",
-        "String",
         "Unit"
       ],
       "blocks": [
@@ -29,18 +28,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      1
+                      0
                     ]
                   }
                 }

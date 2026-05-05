@@ -14,7 +14,7 @@ method        divide (II)I 0x0019
     0014 iload_0
     0015 iload_1
     0016 idiv
-    0017 op_0xAC
+    0017 ireturn
     sub_attr  StackMapTable (3 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
@@ -35,7 +35,7 @@ method        main ()V 0x0019
     0026 aload_1
     0027 invokevirtual Method(java/lang/Exception.toString:()Ljava/lang/String;)
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 op_0x5F
+    0033 swap
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0037 return
     sub_attr  StackMapTable (14 bytes)

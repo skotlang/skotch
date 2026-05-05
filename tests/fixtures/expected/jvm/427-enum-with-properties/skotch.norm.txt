@@ -8,12 +8,10 @@ method        EARTH ()LPlanet; 0x0019
     0003 dup
     0004 ldc "EARTH"
     0006 astore_1
-    0007 op_0x14
-    0008 nop
-    0009 op_0x31
-    0010 op_0x49
+    0007 ldc2_w double(5.97)
+    0010 dstore_2
     0011 aload_1
-    0012 op_0x28
+    0012 dload_2
     0013 invokespecial Method(Planet.<init>:(Ljava/lang/String;D)V)
     0016 areturn
 method        JUPITER ()LPlanet; 0x0019
@@ -22,12 +20,10 @@ method        JUPITER ()LPlanet; 0x0019
     0003 dup
     0004 ldc "JUPITER"
     0006 astore_1
-    0007 op_0x14
-    0008 nop
-    0009 istore_0
-    0010 op_0x49
+    0007 ldc2_w double(1898)
+    0010 dstore_2
     0011 aload_1
-    0012 op_0x28
+    0012 dload_2
     0013 invokespecial Method(Planet.<init>:(Ljava/lang/String;D)V)
     0016 areturn
 method        MARS ()LPlanet; 0x0019
@@ -36,12 +32,10 @@ method        MARS ()LPlanet; 0x0019
     0003 dup
     0004 ldc "MARS"
     0006 astore_1
-    0007 op_0x14
-    0008 nop
-    0009 op_0x38
-    0010 op_0x49
+    0007 ldc2_w double(0.64)
+    0010 dstore_2
     0011 aload_1
-    0012 op_0x28
+    0012 dload_2
     0013 invokespecial Method(Planet.<init>:(Ljava/lang/String;D)V)
     0016 areturn
 method        Planet$valueOf (Ljava/lang/String;)LPlanet; 0x0019
@@ -87,56 +81,50 @@ method        Planet$valueOf (Ljava/lang/String;)LPlanet; 0x0019
     0075 astore 10
     0077 aload 10
     0079 areturn
-    sub_attr  StackMapTable (76 bytes)
+    sub_attr  StackMapTable (63 bytes)
 method        Planet$values ()Ljava/util/ArrayList; 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=4
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 invokestatic Method(InputKt.EARTH:()LPlanet;)
-    0011 astore_1
-    0012 aload_0
-    0013 aload_1
-    0014 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0017 istore_2
-    0018 invokestatic Method(InputKt.MARS:()LPlanet;)
-    0021 astore_3
-    0022 aload_0
-    0023 aload_3
-    0024 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0027 istore 4
-    0029 invokestatic Method(InputKt.JUPITER:()LPlanet;)
-    0032 astore 5
-    0034 aload_0
-    0035 aload 5
-    0037 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0040 istore 6
-    0042 aload_0
-    0043 areturn
+    0011 aload_0
+    0012 swap
+    0013 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0016 istore_1
+    0017 invokestatic Method(InputKt.MARS:()LPlanet;)
+    0020 aload_0
+    0021 swap
+    0022 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0025 istore 2
+    0027 invokestatic Method(InputKt.JUPITER:()LPlanet;)
+    0030 aload_0
+    0031 swap
+    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0035 istore 3
+    0037 aload_0
+    0038 areturn
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=8
+  code        max_stack=3 max_locals=8
     0000 invokestatic Method(InputKt.EARTH:()LPlanet;)
     0003 getfield Field(Planet.mass:D)
-    0006 op_0x48
+    0006 dstore_1
     0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0010 op_0x27
+    0010 dload_1
     0011 invokevirtual Method(java/io/PrintStream.println:(D)V)
     0014 invokestatic Method(InputKt.MARS:()LPlanet;)
     0017 getfield Field(Planet.name:Ljava/lang/String;)
-    0020 astore 4
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 aload 4
-    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0030 invokestatic Method(InputKt.JUPITER:()LPlanet;)
-    0033 getfield Field(Planet.mass:D)
-    0036 op_0x39
-    0037 iconst_3
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 op_0x18
-    0042 iconst_3
-    0043 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0046 return
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 swap
+    0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0027 invokestatic Method(InputKt.JUPITER:()LPlanet;)
+    0030 getfield Field(Planet.mass:D)
+    0033 dstore 6
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 dload 6
+    0040 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0043 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

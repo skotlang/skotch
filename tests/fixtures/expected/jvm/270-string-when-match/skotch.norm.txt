@@ -3,103 +3,96 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=16
-    0000 aload_0
-    0001 astore_1
-    0002 goto 5
-    0005 ldc "en"
-    0007 astore_2
-    0008 aload_1
-    0009 aload_2
-    0010 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0013 istore_3
-    0014 iload_3
-    0015 ifeq 29
-    0018 ldc "Hello"
+  code        max_stack=2 max_locals=15
+    0000 goto 3
+    0003 ldc "en"
+    0005 astore_1
+    0006 aload_0
+    0007 aload_1
+    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0011 istore_2
+    0012 iload_2
+    0013 ifeq 25
+    0016 ldc "Hello"
+    0018 astore_3
+    0019 aload_3
     0020 astore 4
-    0022 aload 4
-    0024 astore 5
-    0026 goto 124
-    0029 ldc "es"
-    0031 astore 6
-    0033 aload_1
-    0034 aload 6
-    0036 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0039 istore 7
-    0041 iload 7
-    0043 ifeq 57
-    0046 ldc "Hola"
-    0048 astore 8
-    0050 aload 8
-    0052 astore 5
-    0054 goto 124
-    0057 ldc "fr"
-    0059 astore 9
-    0061 aload_1
-    0062 aload 9
-    0064 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0067 istore 10
-    0069 iload 10
-    0071 ifeq 85
-    0074 ldc "Bonjour"
-    0076 astore 11
-    0078 aload 11
-    0080 astore 5
-    0082 goto 124
-    0085 ldc "de"
-    0087 astore 12
-    0089 aload_1
-    0090 aload 12
-    0092 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0095 istore 13
-    0097 iload 13
-    0099 ifeq 113
-    0102 ldc "Hallo"
-    0104 astore 14
-    0106 aload 14
-    0108 astore 5
-    0110 goto 124
-    0113 ldc "Hi"
-    0115 astore 15
-    0117 aload 15
-    0119 astore 5
-    0121 goto 124
-    0124 aload 5
-    0126 areturn
-    sub_attr  StackMapTable (137 bytes)
+    0022 goto 120
+    0025 ldc "es"
+    0027 astore 5
+    0029 aload_0
+    0030 aload 5
+    0032 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0035 istore 6
+    0037 iload 6
+    0039 ifeq 53
+    0042 ldc "Hola"
+    0044 astore 7
+    0046 aload 7
+    0048 astore 4
+    0050 goto 120
+    0053 ldc "fr"
+    0055 astore 8
+    0057 aload_0
+    0058 aload 8
+    0060 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0063 istore 9
+    0065 iload 9
+    0067 ifeq 81
+    0070 ldc "Bonjour"
+    0072 astore 10
+    0074 aload 10
+    0076 astore 4
+    0078 goto 120
+    0081 ldc "de"
+    0083 astore 11
+    0085 aload_0
+    0086 aload 11
+    0088 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0091 istore 12
+    0093 iload 12
+    0095 ifeq 109
+    0098 ldc "Hallo"
+    0100 astore 13
+    0102 aload 13
+    0104 astore 4
+    0106 goto 120
+    0109 ldc "Hi"
+    0111 astore 14
+    0113 aload 14
+    0115 astore 4
+    0117 goto 120
+    0120 aload 4
+    0122 areturn
+    sub_attr  StackMapTable (64 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=0
     0000 ldc "en"
     0002 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
-    0005 astore_1
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 aload_1
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0013 ldc "es"
-    0015 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
-    0018 astore_3
-    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 aload_3
-    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0026 ldc "fr"
-    0028 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
-    0031 astore 5
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 aload 5
-    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0041 ldc "de"
-    0043 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
-    0046 astore 7
-    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 aload 7
-    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0056 ldc "ja"
-    0058 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
-    0061 astore 9
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 aload 9
-    0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0071 return
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 ldc "es"
+    0014 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 ldc "fr"
+    0026 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 ldc "de"
+    0038 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 swap
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 ldc "ja"
+    0050 invokestatic Method(InputKt.greetByLang:(Ljava/lang/String;)Ljava/lang/String;)
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 swap
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

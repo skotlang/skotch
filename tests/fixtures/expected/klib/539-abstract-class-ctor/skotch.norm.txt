@@ -20,34 +20,16 @@ unique_name=inputkt
         {
           "Class": "Dog"
         },
-        {
-          "Class": "Dog"
-        },
-        {
-          "Class": "Dog"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Dog"
-        },
         "String",
         "Unit",
         "String",
         {
           "Class": "Cat"
         },
-        {
-          "Class": "Cat"
-        },
-        {
-          "Class": "Cat"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Cat"
-        },
         "String",
         "Unit"
       ],
@@ -91,7 +73,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "GetField": {
+                    "receiver": 1,
+                    "class_name": "Animal",
+                    "field_name": "name"
+                  }
                 }
               }
             },
@@ -99,7 +85,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -107,10 +98,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "GetField": {
-                    "receiver": 3,
-                    "class_name": "Animal",
-                    "field_name": "name"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Dog",
+                        "method_name": "sound"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -132,7 +129,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Local": 2
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
+                  "NewInstance": "Cat"
                 }
               }
             },
@@ -142,10 +149,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Virtual": {
-                        "class_name": "Dog",
-                        "method_name": "sound"
-                      }
+                      "Constructor": "Cat"
                     },
                     "args": [
                       6
@@ -158,70 +162,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "String": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "NewInstance": "Cat"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Constructor": "Cat"
-                    },
-                    "args": [
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Local": 10
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
                   "GetField": {
-                    "receiver": 12,
+                    "receiver": 7,
                     "class_name": "Animal",
                     "field_name": "name"
                   }
@@ -230,12 +172,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 14,
+                "dest": 9,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      13
+                      8
                     ]
                   }
                 }
@@ -243,15 +185,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 15,
-                "value": {
-                  "Local": 11
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 16,
+                "dest": 10,
                 "value": {
                   "Call": {
                     "kind": {
@@ -261,7 +195,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      15
+                      7
                     ]
                   }
                 }
@@ -269,12 +203,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 17,
+                "dest": 11,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      16
+                      10
                     ]
                   }
                 }
@@ -284,7 +218,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1,
+        7
+      ]
     },
     {
       "id": 1,
@@ -652,20 +590,11 @@ unique_name=inputkt
           {
             "Class": "Dog"
           },
-          "String",
           "String"
         ],
         "blocks": [
           {
             "stmts": [
-              {
-                "Assign": {
-                  "dest": 2,
-                  "value": {
-                    "Local": 1
-                  }
-                }
-              },
               {
                 "Assign": {
                   "dest": 0,
@@ -676,7 +605,7 @@ unique_name=inputkt
                       },
                       "args": [
                         0,
-                        2
+                        1
                       ]
                     }
                   }
@@ -768,20 +697,11 @@ unique_name=inputkt
           {
             "Class": "Cat"
           },
-          "String",
           "String"
         ],
         "blocks": [
           {
             "stmts": [
-              {
-                "Assign": {
-                  "dest": 2,
-                  "value": {
-                    "Local": 1
-                  }
-                }
-              },
               {
                 "Assign": {
                   "dest": 0,
@@ -792,7 +712,7 @@ unique_name=inputkt
                       },
                       "args": [
                         0,
-                        2
+                        1
                       ]
                     }
                   }

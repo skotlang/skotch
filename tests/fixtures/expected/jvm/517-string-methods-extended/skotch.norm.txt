@@ -3,45 +3,41 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=11
+  code        max_stack=3 max_locals=5
     0000 ldc "  hello  "
     0002 invokevirtual Method(java/lang/String.trim:()Ljava/lang/String;)
-    0005 astore_1
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 aload_1
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0013 ldc "hello world"
-    0015 astore_2
-    0016 iconst_0
-    0017 istore_3
-    0018 iconst_5
-    0019 istore 4
-    0021 aload_2
-    0022 iload_3
-    0023 iload 4
-    0025 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
-    0028 astore 5
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 aload 5
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0038 ldc "hello world"
-    0040 astore 6
-    0042 bipush 6
-    0044 istore 7
-    0046 aload 6
-    0048 iload 7
-    0050 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
-    0053 astore 8
-    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0058 aload 8
-    0060 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0063 ldc "ABC"
-    0065 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
-    0068 astore 10
-    0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0073 aload 10
-    0075 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0078 return
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 ldc "hello world"
+    0014 astore_0
+    0015 iconst_0
+    0016 istore_1
+    0017 iconst_5
+    0018 istore 2
+    0020 aload_0
+    0021 iload_1
+    0022 iload 2
+    0024 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 swap
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 ldc "hello world"
+    0036 astore 3
+    0038 bipush 6
+    0040 istore 4
+    0042 aload 3
+    0044 iload 4
+    0046 invokevirtual Method(java/lang/String.substring:(I)Ljava/lang/String;)
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 swap
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0056 ldc "ABC"
+    0058 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 swap
+    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0068 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

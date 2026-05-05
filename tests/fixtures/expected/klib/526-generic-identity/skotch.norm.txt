@@ -18,23 +18,13 @@ unique_name=inputkt
         0
       ],
       "locals": [
-        "Any",
         "Any"
       ],
       "blocks": [
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 0
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
-            "ReturnValue": 1
+            "ReturnValue": 0
           }
         }
       ],

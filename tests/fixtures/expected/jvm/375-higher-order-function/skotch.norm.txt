@@ -3,31 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        apply (Lkotlin/jvm/functions/Function1;I)I 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=2
     0000 iload_1
     0001 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0004 astore_3
-    0005 aload_0
-    0006 aload_3
-    0007 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0012 checkcast Class(java/lang/Integer)
-    0015 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0018 op_0xAC
+    0004 aload_0
+    0005 swap
+    0006 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0011 checkcast Class(java/lang/Integer)
+    0014 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0017 ireturn
 method        combine (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;I)I 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=3
     0000 iload_2
     0001 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0004 astore 4
-    0006 aload_0
-    0007 aload 4
-    0009 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0014 astore 5
-    0016 aload_1
-    0017 aload 5
-    0019 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0024 checkcast Class(java/lang/Integer)
-    0027 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0030 op_0xAC
+    0004 aload_0
+    0005 swap
+    0006 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0011 aload_1
+    0012 swap
+    0013 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0018 checkcast Class(java/lang/Integer)
+    0021 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0024 ireturn
 method        main ()V 0x0019
   code        max_stack=3 max_locals=13
     0000 new Class(InputKt$Lambda$0)
@@ -93,13 +90,12 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        transform (Lkotlin/jvm/functions/Function1;I)I 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=2
     0000 iload_1
     0001 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0004 astore_3
-    0005 aload_0
-    0006 aload_3
-    0007 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0012 checkcast Class(java/lang/Integer)
-    0015 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0018 op_0xAC
+    0004 aload_0
+    0005 swap
+    0006 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0011 checkcast Class(java/lang/Integer)
+    0014 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0017 ireturn

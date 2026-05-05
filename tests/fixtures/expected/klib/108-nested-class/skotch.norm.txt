@@ -21,12 +21,6 @@ unique_name=inputkt
         {
           "Class": "Container$Item"
         },
-        {
-          "Class": "Container$Item"
-        },
-        {
-          "Class": "Container$Item"
-        },
         "Int",
         "Unit"
       ],
@@ -80,24 +74,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "GetField": {
-                    "receiver": 4,
+                    "receiver": 2,
                     "class_name": "Container$Item",
                     "field_name": "value"
                   }
@@ -106,12 +84,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      3
                     ]
                   }
                 }
@@ -121,7 +99,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2
+      ]
     },
     {
       "id": 1,

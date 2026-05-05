@@ -7,12 +7,12 @@ method        main ()V 0x0019
     0000 getstatic Field(Dir.NORTH:LDir;)
     0003 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 op_0x5F
+    0009 swap
     0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0013 getstatic Field(Dir.WEST:LDir;)
     0016 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x5F
+    0022 swap
     0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0026 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -26,7 +26,7 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 getstatic Field(InputKt$WhenMappings.$EnumSwitchMapping$0:[I)
-    0010 op_0x5F
+    0010 swap
     0011 invokevirtual Method(Dir.ordinal:()I)
     0014 op_0x2E
     0015 tableswitch default=64 low=1 high=4 1=44 2=49 3=54 4=59

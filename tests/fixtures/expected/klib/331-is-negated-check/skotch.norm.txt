@@ -19,7 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Any",
-        "Any",
         "Bool",
         "Bool",
         "Bool"
@@ -31,16 +30,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "InstanceOf": {
-                    "obj": 1,
+                    "obj": 0,
                     "type_descriptor": "java/lang/String"
                   }
                 }
@@ -48,7 +39,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
                   "Const": {
                     "Bool": false
@@ -58,19 +49,19 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "BinOp": {
                     "op": "CmpEq",
-                    "lhs": 2,
-                    "rhs": 3
+                    "lhs": 1,
+                    "rhs": 2
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],

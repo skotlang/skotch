@@ -20,8 +20,6 @@ unique_name=inputkt
         "Int",
         "Any",
         "Int",
-        "Int",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -95,26 +93,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      0
                     ]
                   }
                 }
@@ -132,6 +114,9 @@ unique_name=inputkt
           "handler_block": 2,
           "catch_type": "java/lang/Exception"
         }
+      ],
+      "named_locals": [
+        0
       ]
     },
     {

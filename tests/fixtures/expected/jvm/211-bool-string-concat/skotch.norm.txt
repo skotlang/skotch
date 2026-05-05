@@ -3,61 +3,40 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=17
+  code        max_stack=2 max_locals=2
     0000 bipush 42
-    0002 istore_1
+    0002 istore_0
     0003 iconst_1
-    0004 istore_3
+    0004 istore_1
     0005 ldc "x="
-    0007 astore 4
-    0009 iload_1
-    0010 istore 5
-    0012 aload 4
-    0014 iload 5
-    0016 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0019 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0022 astore 6
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 aload 6
-    0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0032 ldc "b="
-    0034 astore 7
-    0036 iload_3
-    0037 istore 8
-    0039 aload 7
-    0041 iload 8
-    0043 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
-    0046 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0049 astore 9
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 aload 9
-    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0059 ldc "answer: "
-    0061 astore 10
-    0063 iload_1
-    0064 istore 11
-    0066 aload 10
-    0068 iload 11
-    0070 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0073 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0076 astore 12
-    0078 ldc ", valid: "
-    0080 astore 13
-    0082 aload 12
-    0084 aload 13
-    0086 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0089 astore 14
-    0091 iload_3
-    0092 istore 15
-    0094 aload 14
-    0096 iload 15
-    0098 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
-    0101 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0104 astore 16
-    0106 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0109 aload 16
-    0111 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0114 return
+    0007 iload_0
+    0008 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0011 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0017 swap
+    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0021 ldc "b="
+    0023 iload_1
+    0024 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
+    0027 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 ldc "answer: "
+    0039 iload_0
+    0040 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0043 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0046 ldc ", valid: "
+    0048 swap
+    0049 swap
+    0050 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0053 iload_1
+    0054 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
+    0057 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 swap
+    0064 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0067 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

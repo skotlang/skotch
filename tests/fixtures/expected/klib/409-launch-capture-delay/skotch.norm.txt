@@ -346,7 +346,6 @@ unique_name=inputkt
               "Class": "InputKt$Lambda$0"
             },
             "String",
-            "String",
             {
               "Class": "InputKt$Lambda$1"
             },
@@ -394,21 +393,13 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
                       "NewInstance": "InputKt$Lambda$1"
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 4,
+                    "dest": 3,
                     "value": {
                       "Const": "Null"
                     }
@@ -416,15 +407,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 3,
+                    "dest": 2,
                     "value": {
                       "Call": {
                         "kind": {
                           "Constructor": "InputKt$Lambda$1"
                         },
                         "args": [
-                          2,
-                          4
+                          1,
+                          3
                         ]
                       }
                     }
@@ -432,7 +423,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 4,
                     "value": {
                       "GetField": {
                         "receiver": 0,
@@ -444,12 +435,20 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "CheckCast": {
-                        "obj": 5,
+                        "obj": 4,
                         "target_class": "kotlinx/coroutines/CoroutineScope"
                       }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 6,
+                    "value": {
+                      "Const": "Null"
                     }
                   }
                 },
@@ -465,16 +464,8 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 8,
                     "value": {
-                      "Const": "Null"
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
                       "CheckCast": {
-                        "obj": 3,
+                        "obj": 2,
                         "target_class": "kotlin/jvm/functions/Function2"
                       }
                     }
@@ -482,7 +473,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 10,
+                    "dest": 9,
                     "value": {
                       "Const": {
                         "Int": 3
@@ -492,7 +483,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 11,
+                    "dest": 10,
                     "value": {
                       "Const": "Null"
                     }
@@ -500,7 +491,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 12,
+                    "dest": 11,
                     "value": {
                       "Call": {
                         "kind": {
@@ -511,12 +502,12 @@ unique_name=inputkt
                           }
                         },
                         "args": [
+                          5,
                           6,
                           7,
                           8,
                           9,
-                          10,
-                          11
+                          10
                         ]
                       }
                     }
@@ -524,7 +515,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 13,
+                    "dest": 12,
                     "value": {
                       "Const": {
                         "Long": 200
@@ -534,7 +525,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 14,
+                    "dest": 13,
                     "value": {
                       "Const": "Null"
                     }
@@ -542,15 +533,15 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 15,
+                    "dest": 14,
                     "value": {
                       "Call": {
                         "kind": {
                           "Static": 1
                         },
                         "args": [
-                          13,
-                          14
+                          12,
+                          13
                         ]
                       }
                     }
@@ -558,7 +549,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 15
+                "ReturnValue": 14
               }
             }
           ],
@@ -574,21 +565,24 @@ unique_name=inputkt
             "sites": [
               {
                 "block_idx": 0,
-                "stmt_idx": 15,
+                "stmt_idx": 14,
                 "callee_class": "kotlinx/coroutines/DelayKt",
                 "callee_method": "delay",
                 "args": [
-                  13
+                  12
                 ],
                 "arg_tys": [
                   "Long"
                 ],
                 "return_ty": "Unit",
-                "result_local": 15
+                "result_local": 14
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            1
+          ]
         }
       ],
       "constructor": {
@@ -656,7 +650,6 @@ unique_name=inputkt
               "Class": "kotlin/coroutines/Continuation"
             },
             "Any",
-            "String",
             "Unit"
           ],
           "blocks": [
@@ -712,18 +705,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          5
+                          1
                         ]
                       }
                     }

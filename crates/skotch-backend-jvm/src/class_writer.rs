@@ -17,7 +17,7 @@
 
 use crate::constant_pool::ConstantPool;
 use byteorder::{BigEndian, WriteBytesExt};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use skotch_config::jvm;
 use skotch_intern::Interner;
 use skotch_mir::{
@@ -25,6 +25,7 @@ use skotch_mir::{
     MirModule, Rvalue, SpillKind, Stmt, SuspendCallSite, SuspendStateMachine, Terminator,
 };
 use skotch_types::Ty;
+use std::cell::RefCell;
 use std::io::Write;
 
 /// When true, emit class version 50 (Java 6) and skip StackMapTable.
@@ -54,7 +55,6 @@ fn is_jvm_interface_check(class_name: &str) -> bool {
 }
 
 const ACC_PUBLIC: u16 = 0x0001;
-#[allow(dead_code)]
 const ACC_PRIVATE: u16 = 0x0002;
 #[allow(dead_code)]
 const ACC_PROTECTED: u16 = 0x0004;
@@ -1644,6 +1644,17 @@ fn emit_method_body(
         is_handler[eh.handler_block as usize] = true;
     }
 
+    // Compute single-use constant locals that can be inlined at use site
+    // instead of being materialized to a slot. Only safe when the bytecode
+    // ordering supports it — we apply this to functions without branches
+    // for now (extending later requires careful liveness across blocks).
+    let inlinable = if func.blocks.len() == 1 {
+        compute_inlinable_constants(func)
+    } else {
+        FxHashMap::default()
+    };
+    INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
+
     // Compute reachable blocks — skip emitting dead blocks that follow
     // throw/return-terminated branches to avoid VerifyError from missing
     // StackMapTable entries on unreachable code.
@@ -1947,12 +1958,50 @@ fn emit_method_body(
     }
 
     // Pass 3: Peephole optimization — elide adjacent store+load of same slot.
-    // Only safe when there are no branch targets (jumps would be invalidated).
-    if patches.is_empty() && cmp_targets.is_empty() {
-        peephole_elide_store_load(&mut code);
+    // Safe when:
+    //   - No inter-block branches (`patches`), OR
+    //   - We only remove bytes after the last branch/cmp_target offset
+    let mut max_locals = next_slot as u16;
+    let no_branches = patches.is_empty() && cmp_targets.is_empty();
+    let initial_param_slots = match &kind {
+        MethodKind::Static => {
+            if func.name == "main" && func.params.is_empty() {
+                0
+            } else if func.name == "main" {
+                1
+            } else {
+                func.params.len() as u8
+            }
+        }
+        MethodKind::Instance => (func.params.len()) as u8,
+    };
+    if no_branches {
+        // Compute JVM slots that correspond to named MIR locals (vals/vars).
+        // These slots must NOT be eliminated by the swap peephole — kotlinc
+        // preserves named local variables in the bytecode for parity and
+        // debugging.
+        let named_slots: FxHashSet<u8> = func
+            .named_locals
+            .iter()
+            .filter_map(|l| slots.get(&l.0).copied())
+            .collect();
+        peephole_elide_store_load(&mut code, &named_slots);
+        // After elision, some slots may be unused. Compact slot numbers so
+        // they're consecutive starting from the first param slot. This
+        // matches kotlinc's slot allocation.
+        let new_max = compact_local_slots(&mut code, initial_param_slots);
+        max_locals = new_max as u16;
+    } else if patches.is_empty() {
+        // Only intra-block (cmp_targets) branches: we can still elide
+        // store+load pairs that are positioned AFTER the highest branch
+        // target, since the JVM verifier won't reach them via any branch.
+        let max_branch_off = cmp_targets.iter().map(|t| t.offset).max().unwrap_or(0);
+        peephole_elide_tail_store_load(&mut code, max_branch_off);
+        // Slot compaction is byte-preserving, so it's safe to run with
+        // branches present too. This matches kotlinc's compact slot use.
+        let new_max = compact_local_slots(&mut code, initial_param_slots);
+        max_locals = new_max as u16;
     }
-
-    let max_locals = next_slot as u16;
 
     // ── StackMapTable ────────────────────────────────────────────────
     //
@@ -2070,6 +2119,27 @@ fn emit_method_body(
     let mut stack_map_entries: Vec<u8> = Vec::new();
     let mut smt_count: u16 = 0;
     let mut prev_offset: i32 = -1;
+    // Track previous frame's verification entries for compact encoding
+    // (same_frame, same_locals_1_stack_item_frame, etc). Initialize with
+    // the initial frame's locals (the method's parameters).
+    let mut prev_locals_verif: Vec<Vec<u8>> = {
+        let mut entries: Vec<Vec<u8>> = Vec::new();
+        let mut s = 0usize;
+        while s < initial_locals_count as usize {
+            let mut entry_buf = Vec::new();
+            write_slot_verif(&mut entry_buf, cp, s, true, &slot_to_local, func);
+            entries.push(entry_buf);
+            // Wide type? Skip the second slot.
+            let is_wide = slot_to_local
+                .get(s)
+                .copied()
+                .flatten()
+                .map(|mid| matches!(func.locals[mid as usize], Ty::Long | Ty::Double))
+                .unwrap_or(false);
+            s += if is_wide { 2 } else { 1 };
+        }
+        entries
+    };
 
     for &(off, ref source) in &all_targets {
         let delta = if prev_offset < 0 {
@@ -2114,23 +2184,15 @@ fn emit_method_body(
                     .map(|i| (i + 1) as u16)
                     .unwrap_or(initial_locals_count);
 
-                stack_map_entries.push(255); // full_frame
-                stack_map_entries
-                    .write_u16::<BigEndian>(delta as u16)
-                    .unwrap();
-                // Count verification type entries (Long/Double count as 1 entry
-                // but occupy 2 JVM slots).
-                let mut verif_count = 0u16;
-                let mut verif_entries = Vec::new();
+                // Build the per-local verification entries for THIS frame.
+                let mut cur_locals_verif: Vec<Vec<u8>> = Vec::new();
                 {
                     let mut s = 0usize;
                     while s < num_locals as usize {
                         let live = merged.get(s).copied().unwrap_or(false);
                         let mut entry_buf = Vec::new();
                         write_slot_verif(&mut entry_buf, cp, s, live, &slot_to_local, func);
-                        verif_entries.extend_from_slice(&entry_buf);
-                        verif_count += 1;
-                        // Check if this slot is a wide type (Long/Double).
+                        cur_locals_verif.push(entry_buf);
                         let is_wide = if live {
                             slot_to_local
                                 .get(s)
@@ -2146,25 +2208,33 @@ fn emit_method_body(
                         s += if is_wide { 2 } else { 1 };
                     }
                 }
-                stack_map_entries
-                    .write_u16::<BigEndian>(verif_count)
-                    .unwrap();
-                stack_map_entries.extend_from_slice(&verif_entries);
 
-                // Exception handlers.
-                if is_handler.get(*target_bi).copied().unwrap_or(false) {
-                    stack_map_entries.write_u16::<BigEndian>(1).unwrap();
-                    let hc = func
-                        .exception_handlers
-                        .iter()
-                        .find(|eh| eh.handler_block as usize == *target_bi)
-                        .and_then(|eh| eh.catch_type.as_deref());
-                    stack_map_entries.push(7);
-                    let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
-                    stack_map_entries.write_u16::<BigEndian>(ci).unwrap();
-                } else {
-                    stack_map_entries.write_u16::<BigEndian>(0).unwrap();
-                }
+                // Build the verification entry for the catch type (if any),
+                // which lives on the operand stack for handler frames.
+                let stack_verif: Option<Vec<u8>> =
+                    if is_handler.get(*target_bi).copied().unwrap_or(false) {
+                        let hc = func
+                            .exception_handlers
+                            .iter()
+                            .find(|eh| eh.handler_block as usize == *target_bi)
+                            .and_then(|eh| eh.catch_type.as_deref());
+                        let mut buf = Vec::new();
+                        buf.push(7);
+                        let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
+                        buf.write_u16::<BigEndian>(ci).unwrap();
+                        Some(buf)
+                    } else {
+                        None
+                    };
+
+                emit_compact_frame(
+                    &mut stack_map_entries,
+                    delta as u16,
+                    &cur_locals_verif,
+                    stack_verif.as_deref(),
+                    &prev_locals_verif,
+                );
+                prev_locals_verif = cur_locals_verif;
             }
             TargetSource::Cmp(ci) => {
                 let ct = &cmp_targets[*ci];
@@ -2178,19 +2248,15 @@ fn emit_method_body(
                     .map(|i| (i + 1) as u16)
                     .unwrap_or(initial_locals_count);
 
-                stack_map_entries.push(255); // full_frame
-                stack_map_entries
-                    .write_u16::<BigEndian>(delta as u16)
-                    .unwrap();
-                // Count verification entries (skipping second slot of wide types).
-                let mut cmp_verif_count = 0u16;
-                let mut cmp_verif_entries = Vec::new();
+                // Build per-local verification entries for THIS frame.
+                let mut cur_locals_verif: Vec<Vec<u8>> = Vec::new();
                 {
                     let mut s = 0usize;
                     while s < num_locals as usize {
                         let lv = live.get(s).copied().unwrap_or(false);
-                        write_slot_verif(&mut cmp_verif_entries, cp, s, lv, &slot_to_local, func);
-                        cmp_verif_count += 1;
+                        let mut entry_buf = Vec::new();
+                        write_slot_verif(&mut entry_buf, cp, s, lv, &slot_to_local, func);
+                        cur_locals_verif.push(entry_buf);
                         let is_wide = if lv {
                             slot_to_local
                                 .get(s)
@@ -2206,28 +2272,49 @@ fn emit_method_body(
                         s += if is_wide { 2 } else { 1 };
                     }
                 }
-                stack_map_entries
-                    .write_u16::<BigEndian>(cmp_verif_count)
-                    .unwrap();
-                stack_map_entries.extend_from_slice(&cmp_verif_entries);
-                stack_map_entries
-                    .write_u16::<BigEndian>(ct.stack_count)
-                    .unwrap();
-                stack_map_entries.extend(std::iter::repeat_n(1u8, ct.stack_count as usize));
+
+                // For comparison frames, the stack item (if present) is
+                // always Integer (verification tag = 1, no class index).
+                // ct.stack_count is 0 or 1 here.
+                let stack_verif: Option<Vec<u8>> = if ct.stack_count == 1 {
+                    Some(vec![1u8]) // Integer_variable_info
+                } else {
+                    None
+                };
+
+                emit_compact_frame(
+                    &mut stack_map_entries,
+                    delta as u16,
+                    &cur_locals_verif,
+                    stack_verif.as_deref(),
+                    &prev_locals_verif,
+                );
+                prev_locals_verif = cur_locals_verif;
             }
         }
     }
 
-    // Safety: if the function uses any wide types (Double/Long) and the
-    // tracked max_stack is low, bump it. Wide types take 2 stack slots
-    // and the tracking in walk_block may undercount when they appear in
-    // string template concatenation (StringBuilder.append) alongside
-    // other stack-resident values like PrintStream and StringBuilder.
+    // Safety: bump max_stack for string template concatenation with wide
+    // types. Skotch's walk_block stack tracker undercounts when a
+    // Long/Double append happens inside `new StringBuilder; dup; ...; append(J)`.
+    // Detect this specific pattern: StringBuilder allocation (`new+dup`)
+    // followed by a wide-type append, which the tracker doesn't fully
+    // account for. Conservative: only apply when both `new` (0xBB) and a
+    // wide-type append are present and the function uses Long/Double.
     let has_wide = func
         .locals
         .iter()
         .any(|ty| matches!(ty, Ty::Long | Ty::Double));
-    if has_wide && max_stack < 5 {
+    let mut has_new_dup = false;
+    let mut i = 0;
+    while i < code.len() {
+        if code[i] == 0xBB && i + 3 < code.len() && code[i + 3] == 0x59 {
+            has_new_dup = true;
+            break;
+        }
+        i += instruction_len(&code, i);
+    }
+    if has_wide && has_new_dup && max_stack < 5 {
         max_stack = 5;
     }
 
@@ -2264,6 +2351,8 @@ fn emit_method_body(
         .write_u32::<BigEndian>(code_attr.len() as u32)
         .unwrap();
     method.write_all(&code_attr).unwrap();
+    // Clear inlinable-constants table for the next function.
+    INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
     method
 }
 
@@ -2665,7 +2754,12 @@ fn emit_method(
         );
     }
     let descriptor = jvm_descriptor(func);
-    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+    let visibility_flag = if func.is_private {
+        ACC_PRIVATE
+    } else {
+        ACC_PUBLIC
+    };
+    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -5093,18 +5187,13 @@ fn emit_mir_segment(
                     if let Some(&a) = args.first() {
                         emit_load_mir_local(code, func, local_slot, a);
                         let arg_ty = &func.locals[a.0 as usize];
-                        // Same checkcast fix for print().
-                        if matches!(arg_ty, Ty::String) {
-                            let ci = cp.class("java/lang/String");
-                            code.push(0xC0); // checkcast
-                            code.write_u16::<BigEndian>(ci).unwrap();
-                        }
                         let descriptor = match arg_ty {
                             Ty::Bool => "(Z)V",
+                            Ty::Char => "(C)V",
                             Ty::Int => "(I)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
-                            Ty::String => "(Ljava/lang/String;)V",
+                            // kotlinc uses print(Object) for all reference types
                             _ => "(Ljava/lang/Object;)V",
                         };
                         let mr = cp.methodref("java/io/PrintStream", "print", descriptor);
@@ -7673,6 +7762,193 @@ fn jvm_type(ty: &Ty) -> &'static str {
     }
 }
 
+/// Compute the set of locals that can be inlined as constants. A local is
+/// inlinable if:
+/// - It's assigned exactly once with a `Rvalue::Const`
+/// - It's used exactly once IN A BINOP context (kotlinc keeps locals for
+///   call arguments — see `is_call_arg_use`)
+/// - It's not a parameter or named (val/var) local
+///
+/// This matches kotlinc's behavior of pushing constants directly at the use
+/// site for arithmetic/comparison operations, but materializing them to a
+/// local before method calls.
+fn compute_inlinable_constants(func: &MirFunction) -> FxHashMap<u32, MirConst> {
+    let mut const_assign: FxHashMap<u32, MirConst> = FxHashMap::default();
+    let mut assign_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    let mut use_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    // Track locals used in non-BinOp contexts (Call args, etc.) — these
+    // must NOT be inlined, even if they're single-use.
+    let mut non_binop_use: FxHashSet<u32> = FxHashSet::default();
+
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            *assign_counts.entry(dest.0).or_insert(0) += 1;
+            if let Rvalue::Const(c) = value {
+                const_assign.entry(dest.0).or_insert_with(|| c.clone());
+            }
+            count_rvalue_uses(value, &mut use_counts);
+            // Mark locals used in non-BinOp contexts.
+            mark_non_binop_uses(value, &mut non_binop_use);
+        }
+        match &block.terminator {
+            Terminator::Throw(l) => {
+                *use_counts.entry(l.0).or_insert(0) += 1;
+                non_binop_use.insert(l.0);
+            }
+            Terminator::ReturnValue(l) => {
+                *use_counts.entry(l.0).or_insert(0) += 1;
+                non_binop_use.insert(l.0);
+            }
+            Terminator::Branch { cond, .. } => {
+                *use_counts.entry(cond.0).or_insert(0) += 1;
+                non_binop_use.insert(cond.0);
+            }
+            _ => {}
+        }
+    }
+
+    let param_set: FxHashSet<u32> = func.params.iter().map(|p| p.0).collect();
+    let named: FxHashSet<u32> = func.named_locals.iter().map(|l| l.0).collect();
+    let mut result: FxHashMap<u32, MirConst> = FxHashMap::default();
+    for (&local, &count) in &assign_counts {
+        if count != 1 {
+            continue;
+        }
+        if param_set.contains(&local) || named.contains(&local) {
+            continue;
+        }
+        let Some(c) = const_assign.get(&local) else {
+            continue;
+        };
+        let uses = use_counts.get(&local).copied().unwrap_or(0);
+        if uses != 1 {
+            continue;
+        }
+        // Skip locals used as call args, return values, etc. — kotlinc
+        // materializes these to locals.
+        if non_binop_use.contains(&local) {
+            continue;
+        }
+        // Only inline constants that don't need the constant pool —
+        // load_local can emit these directly without cp/module access.
+        if !is_simply_inlinable(c) {
+            continue;
+        }
+        result.insert(local, c.clone());
+    }
+    result
+}
+
+/// Mark locals that appear as Call args, field receivers, etc. These should
+/// NOT be inlined as constants — kotlinc materializes them to locals.
+fn mark_non_binop_uses(rv: &Rvalue, set: &mut FxHashSet<u32>) {
+    match rv {
+        Rvalue::Local(l) => {
+            // A direct copy through a local — propagate the mark.
+            set.insert(l.0);
+        }
+        Rvalue::Call { args, .. } => {
+            for &a in args {
+                set.insert(a.0);
+            }
+        }
+        Rvalue::GetField { receiver, .. } => {
+            set.insert(receiver.0);
+        }
+        Rvalue::PutField {
+            receiver, value, ..
+        } => {
+            set.insert(receiver.0);
+            set.insert(value.0);
+        }
+        Rvalue::ArrayLoad { array, index } => {
+            set.insert(array.0);
+            set.insert(index.0);
+        }
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            set.insert(array.0);
+            set.insert(index.0);
+            set.insert(value.0);
+        }
+        Rvalue::ArrayLength(a) | Rvalue::NewIntArray(a) | Rvalue::NewObjectArray(a) => {
+            set.insert(a.0);
+        }
+        Rvalue::NewTypedObjectArray { size, .. } => {
+            set.insert(size.0);
+        }
+        Rvalue::InstanceOf { obj, .. } => {
+            set.insert(obj.0);
+        }
+        // BinOp: this IS a binop context — operands are eligible for inlining.
+        Rvalue::BinOp { .. } => {}
+        // Other variants don't reference locals, or do so in BinOp-like contexts.
+        _ => {}
+    }
+}
+
+/// Whether a constant can be inlined without access to the constant pool.
+/// Matches the cases handled by `try_emit_simple_const`.
+fn is_simply_inlinable(c: &MirConst) -> bool {
+    match c {
+        MirConst::Bool(_) | MirConst::Null => true,
+        MirConst::Int(v) => (-32768..=32767).contains(v),
+        MirConst::Long(v) => *v == 0 || *v == 1,
+        // Float, Double, String — need constant pool, can't inline simply
+        _ => false,
+    }
+}
+
+/// Increment use counts for every `LocalId` referenced in `rv`.
+fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
+    let mut bump = |id: LocalId| {
+        *counts.entry(id.0).or_insert(0) += 1;
+    };
+    match rv {
+        Rvalue::Const(_) | Rvalue::NewInstance(_) | Rvalue::GetStaticField { .. } => {}
+        Rvalue::Local(l) => bump(*l),
+        Rvalue::BinOp { lhs, rhs, .. } => {
+            bump(*lhs);
+            bump(*rhs);
+        }
+        Rvalue::GetField { receiver, .. } => bump(*receiver),
+        Rvalue::PutField {
+            receiver, value, ..
+        } => {
+            bump(*receiver);
+            bump(*value);
+        }
+        Rvalue::Call { args, .. } => {
+            for &a in args {
+                bump(a);
+            }
+        }
+        Rvalue::InstanceOf { obj, .. } => bump(*obj),
+        Rvalue::NewIntArray(s) => bump(*s),
+        Rvalue::ArrayLoad { array, index } => {
+            bump(*array);
+            bump(*index);
+        }
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            bump(*array);
+            bump(*index);
+            bump(*value);
+        }
+        Rvalue::ArrayLength(a) => bump(*a),
+        Rvalue::NewObjectArray(s) => bump(*s),
+        Rvalue::NewTypedObjectArray { size, .. } => bump(*size),
+        _ => {}
+    }
+}
+
 /// Get JVM type descriptor for a type, supporting class types.
 fn jvm_type_string(ty: &Ty) -> String {
     match ty {
@@ -7699,6 +7975,13 @@ fn walk_block(
 ) {
     for stmt in &block.stmts {
         let Stmt::Assign { dest, value } = stmt;
+        // Skip emission of single-use constant assignments — they will be
+        // inlined at the use site by `load_local`.
+        if matches!(value, Rvalue::Const(_))
+            && INLINABLE_CONSTS.with(|cell| cell.borrow().contains_key(&dest.0))
+        {
+            continue;
+        }
         match value {
             Rvalue::Const(c) => {
                 // Fix type mismatches between const value and dest local:
@@ -8175,20 +8458,86 @@ fn walk_block(
                             continue;
                         }
 
+                        // kotlinc generates comparison results using the
+                        // inverted branch pattern: branch to the FALSE case
+                        // when the inverted condition holds, fall through
+                        // to the TRUE case, then jump over the FALSE case.
+                        // We mirror this for byte-for-byte parity.
+                        //
+                        //   <push lhs>
+                        //   <push rhs>             (skipped when rhs == 0)
+                        //   if_icmp<INV>  +7       (branch to FALSE case)
+                        //   iconst_1               (TRUE case, fall-through)
+                        //   goto         +4        (skip FALSE case)
+                        //   iconst_0               (FALSE case, branch target)
+                        //
+                        // Compare-with-zero optimization: if the rhs is a
+                        // constant 0 (just emitted inline via inlinable-
+                        // constants), pop the redundant 0 and use the
+                        // single-operand `if*` opcode instead of `if_icmp*`.
+
+                        let rhs_is_zero = !is_ref
+                            && INLINABLE_CONSTS.with(|cell| {
+                                matches!(
+                                    cell.borrow().get(&rhs.0),
+                                    Some(MirConst::Int(0)) | Some(MirConst::Bool(false))
+                                )
+                            });
+                        if rhs_is_zero {
+                            debug_assert_eq!(code.last().copied(), Some(0x03));
+                            code.pop();
+                            bump(stack, max_stack, -1);
+                            // Inverted single-operand branch.
+                            let branch_op: u8 = match op {
+                                MBinOp::CmpEq => 0x9A, // ifne (inverse of ==)
+                                MBinOp::CmpNe => 0x99, // ifeq (inverse of !=)
+                                MBinOp::CmpLt => 0x9C, // ifge (inverse of <)
+                                MBinOp::CmpGe => 0x9B, // iflt (inverse of >=)
+                                MBinOp::CmpGt => 0x9E, // ifle (inverse of >)
+                                MBinOp::CmpLe => 0x9D, // ifgt (inverse of <=)
+                                _ => unreachable!(),
+                            };
+                            let cmp_start = code.len();
+                            code.push(branch_op);
+                            code.write_i16::<BigEndian>(7).unwrap();
+                            bump(stack, max_stack, -1); // pops the lhs int
+                            code.push(0x04); // iconst_1 (TRUE — fall-through case)
+                            bump(stack, max_stack, 1);
+                            code.push(0xA7); // goto L_end
+                            code.write_i16::<BigEndian>(4).unwrap();
+                            code.push(0x03); // iconst_0 (FALSE — branch target)
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 7,
+                                stack_count: 0,
+                                cmp_start,
+                                block_idx,
+                            });
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 8,
+                                stack_count: 1,
+                                cmp_start,
+                                block_idx,
+                            });
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
+                        // Inverted branch: jump to FALSE case when the
+                        // inverted condition holds.
                         let branch_op: u8 = if is_ref {
                             match op {
-                                MBinOp::CmpEq => 0xA5, // if_acmpeq
-                                MBinOp::CmpNe => 0xA6, // if_acmpne
-                                _ => 0xA5,
+                                MBinOp::CmpEq => 0xA6, // if_acmpne (inverse of ==)
+                                MBinOp::CmpNe => 0xA5, // if_acmpeq (inverse of !=)
+                                _ => 0xA6,
                             }
                         } else {
                             match op {
-                                MBinOp::CmpEq => 0x9F, // if_icmpeq
-                                MBinOp::CmpNe => 0xA0, // if_icmpne
-                                MBinOp::CmpLt => 0xA1, // if_icmplt
-                                MBinOp::CmpGe => 0xA2, // if_icmpge
-                                MBinOp::CmpGt => 0xA3, // if_icmpgt
-                                MBinOp::CmpLe => 0xA4, // if_icmple
+                                MBinOp::CmpEq => 0xA0, // if_icmpne
+                                MBinOp::CmpNe => 0x9F, // if_icmpeq
+                                MBinOp::CmpLt => 0xA2, // if_icmpge
+                                MBinOp::CmpGe => 0xA1, // if_icmplt
+                                MBinOp::CmpGt => 0xA4, // if_icmple
+                                MBinOp::CmpLe => 0xA3, // if_icmpgt
                                 _ => unreachable!(),
                             }
                         };
@@ -8196,17 +8545,15 @@ fn walk_block(
                         code.push(branch_op);
                         code.write_i16::<BigEndian>(7).unwrap();
                         bump(stack, max_stack, -2); // pops both int operands
-                        code.push(0x03); // iconst_0 (false)
+                        code.push(0x04); // iconst_1 (TRUE — fall-through)
                         bump(stack, max_stack, 1);
                         code.push(0xA7); // goto L_end
                         code.write_i16::<BigEndian>(4).unwrap(); // skip 1+3=4
-                                                                 // L_true:
-                        code.push(0x04); // iconst_1 (true)
-                                         // L_end: (stack has one int)
+                        code.push(0x03); // iconst_0 (FALSE — branch target)
 
                         // Record intra-block branch targets for StackMapTable.
                         cmp_targets.push(CmpBranchTarget {
-                            offset: cmp_start + 7, // L_true
+                            offset: cmp_start + 7, // FALSE case
                             stack_count: 0,
                             cmp_start,
                             block_idx,
@@ -8297,7 +8644,7 @@ fn walk_block(
                             Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
-                            Ty::String => "(Ljava/lang/String;)V",
+                            // kotlinc uses println(Object) for all reference types
                             _ => "(Ljava/lang/Object;)V",
                         };
                         let mref = cp.methodref("java/io/PrintStream", "println", descriptor);
@@ -8335,7 +8682,7 @@ fn walk_block(
                             Ty::Float => "(F)V",
                             Ty::Long => "(J)V",
                             Ty::Double => "(D)V",
-                            Ty::String => "(Ljava/lang/String;)V",
+                            // kotlinc uses println(Object) for all reference types
                             _ => "(Ljava/lang/Object;)V",
                         };
                         let mref = cp.methodref("java/io/PrintStream", "print", descriptor);
@@ -9186,6 +9533,16 @@ fn store_local(
     *stack -= width;
 }
 
+thread_local! {
+    /// Per-function map of inlinable constant locals. Set by
+    /// `emit_method_body` before `walk_block` runs, cleared after. When
+    /// `load_local` is called for an inlinable local, the constant is
+    /// pushed inline instead of loaded from a slot, matching kotlinc's
+    /// behavior of avoiding redundant local materialization.
+    static INLINABLE_CONSTS: RefCell<FxHashMap<u32, MirConst>> =
+        RefCell::new(FxHashMap::default());
+}
+
 fn load_local(
     code: &mut Vec<u8>,
     stack: &mut i32,
@@ -9197,6 +9554,14 @@ fn load_local(
     let ty = &locals[local.0 as usize];
     if matches!(ty, Ty::Unit) {
         return;
+    }
+    // Check inlinable-constants table. If this local is a single-use
+    // constant, push it directly instead of loading a slot.
+    let inlined = INLINABLE_CONSTS.with(|cell| cell.borrow().get(&local.0).cloned());
+    if let Some(c) = inlined {
+        if try_emit_simple_const(code, stack, max_stack, &c) {
+            return;
+        }
     }
     // If the local was never stored (e.g. if-expression result in a
     // branch where the then-block terminates via return/break and
@@ -9228,6 +9593,67 @@ fn load_local(
     bump(stack, max_stack, width);
 }
 
+/// Try to emit a simple constant inline (without needing the constant pool).
+/// Returns `true` if successful. `false` means the constant requires cp
+/// access (Float, Double > 1.0, String, large Int, etc.) and the caller
+/// must fall back to a regular `iload`.
+fn try_emit_simple_const(
+    code: &mut Vec<u8>,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    c: &MirConst,
+) -> bool {
+    match c {
+        MirConst::Bool(b) => {
+            code.push(if *b { 0x04 } else { 0x03 });
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Null => {
+            code.push(0x01);
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Int(v) => match *v {
+            -1 => {
+                code.push(0x02);
+                bump(stack, max_stack, 1);
+                true
+            }
+            0..=5 => {
+                code.push(0x03 + (*v as u8));
+                bump(stack, max_stack, 1);
+                true
+            }
+            v if (-128..=127).contains(&v) => {
+                code.push(0x10); // bipush
+                code.push(v as u8);
+                bump(stack, max_stack, 1);
+                true
+            }
+            v if (-32768..=32767).contains(&v) => {
+                code.push(0x11); // sipush
+                code.write_i16::<BigEndian>(v as i16).unwrap();
+                bump(stack, max_stack, 1);
+                true
+            }
+            _ => false, // needs ldc / constant pool
+        },
+        MirConst::Long(0) => {
+            code.push(0x09); // lconst_0
+            bump(stack, max_stack, 2);
+            true
+        }
+        MirConst::Long(1) => {
+            code.push(0x0A); // lconst_1
+            bump(stack, max_stack, 2);
+            true
+        }
+        // Float, Double, String, large Long, large Int — need constant pool
+        _ => false,
+    }
+}
+
 fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
     *stack += by;
     if *stack > *max_stack {
@@ -9245,7 +9671,36 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
 ///
 /// Only call this when there are NO branch targets in the code — removing
 /// bytes would invalidate jump offsets.
-fn peephole_elide_store_load(code: &mut Vec<u8>) {
+/// Variant of `peephole_elide_store_load` that operates only on the bytecode
+/// region AFTER `min_offset`. Used when the function has intra-block branches
+/// (cmp_targets) — we can still elide store+load pairs positioned after the
+/// last branch target offset, since their bytes don't affect any jump.
+fn peephole_elide_tail_store_load(code: &mut Vec<u8>, min_offset: usize) {
+    loop {
+        let mut removals: Vec<(usize, usize)> = Vec::new();
+        let mut i = min_offset;
+        while i < code.len() {
+            if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
+                let pair_end = i + store_len + load_len;
+                // Be conservative: ensure the slot has no use after the pair.
+                if !slot_loaded_elsewhere(code, slot, pair_end) {
+                    removals.push((i, store_len + load_len));
+                    i += store_len + load_len;
+                    continue;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        if removals.is_empty() {
+            break;
+        }
+        for &(start, len) in removals.iter().rev() {
+            code.drain(start..start + len);
+        }
+    }
+}
+
+fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
     // We may need multiple passes since removing one pair can create new
     // adjacent pairs (e.g., astore_1; aload_1; astore_2; aload_2 → after
     // removing the first pair, astore_2; aload_2 becomes exposed).
@@ -9256,7 +9711,11 @@ fn peephole_elide_store_load(code: &mut Vec<u8>) {
             if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
                 // Only safe to remove if this slot is never loaded again
                 // elsewhere in the method (the adjacent load we're removing
-                // is the ONLY use).
+                // is the ONLY use). Adjacent store+load of any slot is a
+                // pure copy — even named locals are safe to elide here
+                // since the slot can be reassigned later if needed. The
+                // swap pattern (below) is what really needs to preserve
+                // named slots.
                 let pair_end = i + store_len + load_len;
                 if !slot_loaded_elsewhere(code, slot, pair_end) {
                     removals.push((i, store_len + load_len));
@@ -9275,6 +9734,212 @@ fn peephole_elide_store_load(code: &mut Vec<u8>) {
         for &(start, len) in removals.iter().rev() {
             code.drain(start..start + len);
         }
+    }
+
+    // Second pass: swap pattern.
+    //   Xstore_N ; <single-push> ; Xload_N → <single-push> ; swap
+    // when slot N is not used elsewhere AND not a named local. This matches
+    // kotlinc's pattern for arguments computed inline before another value
+    // (e.g., `println(literal)` where receiver is pushed after the arg).
+    peephole_swap_pattern(code, named_slots);
+}
+
+/// Peephole: replace `Xstore_N ; <pure-push> ; Xload_N` with `<pure-push> ; swap`
+/// when slot N has no other uses. This matches kotlinc's codegen which avoids
+/// allocating a local for arguments to single-arg method calls.
+///
+/// Only handles category-1 values (non-Long/Double); swap doesn't work for
+/// category-2 values.
+fn peephole_swap_pattern(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
+    loop {
+        let mut applied: Option<(usize, usize, Vec<u8>)> = None; // (start, old_len, replacement)
+        let mut i = 0;
+        while i < code.len() {
+            // Match a store (compact or generic) of a category-1 slot.
+            let (store_slot, store_len, is_int) = match decode_astore_slot(code, i) {
+                Some(s) => s,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            // Skip named locals — kotlinc preserves them.
+            if named_slots.contains(&store_slot) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // For int stores, only swap when the value came from an invoke*
+            // (call result). kotlinc materializes int constants to locals.
+            if is_int && !previous_is_invoke(code, i) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let push_start = i + store_len;
+            // Match a single pure-push instruction (no pops).
+            let push_len = match pure_push_len(code, push_start) {
+                Some(n) => n,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            let load_start = push_start + push_len;
+            // Match a matching load of the same slot.
+            let load_len = match decode_aload_of_slot(code, load_start, store_slot, is_int) {
+                Some(n) => n,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            // For int stores: only apply swap when the consuming operation
+            // is invokestatic or arithmetic. kotlinc keeps the local for
+            // invokevirtual/invokeinterface dispatch.
+            if is_int {
+                let consume_pos = load_start + load_len;
+                if consume_pos >= code.len() {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                let consume_op = code[consume_pos];
+                // Allow only invokestatic (0xB8) and arithmetic (0x60..=0x83).
+                let allowed = consume_op == 0xB8 || (0x60..=0x83).contains(&consume_op);
+                if !allowed {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            }
+            // Verify the slot isn't loaded anywhere else.
+            let pattern_end = load_start + load_len;
+            if slot_loaded_elsewhere(code, store_slot, pattern_end) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Build replacement: <push bytes> ; swap (0x5F)
+            let mut replacement = Vec::with_capacity(push_len + 1);
+            replacement.extend_from_slice(&code[push_start..push_start + push_len]);
+            replacement.push(0x5F); // swap
+            let old_len = store_len + push_len + load_len;
+            applied = Some((i, old_len, replacement));
+            break;
+        }
+
+        if let Some((start, old_len, replacement)) = applied {
+            code.splice(start..start + old_len, replacement);
+        } else {
+            break;
+        }
+    }
+}
+
+/// If the instruction at `pos` is a category-1 store (compact or generic),
+/// return `Some((slot, instr_len, is_int))`. `is_int` is true for integer
+/// stores (istore), false for reference (astore). kotlinc applies the swap
+/// pattern primarily to references; for integers, it's only applied when
+/// the value came from a method call (not a simple constant).
+fn decode_astore_slot(code: &[u8], pos: usize) -> Option<(u8, usize, bool)> {
+    if pos >= code.len() {
+        return None;
+    }
+    match code[pos] {
+        // Compact astore (reference)
+        0x4B..=0x4E => Some((code[pos] - 0x4B, 1, false)),
+        // Generic 2-byte astore (reference)
+        0x3A if pos + 1 < code.len() => Some((code[pos + 1], 2, false)),
+        // Compact istore
+        0x3B..=0x3E => Some((code[pos] - 0x3B, 1, true)),
+        // Generic 2-byte istore
+        0x36 if pos + 1 < code.len() => Some((code[pos + 1], 2, true)),
+        _ => None,
+    }
+}
+
+/// If the instruction at `pos` is a load of `slot` matching `is_int`, return
+/// `Some(instr_len)`.
+fn decode_aload_of_slot(code: &[u8], pos: usize, slot: u8, is_int: bool) -> Option<usize> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    if is_int {
+        // iload variants
+        if slot <= 3 && op == 0x1A + slot {
+            return Some(1);
+        }
+        if op == 0x15 && pos + 1 < code.len() && code[pos + 1] == slot {
+            return Some(2);
+        }
+    } else {
+        // aload variants
+        if slot <= 3 && op == 0x2A + slot {
+            return Some(1);
+        }
+        if op == 0x19 && pos + 1 < code.len() && code[pos + 1] == slot {
+            return Some(2);
+        }
+    }
+    None
+}
+
+/// Check if the bytecode immediately preceding `pos` is an invoke* instruction.
+/// We use this to determine when int swap is appropriate (int call results
+/// can be reordered, but int constants kotlinc materializes to a local).
+fn previous_is_invoke(code: &[u8], pos: usize) -> bool {
+    // Scan backwards from `pos` looking for the immediately-preceding
+    // instruction. invoke* opcodes are 3 bytes (or 5 for invokeinterface
+    // and invokedynamic). We need to find the last instruction boundary.
+    if pos < 3 {
+        return false;
+    }
+    let candidate3 = pos - 3;
+    let op3 = code[candidate3];
+    if matches!(op3, 0xB6..=0xB8) {
+        // invokevirtual, invokespecial, invokestatic — 3 bytes
+        return instruction_len(code, candidate3) == 3 && candidate3 + 3 == pos;
+    }
+    if pos >= 5 {
+        let candidate5 = pos - 5;
+        let op5 = code[candidate5];
+        if matches!(op5, 0xB9 | 0xBA) {
+            // invokeinterface, invokedynamic — 5 bytes
+            return instruction_len(code, candidate5) == 5 && candidate5 + 5 == pos;
+        }
+    }
+    false
+}
+
+/// If the instruction at `pos` is a "pure push" (pushes exactly one
+/// category-1 value with no side effects on the stack or locals), return
+/// its length. Otherwise None.
+fn pure_push_len(code: &[u8], pos: usize) -> Option<usize> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    match op {
+        // 1-byte pushes: aconst_null, iconst_*, lconst_* (wide!), fconst_*, dconst_* (wide!)
+        0x01 => Some(1),        // aconst_null
+        0x02..=0x08 => Some(1), // iconst_m1..iconst_5
+        0x0B..=0x0D => Some(1), // fconst_0..fconst_2
+        // bipush, sipush
+        0x10 => Some(2),
+        0x11 => Some(3),
+        // ldc, ldc_w (category-1 only — ldc2_w is wide and excluded)
+        0x12 => Some(2),
+        0x13 => Some(3),
+        // Compact loads (1 byte) of category-1 types
+        0x1A..=0x1D => Some(1), // iload_0..3
+        0x22..=0x25 => Some(1), // fload_0..3
+        0x2A..=0x2D => Some(1), // aload_0..3
+        // Generic 2-byte loads of category-1 types
+        0x15 => Some(2), // iload
+        0x17 => Some(2), // fload
+        0x19 => Some(2), // aload
+        // getstatic — pushes the field's value (category-1 only assumed).
+        0xB2 => Some(3),
+        // new — pushes uninitialized objref
+        0xBB => Some(3),
+        _ => None,
     }
 }
 
@@ -9476,6 +10141,206 @@ fn slot_loaded_elsewhere(code: &[u8], slot: u8, from: usize) -> bool {
     false
 }
 
+/// Renumber local slots so they're consecutive starting from `initial_param_slots`.
+/// Returns the new max_locals. After the peephole elision pass, some slots
+/// may be unused (the MIR allocates fresh locals for each statement, but the
+/// peephole eliminates redundant copies). Renumbering to consecutive slots
+/// matches kotlinc's compact slot allocation.
+///
+/// Only safe when there are no branch targets (no StackMapTable to update).
+fn compact_local_slots(code: &mut [u8], initial_param_slots: u8) -> u8 {
+    // Step 1: scan code to find which slots are used and which are wide.
+    // Wide slots (Long/Double) occupy 2 consecutive slots.
+    let mut used = [false; 256];
+    let mut wide = [false; 256]; // wide[s] = true means slot s holds a wide type
+    for slot in 0..initial_param_slots {
+        used[slot as usize] = true;
+    }
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((slot, is_wide)) = decode_slot_reference(code, i) {
+            used[slot as usize] = true;
+            if is_wide {
+                wide[slot as usize] = true;
+                used[slot as usize + 1] = true; // second half of wide value
+            }
+        }
+        i += instruction_len(code, i);
+    }
+
+    // If any wide types are used, skip compaction — wide types pin slot
+    // pairs together, and remapping them safely requires more analysis.
+    if wide.iter().any(|&w| w) {
+        // Compute max_locals from the highest used slot + 1.
+        let max_used = (0..=255usize)
+            .rev()
+            .find(|&s| used[s])
+            .map(|s| s as u16 + 1)
+            .unwrap_or(0);
+        return max_used.min(255) as u8;
+    }
+
+    // Step 2: build remapping table. Used slots are mapped to consecutive
+    // numbers starting from 0.
+    let mut remap = [0u8; 256];
+    let mut next = 0u8;
+    for s in 0..=255usize {
+        if used[s] {
+            remap[s] = next;
+            if next == 255 {
+                // Saturate; no further compaction possible.
+                break;
+            }
+            next += 1;
+        }
+    }
+    let max_used = next;
+
+    // If nothing changed, skip the rewrite pass.
+    let mut needs_rewrite = false;
+    for s in 0..256 {
+        if used[s] && remap[s] != s as u8 {
+            needs_rewrite = true;
+            break;
+        }
+    }
+    if !needs_rewrite {
+        return max_used;
+    }
+
+    // Step 3: rewrite slot references in the bytecode.
+    let mut i = 0;
+    while i < code.len() {
+        rewrite_slot_reference(code, i, &remap);
+        i += instruction_len(code, i);
+    }
+
+    max_used
+}
+
+/// Decode the slot referenced by the instruction at `pos`, if any.
+/// Returns `Some((slot, is_wide))` for load/store/iinc, `None` for other.
+/// `is_wide` is true for Long/Double load/store (which occupy 2 slots).
+fn decode_slot_reference(code: &[u8], pos: usize) -> Option<(u8, bool)> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    match op {
+        // Compact load forms (1 byte, slot encoded in opcode)
+        0x1A..=0x1D => Some((op - 0x1A, false)), // iload_0..iload_3
+        0x1E..=0x21 => Some((op - 0x1E, true)),  // lload_0..lload_3 (wide)
+        0x22..=0x25 => Some((op - 0x22, false)), // fload_0..fload_3
+        0x26..=0x29 => Some((op - 0x26, true)),  // dload_0..dload_3 (wide)
+        0x2A..=0x2D => Some((op - 0x2A, false)), // aload_0..aload_3
+        // Compact store forms
+        0x3B..=0x3E => Some((op - 0x3B, false)), // istore_0..istore_3
+        0x3F..=0x42 => Some((op - 0x3F, true)),  // lstore_0..lstore_3 (wide)
+        0x43..=0x46 => Some((op - 0x43, false)), // fstore_0..fstore_3
+        0x47..=0x4A => Some((op - 0x47, true)),  // dstore_0..dstore_3 (wide)
+        0x4B..=0x4E => Some((op - 0x4B, false)), // astore_0..astore_3
+        // Generic 2-byte load forms
+        0x15 if pos + 1 < code.len() => Some((code[pos + 1], false)), // iload
+        0x16 if pos + 1 < code.len() => Some((code[pos + 1], true)),  // lload (wide)
+        0x17 if pos + 1 < code.len() => Some((code[pos + 1], false)), // fload
+        0x18 if pos + 1 < code.len() => Some((code[pos + 1], true)),  // dload (wide)
+        0x19 if pos + 1 < code.len() => Some((code[pos + 1], false)), // aload
+        // Generic 2-byte store forms
+        0x36 if pos + 1 < code.len() => Some((code[pos + 1], false)), // istore
+        0x37 if pos + 1 < code.len() => Some((code[pos + 1], true)),  // lstore (wide)
+        0x38 if pos + 1 < code.len() => Some((code[pos + 1], false)), // fstore
+        0x39 if pos + 1 < code.len() => Some((code[pos + 1], true)),  // dstore (wide)
+        0x3A if pos + 1 < code.len() => Some((code[pos + 1], false)), // astore
+        // iinc (slot, const) — int-typed
+        0x84 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        _ => None,
+    }
+}
+
+/// Rewrite the slot reference of the instruction at `pos` according to `remap`.
+/// May change the opcode (e.g., aload_2 → aload_0) when the new slot is in 0..=3
+/// or the old slot was in 0..=3 but the new one isn't.
+fn rewrite_slot_reference(code: &mut [u8], pos: usize, remap: &[u8; 256]) {
+    if pos >= code.len() {
+        return;
+    }
+    let op = code[pos];
+    // Compact forms: change to new compact form if new slot <= 3, else
+    // change to generic form. But generic form takes 2 bytes vs 1 — we
+    // can only safely change a compact form if the new slot is also <=3.
+    // Otherwise we'd need to extend the bytecode (not possible without
+    // moving everything). For simplicity, only remap compact↔compact and
+    // generic↔generic of the same arity.
+    match op {
+        0x1A..=0x1D => {
+            let new_slot = remap[(op - 0x1A) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x1A + new_slot;
+            }
+        }
+        0x1E..=0x21 => {
+            let new_slot = remap[(op - 0x1E) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x1E + new_slot;
+            }
+        }
+        0x22..=0x25 => {
+            let new_slot = remap[(op - 0x22) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x22 + new_slot;
+            }
+        }
+        0x26..=0x29 => {
+            let new_slot = remap[(op - 0x26) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x26 + new_slot;
+            }
+        }
+        0x2A..=0x2D => {
+            let new_slot = remap[(op - 0x2A) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x2A + new_slot;
+            }
+        }
+        0x3B..=0x3E => {
+            let new_slot = remap[(op - 0x3B) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x3B + new_slot;
+            }
+        }
+        0x3F..=0x42 => {
+            let new_slot = remap[(op - 0x3F) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x3F + new_slot;
+            }
+        }
+        0x43..=0x46 => {
+            let new_slot = remap[(op - 0x43) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x43 + new_slot;
+            }
+        }
+        0x47..=0x4A => {
+            let new_slot = remap[(op - 0x47) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x47 + new_slot;
+            }
+        }
+        0x4B..=0x4E => {
+            let new_slot = remap[(op - 0x4B) as usize];
+            if new_slot <= 3 {
+                code[pos] = 0x4B + new_slot;
+            }
+        }
+        // Generic 2-byte forms — the slot is at pos+1
+        0x15..=0x19 | 0x36..=0x3A | 0x84 if pos + 1 < code.len() => {
+            let old_slot = code[pos + 1];
+            code[pos + 1] = remap[old_slot as usize];
+        }
+        _ => {}
+    }
+}
+
 /// Get the byte length of the instruction at `pos` in the code array.
 fn instruction_len(code: &[u8], pos: usize) -> usize {
     if pos >= code.len() {
@@ -9531,6 +10396,99 @@ fn instruction_len(code: &[u8], pos: usize) -> usize {
         // tableswitch, lookupswitch: variable — just return 1 to advance
         0xAA | 0xAB => 1,
         _ => 1,
+    }
+}
+
+/// Emit a compact StackMapTable frame. Picks the most compact frame type
+/// that represents the locals and stack state. Falls back to `full_frame`
+/// when no compact form applies.
+///
+/// Frame format reference (JVMS §4.7.4):
+///   - same_frame (0..=63): tag = delta, no payload
+///   - same_locals_1_stack_item_frame (64..=127): tag = 64 + delta, 1 stack item
+///   - same_locals_1_stack_item_frame_extended (247): u2 delta, 1 stack item
+///   - chop_frame (248..=250): u2 delta, drops 251-tag locals
+///   - same_frame_extended (251): u2 delta
+///   - append_frame (252..=254): u2 delta, append (tag-251) locals
+///   - full_frame (255): full state
+fn emit_compact_frame(
+    out: &mut Vec<u8>,
+    delta: u16,
+    cur_locals: &[Vec<u8>],
+    stack: Option<&[u8]>,
+    prev_locals: &[Vec<u8>],
+) {
+    let stack_count = if stack.is_some() { 1 } else { 0 };
+    let cur_n = cur_locals.len();
+    let prev_n = prev_locals.len();
+
+    // Check if the leading locals match.
+    let common = cur_locals
+        .iter()
+        .zip(prev_locals.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let locals_unchanged = common == cur_n && common == prev_n;
+    let locals_appended = common == prev_n && cur_n > prev_n;
+    let locals_chopped = common == cur_n && prev_n > cur_n;
+
+    // same_frame / same_frame_extended: locals unchanged, stack empty
+    if locals_unchanged && stack_count == 0 {
+        if delta <= 63 {
+            out.push(delta as u8);
+        } else {
+            out.push(251); // same_frame_extended
+            out.write_u16::<BigEndian>(delta).unwrap();
+        }
+        return;
+    }
+
+    // same_locals_1_stack_item_frame / extended: locals unchanged, stack has 1 item
+    if locals_unchanged && stack_count == 1 {
+        if delta <= 63 {
+            out.push(64 + delta as u8);
+        } else {
+            out.push(247);
+            out.write_u16::<BigEndian>(delta).unwrap();
+        }
+        out.extend_from_slice(stack.unwrap());
+        return;
+    }
+
+    // append_frame: 1..=3 new locals, stack empty
+    if locals_appended && stack_count == 0 {
+        let added = cur_n - prev_n;
+        if (1..=3).contains(&added) {
+            out.push(251 + added as u8);
+            out.write_u16::<BigEndian>(delta).unwrap();
+            for v in &cur_locals[prev_n..cur_n] {
+                out.extend_from_slice(v);
+            }
+            return;
+        }
+    }
+
+    // chop_frame: 1..=3 fewer locals, stack empty
+    if locals_chopped && stack_count == 0 {
+        let dropped = prev_n - cur_n;
+        if (1..=3).contains(&dropped) {
+            out.push(251 - dropped as u8);
+            out.write_u16::<BigEndian>(delta).unwrap();
+            return;
+        }
+    }
+
+    // Fall back to full_frame.
+    out.push(255);
+    out.write_u16::<BigEndian>(delta).unwrap();
+    out.write_u16::<BigEndian>(cur_n as u16).unwrap();
+    for v in cur_locals {
+        out.extend_from_slice(v);
+    }
+    out.write_u16::<BigEndian>(stack_count).unwrap();
+    if let Some(s) = stack {
+        out.extend_from_slice(s);
     }
 }
 

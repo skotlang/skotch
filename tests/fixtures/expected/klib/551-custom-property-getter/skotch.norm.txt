@@ -20,17 +20,8 @@ unique_name=inputkt
         {
           "Class": "Circle"
         },
-        {
-          "Class": "Circle"
-        },
-        {
-          "Class": "Circle"
-        },
         "Double",
         "Unit",
-        {
-          "Class": "Circle"
-        },
         "Double",
         "Unit"
       ],
@@ -74,7 +65,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Circle",
+                        "method_name": "getArea"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -82,7 +83,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -94,11 +100,11 @@ unique_name=inputkt
                     "kind": {
                       "Virtual": {
                         "class_name": "Circle",
-                        "method_name": "getArea"
+                        "method_name": "getDiameter"
                       }
                     },
                     "args": [
-                      3
+                      1
                     ]
                   }
                 }
@@ -116,51 +122,15 @@ unique_name=inputkt
                   }
                 }
               }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Circle",
-                        "method_name": "getDiameter"
-                      }
-                    },
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
             }
           ],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -386,8 +356,6 @@ unique_name=inputkt
             "Double",
             "Double",
             "Double",
-            "Double",
-            "Double",
             "Double"
           ],
           "blocks": [
@@ -443,7 +411,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "Local": 1
+                      "BinOp": {
+                        "op": "MulD",
+                        "lhs": 4,
+                        "rhs": 1
+                      }
                     }
                   }
                 },
@@ -453,35 +425,15 @@ unique_name=inputkt
                     "value": {
                       "BinOp": {
                         "op": "MulD",
-                        "lhs": 4,
-                        "rhs": 5
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 8,
-                    "value": {
-                      "BinOp": {
-                        "op": "MulD",
-                        "lhs": 6,
-                        "rhs": 7
+                        "lhs": 5,
+                        "rhs": 1
                       }
                     }
                   }
                 }
               ],
               "terminator": {
-                "ReturnValue": 8
+                "ReturnValue": 6
               }
             }
           ],
@@ -497,7 +449,6 @@ unique_name=inputkt
             {
               "Class": "Circle"
             },
-            "Double",
             "Double",
             "Double",
             "Double",
@@ -547,14 +498,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
                       "Const": {
                         "Double": 2.0
                       }
@@ -563,19 +506,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 6,
+                    "dest": 5,
                     "value": {
                       "BinOp": {
                         "op": "MulD",
-                        "lhs": 4,
-                        "rhs": 5
+                        "lhs": 1,
+                        "rhs": 4
                       }
                     }
                   }
                 }
               ],
               "terminator": {
-                "ReturnValue": 6
+                "ReturnValue": 5
               }
             }
           ],

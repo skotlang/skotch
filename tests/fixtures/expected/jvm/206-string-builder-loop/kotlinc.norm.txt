@@ -10,14 +10,10 @@ method        joinNumbers (I)Ljava/lang/String; 0x0019
     0004 istore_2
     0005 iload_2
     0006 iload_0
-    0007 op_0xA3
-    0008 nop
-    0009 op_0x22
+    0007 if_icmpgt 41
     0010 iload_2
     0011 iconst_1
-    0012 op_0xA4
-    0013 nop
-    0014 op_0x0A
+    0012 if_icmple 22
     0015 aload_1
     0016 op_0xBA
     0017 nop
@@ -34,9 +30,7 @@ method        joinNumbers (I)Ljava/lang/String; 0x0019
     0029 astore_1
     0030 iload_2
     0031 iload_0
-    0032 op_0x9F
-    0033 nop
-    0034 op_0x09
+    0032 if_icmpeq 41
     0035 op_0x84
     0036 iconst_m1
     0037 aconst_null
@@ -50,12 +44,12 @@ method        main ()V 0x0019
     0000 iconst_5
     0001 invokestatic Method(InputKt.joinNumbers:(I)Ljava/lang/String;)
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0007 op_0x5F
+    0007 swap
     0008 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0011 iconst_1
     0012 invokestatic Method(InputKt.joinNumbers:(I)Ljava/lang/String;)
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 op_0x5F
+    0018 swap
     0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0022 return
 method        main ([Ljava/lang/String;)V 0x1009

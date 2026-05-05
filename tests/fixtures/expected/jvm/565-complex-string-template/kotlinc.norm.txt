@@ -21,7 +21,7 @@ method        main ()V 0x0019
     0000 iconst_5
     0001 op_0xBD
     0002 nop
-    0003 op_0x1F
+    0003 lload_1
     0004 astore_1
     0005 aload_1
     0006 iconst_0
@@ -59,17 +59,17 @@ method        main ()V 0x0019
     0054 nop
     0055 nop
     0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0059 op_0x5F
+    0059 swap
     0060 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0063 ldc "World"
     0065 invokestatic Method(InputKt.greet:(Ljava/lang/String;)Ljava/lang/String;)
     0068 op_0xBA
     0069 nop
-    0070 op_0x47
+    0070 dstore_0
     0071 nop
     0072 nop
     0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0076 op_0x5F
+    0076 swap
     0077 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0080 bipush 10
     0082 istore_1
@@ -87,7 +87,7 @@ method        main ()V 0x0019
     0095 nop
     0096 nop
     0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0100 op_0x5F
+    0100 swap
     0101 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0104 aload_0
     0105 checkcast Class(java/lang/Iterable)
@@ -107,7 +107,7 @@ method        main ()V 0x0019
     0127 nop
     0128 nop
     0129 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0132 op_0x5F
+    0132 swap
     0133 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0136 aload_0
     0137 checkcast Class(java/lang/Iterable)
@@ -118,7 +118,7 @@ method        main ()V 0x0019
     0146 nop
     0147 nop
     0148 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0151 op_0x5F
+    0151 swap
     0152 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0155 aload_0
     0156 checkcast Class(java/lang/Iterable)
@@ -130,7 +130,7 @@ method        main ()V 0x0019
     0166 nop
     0167 nop
     0168 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0171 op_0x5F
+    0171 swap
     0172 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0175 return
 method        main ([Ljava/lang/String;)V 0x1009

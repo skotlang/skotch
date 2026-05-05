@@ -16,7 +16,7 @@ method        main ()V 0x0019
     0016 astore_0
     0017 ldc "caught: division by zero"
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 op_0x5F
+    0022 swap
     0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0026 return
     sub_attr  StackMapTable (7 bytes)

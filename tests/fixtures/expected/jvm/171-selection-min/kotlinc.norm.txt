@@ -37,23 +37,17 @@ method        min3 (III)I 0x0019
   code        max_stack=2 max_locals=3
     0000 iload_0
     0001 iload_1
-    0002 op_0xA3
-    0003 nop
-    0004 op_0x0A
+    0002 if_icmpgt 12
     0005 iload_0
     0006 iload_2
-    0007 op_0xA3
-    0008 nop
-    0009 iconst_2
+    0007 if_icmpgt 12
     0010 iload_0
-    0011 op_0xAC
+    0011 ireturn
     0012 iload_1
     0013 iload_2
-    0014 op_0xA3
-    0015 nop
-    0016 iconst_2
+    0014 if_icmpgt 19
     0017 iload_1
-    0018 op_0xAC
+    0018 ireturn
     0019 iload_2
-    0020 op_0xAC
+    0020 ireturn
     sub_attr  StackMapTable (4 bytes)

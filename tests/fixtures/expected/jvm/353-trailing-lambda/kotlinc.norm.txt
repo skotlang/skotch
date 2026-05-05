@@ -34,7 +34,7 @@ method        main$lambda$0 (Ljava/lang/String;)Lkotlin/Unit; 0x001A
     0010 nop
     0011 nop
     0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 op_0x5F
+    0015 swap
     0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0019 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
     0022 areturn

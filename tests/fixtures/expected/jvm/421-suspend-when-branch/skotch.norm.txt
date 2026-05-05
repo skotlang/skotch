@@ -9,14 +9,14 @@ method        fetch (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0004 ifeq 40
     0007 aload_1
     0008 checkcast Class(InputKt$fetch$1)
-    0011 astore 18
-    0013 aload 18
+    0011 astore 17
+    0013 aload 17
     0015 getfield Field(InputKt$fetch$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
     0021 ifeq 40
-    0024 aload 18
-    0026 aload 18
+    0024 aload 17
+    0026 aload 17
     0028 getfield Field(InputKt$fetch$1.label:I)
     0031 ldc int(-2147483648)
     0033 isub
@@ -26,167 +26,149 @@ method        fetch (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0043 dup
     0044 aload_1
     0045 invokespecial Method(InputKt$fetch$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 18
-    0050 aload 18
+    0048 astore 17
+    0050 aload 17
     0052 getfield Field(InputKt$fetch$1.result:Ljava/lang/Object;)
-    0055 astore 17
+    0055 astore 16
     0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 19
-    0062 op_0x09
-    0063 op_0x37
-    0064 op_0x0C
-    0065 aconst_null
-    0066 astore 9
+    0060 astore 18
+    0062 aconst_null
+    0063 astore 7
+    0065 iconst_0
+    0066 istore 2
     0068 aconst_null
-    0069 astore 16
-    0071 op_0x09
-    0072 op_0x37
-    0073 iconst_2
-    0074 iconst_0
-    0075 istore 10
+    0069 astore 13
+    0071 lconst_0
+    0072 lstore 11
+    0074 aconst_null
+    0075 astore 6
     0077 aconst_null
-    0078 astore 14
+    0078 astore 8
     0080 iconst_0
-    0081 istore 3
+    0081 istore 10
     0083 aconst_null
-    0084 astore 7
-    0086 iconst_0
-    0087 istore 11
-    0089 iconst_0
-    0090 istore 2
-    0092 aconst_null
-    0093 astore 15
+    0084 astore 15
+    0086 lconst_0
+    0087 lstore 4
+    0089 aconst_null
+    0090 astore 14
+    0092 iconst_0
+    0093 istore 9
     0095 iconst_0
-    0096 istore 4
-    0098 aconst_null
-    0099 astore 8
-    0101 aload 18
-    0103 getfield Field(InputKt$fetch$1.label:I)
-    0106 tableswitch default=291 low=0 high=2 0=132 1=247 2=269
-    0132 aload 17
-    0134 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0137 iload_0
-    0138 istore_2
-    0139 iconst_1
-    0140 istore_3
-    0141 iload_2
-    0142 iload_3
-    0143 op_0x9F
-    0144 nop
-    0145 iconst_4
-    0146 iconst_0
-    0147 goto 151
-    0150 iconst_1
-    0151 istore 4
-    0153 iload 4
-    0155 ifeq 185
-    0158 op_0x14
-    0159 nop
-    0160 op_0x32
-    0161 op_0x37
-    0162 iconst_2
-    0163 op_0x16
-    0164 iconst_2
-    0165 aload 18
-    0167 iconst_1
-    0168 putfield Field(InputKt$fetch$1.label:I)
-    0171 aload 18
-    0173 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0176 dup
-    0177 aload 19
-    0179 if_acmpne 254
-    0182 aload 19
-    0184 areturn
-    0185 iconst_2
-    0186 istore 10
-    0188 iload_2
-    0189 iload 10
-    0191 op_0x9F
-    0192 nop
-    0193 iconst_4
-    0194 iconst_0
-    0195 goto 199
-    0198 iconst_1
-    0199 istore 11
-    0201 iload 11
-    0203 ifeq 233
-    0206 op_0x14
-    0207 nop
-    0208 op_0x34
-    0209 op_0x37
-    0210 op_0x0C
-    0211 op_0x16
-    0212 op_0x0C
-    0213 aload 18
-    0215 iconst_2
-    0216 putfield Field(InputKt$fetch$1.label:I)
-    0219 aload 18
-    0221 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0224 dup
-    0225 aload 19
-    0227 if_acmpne 276
-    0230 aload 19
-    0232 areturn
-    0233 ldc "other"
-    0235 astore 16
-    0237 aload 16
-    0239 astore 9
-    0241 aload 16
-    0243 areturn
-    0244 aload 9
-    0246 areturn
-    0247 aload 17
-    0249 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0252 aload 17
-    0254 pop
-    0255 aconst_null
-    0256 astore 7
-    0258 ldc "one"
-    0260 astore 8
-    0262 aload 8
-    0264 astore 9
-    0266 aload 8
-    0268 areturn
-    0269 aload 17
-    0271 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0274 aload 17
-    0276 pop
-    0277 aconst_null
-    0278 astore 14
-    0280 ldc "two"
-    0282 astore 15
-    0284 aload 15
-    0286 astore 9
-    0288 aload 15
-    0290 areturn
-    0291 new Class(java/lang/IllegalStateException)
-    0294 dup
-    0295 ldc "call to 'resume' before 'invoke' with coroutine"
-    0297 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0300 athrow
-    sub_attr  StackMapTable (751 bytes)
+    0096 istore 3
+    0098 aload 17
+    0100 getfield Field(InputKt$fetch$1.label:I)
+    0103 tableswitch default=283 low=0 high=2 0=128 1=239 2=261
+    0128 aload 16
+    0130 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0133 iconst_1
+    0134 istore_2
+    0135 iload_0
+    0136 iload_2
+    0137 if_icmpeq 144
+    0140 iconst_0
+    0141 goto 145
+    0144 iconst_1
+    0145 istore_3
+    0146 iload_3
+    0147 ifeq 177
+    0150 ldc2_w long(10)
+    0153 lstore 4
+    0155 lload 4
+    0157 aload 17
+    0159 iconst_1
+    0160 putfield Field(InputKt$fetch$1.label:I)
+    0163 aload 17
+    0165 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0168 dup
+    0169 aload 18
+    0171 if_acmpne 246
+    0174 aload 18
+    0176 areturn
+    0177 iconst_2
+    0178 istore 9
+    0180 iload_0
+    0181 iload 9
+    0183 if_icmpeq 190
+    0186 iconst_0
+    0187 goto 191
+    0190 iconst_1
+    0191 istore 10
+    0193 iload 10
+    0195 ifeq 225
+    0198 ldc2_w long(20)
+    0201 lstore 11
+    0203 lload 11
+    0205 aload 17
+    0207 iconst_2
+    0208 putfield Field(InputKt$fetch$1.label:I)
+    0211 aload 17
+    0213 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0216 dup
+    0217 aload 18
+    0219 if_acmpne 268
+    0222 aload 18
+    0224 areturn
+    0225 ldc "other"
+    0227 astore 15
+    0229 aload 15
+    0231 astore 8
+    0233 aload 15
+    0235 areturn
+    0236 aload 8
+    0238 areturn
+    0239 aload 16
+    0241 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0244 aload 16
+    0246 pop
+    0247 aconst_null
+    0248 astore 6
+    0250 ldc "one"
+    0252 astore 7
+    0254 aload 7
+    0256 astore 8
+    0258 aload 7
+    0260 areturn
+    0261 aload 16
+    0263 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0266 aload 16
+    0268 pop
+    0269 aconst_null
+    0270 astore 13
+    0272 ldc "two"
+    0274 astore 14
+    0276 aload 14
+    0278 astore 8
+    0280 aload 14
+    0282 areturn
+    0283 new Class(java/lang/IllegalStateException)
+    0286 dup
+    0287 ldc "call to 'resume' before 'invoke' with coroutine"
+    0289 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0292 athrow
+    sub_attr  StackMapTable (734 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=7
+  code        max_stack=4 max_locals=6
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 aconst_null
     0005 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
     0008 astore_0
     0009 aconst_null
-    0010 astore_2
+    0010 astore_1
     0011 aload_0
     0012 checkcast Class(kotlin/jvm/functions/Function2)
-    0015 astore_3
+    0015 astore_2
     0016 iconst_1
-    0017 istore 4
+    0017 istore 3
     0019 aconst_null
-    0020 astore 5
-    0022 aload_2
-    0023 aload_3
-    0024 iload 4
-    0026 aload 5
+    0020 astore 4
+    0022 aload_1
+    0023 aload_2
+    0024 iload 3
+    0026 aload 4
     0028 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
-    0031 astore 6
+    0031 astore 5
     0033 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

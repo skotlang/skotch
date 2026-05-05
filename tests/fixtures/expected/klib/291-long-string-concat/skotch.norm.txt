@@ -17,18 +17,12 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "String",
-        "String",
-        "Long",
-        "Long",
-        "String",
         "Long",
         "String",
         "String",
         "Unit",
         "Long",
-        "Long",
         "String",
-        "Long",
         "String",
         "String",
         "Unit"
@@ -50,14 +44,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "Const": {
                     "Long": 42
                   }
@@ -66,9 +52,32 @@ unique_name=inputkt
             },
             {
               "Assign": {
+                "dest": 2,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "java/lang/Long",
+                        "method_name": "toString",
+                        "descriptor": "(J)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
+                  "BinOp": {
+                    "op": "ConcatStr",
+                    "lhs": 0,
+                    "rhs": 2
+                  }
                 }
               }
             },
@@ -76,7 +85,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
+                    ]
+                  }
                 }
               }
             },
@@ -84,13 +98,25 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 3
+                  "Const": {
+                    "Long": 100
+                  }
                 }
               }
             },
             {
               "Assign": {
                 "dest": 6,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": {
@@ -109,25 +135,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 8,
                 "value": {
                   "BinOp": {
                     "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 6
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      7
-                    ]
+                    "lhs": 6,
+                    "rhs": 7
                   }
                 }
               }
@@ -136,77 +149,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Const": {
-                    "Long": 100
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Local": 9
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 12,
-                "value": {
-                  "Local": 10
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 13,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Long",
-                        "method_name": "toString",
-                        "descriptor": "(J)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      12
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 14,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 11,
-                    "rhs": 13
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      14
+                      8
                     ]
                   }
                 }
@@ -216,7 +162,12 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        1,
+        5
+      ]
     },
     {
       "id": 1,

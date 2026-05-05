@@ -19,8 +19,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Int",
-        "Int",
         "Unit",
         {
           "Class": "ArithmeticException"
@@ -73,26 +71,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -107,7 +89,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Const": "Null"
                 }
@@ -115,7 +97,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "String": 0
@@ -125,12 +107,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      7
+                      5
                     ]
                   }
                 }
@@ -154,6 +136,9 @@ unique_name=inputkt
           "handler_block": 2,
           "catch_type": "java/lang/ArithmeticException"
         }
+      ],
+      "named_locals": [
+        2
       ]
     },
     {

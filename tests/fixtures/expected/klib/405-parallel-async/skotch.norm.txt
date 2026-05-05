@@ -378,9 +378,6 @@ unique_name=inputkt
               "Class": "kotlinx/coroutines/Deferred"
             },
             {
-              "Class": "kotlinx/coroutines/Deferred"
-            },
-            {
               "Class": "InputKt$Lambda$2"
             },
             {
@@ -405,18 +402,9 @@ unique_name=inputkt
               "Class": "kotlinx/coroutines/Deferred"
             },
             {
-              "Class": "kotlinx/coroutines/Deferred"
-            },
-            {
-              "Class": "kotlinx/coroutines/Deferred"
-            },
-            {
               "Class": "kotlin/coroutines/Continuation"
             },
             "Any",
-            {
-              "Class": "kotlinx/coroutines/Deferred"
-            },
             {
               "Class": "kotlin/coroutines/Continuation"
             },
@@ -556,21 +544,13 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 11,
                     "value": {
-                      "Local": 10
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 12,
-                    "value": {
                       "NewInstance": "InputKt$Lambda$2"
                     }
                   }
                 },
                 {
                   "Assign": {
-                    "dest": 13,
+                    "dest": 12,
                     "value": {
                       "Const": "Null"
                     }
@@ -578,14 +558,14 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 12,
+                    "dest": 11,
                     "value": {
                       "Call": {
                         "kind": {
                           "Constructor": "InputKt$Lambda$2"
                         },
                         "args": [
-                          13
+                          12
                         ]
                       }
                     }
@@ -593,7 +573,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 14,
+                    "dest": 13,
                     "value": {
                       "GetField": {
                         "receiver": 0,
@@ -605,12 +585,20 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 15,
+                    "dest": 14,
                     "value": {
                       "CheckCast": {
-                        "obj": 14,
+                        "obj": 13,
                         "target_class": "kotlinx/coroutines/CoroutineScope"
                       }
+                    }
+                  }
+                },
+                {
+                  "Assign": {
+                    "dest": 15,
+                    "value": {
+                      "Const": "Null"
                     }
                   }
                 },
@@ -626,16 +614,8 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 17,
                     "value": {
-                      "Const": "Null"
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 18,
-                    "value": {
                       "CheckCast": {
-                        "obj": 12,
+                        "obj": 11,
                         "target_class": "kotlin/jvm/functions/Function2"
                       }
                     }
@@ -643,7 +623,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 19,
+                    "dest": 18,
                     "value": {
                       "Const": {
                         "Int": 3
@@ -653,7 +633,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 20,
+                    "dest": 19,
                     "value": {
                       "Const": "Null"
                     }
@@ -661,7 +641,7 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 21,
+                    "dest": 20,
                     "value": {
                       "Call": {
                         "kind": {
@@ -672,12 +652,12 @@ unique_name=inputkt
                           }
                         },
                         "args": [
+                          14,
                           15,
                           16,
                           17,
                           18,
-                          19,
-                          20
+                          19
                         ]
                       }
                     }
@@ -685,9 +665,29 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
+                    "dest": 21,
+                    "value": {
+                      "Const": "Null"
+                    }
+                  }
+                },
+                {
+                  "Assign": {
                     "dest": 22,
                     "value": {
-                      "Local": 21
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "kotlinx/coroutines/Deferred",
+                            "method_name": "await",
+                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                          }
+                        },
+                        "args": [
+                          10,
+                          21
+                        ]
+                      }
                     }
                   }
                 },
@@ -695,7 +695,7 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 23,
                     "value": {
-                      "Local": 11
+                      "Const": "Null"
                     }
                   }
                 },
@@ -703,7 +703,19 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 24,
                     "value": {
-                      "Const": "Null"
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "kotlinx/coroutines/Deferred",
+                            "method_name": "await",
+                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                          }
+                        },
+                        "args": [
+                          20,
+                          23
+                        ]
+                      }
                     }
                   }
                 },
@@ -714,14 +726,13 @@ unique_name=inputkt
                       "Call": {
                         "kind": {
                           "VirtualJava": {
-                            "class_name": "kotlinx/coroutines/Deferred",
-                            "method_name": "await",
-                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+                            "class_name": "java/lang/Integer",
+                            "method_name": "intValue",
+                            "descriptor": "()I"
                           }
                         },
                         "args": [
-                          23,
-                          24
+                          22
                         ]
                       }
                     }
@@ -731,7 +742,18 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 26,
                     "value": {
-                      "Local": 22
+                      "Call": {
+                        "kind": {
+                          "VirtualJava": {
+                            "class_name": "java/lang/Integer",
+                            "method_name": "intValue",
+                            "descriptor": "()I"
+                          }
+                        },
+                        "args": [
+                          24
+                        ]
+                      }
                     }
                   }
                 },
@@ -739,7 +761,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 27,
                     "value": {
-                      "Const": "Null"
+                      "BinOp": {
+                        "op": "AddI",
+                        "lhs": 25,
+                        "rhs": 26
+                      }
                     }
                   }
                 },
@@ -748,79 +774,9 @@ unique_name=inputkt
                     "dest": 28,
                     "value": {
                       "Call": {
-                        "kind": {
-                          "VirtualJava": {
-                            "class_name": "kotlinx/coroutines/Deferred",
-                            "method_name": "await",
-                            "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
-                          }
-                        },
-                        "args": [
-                          26,
-                          27
-                        ]
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 29,
-                    "value": {
-                      "Call": {
-                        "kind": {
-                          "VirtualJava": {
-                            "class_name": "java/lang/Integer",
-                            "method_name": "intValue",
-                            "descriptor": "()I"
-                          }
-                        },
-                        "args": [
-                          25
-                        ]
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 30,
-                    "value": {
-                      "Call": {
-                        "kind": {
-                          "VirtualJava": {
-                            "class_name": "java/lang/Integer",
-                            "method_name": "intValue",
-                            "descriptor": "()I"
-                          }
-                        },
-                        "args": [
-                          28
-                        ]
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 31,
-                    "value": {
-                      "BinOp": {
-                        "op": "AddI",
-                        "lhs": 29,
-                        "rhs": 30
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 32,
-                    "value": {
-                      "Call": {
                         "kind": "Println",
                         "args": [
-                          31
+                          27
                         ]
                       }
                     }
@@ -842,11 +798,11 @@ unique_name=inputkt
             "sites": [
               {
                 "block_idx": 0,
-                "stmt_idx": 26,
+                "stmt_idx": 23,
                 "callee_class": "kotlinx/coroutines/Deferred",
                 "callee_method": "await",
                 "args": [
-                  23
+                  10
                 ],
                 "arg_tys": [
                   {
@@ -855,21 +811,21 @@ unique_name=inputkt
                 ],
                 "return_ty": "Any",
                 "is_virtual": true,
-                "result_local": 25,
+                "result_local": 22,
                 "live_spills": [
                   {
-                    "local": 22,
+                    "local": 20,
                     "slot": 0
                   }
                 ]
               },
               {
                 "block_idx": 0,
-                "stmt_idx": 29,
+                "stmt_idx": 25,
                 "callee_class": "kotlinx/coroutines/Deferred",
                 "callee_method": "await",
                 "args": [
-                  26
+                  20
                 ],
                 "arg_tys": [
                   {
@@ -878,10 +834,10 @@ unique_name=inputkt
                 ],
                 "return_ty": "Any",
                 "is_virtual": true,
-                "result_local": 28,
+                "result_local": 24,
                 "live_spills": [
                   {
-                    "local": 25,
+                    "local": 22,
                     "slot": 1
                   }
                 ]
@@ -898,7 +854,11 @@ unique_name=inputkt
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            10,
+            20
+          ]
         }
       ],
       "constructor": {

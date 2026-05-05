@@ -3,72 +3,60 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=22
+  code        max_stack=3 max_locals=13
     0000 ldc "Hello, World!"
-    0002 astore_1
+    0002 astore_0
     0003 ldc "World"
-    0005 astore_2
+    0005 astore_1
     0006 ldc "Kotlin"
-    0008 astore_3
-    0009 aload_1
-    0010 astore 4
-    0012 ldc "World"
-    0014 astore 5
-    0016 ldc "Kotlin"
-    0018 astore 6
-    0020 aload 4
-    0022 aload 5
-    0024 aload 6
-    0026 invokevirtual Method(java/lang/String.replace:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;)
-    0029 astore 7
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 aload 7
-    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0039 ldc "!"
-    0041 astore 8
-    0043 ldc "?"
-    0045 astore 9
-    0047 aload_1
-    0048 astore 10
-    0050 ldc "!"
-    0052 astore 11
-    0054 ldc "?"
-    0056 astore 12
-    0058 aload 10
-    0060 aload 11
-    0062 aload 12
-    0064 invokevirtual Method(java/lang/String.replace:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;)
-    0067 astore 13
-    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0072 aload 13
-    0074 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0077 ldc "World"
-    0079 astore 14
-    0081 aload_1
-    0082 astore 15
-    0084 ldc "World"
-    0086 astore 16
-    0088 aload 15
-    0090 aload 16
-    0092 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
-    0095 istore 17
-    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0100 iload 17
-    0102 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0105 ldc "l"
-    0107 astore 18
-    0109 aload_1
-    0110 astore 19
-    0112 ldc "l"
-    0114 astore 20
-    0116 aload 19
-    0118 aload 20
-    0120 invokevirtual Method(java/lang/String.lastIndexOf:(Ljava/lang/String;)I)
-    0123 istore 21
-    0125 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0128 iload 21
-    0130 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0133 return
+    0008 astore_2
+    0009 ldc "World"
+    0011 astore_3
+    0012 ldc "Kotlin"
+    0014 astore 4
+    0016 aload_0
+    0017 aload_3
+    0018 aload 4
+    0020 invokevirtual Method(java/lang/String.replace:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;)
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 swap
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0030 ldc "!"
+    0032 astore 5
+    0034 ldc "?"
+    0036 astore 6
+    0038 ldc "!"
+    0040 astore 7
+    0042 ldc "?"
+    0044 astore 8
+    0046 aload_0
+    0047 aload 7
+    0049 aload 8
+    0051 invokevirtual Method(java/lang/String.replace:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;)
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 swap
+    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0061 ldc "World"
+    0063 astore 9
+    0065 ldc "World"
+    0067 aload_0
+    0068 swap
+    0069 invokevirtual Method(java/lang/String.indexOf:(Ljava/lang/String;)I)
+    0072 istore 10
+    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0077 iload 10
+    0079 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0082 ldc "l"
+    0084 astore 11
+    0086 ldc "l"
+    0088 aload_0
+    0089 swap
+    0090 invokevirtual Method(java/lang/String.lastIndexOf:(Ljava/lang/String;)I)
+    0093 istore 12
+    0095 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0098 iload 12
+    0100 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0103 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

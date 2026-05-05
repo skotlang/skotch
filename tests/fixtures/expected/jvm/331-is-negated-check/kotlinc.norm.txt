@@ -33,6 +33,6 @@ method        notString (Ljava/lang/Object;)Z 0x0019
     0013 iconst_1
     0014 goto 18
     0017 iconst_0
-    0018 op_0xAC
+    0018 ireturn
     sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

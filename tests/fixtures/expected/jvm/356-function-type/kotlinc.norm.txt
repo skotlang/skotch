@@ -30,7 +30,7 @@ method        main ()V 0x0019
     0038 ldc "World"
     0040 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 op_0x5F
+    0048 swap
     0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0052 return
 method        main ([Ljava/lang/String;)V 0x1009
@@ -42,7 +42,7 @@ method        main$lambda$0 (I)I 0x001A
     0000 iload_0
     0001 iconst_3
     0002 imul
-    0003 op_0xAC
+    0003 ireturn
 method        main$lambda$1 (Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=2 max_locals=1
     0000 aload_0
@@ -51,7 +51,7 @@ method        main$lambda$1 (Ljava/lang/String;)Ljava/lang/String; 0x001A
     0006 aload_0
     0007 op_0xBA
     0008 nop
-    0009 op_0x5F
+    0009 swap
     0010 nop
     0011 nop
     0012 areturn

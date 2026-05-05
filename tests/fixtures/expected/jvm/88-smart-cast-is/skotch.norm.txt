@@ -3,98 +3,85 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=19
-    0000 aload_0
-    0001 astore_1
-    0002 goto 5
-    0005 aload_0
-    0006 astore_2
-    0007 aload_2
-    0008 instanceof Class(java/lang/Integer)
-    0011 istore_3
-    0012 iload_3
-    0013 ifeq 36
-    0016 aload_0
-    0017 checkcast Class(java/lang/Integer)
-    0020 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0023 istore 4
-    0025 ldc "integer"
-    0027 astore 5
-    0029 aload 5
-    0031 astore 6
-    0033 goto 137
-    0036 aload_0
-    0037 astore 7
-    0039 aload 7
-    0041 instanceof Class(java/lang/String)
-    0044 istore 8
-    0046 iload 8
-    0048 ifeq 91
-    0051 aload_0
-    0052 checkcast Class(java/lang/String)
-    0055 astore 9
-    0057 ldc "string of length "
-    0059 astore 10
-    0061 aload 9
-    0063 astore 11
-    0065 aload 11
-    0067 invokevirtual Method(java/lang/String.length:()I)
-    0070 istore 12
-    0072 aload 10
-    0074 iload 12
-    0076 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0079 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0082 astore 13
-    0084 aload 13
-    0086 astore 6
-    0088 goto 137
-    0091 aload_0
-    0092 astore 14
-    0094 aload 14
-    0096 instanceof Class(java/lang/Boolean)
-    0099 istore 15
-    0101 iload 15
-    0103 ifeq 126
-    0106 aload_0
-    0107 checkcast Class(java/lang/Boolean)
-    0110 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
-    0113 istore 16
-    0115 ldc "boolean"
-    0117 astore 17
-    0119 aload 17
-    0121 astore 6
-    0123 goto 137
-    0126 ldc "unknown"
-    0128 astore 18
-    0130 aload 18
-    0132 astore 6
-    0134 goto 137
-    0137 aload 6
-    0139 areturn
-    sub_attr  StackMapTable (110 bytes)
+  code        max_stack=2 max_locals=14
+    0000 goto 3
+    0003 aload_0
+    0004 instanceof Class(java/lang/Integer)
+    0007 istore_1
+    0008 iload_1
+    0009 ifeq 29
+    0012 aload_0
+    0013 checkcast Class(java/lang/Integer)
+    0016 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0019 istore_2
+    0020 ldc "integer"
+    0022 astore_3
+    0023 aload_3
+    0024 astore 4
+    0026 goto 118
+    0029 aload_0
+    0030 instanceof Class(java/lang/String)
+    0033 istore 5
+    0035 iload 5
+    0037 ifeq 76
+    0040 aload_0
+    0041 checkcast Class(java/lang/String)
+    0044 astore 6
+    0046 ldc "string of length "
+    0048 astore 7
+    0050 aload 6
+    0052 invokevirtual Method(java/lang/String.length:()I)
+    0055 istore 8
+    0057 aload 7
+    0059 iload 8
+    0061 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0064 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0067 astore 9
+    0069 aload 9
+    0071 astore 4
+    0073 goto 118
+    0076 aload_0
+    0077 instanceof Class(java/lang/Boolean)
+    0080 istore 10
+    0082 iload 10
+    0084 ifeq 107
+    0087 aload_0
+    0088 checkcast Class(java/lang/Boolean)
+    0091 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
+    0094 istore 11
+    0096 ldc "boolean"
+    0098 astore 12
+    0100 aload 12
+    0102 astore 4
+    0104 goto 118
+    0107 ldc "unknown"
+    0109 astore 13
+    0111 aload 13
+    0113 astore 4
+    0115 goto 118
+    0118 aload 4
+    0120 areturn
+    sub_attr  StackMapTable (44 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=0
     0000 bipush 42
     0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0005 invokestatic Method(InputKt.describe:(Ljava/lang/Object;)Ljava/lang/String;)
-    0008 astore_2
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 aload_2
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0016 ldc "hello"
-    0018 invokestatic Method(InputKt.describe:(Ljava/lang/Object;)Ljava/lang/String;)
-    0021 astore 4
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 aload 4
-    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0031 iconst_1
-    0032 invokestatic Method(java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;)
-    0035 invokestatic Method(InputKt.describe:(Ljava/lang/Object;)Ljava/lang/String;)
-    0038 astore 7
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 aload 7
-    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/String;)V)
-    0048 return
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 swap
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 ldc "hello"
+    0017 invokestatic Method(InputKt.describe:(Ljava/lang/Object;)Ljava/lang/String;)
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 swap
+    0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0027 iconst_1
+    0028 invokestatic Method(java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;)
+    0031 invokestatic Method(InputKt.describe:(Ljava/lang/Object;)Ljava/lang/String;)
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 swap
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -19,7 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Any",
-        "Any",
         "Bool"
       ],
       "blocks": [
@@ -29,16 +28,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "InstanceOf": {
-                    "obj": 1,
+                    "obj": 0,
                     "type_descriptor": "T"
                   }
                 }
@@ -46,7 +37,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 2
+            "ReturnValue": 1
           }
         }
       ],

@@ -3,75 +3,57 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        eval (LExpr;)I 0x0019
-  code        max_stack=2 max_locals=18
-    0000 aload_0
-    0001 checkcast Class(Expr)
-    0004 astore_1
-    0005 goto 8
-    0008 aload_0
-    0009 checkcast Class(Expr)
-    0012 astore_2
-    0013 aload_2
-    0014 instanceof Class(Num)
-    0017 istore_3
-    0018 iload_3
-    0019 ifeq 49
-    0022 aload_0
-    0023 checkcast Class(Num)
-    0026 astore 4
-    0028 aload 4
-    0030 checkcast Class(Num)
-    0033 astore 5
-    0035 aload 5
-    0037 getfield Field(Num.value:I)
-    0040 istore 6
-    0042 iload 6
-    0044 istore 7
-    0046 goto 135
-    0049 aload_0
-    0050 checkcast Class(Expr)
-    0053 astore 8
-    0055 aload 8
-    0057 instanceof Class(Sum)
-    0060 istore 9
-    0062 iload 9
-    0064 ifeq 129
-    0067 aload_0
-    0068 checkcast Class(Sum)
-    0071 astore 10
-    0073 aload 10
-    0075 checkcast Class(Sum)
-    0078 astore 11
-    0080 aload 11
-    0082 getfield Field(Sum.left:LExpr;)
-    0085 astore 12
-    0087 aload 12
-    0089 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0092 istore 13
-    0094 aload 10
-    0096 checkcast Class(Sum)
-    0099 astore 14
-    0101 aload 14
-    0103 getfield Field(Sum.right:LExpr;)
-    0106 astore 15
-    0108 aload 15
-    0110 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0113 istore 16
-    0115 iload 13
-    0117 iload 16
-    0119 iadd
-    0120 istore 17
-    0122 iload 17
-    0124 istore 7
-    0126 goto 135
-    0129 iconst_0
-    0130 istore 7
-    0132 goto 135
-    0135 iload 7
-    0137 op_0xAC
-    sub_attr  StackMapTable (77 bytes)
+  code        max_stack=2 max_locals=12
+    0000 goto 3
+    0003 aload_0
+    0004 instanceof Class(Num)
+    0007 istore_1
+    0008 iload_1
+    0009 ifeq 28
+    0012 aload_0
+    0013 checkcast Class(Num)
+    0016 astore_2
+    0017 aload_2
+    0018 getfield Field(Num.value:I)
+    0021 istore_3
+    0022 iload_3
+    0023 istore 4
+    0025 goto 93
+    0028 aload_0
+    0029 instanceof Class(Sum)
+    0032 istore 5
+    0034 iload 5
+    0036 ifeq 87
+    0039 aload_0
+    0040 checkcast Class(Sum)
+    0043 astore 6
+    0045 aload 6
+    0047 getfield Field(Sum.left:LExpr;)
+    0050 astore 7
+    0052 aload 7
+    0054 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0057 istore 8
+    0059 aload 6
+    0061 getfield Field(Sum.right:LExpr;)
+    0064 astore 9
+    0066 aload 9
+    0068 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0071 istore 10
+    0073 iload 8
+    0075 iload 10
+    0077 iadd
+    0078 istore 11
+    0080 iload 11
+    0082 istore 4
+    0084 goto 93
+    0087 iconst_0
+    0088 istore 4
+    0090 goto 93
+    0093 iload 4
+    0095 ireturn
+    sub_attr  StackMapTable (14 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=11
+  code        max_stack=4 max_locals=8
     0000 iconst_1
     0001 istore_0
     0002 new Class(Num)
@@ -104,14 +86,12 @@ method        main ()V 0x0019
     0052 aload_1
     0053 aload 6
     0055 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
-    0058 checkcast Class(Sum)
-    0061 checkcast Class(Sum)
-    0064 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0067 istore 10
-    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0072 iload 10
-    0074 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0077 return
+    0058 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0061 istore 7
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 iload 7
+    0068 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0071 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

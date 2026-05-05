@@ -21,72 +21,30 @@ unique_name=inputkt
         {
           "Class": "Point"
         },
-        {
-          "Class": "Point"
-        },
         "Int",
         "Int",
         {
           "Class": "Point"
         },
-        {
-          "Class": "Point"
-        },
         "Int",
         "Int",
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         {
           "Class": "Point"
         },
         "Bool",
         "Unit",
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         "Bool",
         "Unit",
-        {
-          "Class": "Point"
-        },
         "Int",
-        {
-          "Class": "Point"
-        },
         "Int",
         "Bool",
         "Unit",
-        {
-          "Class": "Point"
-        },
         "Int",
         "Int",
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         {
           "Class": "Point"
         },
         "Unit",
-        {
-          "Class": "Point"
-        },
-        {
-          "Class": "Point"
-        },
         "Bool",
         "Unit"
       ],
@@ -141,14 +99,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -157,7 +107,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 4,
                 "value": {
                   "Const": {
                     "Int": 2
@@ -167,7 +117,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "NewInstance": "Point"
                 }
@@ -175,15 +125,15 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": {
                       "Constructor": "Point"
                     },
                     "args": [
-                      4,
-                      5
+                      3,
+                      4
                     ]
                   }
                 }
@@ -191,15 +141,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 6
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
+                "dest": 6,
                 "value": {
                   "Const": {
                     "Int": 3
@@ -209,7 +151,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "Const": {
                     "Int": 4
@@ -219,9 +161,37 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 10,
+                "dest": 8,
                 "value": {
                   "NewInstance": "Point"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 8,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "Constructor": "Point"
+                    },
+                    "args": [
+                      6,
+                      7
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 2,
+                    "rhs": 5
+                  }
                 }
               }
             },
@@ -230,11 +200,8 @@ unique_name=inputkt
                 "dest": 10,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "Constructor": "Point"
-                    },
+                    "kind": "Println",
                     "args": [
-                      8,
                       9
                     ]
                   }
@@ -245,7 +212,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "Local": 10
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 2,
+                    "rhs": 8
+                  }
                 }
               }
             },
@@ -253,7 +224,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      11
+                    ]
+                  }
                 }
               }
             },
@@ -261,7 +237,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 13,
                 "value": {
-                  "Local": 7
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "hashCode"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -269,10 +255,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 14,
                 "value": {
-                  "BinOp": {
-                    "op": "CmpEq",
-                    "lhs": 12,
-                    "rhs": 13
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "hashCode"
+                      }
+                    },
+                    "args": [
+                      5
+                    ]
                   }
                 }
               }
@@ -281,11 +273,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 15,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      14
-                    ]
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 13,
+                    "rhs": 14
                   }
                 }
               }
@@ -294,7 +285,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 16,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      15
+                    ]
+                  }
                 }
               }
             },
@@ -302,7 +298,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 17,
                 "value": {
-                  "Local": 11
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "Point",
+                    "field_name": "x"
+                  }
                 }
               }
             },
@@ -310,10 +310,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 18,
                 "value": {
-                  "BinOp": {
-                    "op": "CmpEq",
-                    "lhs": 16,
-                    "rhs": 17
+                  "GetField": {
+                    "receiver": 2,
+                    "class_name": "Point",
+                    "field_name": "y"
                   }
                 }
               }
@@ -323,8 +323,15 @@ unique_name=inputkt
                 "dest": 19,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "copy"
+                      }
+                    },
                     "args": [
+                      2,
+                      17,
                       18
                     ]
                   }
@@ -335,7 +342,12 @@ unique_name=inputkt
               "Assign": {
                 "dest": 20,
                 "value": {
-                  "Local": 3
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      19
+                    ]
+                  }
                 }
               }
             },
@@ -343,16 +355,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 21,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Point",
-                        "method_name": "hashCode"
-                      }
-                    },
-                    "args": [
-                      20
-                    ]
+                  "BinOp": {
+                    "op": "CmpEq",
+                    "lhs": 19,
+                    "rhs": 2
                   }
                 }
               }
@@ -361,170 +367,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 22,
                 "value": {
-                  "Local": 7
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 23,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Point",
-                        "method_name": "hashCode"
-                      }
-                    },
-                    "args": [
-                      22
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 24,
-                "value": {
-                  "BinOp": {
-                    "op": "CmpEq",
-                    "lhs": 21,
-                    "rhs": 23
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 25,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      24
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 26,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 27,
-                "value": {
-                  "GetField": {
-                    "receiver": 26,
-                    "class_name": "Point",
-                    "field_name": "x"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 28,
-                "value": {
-                  "GetField": {
-                    "receiver": 26,
-                    "class_name": "Point",
-                    "field_name": "y"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 29,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Point",
-                        "method_name": "copy"
-                      }
-                    },
-                    "args": [
-                      26,
-                      27,
-                      28
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 30,
-                "value": {
-                  "Local": 29
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 31,
-                "value": {
-                  "Local": 30
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 32,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      31
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 33,
-                "value": {
-                  "Local": 30
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 34,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 35,
-                "value": {
-                  "BinOp": {
-                    "op": "CmpEq",
-                    "lhs": 33,
-                    "rhs": 34
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 36,
-                "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      35
+                      21
                     ]
                   }
                 }
@@ -534,7 +380,13 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        2,
+        5,
+        8,
+        19
+      ]
     },
     {
       "id": 1,

@@ -386,7 +386,6 @@ unique_name=inputkt
             "Any",
             "Int",
             "String",
-            "Int",
             "String",
             "Unit"
           ],
@@ -426,7 +425,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 2
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 3,
+                        "rhs": 2
+                      }
                     }
                   }
                 },
@@ -434,22 +437,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 4
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
                       "Call": {
                         "kind": "Println",
                         "args": [
-                          5
+                          4
                         ]
                       }
                     }

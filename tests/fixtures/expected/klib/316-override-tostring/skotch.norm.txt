@@ -370,11 +370,9 @@ unique_name=inputkt
             "Int",
             "Int",
             "String",
-            "Int",
             "String",
             "String",
             "String",
-            "Int",
             "String",
             "String",
             "String"
@@ -420,7 +418,11 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "Local": 1
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 3,
+                        "rhs": 1
+                      }
                     }
                   }
                 },
@@ -428,10 +430,8 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 5,
                     "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 4
+                      "Const": {
+                        "String": 1
                       }
                     }
                   }
@@ -440,8 +440,10 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 6,
                     "value": {
-                      "Const": {
-                        "String": 1
+                      "BinOp": {
+                        "op": "ConcatStr",
+                        "lhs": 4,
+                        "rhs": 5
                       }
                     }
                   }
@@ -452,8 +454,8 @@ unique_name=inputkt
                     "value": {
                       "BinOp": {
                         "op": "ConcatStr",
-                        "lhs": 5,
-                        "rhs": 6
+                        "lhs": 6,
+                        "rhs": 2
                       }
                     }
                   }
@@ -462,7 +464,9 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 8,
                     "value": {
-                      "Local": 2
+                      "Const": {
+                        "String": 2
+                      }
                     }
                   }
                 },
@@ -474,28 +478,6 @@ unique_name=inputkt
                         "op": "ConcatStr",
                         "lhs": 7,
                         "rhs": 8
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 10,
-                    "value": {
-                      "Const": {
-                        "String": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 11,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 9,
-                        "rhs": 10
                       }
                     }
                   }
@@ -528,7 +510,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 11
+                "ReturnValue": 9
               }
             }
           ],

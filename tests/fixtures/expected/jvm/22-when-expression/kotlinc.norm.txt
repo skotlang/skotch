@@ -19,7 +19,7 @@ method        main ()V 0x0019
     0000 iconst_1
     0001 invokestatic Method(InputKt.describe:(I)Ljava/lang/String;)
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0007 op_0x5F
+    0007 swap
     0008 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0011 return
 method        main ([Ljava/lang/String;)V 0x1009

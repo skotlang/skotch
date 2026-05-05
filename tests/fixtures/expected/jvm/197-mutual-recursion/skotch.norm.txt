@@ -3,101 +3,89 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isEven (I)Z 0x0019
-  code        max_stack=3 max_locals=10
-    0000 iload_0
+  code        max_stack=3 max_locals=8
+    0000 iconst_0
     0001 istore_1
-    0002 iconst_0
-    0003 istore_2
-    0004 iload_1
-    0005 iload_2
-    0006 op_0x9F
-    0007 nop
-    0008 iconst_4
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 25
-    0019 iconst_1
-    0020 istore 4
-    0022 iload 4
-    0024 op_0xAC
-    0025 goto 28
-    0028 iload_0
-    0029 istore 5
-    0031 iconst_1
-    0032 istore 6
-    0034 iload 5
-    0036 iload 6
-    0038 isub
-    0039 istore 7
-    0041 iload 7
-    0043 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0046 astore 8
-    0048 aload 8
-    0050 checkcast Class(java/lang/Integer)
-    0053 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0056 invokestatic Method(InputKt.isOdd:(I)Z)
-    0059 istore 9
-    0061 iload 9
-    0063 op_0xAC
-    sub_attr  StackMapTable (45 bytes)
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpne 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 21
+    0017 iconst_1
+    0018 istore_3
+    0019 iload_3
+    0020 ireturn
+    0021 goto 24
+    0024 iconst_1
+    0025 istore 4
+    0027 iload_0
+    0028 iload 4
+    0030 isub
+    0031 istore 5
+    0033 iload 5
+    0035 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0038 astore 6
+    0040 aload 6
+    0042 checkcast Class(java/lang/Integer)
+    0045 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0048 invokestatic Method(InputKt.isOdd:(I)Z)
+    0051 istore 7
+    0053 iload 7
+    0055 ireturn
+    sub_attr  StackMapTable (13 bytes)
 method        isOdd (I)Z 0x0019
-  code        max_stack=3 max_locals=9
-    0000 iload_0
+  code        max_stack=3 max_locals=7
+    0000 iconst_0
     0001 istore_1
-    0002 iconst_0
-    0003 istore_2
-    0004 iload_1
-    0005 iload_2
-    0006 op_0x9F
-    0007 nop
-    0008 iconst_4
-    0009 iconst_0
-    0010 goto 14
-    0013 iconst_1
-    0014 istore_3
-    0015 iload_3
-    0016 ifeq 25
-    0019 iconst_0
-    0020 istore 4
-    0022 iload 4
-    0024 op_0xAC
-    0025 goto 28
-    0028 iload_0
-    0029 istore 5
-    0031 iconst_1
-    0032 istore 6
-    0034 iload 5
-    0036 iload 6
-    0038 isub
-    0039 istore 7
-    0041 iload 7
-    0043 invokestatic Method(InputKt.isEven:(I)Z)
-    0046 istore 8
-    0048 iload 8
-    0050 op_0xAC
-    sub_attr  StackMapTable (45 bytes)
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpne 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 ifeq 21
+    0017 iconst_0
+    0018 istore_3
+    0019 iload_3
+    0020 ireturn
+    0021 goto 24
+    0024 iconst_1
+    0025 istore 4
+    0027 iload_0
+    0028 iload 4
+    0030 isub
+    0031 istore 5
+    0033 iload 5
+    0035 invokestatic Method(InputKt.isEven:(I)Z)
+    0038 istore 6
+    0040 iload 6
+    0042 ireturn
+    sub_attr  StackMapTable (13 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=3
     0000 iconst_4
     0001 invokestatic Method(InputKt.isEven:(I)Z)
-    0004 istore_1
+    0004 istore_0
     0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 iload_1
+    0008 iload_0
     0009 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0012 bipush 7
     0014 invokestatic Method(InputKt.isOdd:(I)Z)
-    0017 istore_3
+    0017 istore_1
     0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0021 iload_3
+    0021 iload_1
     0022 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0025 iconst_3
     0026 invokestatic Method(InputKt.isEven:(I)Z)
-    0029 istore 5
+    0029 istore 2
     0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 iload 5
+    0034 iload 2
     0036 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0039 return
 method        main ([Ljava/lang/String;)V 0x1009

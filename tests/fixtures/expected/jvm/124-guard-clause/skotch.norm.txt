@@ -3,52 +3,34 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        clamp (III)I 0x0019
-  code        max_stack=3 max_locals=12
+  code        max_stack=3 max_locals=5
     0000 iload_0
-    0001 istore_3
-    0002 iload_1
-    0003 istore 4
-    0005 iload_3
-    0006 iload 4
-    0008 op_0xA1
-    0009 nop
-    0010 iconst_4
-    0011 iconst_0
-    0012 goto 16
-    0015 iconst_1
-    0016 istore 5
-    0018 iload 5
-    0020 ifeq 29
-    0023 iload_1
-    0024 istore 6
-    0026 iload 6
-    0028 op_0xAC
-    0029 goto 32
-    0032 iload_0
-    0033 istore 7
-    0035 iload_2
-    0036 istore 8
-    0038 iload 7
-    0040 iload 8
-    0042 op_0xA3
-    0043 nop
-    0044 iconst_4
-    0045 iconst_0
-    0046 goto 50
-    0049 iconst_1
-    0050 istore 9
-    0052 iload 9
-    0054 ifeq 63
-    0057 iload_2
-    0058 istore 10
-    0060 iload 10
-    0062 op_0xAC
-    0063 goto 66
-    0066 iload_0
-    0067 istore 11
-    0069 iload 11
-    0071 op_0xAC
-    sub_attr  StackMapTable (120 bytes)
+    0001 iload_1
+    0002 if_icmpge 9
+    0005 iconst_1
+    0006 goto 10
+    0009 iconst_0
+    0010 istore_3
+    0011 iload_3
+    0012 ifeq 17
+    0015 iload_1
+    0016 ireturn
+    0017 goto 20
+    0020 iload_0
+    0021 iload_2
+    0022 if_icmple 29
+    0025 iconst_1
+    0026 goto 30
+    0029 iconst_0
+    0030 istore 4
+    0032 iload 4
+    0034 ifeq 39
+    0037 iload_2
+    0038 ireturn
+    0039 goto 42
+    0042 iload_0
+    0043 ireturn
+    sub_attr  StackMapTable (18 bytes)
 method        main ()V 0x0019
   code        max_stack=3 max_locals=12
     0000 iconst_5

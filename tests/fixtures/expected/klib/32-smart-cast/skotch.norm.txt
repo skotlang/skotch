@@ -19,10 +19,8 @@ unique_name=inputkt
       ],
       "locals": [
         "Any",
-        "Any",
         "Bool",
         "Unit",
-        "String",
         "String",
         "Int",
         "Unit"
@@ -34,16 +32,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "InstanceOf": {
-                    "obj": 1,
+                    "obj": 0,
                     "type_descriptor": "java/lang/String"
                   }
                 }
@@ -52,7 +42,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 2,
+              "cond": 1,
               "then_block": 1,
               "else_block": 2
             }
@@ -62,7 +52,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 4,
+                "dest": 3,
                 "value": {
                   "Local": 0
                 }
@@ -70,15 +60,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
-                "value": {
-                  "Local": 4
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": {
@@ -88,7 +70,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      5
+                      3
                     ]
                   }
                 }
@@ -96,12 +78,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      6
+                      4
                     ]
                   }
                 }
@@ -109,9 +91,9 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
+                "dest": 2,
                 "value": {
-                  "Local": 7
+                  "Local": 5
                 }
               }
             }

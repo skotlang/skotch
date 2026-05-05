@@ -3,36 +3,35 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=6
+  code        max_stack=3 max_locals=4
     0000 iconst_0
-    0001 istore_1
+    0001 istore_0
     0002 new Class($Ref$0)
     0005 dup
-    0006 iload_1
+    0006 iload_0
     0007 invokespecial Method($Ref$0.<init>:(I)V)
-    0010 astore_2
+    0010 astore_1
     0011 new Class(InputKt$Lambda$1)
     0014 dup
-    0015 aload_2
+    0015 aload_1
     0016 invokespecial Method(InputKt$Lambda$1.<init>:(L$Ref$0;)V)
-    0019 checkcast Class(InputKt$Lambda$1)
-    0022 astore 4
-    0024 aload 4
+    0019 astore_2
+    0020 aload_2
+    0021 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0024 pop
+    0025 aload_2
     0026 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
     0029 pop
-    0030 aload 4
-    0032 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
-    0035 pop
-    0036 aload 4
-    0038 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
-    0041 pop
-    0042 aload_2
-    0043 getfield Field($Ref$0.element:I)
-    0046 istore 5
-    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 iload 5
-    0053 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0056 return
+    0030 aload_2
+    0031 invokevirtual Method(InputKt$Lambda$1.invoke:()Ljava/lang/Object;)
+    0034 pop
+    0035 aload_1
+    0036 getfield Field($Ref$0.element:I)
+    0039 istore 3
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload 3
+    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0049 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

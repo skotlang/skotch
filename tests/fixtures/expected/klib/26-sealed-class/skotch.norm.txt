@@ -20,12 +20,6 @@ unique_name=inputkt
         {
           "Class": "Ok"
         },
-        {
-          "Class": "Ok"
-        },
-        {
-          "Class": "Ok"
-        },
         "Bool",
         "Unit"
       ],
@@ -69,24 +63,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "InstanceOf": {
-                    "obj": 3,
+                    "obj": 1,
                     "type_descriptor": "Ok"
                   }
                 }
@@ -94,12 +72,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -109,7 +87,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,

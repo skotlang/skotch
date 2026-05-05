@@ -19,7 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "String",
-        "String",
         {
           "Class": "java/lang/IllegalStateException"
         }
@@ -31,21 +30,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "NewInstance": "java/lang/IllegalStateException"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 2,
+                "dest": 1,
                 "value": {
                   "Call": {
                     "kind": {
@@ -55,7 +46,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      1
+                      0
                     ]
                   }
                 }
@@ -63,7 +54,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "Throw": 2
+            "Throw": 1
           }
         }
       ],
@@ -87,9 +78,6 @@ unique_name=inputkt
           "Class": "java/lang/IllegalStateException"
         },
         "String",
-        {
-          "Class": "java/lang/IllegalStateException"
-        },
         "String",
         "Unit"
       ],
@@ -156,14 +144,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -173,7 +153,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      2
                     ]
                   }
                 }
@@ -181,13 +161,13 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
                       3,
-                      5
+                      4
                     ]
                   }
                 }

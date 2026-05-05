@@ -20,22 +20,10 @@ unique_name=inputkt
           "Class": "HelloGreeter"
         },
         {
-          "Class": "HelloGreeter"
-        },
-        {
           "Class": "ByeGreeter"
-        },
-        {
-          "Class": "ByeGreeter"
-        },
-        {
-          "Class": "HelloGreeter"
         },
         "String",
         "Unit",
-        {
-          "Class": "ByeGreeter"
-        },
         "String",
         "Unit"
       ],
@@ -67,21 +55,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
                   "NewInstance": "ByeGreeter"
                 }
               }
             },
             {
               "Assign": {
-                "dest": 2,
+                "dest": 1,
                 "value": {
                   "Call": {
                     "kind": {
@@ -94,23 +74,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
+                "dest": 2,
                 "value": {
                   "Call": {
                     "kind": {
@@ -120,7 +84,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      4
+                      0
                     ]
                   }
                 }
@@ -128,12 +92,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 3,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      5
+                      2
                     ]
                   }
                 }
@@ -141,15 +105,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 3
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
+                "dest": 4,
                 "value": {
                   "Call": {
                     "kind": {
@@ -159,7 +115,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      7
+                      1
                     ]
                   }
                 }
@@ -167,12 +123,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 5,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      4
                     ]
                   }
                 }
@@ -182,7 +138,11 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0,
+        1
+      ]
     },
     {
       "id": 1,

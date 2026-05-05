@@ -19,18 +19,9 @@ unique_name=inputkt
         {
           "Class": "Service"
         },
-        {
-          "Class": "Service"
-        },
         "String",
-        {
-          "Class": "Service"
-        },
         "String",
         "Unit",
-        {
-          "Class": "Service"
-        },
         "String",
         "Unit"
       ],
@@ -62,7 +53,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 0
+                  "Const": {
+                    "String": 0
+                  }
                 }
               }
             },
@@ -80,7 +73,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Service",
+                        "method_name": "setup"
+                      }
+                    },
+                    "args": [
+                      0,
+                      2
+                    ]
+                  }
                 }
               }
             },
@@ -88,8 +92,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "String": 0
+                  "GetField": {
+                    "receiver": 0,
+                    "class_name": "Service",
+                    "field_name": "name"
                   }
                 }
               }
@@ -99,48 +105,9 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Service",
-                        "method_name": "setup"
-                      }
-                    },
-                    "args": [
-                      3,
-                      4
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "GetField": {
-                    "receiver": 6,
-                    "class_name": "Service",
-                    "field_name": "name"
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
                     "kind": "Println",
                     "args": [
-                      7
+                      4
                     ]
                   }
                 }
@@ -150,7 +117,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        0
+      ]
     },
     {
       "id": 1,
@@ -365,7 +335,6 @@ unique_name=inputkt
               "Class": "Service"
             },
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -385,17 +354,9 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 2,
                     "value": {
-                      "Local": 3
+                      "Local": 1
                     }
                   }
                 },

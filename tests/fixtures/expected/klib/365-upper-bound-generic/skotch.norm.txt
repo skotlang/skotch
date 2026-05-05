@@ -21,13 +21,9 @@ unique_name=inputkt
       "locals": [
         "Any",
         "Any",
-        "Any",
-        "Any",
         "Int",
         "Int",
         "Bool",
-        "Any",
-        "Any",
         "Any"
       ],
       "blocks": [
@@ -37,7 +33,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 0
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "intValue",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
+                  }
                 }
               }
             },
@@ -45,7 +52,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 1
+                  "Call": {
+                    "kind": {
+                      "VirtualJava": {
+                        "class_name": "java/lang/Integer",
+                        "method_name": "intValue",
+                        "descriptor": "()I"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
+                  }
                 }
               }
             },
@@ -53,48 +71,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "intValue",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      2
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "intValue",
-                        "descriptor": "()I"
-                      }
-                    },
-                    "args": [
-                      3
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
                   "BinOp": {
                     "op": "CmpGt",
-                    "lhs": 4,
-                    "rhs": 5
+                    "lhs": 2,
+                    "rhs": 3
                   }
                 }
               }
@@ -102,7 +82,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 6,
+              "cond": 4,
               "then_block": 1,
               "else_block": 2
             }
@@ -112,17 +92,9 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 8,
+                "dest": 5,
                 "value": {
                   "Local": 0
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 8
                 }
               }
             }
@@ -135,17 +107,9 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 9,
+                "dest": 5,
                 "value": {
                   "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Local": 9
                 }
               }
             }
@@ -157,7 +121,7 @@ unique_name=inputkt
         {
           "stmts": [],
           "terminator": {
-            "ReturnValue": 7
+            "ReturnValue": 5
           }
         }
       ],

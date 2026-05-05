@@ -11,29 +11,27 @@ method        main ()V 0x0019
     0006 aload_0
     0007 op_0xBA
     0008 nop
-    0009 op_0x14
-    0010 nop
-    0011 nop
+    0009 ldc2_w #0
     0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 op_0x5F
+    0015 swap
     0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0019 iload_1
     0020 op_0xBA
     0021 nop
-    0022 op_0x25
+    0022 fload_3
     0023 nop
     0024 nop
     0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0028 op_0x5F
+    0028 swap
     0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0032 iload_1
     0033 op_0xBA
     0034 nop
-    0035 op_0x28
+    0035 dload_2
     0036 nop
     0037 nop
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 op_0x5F
+    0041 swap
     0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0045 return
 method        main ([Ljava/lang/String;)V 0x1009

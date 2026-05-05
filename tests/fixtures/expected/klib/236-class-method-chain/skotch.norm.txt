@@ -20,12 +20,6 @@ unique_name=inputkt
         {
           "Class": "Counter"
         },
-        {
-          "Class": "Counter"
-        },
-        {
-          "Class": "Counter"
-        },
         "Int",
         "Unit",
         "Int",
@@ -75,22 +69,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 1
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Local": 2
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -99,8 +77,31 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      3
+                      1
                     ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 100
                   }
                 }
               }
@@ -109,8 +110,18 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
+                  "NewInstance": "Counter"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "Constructor": "Counter"
+                    },
                     "args": [
                       4
                     ]
@@ -122,39 +133,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "Const": {
-                    "Int": 100
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "NewInstance": "Counter"
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Constructor": "Counter"
-                    },
-                    "args": [
-                      6
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -163,7 +141,7 @@ unique_name=inputkt
                       }
                     },
                     "args": [
-                      7
+                      5
                     ]
                   }
                 }
@@ -171,12 +149,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      6
                     ]
                   }
                 }
@@ -186,7 +164,10 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        1
+      ]
     },
     {
       "id": 1,
@@ -399,7 +380,6 @@ unique_name=inputkt
             {
               "Class": "Counter"
             },
-            "Int",
             "Int"
           ],
           "blocks": [
@@ -419,14 +399,6 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 2,
-                    "value": {
-                      "Local": 1
-                    }
-                  }
-                },
-                {
-                  "Assign": {
                     "dest": 0,
                     "value": {
                       "PutField": {
@@ -440,7 +412,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 2
+                "ReturnValue": 1
               }
             }
           ],

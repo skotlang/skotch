@@ -575,7 +575,10 @@ unique_name=inputkt
               }
             ],
             "is_instance_method": false
-          }
+          },
+          "named_locals": [
+            2
+          ]
         }
       ],
       "constructor": {

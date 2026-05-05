@@ -46,7 +46,7 @@ method        main$lambda$0 (I)Lkotlin/jvm/functions/Function1; 0x001A
     0000 iload_0
     0001 op_0xBA
     0002 nop
-    0003 op_0x4A
+    0003 dstore_3
     0004 nop
     0005 nop
     0006 astore_1
@@ -57,5 +57,5 @@ method        main$lambda$0$0 (II)I 0x001A
     0000 iload_0
     0001 iload_1
     0002 iadd
-    0003 op_0xAC
+    0003 ireturn
 class_attr    BootstrapMethods (22 bytes)
