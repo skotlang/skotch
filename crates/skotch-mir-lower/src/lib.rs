@@ -4236,8 +4236,11 @@ fn lower_stmt(
                 }
             } else {
                 // No catch — just try + finally (original simplified path).
+                // Lower all statements unconditionally. Don't break on
+                // lower_stmt returning true — it indicates success, not
+                // control-flow termination.
                 for s in &body.stmts {
-                    let terminated = lower_stmt(
+                    lower_stmt(
                         s,
                         fb,
                         scope,
@@ -4248,13 +4251,10 @@ fn lower_stmt(
                         diags,
                         loop_ctx,
                     );
-                    if terminated {
-                        break;
-                    }
                 }
                 if let Some(fb_block) = finally_body {
                     for s in &fb_block.stmts {
-                        let terminated = lower_stmt(
+                        lower_stmt(
                             s,
                             fb,
                             scope,
@@ -4265,9 +4265,6 @@ fn lower_stmt(
                             diags,
                             loop_ctx,
                         );
-                        if terminated {
-                            break;
-                        }
                     }
                 }
             }
@@ -13738,6 +13735,7 @@ fn make_lookup_result(
         "Unit" => Ty::Unit,
         "Boolean" => Ty::Bool,
         "Int" => Ty::Int,
+        "Char" => Ty::Char,
         "Long" => Ty::Long,
         "Double" => Ty::Double,
         "String" => Ty::String,

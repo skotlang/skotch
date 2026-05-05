@@ -7,12 +7,8 @@ declare i32 @printf(ptr, ...)
 
 define i32 @main() {
 entry:
-  %t0 = add i32 0, 1
-  %t1 = add i32 0, 2
-  %t2 = add i32 0, 3
-  %t3 = mul i32 %t1, %t2
-  %t4 = add i32 %t0, %t3
-  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
+  %t0 = add i32 0, 7
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t0)
   ret i32 0
 }
 

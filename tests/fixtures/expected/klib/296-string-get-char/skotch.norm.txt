@@ -21,12 +21,12 @@ unique_name=inputkt
         "Int",
         "String",
         "Int",
-        "Int",
+        "Char",
         "Unit",
         "Int",
         "String",
         "Int",
-        "Int",
+        "Char",
         "Unit"
       ],
       "blocks": [

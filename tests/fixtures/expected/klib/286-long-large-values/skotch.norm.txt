@@ -25,8 +25,6 @@ unique_name=inputkt
         "Long",
         "Unit",
         "Long",
-        "Long",
-        "Long",
         "Unit"
       ],
       "blocks": [
@@ -119,7 +117,7 @@ unique_name=inputkt
                 "dest": 8,
                 "value": {
                   "Const": {
-                    "Long": 1000000000
+                    "Long": 3000000000
                   }
                 }
               }
@@ -128,32 +126,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Const": {
-                    "Long": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "MulL",
-                    "lhs": 8,
-                    "rhs": 9
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      10
+                      8
                     ]
                   }
                 }

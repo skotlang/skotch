@@ -1008,7 +1008,8 @@ pub fn return_type_from_descriptor(desc: &str) -> &str {
     match ret {
         "V" => "Unit",
         "Z" => "Boolean",
-        "B" | "S" | "C" | "I" => "Int", // byte, short, char, int → Int
+        "B" | "S" | "I" => "Int", // byte, short, int → Int
+        "C" => "Char",
         "J" => "Long",
         "D" | "F" => "Double", // float and double → Double
         _ if ret.starts_with("Ljava/lang/String;") => "String",

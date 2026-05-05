@@ -15,7 +15,7 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/lang/System;"
   "V"
-  "VI"
+  "VC"
   "VL"
   "[Ljava/lang/String;"
   "charAt"
@@ -38,7 +38,7 @@ classes       1
 --- methods ---
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
-  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(C)V
   Ljava/lang/String;.charAt(I)C
 
 --- class[0] ---

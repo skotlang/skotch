@@ -18,8 +18,6 @@ unique_name=inputkt
       "locals": [
         "String",
         "Int",
-        "Int",
-        "Int",
         "Unit"
       ],
       "blocks": [
@@ -40,7 +38,7 @@ unique_name=inputkt
                 "dest": 1,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 3
                   }
                 }
               }
@@ -49,33 +47,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "Int": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "BinOp": {
-                    "op": "AddI",
-                    "lhs": 1,
-                    "rhs": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
                       0,
-                      3
+                      1
                     ]
                   }
                 }
