@@ -599,6 +599,77 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "getItems",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Stack"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Stack",
+                        "field_name": "items"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 12,
+          "name": "setItems",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Stack"
+            },
+            "Int",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Stack",
+                        "field_name": "items",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
         }
       ],
       "constructor": {

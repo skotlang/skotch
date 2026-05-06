@@ -11,20 +11,20 @@ declare i32 @puts(ptr)
 ; @InputKt_abs
 define i32 @InputKt_abs(i32 %arg0) {
 entry:
-  %merge_4 = alloca i32
+  %merge_3 = alloca i32
   %t0 = add i32 0, 0
   %t1 = icmp slt i32 %arg0, %t0
   br i1 %t1, label %bb1, label %bb2
 bb1:
   %t2 = add i32 0, 0
   %t3 = sub i32 %t2, %arg0
-  store i32 %t3, ptr %merge_4
+  store i32 %t3, ptr %merge_3
   br label %bb3
 bb2:
-  store i32 %arg0, ptr %merge_4
+  store i32 %arg0, ptr %merge_3
   br label %bb3
 bb3:
-  %t4 = load i32, ptr %merge_4
+  %t4 = load i32, ptr %merge_3
   ret i32 %t4
 }
 

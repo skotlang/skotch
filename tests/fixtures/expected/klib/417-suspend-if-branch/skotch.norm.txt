@@ -98,8 +98,8 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
+                        "class_name": "kotlin/coroutines/jvm/internal/Boxing",
+                        "method_name": "boxInt",
                         "descriptor": "(I)Ljava/lang/Integer;"
                       }
                     },
@@ -168,8 +168,8 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
+                        "class_name": "kotlin/coroutines/jvm/internal/Boxing",
+                        "method_name": "boxInt",
                         "descriptor": "(I)Ljava/lang/Integer;"
                       }
                     },

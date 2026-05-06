@@ -75,10 +75,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getN"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -109,11 +115,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "PutField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n",
-                    "value": 4
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "setN"
+                      }
+                    },
+                    "args": [
+                      1,
+                      4
+                    ]
                   }
                 }
               }
@@ -122,10 +134,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getN"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -156,11 +174,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "PutField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n",
-                    "value": 8
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "setN"
+                      }
+                    },
+                    "args": [
+                      1,
+                      8
+                    ]
                   }
                 }
               }
@@ -169,10 +193,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getN"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -203,11 +233,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 13,
                 "value": {
-                  "PutField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n",
-                    "value": 12
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "setN"
+                      }
+                    },
+                    "args": [
+                      1,
+                      12
+                    ]
                   }
                 }
               }
@@ -216,10 +252,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 14,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Counter",
-                    "field_name": "n"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getN"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -446,7 +488,79 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getN",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Counter"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Counter",
+                        "field_name": "n"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "setN",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Counter"
+            },
+            "Int",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Counter",
+                        "field_name": "n",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

@@ -85,10 +85,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Counter",
-                    "field_name": "count"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getCount"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -139,10 +145,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Counter",
-                    "field_name": "count"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getCount"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -372,6 +384,41 @@ unique_name=inputkt
       "methods": [
         {
           "id": 8,
+          "name": "getCount",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Counter"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Counter",
+                        "field_name": "count"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
           "name": "setCount",
           "params": [
             0,

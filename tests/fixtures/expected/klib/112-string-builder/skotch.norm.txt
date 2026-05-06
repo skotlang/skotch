@@ -87,7 +87,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/StringBuilder",
                         "method_name": "append",
-                        "descriptor": "(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;"
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/StringBuilder;"
                       }
                     },
                     "args": [
@@ -127,7 +127,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/StringBuilder",
                         "method_name": "append",
-                        "descriptor": "(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;"
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/StringBuilder;"
                       }
                     },
                     "args": [
@@ -167,7 +167,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/StringBuilder",
                         "method_name": "append",
-                        "descriptor": "(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;"
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/StringBuilder;"
                       }
                     },
                     "args": [

@@ -118,7 +118,7 @@ method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0205 aload 4
     0207 astore 6
     0209 iload 5
-    0211 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0211 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
     0214 astore 7
     0216 aload 7
     0218 areturn
@@ -133,7 +133,7 @@ method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0234 iconst_2
     0235 istore 11
     0237 iload 11
-    0239 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0239 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
     0242 astore 12
     0244 aload 12
     0246 areturn
@@ -143,4 +143,7 @@ method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0253 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0256 athrow
     sub_attr  StackMapTable (404 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+class_attr    InnerClasses (18 bytes)

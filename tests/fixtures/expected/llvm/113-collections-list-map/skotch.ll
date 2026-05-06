@@ -1,0 +1,24 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [6 x i8] c"Alice\00", align 1
+@.str.1 = private unnamed_addr constant [4 x i8] c"Bob\00", align 1
+@.str.2 = private unnamed_addr constant [8 x i8] c"Charlie\00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+declare i32 @puts(ptr)
+
+define i32 @main() {
+entry:
+  %t0 = add i32 0, 3
+  %t1 = add i32 0, 0
+  %t2 = add i32 0, 1
+  %t3 = add i32 0, 2
+  %t4 = inttoptr i64 0 to ptr
+  %t5 = inttoptr i64 0 to ptr
+  %t6 = inttoptr i64 0 to ptr
+  %t7 = inttoptr i64 0 to ptr
+  call i32 @puts(ptr %t7)
+  ret i32 0
+}
+

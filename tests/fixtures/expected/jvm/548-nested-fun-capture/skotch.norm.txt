@@ -34,11 +34,17 @@ method        main$double (I)I 0x001A
 method        main$greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=2 max_locals=2
     0000 aload_0
-    0001 ldc ", "
-    0003 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0001 op_0xBA
+    0002 nop
+    0003 op_0x31
+    0004 nop
+    0005 nop
     0006 aload_1
     0007 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0010 ldc "!"
-    0012 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0010 op_0xBA
+    0011 nop
+    0012 dstore 0
+    0014 nop
     0015 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (14 bytes)

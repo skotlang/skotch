@@ -141,10 +141,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Rectangle",
-                    "field_name": "width"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Rectangle",
+                        "method_name": "getWidth"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -569,6 +575,76 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 5
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "getWidth",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rectangle"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rectangle",
+                        "field_name": "width"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "getHeight",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rectangle"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rectangle",
+                        "field_name": "height"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

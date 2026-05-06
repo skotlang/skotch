@@ -22,9 +22,9 @@ unique_name=inputkt
         "Unit",
         "Long",
         "Unit",
-        "Int",
+        "Byte",
         "Unit",
-        "Int",
+        "Short",
         "Unit"
       ],
       "blocks": [

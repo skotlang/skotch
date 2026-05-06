@@ -27,6 +27,8 @@ enum Key {
     Fieldref(u16, u16),
     Methodref(u16, u16),
     InterfaceMethodref(u16, u16),
+    MethodHandle(u8, u16),
+    InvokeDynamic(u16, u16),
 }
 
 #[derive(Clone, Debug)]
@@ -42,14 +44,29 @@ enum Entry {
     Fieldref(u16, u16),
     Methodref(u16, u16),
     InterfaceMethodref(u16, u16),
+    /// CONSTANT_MethodHandle (tag 15): reference_kind, reference_index.
+    MethodHandle(u8, u16),
+    /// CONSTANT_InvokeDynamic (tag 18): bootstrap_method_attr_index,
+    /// name_and_type_index.
+    InvokeDynamic(u16, u16),
     /// Placeholder for the second slot of Double/Long entries.
     WideSlot,
+}
+
+/// Entry of the class-level `BootstrapMethods` attribute. Each entry
+/// has a method-handle (the bootstrap target) and a list of static
+/// arguments (CP indices), per JVMS §4.7.23.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct BootstrapEntry {
+    pub method_handle_index: u16,
+    pub args: Vec<u16>,
 }
 
 #[derive(Default)]
 pub struct ConstantPool {
     entries: Vec<Entry>,
     dedupe: FxHashMap<Key, u16>,
+    bootstrap_methods: Vec<BootstrapEntry>,
 }
 
 impl ConstantPool {
@@ -118,6 +135,44 @@ impl ConstantPool {
         let c = self.class(class_internal);
         let nt = self.name_and_type(name, descriptor);
         self.add(Key::Methodref(c, nt), Entry::Methodref(c, nt))
+    }
+
+    /// CONSTANT_MethodHandle. `kind` is the reference-kind byte (1..=9
+    /// per JVMS §4.4.8). `reference_index` points at the underlying
+    /// (Field|Method|InterfaceMethod)ref entry.
+    pub fn method_handle(&mut self, kind: u8, reference_index: u16) -> u16 {
+        self.add(
+            Key::MethodHandle(kind, reference_index),
+            Entry::MethodHandle(kind, reference_index),
+        )
+    }
+
+    /// CONSTANT_InvokeDynamic. `bootstrap_index` is the index into the
+    /// class-level `BootstrapMethods` attribute; `name_and_type_index`
+    /// refers to a NameAndType CP entry.
+    pub fn invoke_dynamic(&mut self, bootstrap_index: u16, name_and_type_index: u16) -> u16 {
+        self.add(
+            Key::InvokeDynamic(bootstrap_index, name_and_type_index),
+            Entry::InvokeDynamic(bootstrap_index, name_and_type_index),
+        )
+    }
+
+    /// Add a bootstrap-method entry to the class-level `BootstrapMethods`
+    /// table, deduplicating identical entries. Returns the entry's index
+    /// (0-based) for use as the `bootstrap_method_attr_index` of an
+    /// `InvokeDynamic` CP entry.
+    pub fn bootstrap_method(&mut self, entry: BootstrapEntry) -> u16 {
+        if let Some(idx) = self.bootstrap_methods.iter().position(|e| e == &entry) {
+            return idx as u16;
+        }
+        let idx = self.bootstrap_methods.len() as u16;
+        self.bootstrap_methods.push(entry);
+        idx
+    }
+
+    /// Return all registered bootstrap-method entries in insertion order.
+    pub fn bootstrap_entries(&self) -> &[BootstrapEntry] {
+        &self.bootstrap_methods
     }
 
     pub fn interface_methodref(
@@ -195,6 +250,16 @@ impl ConstantPool {
                     out.push(12);
                     out.write_u16::<BigEndian>(*n).unwrap();
                     out.write_u16::<BigEndian>(*d).unwrap();
+                }
+                Entry::MethodHandle(k, r) => {
+                    out.push(15);
+                    out.push(*k);
+                    out.write_u16::<BigEndian>(*r).unwrap();
+                }
+                Entry::InvokeDynamic(bm, nt) => {
+                    out.push(18);
+                    out.write_u16::<BigEndian>(*bm).unwrap();
+                    out.write_u16::<BigEndian>(*nt).unwrap();
                 }
             }
         }

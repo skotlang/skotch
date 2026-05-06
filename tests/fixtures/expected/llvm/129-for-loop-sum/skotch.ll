@@ -8,27 +8,29 @@ declare i32 @printf(ptr, ...)
 define i32 @InputKt_sumTo(i32 %arg0) {
 entry:
   %merge_2 = alloca i32
-  %merge_5 = alloca i32
+  %merge_4 = alloca i32
   %t0 = add i32 0, 0
   store i32 %t0, ptr %merge_2
   %t1 = add i32 0, 1
-  store i32 %t1, ptr %merge_5
+  store i32 %t1, ptr %merge_4
   br label %bb1
 bb1:
-  %t2 = load i32, ptr %merge_5
+  %t2 = load i32, ptr %merge_4
   %t3 = icmp sle i32 %t2, %arg0
-  br i1 %t3, label %bb2, label %bb3
+  br i1 %t3, label %bb2, label %bb4
 bb2:
   %t4 = load i32, ptr %merge_2
-  %t5 = load i32, ptr %merge_5
+  %t5 = load i32, ptr %merge_4
   %t6 = add i32 %t4, %t5
   store i32 %t6, ptr %merge_2
-  %t7 = add i32 0, 1
-  %t8 = load i32, ptr %merge_5
-  %t9 = add i32 %t8, %t7
-  store i32 %t9, ptr %merge_5
-  br label %bb1
+  br label %bb3
 bb3:
+  %t7 = add i32 0, 1
+  %t8 = load i32, ptr %merge_4
+  %t9 = add i32 %t8, %t7
+  store i32 %t9, ptr %merge_4
+  br label %bb1
+bb4:
   %t10 = load i32, ptr %merge_2
   ret i32 %t10
 }

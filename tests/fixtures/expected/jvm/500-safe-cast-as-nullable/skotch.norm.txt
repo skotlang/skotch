@@ -21,21 +21,25 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safeCast (Ljava/lang/Object;)Ljava/lang/Object; 0x0019
-  code        max_stack=1 max_locals=4
+  code        max_stack=2 max_locals=4
     0000 aload_0
-    0001 instanceof Class(java/lang/String)
-    0004 istore_1
-    0005 iload_1
-    0006 ifeq 19
-    0009 aload_0
-    0010 checkcast Class(java/lang/String)
-    0013 astore_2
-    0014 aload_2
-    0015 astore_3
-    0016 goto 24
-    0019 aconst_null
-    0020 astore_3
-    0021 goto 24
-    0024 aload_3
-    0025 areturn
+    0001 ldc "x"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 instanceof Class(java/lang/String)
+    0010 istore_1
+    0011 iload_1
+    0012 ifeq 25
+    0015 aload_0
+    0016 checkcast Class(java/lang/String)
+    0019 astore_2
+    0020 aload_2
+    0021 astore_3
+    0022 goto 30
+    0025 aconst_null
+    0026 astore_3
+    0027 goto 30
+    0030 aload_3
+    0031 areturn
     sub_attr  StackMapTable (11 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

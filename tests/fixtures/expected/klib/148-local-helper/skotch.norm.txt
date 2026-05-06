@@ -383,7 +383,7 @@ unique_name=inputkt
     },
     {
       "id": 8,
-      "name": "isPrime",
+      "name": "main$isPrime",
       "params": [
         0
       ],
@@ -685,7 +685,8 @@ unique_name=inputkt
       "return_ty": "Bool",
       "named_locals": [
         6
-      ]
+      ],
+      "is_private": true
     }
   ],
   "classes": [],

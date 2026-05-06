@@ -498,6 +498,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getSize",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "size"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

@@ -20,6 +20,9 @@ unique_name=inputkt
         {
           "Class": "Document"
         },
+        {
+          "Class": "Printable"
+        },
         "String",
         "Unit"
       ],
@@ -63,16 +66,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Document",
-                        "method_name": "prettyPrint"
-                      }
-                    },
-                    "args": [
-                      1
-                    ]
+                  "CheckCast": {
+                    "obj": 1,
+                    "target_class": "Printable"
                   }
                 }
               }
@@ -82,9 +78,27 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Printable",
+                        "method_name": "prettyPrint"
+                      }
+                    },
                     "args": [
                       2
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      3
                     ]
                   }
                 }
@@ -96,7 +110,7 @@ unique_name=inputkt
       ],
       "return_ty": "Unit",
       "named_locals": [
-        1
+        2
       ]
     },
     {
@@ -403,6 +417,41 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 3
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "getTitle",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Document"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Document",
+                        "field_name": "title"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

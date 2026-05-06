@@ -13,7 +13,7 @@ unique_name=inputkt
   "functions": [
     {
       "id": 0,
-      "name": "lastChar",
+      "name": "getLastChar",
       "params": [
         0
       ],
@@ -93,7 +93,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Char"
+      "return_ty": "Char",
+      "param_names": [
+        "<this>"
+      ]
     },
     {
       "id": 1,

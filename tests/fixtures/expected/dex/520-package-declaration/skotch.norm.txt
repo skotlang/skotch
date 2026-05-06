@@ -1,6 +1,6 @@
 dex_version   035
-strings       24
-types         10
+strings       23
+types         9
 methods       8
 classes       1
 
@@ -13,7 +13,6 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "Ljava/util/ArrayList;"
-  "Ljava/util/List;"
   "V"
   "VI"
   "VL"
@@ -37,7 +36,6 @@ classes       1
   Ljava/lang/Object;
   Ljava/lang/System;
   Ljava/util/ArrayList;
-  Ljava/util/List;
   V
   Z
   [Ljava/lang/String;
@@ -48,9 +46,9 @@ classes       1
   Ljava/io/PrintStream;.println(I)V
   Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
   Ljava/util/ArrayList;.<init>()V
+  Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
+  Ljava/util/ArrayList;.get(I)Ljava/lang/Object;
   Ljava/util/ArrayList;.size()I
-  Ljava/util/List;.add(Ljava/lang/Object;)Z
-  Ljava/util/List;.get(I)Ljava/lang/Object;
 
 --- class[0] ---
   descriptor   LInputKt;

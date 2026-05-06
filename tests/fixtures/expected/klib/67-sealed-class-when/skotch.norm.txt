@@ -84,10 +84,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "GetField": {
-                    "receiver": 3,
-                    "class_name": "Num",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Num",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -141,10 +147,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 6,
-                    "class_name": "Sum",
-                    "field_name": "left"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Sum",
+                        "method_name": "getLeft"
+                      }
+                    },
+                    "args": [
+                      6
+                    ]
                   }
                 }
               }
@@ -168,10 +180,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "GetField": {
-                    "receiver": 6,
-                    "class_name": "Sum",
-                    "field_name": "right"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Sum",
+                        "method_name": "getRight"
+                      }
+                    },
+                    "args": [
+                      6
+                    ]
                   }
                 }
               }
@@ -709,6 +727,41 @@ unique_name=inputkt
       "methods": [
         {
           "id": 9,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Num"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Num",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
           "name": "toString",
           "params": [
             0
@@ -823,7 +876,7 @@ unique_name=inputkt
           "return_ty": "String"
         },
         {
-          "id": 10,
+          "id": 11,
           "name": "component1",
           "params": [
             0
@@ -858,7 +911,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 11,
+          "id": 12,
           "name": "equals",
           "params": [
             0,
@@ -1027,7 +1080,7 @@ unique_name=inputkt
           "return_ty": "Bool"
         },
         {
-          "id": 12,
+          "id": 13,
           "name": "hashCode",
           "params": [
             0
@@ -1062,7 +1115,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 13,
+          "id": 14,
           "name": "copy",
           "params": [
             0,
@@ -1188,6 +1241,84 @@ unique_name=inputkt
       "methods": [
         {
           "id": 9,
+          "name": "getLeft",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Sum"
+            },
+            {
+              "Class": "Expr"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Sum",
+                        "field_name": "left"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Expr"
+          }
+        },
+        {
+          "id": 10,
+          "name": "getRight",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Sum"
+            },
+            {
+              "Class": "Expr"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Sum",
+                        "field_name": "right"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Expr"
+          }
+        },
+        {
+          "id": 11,
           "name": "toString",
           "params": [
             0
@@ -1396,7 +1527,7 @@ unique_name=inputkt
           "return_ty": "String"
         },
         {
-          "id": 10,
+          "id": 12,
           "name": "component1",
           "params": [
             0
@@ -1435,7 +1566,7 @@ unique_name=inputkt
           }
         },
         {
-          "id": 11,
+          "id": 13,
           "name": "component2",
           "params": [
             0
@@ -1474,7 +1605,7 @@ unique_name=inputkt
           }
         },
         {
-          "id": 12,
+          "id": 14,
           "name": "equals",
           "params": [
             0,
@@ -1719,7 +1850,7 @@ unique_name=inputkt
           "return_ty": "Bool"
         },
         {
-          "id": 13,
+          "id": 15,
           "name": "hashCode",
           "params": [
             0
@@ -1848,7 +1979,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 14,
+          "id": 16,
           "name": "copy",
           "params": [
             0,

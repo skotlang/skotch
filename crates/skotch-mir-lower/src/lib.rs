@@ -34,8 +34,18 @@ use skotch_syntax::{BinOp, ConstructorParam, Decl, Expr, FunDecl, KtFile, Stmt, 
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
+
+thread_local! {
+    /// Hint set by `lower_val_stmt` while lowering the right-hand side
+    /// of a `val name = ...` so an `Expr::ObjectExpr` knows the target
+    /// variable name. kotlinc names anonymous object classes
+    /// `<Wrapper>$<EnclosingFn>$<varName>$<idx>` — we read this hint to
+    /// match the convention. Cleared after the rhs lowers.
+    static OBJECT_EXPR_VAR_HINT: RefCell<Option<String>> = const { RefCell::new(None) };
+}
 
 // ── Shared class registry ───────────────────────────────────────────────
 //
@@ -556,7 +566,21 @@ pub fn lower_file(
         if let Decl::Fun(f) = decl {
             let id = FuncId(module.functions.len() as u32);
             name_to_func.insert(f.name, id);
-            let name_str = interner.resolve(f.name).to_string();
+            // Extension properties (`val X.foo`) are emitted as `getFoo`
+            // methods to match kotlinc's accessor naming. Keep the
+            // original symbol bound in `name_to_func` so source-level
+            // references still resolve to this `FuncId`.
+            let raw_name = interner.resolve(f.name).to_string();
+            let name_str = if f.is_ext_property {
+                let mut chars = raw_name.chars();
+                let first = chars.next().map(|c| c.to_ascii_uppercase());
+                match first {
+                    Some(c) => format!("get{}{}", c, chars.as_str()),
+                    None => raw_name.clone(),
+                }
+            } else {
+                raw_name
+            };
             // Use the typechecker's return type so recursive calls and
             // forward references get the correct type, not Ty::Unit.
             let declared_ret = typed
@@ -587,6 +611,13 @@ pub fn lower_file(
                 .iter()
                 .map(|p| interner.resolve(p.name).to_string())
                 .collect();
+            // Extension functions / properties have an implicit
+            // receiver param prepended at codegen. kotlinc names it
+            // `<this>` so the checkNotNullParameter prologue emits the
+            // right intrinsic message.
+            if f.receiver_ty.is_some() {
+                param_names.insert(0, "<this>".to_string());
+            }
             let vararg_index = f.params.iter().position(|p| p.is_vararg);
             // Coroutine transform: every `suspend
             // fun` grows a trailing `$completion: Continuation`
@@ -1743,6 +1774,38 @@ fn build_continuation_class(
 /// Emit MIR-level autoboxing for a primitive value.  Returns a new
 /// local holding the boxed reference (e.g. `Integer.valueOf(int)`) or
 /// the original local unchanged if it is already a reference type.
+/// Autobox helper for suspend function returns. kotlinc routes the
+/// boxing through `kotlin/coroutines/jvm/internal/Boxing.boxXxx`
+/// rather than `Xxx.valueOf` for these. The Boxing helpers exist for
+/// Bool, Byte, Char, Short, Int, Long, Float, Double — we cover the
+/// numeric set we use.
+fn mir_autobox_suspend(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
+    let (method, descriptor) = match ty {
+        Ty::Int => ("boxInt", "(I)Ljava/lang/Integer;"),
+        Ty::Long => ("boxLong", "(J)Ljava/lang/Long;"),
+        Ty::Double => ("boxDouble", "(D)Ljava/lang/Double;"),
+        Ty::Bool => ("boxBoolean", "(Z)Ljava/lang/Boolean;"),
+        Ty::Byte => ("boxByte", "(B)Ljava/lang/Byte;"),
+        Ty::Short => ("boxShort", "(S)Ljava/lang/Short;"),
+        Ty::Char => ("boxChar", "(C)Ljava/lang/Character;"),
+        Ty::Float => ("boxFloat", "(F)Ljava/lang/Float;"),
+        _ => return val,
+    };
+    let boxed = fb.new_local(Ty::Any);
+    fb.push_stmt(MStmt::Assign {
+        dest: boxed,
+        value: Rvalue::Call {
+            kind: CallKind::StaticJava {
+                class_name: "kotlin/coroutines/jvm/internal/Boxing".to_string(),
+                method_name: method.to_string(),
+                descriptor: descriptor.to_string(),
+            },
+            args: vec![val],
+        },
+    });
+    boxed
+}
+
 fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
     match ty {
         Ty::Int => {
@@ -2893,7 +2956,17 @@ fn lower_function(
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) {
-    let name = interner.resolve(f.name).to_string();
+    let raw_name = interner.resolve(f.name).to_string();
+    let name = if f.is_ext_property {
+        let mut chars = raw_name.chars();
+        let first = chars.next().map(|c| c.to_ascii_uppercase());
+        match first {
+            Some(c) => format!("get{}{}", c, chars.as_str()),
+            None => raw_name.clone(),
+        }
+    } else {
+        raw_name
+    };
     let declared_ret = typed
         .map(|t| t.return_ty.clone())
         .or_else(|| {
@@ -3050,7 +3123,10 @@ fn lower_function(
                     let ty = fb.mf.locals[local.0 as usize].clone();
                     let prev_block = fb.cur_block;
                     fb.cur_block = bi as u32;
-                    let boxed = mir_autobox(&mut fb, local, &ty);
+                    // For suspend functions kotlinc uses
+                    // `kotlin/coroutines/jvm/internal/Boxing.boxInt/Long/...`
+                    // helpers rather than `Integer.valueOf` etc.
+                    let boxed = mir_autobox_suspend(&mut fb, local, &ty);
                     fb.cur_block = prev_block;
                     fb.mf.blocks[bi].terminator = Terminator::ReturnValue(boxed);
                 }
@@ -4416,6 +4492,10 @@ fn lower_val_stmt(
     interner: &mut Interner,
     diags: &mut Diagnostics,
 ) -> bool {
+    // Tell `Expr::ObjectExpr` lowering the target variable name so it
+    // can name the anonymous class `Wrapper$Fn$Var$N` (kotlinc style).
+    let var_name = interner.resolve(v.name).to_string();
+    OBJECT_EXPR_VAR_HINT.with(|cell| *cell.borrow_mut() = Some(var_name));
     let Some(rhs) = lower_expr(
         &v.init,
         fb,
@@ -4427,8 +4507,10 @@ fn lower_val_stmt(
         diags,
         None,
     ) else {
+        OBJECT_EXPR_VAR_HINT.with(|cell| *cell.borrow_mut() = None);
         return false;
     };
+    OBJECT_EXPR_VAR_HINT.with(|cell| *cell.borrow_mut() = None);
     let rhs_ty = fb.mf.locals[rhs.0 as usize].clone();
     // Respect the nullable annotation when present.  In particular,
     // `val x: String? = "hello"` should give x type Nullable(String),
@@ -5299,6 +5381,56 @@ fn lower_expr(
             else_block,
             ..
         } => {
+            // Constant-fold `if (boolean_literal) ... else ...`. kotlinc
+            // emits only the chosen branch with no Branch terminator and
+            // no StackMapTable, which we mirror here to keep parity.
+            if let Expr::BoolLit(b, _) = cond.as_ref() {
+                let chosen: Option<&skotch_syntax::Block> = if *b {
+                    Some(then_block.as_ref())
+                } else {
+                    else_block.as_ref().map(|bx| bx.as_ref())
+                };
+                if let Some(blk) = chosen {
+                    let mut last_val: Option<LocalId> = None;
+                    for s in &blk.stmts {
+                        match s {
+                            skotch_syntax::Stmt::Expr(e) => {
+                                last_val = lower_expr(
+                                    e,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                );
+                            }
+                            _ => {
+                                let _ = lower_stmt(
+                                    s,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                );
+                            }
+                        }
+                    }
+                    return last_val.or_else(|| {
+                        let dest = fb.new_local(Ty::Unit);
+                        Some(dest)
+                    });
+                }
+                let dest = fb.new_local(Ty::Unit);
+                return Some(dest);
+            }
+
             // ── Multi-block lowering for if-as-expression ────────
             //
             // 1. Lower the condition in the current block
@@ -6649,12 +6781,26 @@ fn lower_expr(
                             _ => None,
                         };
                     if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = list_method {
+                        // When the receiver is a concrete class (e.g.
+                        // ArrayList) rather than the generic List
+                        // interface, dispatch on the concrete class —
+                        // kotlinc emits `invokevirtual ArrayList.add`
+                        // not `invokeinterface List.add`.
+                        let dispatch_class = if let Ty::Class(cn) = &recv_ty {
+                            if cn.contains("ArrayList") {
+                                cn.clone()
+                            } else {
+                                jvm_class.to_string()
+                            }
+                        } else {
+                            jvm_class.to_string()
+                        };
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
                             dest,
                             value: Rvalue::Call {
                                 kind: CallKind::VirtualJava {
-                                    class_name: jvm_class.to_string(),
+                                    class_name: dispatch_class,
                                     method_name: jvm_method.to_string(),
                                     descriptor: descriptor.to_string(),
                                 },
@@ -7165,6 +7311,41 @@ fn lower_expr(
                         (jvm_class_for_ty, jvm_method_name)
                     };
 
+                // Constant-fold `<literal>.toString()` — kotlinc emits a
+                // literal `ldc "<value>"` rather than calling
+                // `String.valueOf(...)` when the receiver is a literal in
+                // the source. Skip when the receiver is a named local
+                // (val/var) since kotlinc keeps the runtime call there.
+                if args.is_empty()
+                    && method_name_str == "toString"
+                    && !fb.mf.named_locals.contains(&recv_local)
+                {
+                    let folded: Option<String> = (|| {
+                        let last_stmt = fb.mf.blocks[fb.cur_block as usize].stmts.last()?;
+                        let MStmt::Assign { dest: d, value } = last_stmt;
+                        if d.0 != recv_local.0 {
+                            return None;
+                        }
+                        let Rvalue::Const(c) = value else { return None };
+                        match c {
+                            MirConst::Int(v) => Some(v.to_string()),
+                            MirConst::Long(v) => Some(v.to_string()),
+                            MirConst::Bool(v) => Some(v.to_string()),
+                            // Doubles/floats use Kotlin's special formatter, skip.
+                            _ => None,
+                        }
+                    })();
+                    if let Some(s) = folded {
+                        let sid = module.intern_string(&s);
+                        let dest = fb.new_local(Ty::String);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::String(sid)),
+                        });
+                        return Some(dest);
+                    }
+                }
+
                 // Primitive type conversion methods: toInt(), toDouble(), toLong(), toChar()
                 if args.is_empty() {
                     let conversion: Option<(Ty, &str)> = match (method_name_str.as_str(), &recv_ty)
@@ -7182,8 +7363,44 @@ fn lower_expr(
                         _ => None,
                     };
                     if let Some((ret_ty, opcode_name)) = conversion {
+                        // Constant fold when the receiver is a literal —
+                        // kotlinc emits the converted value directly
+                        // (e.g. `42.toDouble()` → `ldc2_w double(42)`).
+                        // Skip when the receiver is a named local
+                        // (val/var); kotlinc keeps the runtime conversion.
+                        let folded: Option<MirConst> = if fb.mf.named_locals.contains(&recv_local) {
+                            None
+                        } else {
+                            (|| {
+                                let last_stmt = fb.mf.blocks[fb.cur_block as usize].stmts.last()?;
+                                let MStmt::Assign { dest: d, value } = last_stmt;
+                                if d.0 != recv_local.0 {
+                                    return None;
+                                }
+                                let Rvalue::Const(c) = value else { return None };
+                                match (c, opcode_name) {
+                                    (MirConst::Int(v), "i2d") => Some(MirConst::Double(*v as f64)),
+                                    (MirConst::Int(v), "i2l") => Some(MirConst::Long(*v as i64)),
+                                    (MirConst::Int(v), "i2c") => Some(MirConst::Int(*v & 0xFFFF)),
+                                    (MirConst::Long(v), "l2i") => Some(MirConst::Int(*v as i32)),
+                                    (MirConst::Long(v), "l2d") => Some(MirConst::Double(*v as f64)),
+                                    (MirConst::Double(v), "d2i") => Some(MirConst::Int(*v as i32)),
+                                    (MirConst::Double(v), "d2l") => Some(MirConst::Long(*v as i64)),
+                                    _ => None,
+                                }
+                            })()
+                        };
                         let dest = fb.new_local(ret_ty);
-                        if opcode_name == "nop" {
+                        if let Some(folded_const) = folded {
+                            // Replace the receiver's Const stmt by
+                            // reassigning the dest directly. The original
+                            // receiver Const becomes dead and is skipped
+                            // by the unused-locals pass.
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Const(folded_const),
+                            });
+                        } else if opcode_name == "nop" {
                             // Identity conversion — just copy.
                             fb.push_stmt(MStmt::Assign {
                                 dest,
@@ -7233,12 +7450,25 @@ fn lower_expr(
                                 &arg_tys,
                             )
                         {
+                            // Dispatch on the receiver's static type
+                            // when the method was inherited from a
+                            // supertype — kotlinc emits
+                            // `invokevirtual <ReceiverClass>` even when
+                            // the method is defined on a parent. Keep
+                            // the resolved class for true JDK methods
+                            // (e.g. `String.length()` on String).
+                            let is_user_class = module.classes.iter().any(|c| c.name == jvm_class);
+                            let dispatch_class = if is_user_class && found_class != jvm_class {
+                                jvm_class.to_string()
+                            } else {
+                                found_class
+                            };
                             let dest = fb.new_local(ret_ty);
                             fb.push_stmt(MStmt::Assign {
                                 dest,
                                 value: Rvalue::Call {
                                     kind: CallKind::VirtualJava {
-                                        class_name: found_class,
+                                        class_name: dispatch_class,
                                         method_name: found_method,
                                         descriptor,
                                     },
@@ -7256,12 +7486,19 @@ fn lower_expr(
                                     instance_arg_count,
                                 )
                             {
+                                let is_user_class =
+                                    module.classes.iter().any(|c| c.name == jvm_class);
+                                let dispatch_class = if is_user_class && found_class != jvm_class {
+                                    jvm_class.to_string()
+                                } else {
+                                    found_class
+                                };
                                 let dest = fb.new_local(ret_ty);
                                 fb.push_stmt(MStmt::Assign {
                                     dest,
                                     value: Rvalue::Call {
                                         kind: CallKind::VirtualJava {
-                                            class_name: found_class,
+                                            class_name: dispatch_class,
                                             method_name: found_method,
                                             descriptor,
                                         },
@@ -7407,9 +7644,25 @@ fn lower_expr(
                             Ty::Any,
                         )
                     } else if found_on_interface {
+                        // When the method comes from an interface but the
+                        // receiver's static type is a concrete class
+                        // implementing it, dispatch via the concrete
+                        // class — kotlinc emits `invokevirtual <Class>`
+                        // rather than `invokeinterface <Iface>` here.
+                        let receiver_is_class = module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == class_name)
+                            .map(|c| !c.is_interface)
+                            .unwrap_or(false);
+                        let dispatch_class = if receiver_is_class {
+                            class_name.clone()
+                        } else {
+                            iface_name
+                        };
                         (
                             CallKind::Virtual {
-                                class_name: iface_name,
+                                class_name: dispatch_class,
                                 method_name: method_name_str,
                             },
                             return_ty,
@@ -7772,6 +8025,7 @@ fn lower_expr(
                             is_abstract: false,
                             is_suspend: false,
                             is_inline: false,
+                            is_ext_property: false,
                             visibility: skotch_syntax::Visibility::Public,
                             annotations: Vec::new(),
                             span: *lspan,
@@ -10832,8 +11086,12 @@ fn lower_expr(
                 });
                 return Some(dest);
             }
-            // Lower string template to a chain of ConcatStr operations.
-            // Start with the first part and concatenate the rest.
+
+            // Lower string template to a chain of ConcatStr operations
+            // (kept for the LLVM/native backend, which doesn't yet
+            // implement makeConcatWithConstants). The JVM-specific
+            // `println(template)` shortcut higher up uses the JDK-9
+            // invokedynamic intrinsic directly when applicable.
             let mut result: Option<LocalId> = None;
             for part in parts {
                 let part_local = lower_template_part(
@@ -11650,8 +11908,10 @@ fn lower_expr(
                         Some((Ty::Double, MirConst::Double(f64::MIN_POSITIVE)))
                     }
                     ("Float", "MAX_VALUE") => Some((Ty::Float, MirConst::Float(f32::MAX))),
-                    ("Byte", "MAX_VALUE") => Some((Ty::Int, MirConst::Int(i8::MAX as i32))),
-                    ("Short", "MAX_VALUE") => Some((Ty::Int, MirConst::Int(i16::MAX as i32))),
+                    ("Byte", "MAX_VALUE") => Some((Ty::Byte, MirConst::Int(i8::MAX as i32))),
+                    ("Byte", "MIN_VALUE") => Some((Ty::Byte, MirConst::Int(i8::MIN as i32))),
+                    ("Short", "MAX_VALUE") => Some((Ty::Short, MirConst::Int(i16::MAX as i32))),
+                    ("Short", "MIN_VALUE") => Some((Ty::Short, MirConst::Int(i16::MIN as i32))),
                     _ => None,
                 };
                 if let Some((ty, val)) = constant {
@@ -13615,8 +13875,30 @@ fn lower_expr(
             ..
         } => {
             let super_name = interner.resolve(*super_type).to_string();
-            let obj_idx = module.classes.len();
-            let obj_class_name = format!("$Object${obj_idx}");
+            // kotlinc names anonymous object expressions
+            // `<Wrapper>$<EnclosingFn>$<varName>$<idx>`. Use the var
+            // hint when one is set (by `lower_val_stmt`), otherwise fall
+            // back to `$<EnclosingFn>$<idx>`. This matches kotlinc's
+            // output for `val g = object : T { ... }` patterns.
+            let enclosing_fn = fb.mf.name.clone();
+            let wrapper = if module.wrapper_class.is_empty() {
+                "InputKt".to_string()
+            } else {
+                module.wrapper_class.clone()
+            };
+            let var_hint = OBJECT_EXPR_VAR_HINT.with(|cell| cell.borrow().clone());
+            // Sequential index per (enclosing_fn, var) within the file.
+            let obj_idx = module
+                .classes
+                .iter()
+                .filter(|c| c.name.starts_with(&format!("{wrapper}${enclosing_fn}$")))
+                .count()
+                + 1;
+            let obj_class_name = if let Some(var) = var_hint {
+                format!("{wrapper}${enclosing_fn}${var}${obj_idx}")
+            } else {
+                format!("{wrapper}${enclosing_fn}${obj_idx}")
+            };
 
             // Lower each method.
             let mut mir_methods = Vec::new();
@@ -13737,8 +14019,10 @@ fn lower_expr(
                 annotations: Vec::new(),
             });
 
-            // Instantiate.
-            let inst = fb.new_local(Ty::Class(super_name));
+            // Instantiate. Type as the synthetic anonymous class so
+            // method dispatch goes through the concrete class
+            // (matching kotlinc's `invokevirtual InputKt$main$g$1.method`).
+            let inst = fb.new_local(Ty::Class(obj_class_name.clone()));
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::NewInstance(obj_class_name.clone()),
@@ -13750,6 +14034,7 @@ fn lower_expr(
                     args: vec![],
                 },
             });
+            let _ = super_name;
             Some(inst)
         }
     }

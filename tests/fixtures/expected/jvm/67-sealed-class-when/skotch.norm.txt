@@ -76,22 +76,27 @@ method        main ()V 0x0019
     0027 new Class(Sum)
     0030 dup
     0031 aload_1
-    0032 aload_2
-    0033 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
-    0036 astore_1
-    0037 new Class(Sum)
-    0040 dup
-    0041 aload_0
-    0042 aload_1
-    0043 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
-    0046 astore 4
-    0048 aload 4
-    0050 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0053 istore_0
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 iload_0
-    0058 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0061 return
+    0032 checkcast Class(Expr)
+    0035 aload_2
+    0036 checkcast Class(Expr)
+    0039 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
+    0042 astore_1
+    0043 new Class(Sum)
+    0046 dup
+    0047 aload_0
+    0048 checkcast Class(Expr)
+    0051 aload_1
+    0052 checkcast Class(Expr)
+    0055 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
+    0058 astore 4
+    0060 aload 4
+    0062 checkcast Class(Expr)
+    0065 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0068 istore_0
+    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0072 iload_0
+    0073 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0076 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

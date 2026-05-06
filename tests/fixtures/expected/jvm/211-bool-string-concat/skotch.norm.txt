@@ -26,8 +26,11 @@ method        main ()V 0x0019
     0039 iload_0
     0040 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
     0043 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0046 ldc ", valid: "
-    0048 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0046 op_0xBA
+    0047 nop
+    0048 op_0x31
+    0049 nop
+    0050 nop
     0051 iload_1
     0052 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
     0055 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
@@ -39,3 +42,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

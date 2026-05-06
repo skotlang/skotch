@@ -89,4 +89,7 @@ method        sumWithScope (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 
     0151 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0154 athrow
     sub_attr  StackMapTable (125 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    InnerClasses (42 bytes)

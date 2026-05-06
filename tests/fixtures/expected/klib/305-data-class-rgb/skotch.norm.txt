@@ -387,6 +387,111 @@ unique_name=inputkt
       "methods": [
         {
           "id": 8,
+          "name": "getR",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "RGB"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "RGB",
+                        "field_name": "r"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getG",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "RGB"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "RGB",
+                        "field_name": "g"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "getB",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "RGB"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "RGB",
+                        "field_name": "b"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
           "name": "toString",
           "params": [
             0
@@ -681,7 +786,7 @@ unique_name=inputkt
           "return_ty": "String"
         },
         {
-          "id": 9,
+          "id": 12,
           "name": "component1",
           "params": [
             0
@@ -716,7 +821,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 10,
+          "id": 13,
           "name": "component2",
           "params": [
             0
@@ -751,7 +856,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 11,
+          "id": 14,
           "name": "component3",
           "params": [
             0
@@ -786,7 +891,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 12,
+          "id": 15,
           "name": "equals",
           "params": [
             0,
@@ -1059,7 +1164,7 @@ unique_name=inputkt
           "return_ty": "Bool"
         },
         {
-          "id": 13,
+          "id": 16,
           "name": "hashCode",
           "params": [
             0
@@ -1194,7 +1299,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 14,
+          "id": 17,
           "name": "copy",
           "params": [
             0,

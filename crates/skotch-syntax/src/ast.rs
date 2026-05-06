@@ -183,6 +183,10 @@ pub struct FunDecl {
     pub is_suspend: bool,
     /// True when declared with the `inline` modifier.
     pub is_inline: bool,
+    /// True when this FunDecl was synthesized from an extension property
+    /// (`val String.lastChar: Char`). The lowerer emits the method as
+    /// `get<Name>` to match kotlinc's accessor naming.
+    pub is_ext_property: bool,
     pub visibility: Visibility,
     /// Annotations on this function.
     pub annotations: Vec<Annotation>,

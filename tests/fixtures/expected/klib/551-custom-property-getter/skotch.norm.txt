@@ -343,6 +343,41 @@ unique_name=inputkt
       "methods": [
         {
           "id": 8,
+          "name": "getRadius",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Circle"
+            },
+            "Double"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Circle",
+                        "field_name": "radius"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Double"
+        },
+        {
+          "id": 9,
           "name": "getArea",
           "params": [
             0
@@ -440,7 +475,7 @@ unique_name=inputkt
           "return_ty": "Double"
         },
         {
-          "id": 9,
+          "id": 10,
           "name": "getDiameter",
           "params": [
             0

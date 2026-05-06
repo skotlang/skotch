@@ -147,10 +147,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "BankAccount",
-                    "field_name": "balance"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "BankAccount",
+                        "method_name": "getBalance"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -506,6 +512,77 @@ unique_name=inputkt
                         "class_name": "BankAccount",
                         "field_name": "balance",
                         "value": 2
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        },
+        {
+          "id": 10,
+          "name": "getBalance",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "BankAccount"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "BankAccount",
+                        "field_name": "balance"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "setBalance",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "BankAccount"
+            },
+            "Int",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "BankAccount",
+                        "field_name": "balance",
+                        "value": 1
                       }
                     }
                   }

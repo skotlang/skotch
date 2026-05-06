@@ -69,22 +69,24 @@ method        main ()V 0x0019
     0003 dup
     0004 iconst_5
     0005 invokespecial Method(Circle.<init>:(I)V)
-    0008 invokestatic Method(InputKt.area:(LShape;)I)
-    0011 istore_0
-    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 iload_0
-    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0019 new Class(Rect)
-    0022 dup
-    0023 iconst_3
-    0024 iconst_4
-    0025 invokespecial Method(Rect.<init>:(II)V)
-    0028 invokestatic Method(InputKt.area:(LShape;)I)
-    0031 istore_0
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 iload_0
-    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0039 return
+    0008 checkcast Class(Shape)
+    0011 invokestatic Method(InputKt.area:(LShape;)I)
+    0014 istore_0
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 iload_0
+    0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0022 new Class(Rect)
+    0025 dup
+    0026 iconst_3
+    0027 iconst_4
+    0028 invokespecial Method(Rect.<init>:(II)V)
+    0031 checkcast Class(Shape)
+    0034 invokestatic Method(InputKt.area:(LShape;)I)
+    0037 istore_0
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 iload_0
+    0042 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0045 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -53,7 +53,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Bool"
+      "return_ty": "Bool",
+      "param_names": [
+        "<this>"
+      ]
     },
     {
       "id": 1,
@@ -97,7 +100,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "param_names": [
+        "<this>"
+      ]
     },
     {
       "id": 2,
@@ -141,7 +147,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "param_names": [
+        "<this>"
+      ]
     },
     {
       "id": 3,

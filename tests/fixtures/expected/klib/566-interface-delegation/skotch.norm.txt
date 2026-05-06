@@ -660,6 +660,45 @@ unique_name=inputkt
         },
         {
           "id": 9,
+          "name": "getInner",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "PrefixLogger"
+            },
+            {
+              "Class": "Logger"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "PrefixLogger",
+                        "field_name": "inner"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Logger"
+          }
+        },
+        {
+          "id": 10,
           "name": "level",
           "params": [
             0

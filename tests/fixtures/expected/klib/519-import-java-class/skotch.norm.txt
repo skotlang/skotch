@@ -82,7 +82,7 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "VirtualJava": {
-                        "class_name": "java/util/List",
+                        "class_name": "java/util/ArrayList",
                         "method_name": "add",
                         "descriptor": "(Ljava/lang/Object;)Z"
                       }
@@ -122,7 +122,7 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "VirtualJava": {
-                        "class_name": "java/util/List",
+                        "class_name": "java/util/ArrayList",
                         "method_name": "add",
                         "descriptor": "(Ljava/lang/Object;)Z"
                       }

@@ -62,19 +62,21 @@ method        main ()V 0x0019
     0003 dup
     0004 ldc "hello"
     0006 invokespecial Method(Success.<init>:(Ljava/lang/String;)V)
-    0009 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 swap
-    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0019 new Class(Failure)
-    0022 dup
-    0023 ldc "oops"
-    0025 invokespecial Method(Failure.<init>:(Ljava/lang/String;)V)
-    0028 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0034 swap
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0038 return
+    0009 checkcast Class(Result)
+    0012 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 swap
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 new Class(Failure)
+    0025 dup
+    0026 ldc "oops"
+    0028 invokespecial Method(Failure.<init>:(Ljava/lang/String;)V)
+    0031 checkcast Class(Result)
+    0034 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 swap
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0044 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

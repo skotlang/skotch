@@ -64,7 +64,7 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "Virtual": {
-                        "class_name": "Greeter",
+                        "class_name": "Formal",
                         "method_name": "greet"
                       }
                     },

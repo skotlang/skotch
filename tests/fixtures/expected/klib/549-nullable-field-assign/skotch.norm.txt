@@ -465,6 +465,77 @@ unique_name=inputkt
             }
           ],
           "return_ty": "String"
+        },
+        {
+          "id": 10,
+          "name": "getContent",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "content"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 11,
+          "name": "setContent",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "String",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "content",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
         }
       ],
       "constructor": {

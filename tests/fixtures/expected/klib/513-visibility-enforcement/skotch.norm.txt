@@ -334,6 +334,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "getHidden",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Secret"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Secret",
+                        "field_name": "hidden"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
         }
       ],
       "constructor": {

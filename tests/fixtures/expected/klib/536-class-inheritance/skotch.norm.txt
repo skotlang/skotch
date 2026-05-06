@@ -129,10 +129,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Shape",
-                    "field_name": "name"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Square",
+                        "method_name": "getName"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -546,6 +552,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "String"
+        },
+        {
+          "id": 10,
+          "name": "getName",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Shape"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Shape",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
         }
       ],
       "constructor": {
@@ -681,6 +722,41 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 3
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getSide",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Square"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Square",
+                        "field_name": "side"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

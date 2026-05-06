@@ -30,10 +30,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Box",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -74,10 +80,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Box",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -434,7 +446,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 10,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

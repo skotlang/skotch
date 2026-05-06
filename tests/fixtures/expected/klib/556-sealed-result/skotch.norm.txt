@@ -90,10 +90,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 3,
-                    "class_name": "Success",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Success",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -169,10 +175,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "GetField": {
-                    "receiver": 8,
-                    "class_name": "Failure",
-                    "field_name": "error"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Failure",
+                        "method_name": "getError"
+                      }
+                    },
+                    "args": [
+                      8
+                    ]
                   }
                 }
               }
@@ -626,7 +638,43 @@ unique_name=inputkt
           "ty": "String"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Success"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Success",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -690,7 +738,43 @@ unique_name=inputkt
           "ty": "String"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getError",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Failure"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Failure",
+                        "field_name": "error"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

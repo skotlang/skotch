@@ -515,6 +515,76 @@ unique_name=inputkt
             }
           ],
           "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "getY",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

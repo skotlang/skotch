@@ -71,10 +71,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Box",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -135,10 +141,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Box",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -178,10 +190,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Box",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Box",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -527,6 +545,77 @@ unique_name=inputkt
                 {
                   "Assign": {
                     "dest": 0,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "value",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        },
+        {
+          "id": 10,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Box",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "setValue",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Box"
+            },
+            "Int",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
                     "value": {
                       "PutField": {
                         "receiver": 0,

@@ -306,6 +306,77 @@ unique_name=inputkt
       "methods": [
         {
           "id": 8,
+          "name": "getCelsius",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Temperature"
+            },
+            "Double"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Temperature",
+                        "field_name": "celsius"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Double"
+        },
+        {
+          "id": 9,
+          "name": "setCelsius",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Temperature"
+            },
+            "Double",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Temperature",
+                        "field_name": "celsius",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        },
+        {
+          "id": 10,
           "name": "getFahrenheit",
           "params": [
             0

@@ -55,9 +55,9 @@ bb1:
   %t4 = icmp sle i32 %t3, %t2
   br i1 %t4, label %bb2, label %bb4
 bb2:
-  %t5 = load i32, ptr %merge_4
-  %t6 = add i32 0, 3
-  %t7 = srem i32 %t5, %t6
+  %t5 = add i32 0, 3
+  %t6 = load i32, ptr %merge_4
+  %t7 = srem i32 %t6, %t5
   %t8 = add i32 0, 0
   %t9 = icmp ne i32 %t7, %t8
   br i1 %t9, label %bb5, label %bb6

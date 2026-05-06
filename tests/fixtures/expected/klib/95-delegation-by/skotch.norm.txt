@@ -407,6 +407,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Unit"
+        },
+        {
+          "id": 9,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "BaseImpl"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "BaseImpl",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

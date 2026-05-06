@@ -1,6 +1,6 @@
 dex_version   035
-strings       10
-types         4
+strings       11
+types         5
 methods       3
 classes       1
 
@@ -11,9 +11,10 @@ classes       1
   "LL"
   "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "boxInt"
   "input.kt"
   "run"
-  "valueOf"
   "yield_"
 
 --- types ---
@@ -21,11 +22,12 @@ classes       1
   LInputKt;
   Ljava/lang/Integer;
   Ljava/lang/Object;
+  Lkotlin/coroutines/jvm/internal/Boxing;
 
 --- methods ---
   LInputKt;.run(Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.yield_(Ljava/lang/Object;)Ljava/lang/Object;
-  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxInt(I)Ljava/lang/Integer;
 
 --- class[0] ---
   descriptor   LInputKt;

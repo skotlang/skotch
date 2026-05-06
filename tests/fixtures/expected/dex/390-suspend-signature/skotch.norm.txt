@@ -1,6 +1,6 @@
 dex_version   035
-strings       19
-types         9
+strings       20
+types         10
 methods       5
 classes       1
 
@@ -14,16 +14,17 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
   "V"
   "VL"
   "[Ljava/lang/String;"
+  "boxInt"
   "compute"
   "input.kt"
   "main"
   "out"
   "println"
   "skotch parses suspend"
-  "valueOf"
 
 --- types ---
   I
@@ -33,6 +34,7 @@ classes       1
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
+  Lkotlin/coroutines/jvm/internal/Boxing;
   V
   [Ljava/lang/String;
 
@@ -41,7 +43,7 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
-  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxInt(I)Ljava/lang/Integer;
 
 --- class[0] ---
   descriptor   LInputKt;

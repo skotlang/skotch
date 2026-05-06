@@ -349,7 +349,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Outer"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Outer",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -532,6 +568,80 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 5
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getThis$0",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Outer$Inner"
+            },
+            {
+              "Class": "Outer"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Outer$Inner",
+                        "field_name": "this$0"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Outer"
+          }
+        },
+        {
+          "id": 10,
+          "name": "getY",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Outer$Inner"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Outer$Inner",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

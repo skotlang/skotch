@@ -31,10 +31,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Holder",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Holder",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -386,7 +392,43 @@ unique_name=inputkt
           "ty": "Any"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Holder"
+            },
+            "Any"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Holder",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Any"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

@@ -56,7 +56,7 @@ unique_name=inputkt
                     "kind": {
                       "ConstructorJava": {
                         "class_name": "java/io/File",
-                        "descriptor": "(Ljava/net/URI;)V"
+                        "descriptor": "(Ljava/lang/String;)V"
                       }
                     },
                     "args": [

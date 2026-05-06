@@ -37,23 +37,26 @@ method        main ()V 0x0019
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0007 bipush 21
-    0009 invokestatic Method(InputKt.apply:(Lkotlin/jvm/functions/Function1;I)I)
-    0012 istore_0
-    0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0016 iload_0
-    0017 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0020 new Class(InputKt$Lambda$1)
-    0023 dup
-    0024 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0027 ldc "world"
-    0029 invokestatic Method(InputKt.applyStr:(Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Ljava/lang/String;)
-    0032 astore_1
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 aload_1
-    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0040 return
+    0007 checkcast Class(kotlin/jvm/functions/Function1)
+    0010 bipush 21
+    0012 invokestatic Method(InputKt.apply:(Lkotlin/jvm/functions/Function1;I)I)
+    0015 istore_0
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 iload_0
+    0020 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0023 new Class(InputKt$Lambda$1)
+    0026 dup
+    0027 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0030 checkcast Class(kotlin/jvm/functions/Function1)
+    0033 ldc "world"
+    0035 invokestatic Method(InputKt.applyStr:(Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Ljava/lang/String;)
+    0038 astore_1
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 aload_1
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    InnerClasses (18 bytes)

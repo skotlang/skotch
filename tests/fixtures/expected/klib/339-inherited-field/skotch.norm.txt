@@ -65,10 +65,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Base",
-                    "field_name": "x"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Child",
+                        "method_name": "getX"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -90,10 +96,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "GetField": {
-                    "receiver": 1,
-                    "class_name": "Child",
-                    "field_name": "y"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Child",
+                        "method_name": "getY"
+                      }
+                    },
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -320,7 +332,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Base"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Base",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -384,7 +432,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getY",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Child"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Child",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

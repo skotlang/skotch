@@ -19,9 +19,10 @@ bb2:
 bb3:
   %t3 = add i32 0, 1
   %t4 = sub i32 %arg0, %t3
-  %t5 = call i32 @InputKt_factorial(i32 %t4)
-  %t6 = mul i32 %arg0, %t5
-  ret i32 %t6
+  %t5 = inttoptr i64 0 to ptr
+  %t6 = call i32 @InputKt_factorial(ptr %t5)
+  %t7 = mul i32 %arg0, %t6
+  ret i32 %t7
 }
 
 ; @main

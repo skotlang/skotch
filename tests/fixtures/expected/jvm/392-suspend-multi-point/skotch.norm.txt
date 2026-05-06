@@ -96,7 +96,7 @@ method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0208 iadd
     0209 istore 5
     0211 iload 5
-    0213 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0213 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
     0216 astore 6
     0218 aload 6
     0220 areturn
@@ -106,9 +106,14 @@ method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0227 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0230 athrow
     sub_attr  StackMapTable (188 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        yield_ (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
   code        max_stack=1 max_locals=1
     0000 aconst_null
     0001 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    InnerClasses (10 bytes)

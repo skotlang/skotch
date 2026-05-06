@@ -74,10 +74,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Container$Item",
-                    "field_name": "value"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Container$Item",
+                        "method_name": "getValue"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -304,7 +310,43 @@ unique_name=inputkt
           "ty": "String"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getName",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Container"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Container",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -368,7 +410,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Container$Item"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Container$Item",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

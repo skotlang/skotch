@@ -313,6 +313,9 @@ unique_name=inputkt
         }
       ],
       "return_ty": "Bool",
+      "param_names": [
+        "<this>"
+      ],
       "named_locals": [
         6
       ]
@@ -492,6 +495,9 @@ unique_name=inputkt
         }
       ],
       "return_ty": "Int",
+      "param_names": [
+        "<this>"
+      ],
       "named_locals": [
         2
       ]

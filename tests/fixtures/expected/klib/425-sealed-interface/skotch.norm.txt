@@ -573,7 +573,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Ok"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Ok",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -640,7 +676,43 @@ unique_name=inputkt
           "ty": "String"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getMsg",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Err"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Err",
+                        "field_name": "msg"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

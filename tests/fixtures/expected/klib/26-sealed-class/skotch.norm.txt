@@ -20,6 +20,9 @@ unique_name=inputkt
         {
           "Class": "Ok"
         },
+        {
+          "Class": "Result"
+        },
         "Bool",
         "Unit"
       ],
@@ -63,9 +66,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "InstanceOf": {
+                  "CheckCast": {
                     "obj": 1,
-                    "type_descriptor": "Ok"
+                    "target_class": "Result"
                   }
                 }
               }
@@ -74,10 +77,21 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
+                  "InstanceOf": {
+                    "obj": 2,
+                    "type_descriptor": "Ok"
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      2
+                      3
                     ]
                   }
                 }
@@ -89,7 +103,7 @@ unique_name=inputkt
       ],
       "return_ty": "Unit",
       "named_locals": [
-        1
+        2
       ]
     },
     {
@@ -336,7 +350,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getValue",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Ok"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Ok",
+                        "field_name": "value"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -400,7 +450,43 @@ unique_name=inputkt
           "ty": "String"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getMessage",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Err"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Err",
+                        "field_name": "message"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

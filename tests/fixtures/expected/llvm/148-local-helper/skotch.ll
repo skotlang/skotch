@@ -18,7 +18,7 @@ bb1:
   br i1 %t3, label %bb2, label %bb4
 bb2:
   %t4 = load i32, ptr %merge_2
-  %t5 = call i32 @InputKt_isPrime(i32 %t4)
+  %t5 = call i32 @InputKt_main$isPrime(i32 %t4)
   %t6 = trunc i32 %t5 to i1
   br i1 %t6, label %bb5, label %bb6
 bb3:
@@ -39,9 +39,9 @@ bb7:
   br label %bb3
 }
 
-define i32 @InputKt_isPrime(i32 %arg0) {
+define i32 @InputKt_main$isPrime(i32 %arg0) {
 entry:
-  %merge_7 = alloca i32
+  %merge_6 = alloca i32
   %t0 = add i32 0, 2
   %t1 = icmp slt i32 %arg0, %t0
   br i1 %t1, label %bb1, label %bb2
@@ -52,16 +52,16 @@ bb2:
   br label %bb3
 bb3:
   %t3 = add i32 0, 2
-  store i32 %t3, ptr %merge_7
+  store i32 %t3, ptr %merge_6
   br label %bb4
 bb4:
-  %t4 = load i32, ptr %merge_7
-  %t5 = load i32, ptr %merge_7
+  %t4 = load i32, ptr %merge_6
+  %t5 = load i32, ptr %merge_6
   %t6 = mul i32 %t4, %t5
   %t7 = icmp sle i32 %t6, %arg0
   br i1 %t7, label %bb5, label %bb6
 bb5:
-  %t8 = load i32, ptr %merge_7
+  %t8 = load i32, ptr %merge_6
   %t9 = srem i32 %arg0, %t8
   %t10 = add i32 0, 0
   %t11 = icmp eq i32 %t9, %t10
@@ -75,10 +75,10 @@ bb7:
 bb8:
   br label %bb9
 bb9:
-  %t14 = load i32, ptr %merge_7
+  %t14 = load i32, ptr %merge_6
   %t15 = add i32 0, 1
   %t16 = add i32 %t14, %t15
-  store i32 %t16, ptr %merge_7
+  store i32 %t16, ptr %merge_6
   br label %bb4
 }
 

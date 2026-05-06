@@ -16,33 +16,37 @@ entry:
 bb1:
   %t2 = load i32, ptr %merge_2
   %t3 = icmp sle i32 %t2, %t1
-  br i1 %t3, label %bb2, label %bb3
+  br i1 %t3, label %bb2, label %bb4
 bb2:
   %t4 = add i32 0, 1
   %t5 = add i32 0, 3
   store i32 %t4, ptr %merge_6
-  br label %bb4
+  br label %bb5
 bb3:
-  ret i32 0
-bb4:
-  %t6 = load i32, ptr %merge_6
-  %t7 = icmp sle i32 %t6, %t5
-  br i1 %t7, label %bb5, label %bb6
-bb5:
-  %t8 = load i32, ptr %merge_2
-  %t9 = load i32, ptr %merge_6
-  %t10 = mul i32 %t8, %t9
-  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t10)
-  %t12 = add i32 0, 1
-  %t13 = load i32, ptr %merge_6
-  %t14 = add i32 %t13, %t12
-  store i32 %t14, ptr %merge_6
-  br label %bb4
-bb6:
-  %t15 = add i32 0, 1
-  %t16 = load i32, ptr %merge_2
-  %t17 = add i32 %t16, %t15
-  store i32 %t17, ptr %merge_2
+  %t6 = add i32 0, 1
+  %t7 = load i32, ptr %merge_2
+  %t8 = add i32 %t7, %t6
+  store i32 %t8, ptr %merge_2
   br label %bb1
+bb4:
+  ret i32 0
+bb5:
+  %t9 = load i32, ptr %merge_6
+  %t10 = icmp sle i32 %t9, %t5
+  br i1 %t10, label %bb6, label %bb8
+bb6:
+  %t11 = load i32, ptr %merge_2
+  %t12 = load i32, ptr %merge_6
+  %t13 = mul i32 %t11, %t12
+  call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t13)
+  br label %bb7
+bb7:
+  %t15 = add i32 0, 1
+  %t16 = load i32, ptr %merge_6
+  %t17 = add i32 %t16, %t15
+  store i32 %t17, ptr %merge_6
+  br label %bb5
+bb8:
+  br label %bb3
 }
 

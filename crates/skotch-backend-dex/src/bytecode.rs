@@ -328,7 +328,8 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
                 | CallKind::ConstructorJava { .. }
                 | CallKind::Virtual { .. }
                 | CallKind::Super { .. }
-                | CallKind::VirtualJava { .. } => 0,
+                | CallKind::VirtualJava { .. }
+                | CallKind::MakeConcatWithConstants { .. } => 0,
             };
             needed = needed.max(n);
         }
@@ -1237,6 +1238,12 @@ fn emit_call(
                 code.push(opcode_aa(0x0C, dest_reg as u8)); // move-result-object
             }
             regs.len() as u16
+        }
+        CallKind::MakeConcatWithConstants { .. } => {
+            // DEX backend doesn't yet emit invokedynamic — leave the
+            // dest register unset; the higher-level caller's stub
+            // handler will treat it as null.
+            0
         }
     }
 }

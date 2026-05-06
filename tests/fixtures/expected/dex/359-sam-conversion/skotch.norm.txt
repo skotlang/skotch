@@ -9,9 +9,9 @@ classes       1
   "I"
   "II"
   "ILI"
-  "L$Object$2;"
-  "L$Object$3;"
   "LAction;"
+  "LInputKt$main$1;"
+  "LInputKt$main$2;"
   "LInputKt;"
   "LTransform;"
   "Ljava/io/PrintStream;"
@@ -32,9 +32,9 @@ classes       1
 
 --- types ---
   I
-  L$Object$2;
-  L$Object$3;
   LAction;
+  LInputKt$main$1;
+  LInputKt$main$2;
   LInputKt;
   LTransform;
   Ljava/io/PrintStream;
@@ -44,9 +44,9 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  L$Object$2;.<init>()V
-  L$Object$3;.<init>()V
   LAction;.execute()V
+  LInputKt$main$1;.<init>()V
+  LInputKt$main$2;.<init>()V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.process(Ljava/lang/Object;I)I

@@ -290,6 +290,16 @@ pub enum CallKind {
         class_name: std::string::String,
         method_name: std::string::String,
     },
+    /// JDK 9+ string concatenation via `invokedynamic
+    /// makeConcatWithConstants`. `recipe` encodes the constant
+    /// segments interleaved with `` placeholders for the dynamic
+    /// args (one per element of the call's `args` list). `descriptor`
+    /// is the call-site signature (e.g.
+    /// `(Ljava/lang/String;I)Ljava/lang/String;`).
+    MakeConcatWithConstants {
+        recipe: std::string::String,
+        descriptor: std::string::String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

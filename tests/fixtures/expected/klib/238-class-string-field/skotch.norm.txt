@@ -77,10 +77,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Person",
-                    "field_name": "name"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Person",
+                        "method_name": "getName"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -102,10 +108,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Person",
-                    "field_name": "age"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Person",
+                        "method_name": "getAge"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -336,7 +348,78 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getName",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "getAge",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Person"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Person",
+                        "field_name": "age"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

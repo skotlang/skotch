@@ -312,7 +312,7 @@ unique_name=inputkt
     },
     {
       "id": 8,
-      "name": "double",
+      "name": "main$double",
       "params": [
         0
       ],
@@ -352,11 +352,12 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "is_private": true
     },
     {
       "id": 9,
-      "name": "greet",
+      "name": "main$greet",
       "params": [
         0,
         1
@@ -435,7 +436,8 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "String"
+      "return_ty": "String",
+      "is_private": true
     }
   ],
   "classes": [],

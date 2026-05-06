@@ -16,9 +16,6 @@ unique_name=inputkt
       "name": "main",
       "params": [],
       "locals": [
-        "Bool",
-        "Int",
-        "Int",
         "Int",
         "Unit"
       ],
@@ -30,27 +27,6 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "Bool": true
-                  }
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Branch": {
-              "cond": 0,
-              "then_block": 1,
-              "else_block": 2
-            }
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "Const": {
                     "Int": 1
                   }
                 }
@@ -60,50 +36,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 2
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Const": {
-                    "Int": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 1,
-                "value": {
-                  "Local": 3
-                }
-              }
-            }
-          ],
-          "terminator": {
-            "Goto": 3
-          }
-        },
-        {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      1
+                      0
                     ]
                   }
                 }
@@ -115,7 +51,7 @@ unique_name=inputkt
       ],
       "return_ty": "Unit",
       "named_locals": [
-        1
+        0
       ]
     },
     {

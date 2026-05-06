@@ -81,10 +81,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Pair",
-                    "field_name": "first"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Pair",
+                        "method_name": "getFirst"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -106,10 +112,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Pair",
-                    "field_name": "second"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Pair",
+                        "method_name": "getSecond"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -131,10 +143,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Pair",
-                    "field_name": "first"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Pair",
+                        "method_name": "getFirst"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -143,10 +161,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 8,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Pair",
-                    "field_name": "second"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Pair",
+                        "method_name": "getSecond"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -389,7 +413,78 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getFirst",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Pair"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Pair",
+                        "field_name": "first"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getSecond",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Pair"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Pair",
+                        "field_name": "second"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

@@ -66,3 +66,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    InnerClasses (10 bytes)

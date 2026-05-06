@@ -43,17 +43,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "$convert",
-                        "method_name": "i2d",
-                        "descriptor": "()V"
-                      }
-                    },
-                    "args": [
-                      0
-                    ]
+                  "Const": {
+                    "Double": 42.0
                   }
                 }
               }
@@ -85,17 +76,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "$convert",
-                        "method_name": "i2l",
-                        "descriptor": "()V"
-                      }
-                    },
-                    "args": [
-                      3
-                    ]
+                  "Const": {
+                    "Long": 42
                   }
                 }
               }
@@ -127,17 +109,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "$convert",
-                        "method_name": "d2i",
-                        "descriptor": "()V"
-                      }
-                    },
-                    "args": [
-                      6
-                    ]
+                  "Const": {
+                    "Int": 3
                   }
                 }
               }

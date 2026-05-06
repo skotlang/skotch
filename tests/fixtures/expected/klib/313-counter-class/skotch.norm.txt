@@ -113,10 +113,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Counter",
-                    "field_name": "count"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getCount"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -156,10 +162,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Counter",
-                    "field_name": "count"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getCount"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -199,10 +211,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 10,
                 "value": {
-                  "GetField": {
-                    "receiver": 0,
-                    "class_name": "Counter",
-                    "field_name": "count"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Counter",
+                        "method_name": "getCount"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
@@ -635,6 +653,77 @@ unique_name=inputkt
                 {
                   "Assign": {
                     "dest": 0,
+                    "value": {
+                      "PutField": {
+                        "receiver": 0,
+                        "class_name": "Counter",
+                        "field_name": "count",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": "Return"
+            }
+          ],
+          "return_ty": "Unit"
+        },
+        {
+          "id": 11,
+          "name": "getCount",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Counter"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Counter",
+                        "field_name": "count"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 12,
+          "name": "setCount",
+          "params": [
+            0,
+            1
+          ],
+          "locals": [
+            {
+              "Class": "Counter"
+            },
+            "Int",
+            "Unit"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 2,
                     "value": {
                       "PutField": {
                         "receiver": 0,

@@ -116,11 +116,11 @@ unique_name=inputkt
       "params": [],
       "locals": [
         {
-          "Class": "Action"
+          "Class": "InputKt$main$1"
         },
         "Unit",
         {
-          "Class": "Transform"
+          "Class": "InputKt$main$2"
         },
         "Int",
         "Int",
@@ -133,7 +133,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 0,
                 "value": {
-                  "NewInstance": "$Object$2"
+                  "NewInstance": "InputKt$main$1"
                 }
               }
             },
@@ -143,7 +143,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Constructor": "$Object$2"
+                      "Constructor": "InputKt$main$1"
                     },
                     "args": []
                   }
@@ -169,7 +169,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "NewInstance": "$Object$3"
+                  "NewInstance": "InputKt$main$2"
                 }
               }
             },
@@ -179,7 +179,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Constructor": "$Object$3"
+                      "Constructor": "InputKt$main$2"
                     },
                     "args": []
                   }
@@ -488,7 +488,7 @@ unique_name=inputkt
       }
     },
     {
-      "name": "$Object$2",
+      "name": "InputKt$main$1",
       "super_class": null,
       "is_open": false,
       "is_abstract": false,
@@ -506,7 +506,7 @@ unique_name=inputkt
           ],
           "locals": [
             {
-              "Class": "$Object$2"
+              "Class": "InputKt$main$1"
             },
             "String",
             "Unit"
@@ -552,7 +552,7 @@ unique_name=inputkt
         ],
         "locals": [
           {
-            "Class": "$Object$2"
+            "Class": "InputKt$main$1"
           }
         ],
         "blocks": [
@@ -581,7 +581,7 @@ unique_name=inputkt
       }
     },
     {
-      "name": "$Object$3",
+      "name": "InputKt$main$2",
       "super_class": null,
       "is_open": false,
       "is_abstract": false,
@@ -600,7 +600,7 @@ unique_name=inputkt
           ],
           "locals": [
             {
-              "Class": "$Object$3"
+              "Class": "InputKt$main$2"
             },
             "Int",
             "Int",
@@ -648,7 +648,7 @@ unique_name=inputkt
         ],
         "locals": [
           {
-            "Class": "$Object$3"
+            "Class": "InputKt$main$2"
           }
         ],
         "blocks": [

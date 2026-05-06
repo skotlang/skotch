@@ -16,34 +16,34 @@ entry:
 ; @InputKt_max
 define i32 @InputKt_max(i32 %arg0, i32 %arg1) {
 entry:
-  %merge_5 = alloca i32
+  %merge_3 = alloca i32
   %t0 = icmp sgt i32 %arg0, %arg1
   br i1 %t0, label %bb1, label %bb2
 bb1:
-  store i32 %arg0, ptr %merge_5
+  store i32 %arg0, ptr %merge_3
   br label %bb3
 bb2:
-  store i32 %arg1, ptr %merge_5
+  store i32 %arg1, ptr %merge_3
   br label %bb3
 bb3:
-  %t1 = load i32, ptr %merge_5
+  %t1 = load i32, ptr %merge_3
   ret i32 %t1
 }
 
 ; @InputKt_min
 define i32 @InputKt_min(i32 %arg0, i32 %arg1) {
 entry:
-  %merge_5 = alloca i32
+  %merge_3 = alloca i32
   %t0 = icmp slt i32 %arg0, %arg1
   br i1 %t0, label %bb1, label %bb2
 bb1:
-  store i32 %arg0, ptr %merge_5
+  store i32 %arg0, ptr %merge_3
   br label %bb3
 bb2:
-  store i32 %arg1, ptr %merge_5
+  store i32 %arg1, ptr %merge_3
   br label %bb3
 bb3:
-  %t1 = load i32, ptr %merge_5
+  %t1 = load i32, ptr %merge_3
   ret i32 %t1
 }
 

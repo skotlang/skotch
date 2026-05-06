@@ -82,10 +82,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "GetField": {
-                    "receiver": 3,
-                    "class_name": "Circle",
-                    "field_name": "r"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Circle",
+                        "method_name": "getR"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -94,10 +100,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 3,
-                    "class_name": "Circle",
-                    "field_name": "r"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Circle",
+                        "method_name": "getR"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -185,10 +197,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 11,
                 "value": {
-                  "GetField": {
-                    "receiver": 10,
-                    "class_name": "Rect",
-                    "field_name": "w"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Rect",
+                        "method_name": "getW"
+                      }
+                    },
+                    "args": [
+                      10
+                    ]
                   }
                 }
               }
@@ -197,10 +215,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 12,
                 "value": {
-                  "GetField": {
-                    "receiver": 10,
-                    "class_name": "Rect",
-                    "field_name": "h"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Rect",
+                        "method_name": "getH"
+                      }
+                    },
+                    "args": [
+                      10
+                    ]
                   }
                 }
               }
@@ -668,7 +692,43 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getR",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Circle"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Circle",
+                        "field_name": "r"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -736,7 +796,78 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 9,
+          "name": "getW",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rect"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rect",
+                        "field_name": "w"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "getH",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rect"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rect",
+                        "field_name": "h"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",

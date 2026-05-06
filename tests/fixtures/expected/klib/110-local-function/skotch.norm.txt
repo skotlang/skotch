@@ -296,7 +296,7 @@ unique_name=inputkt
     },
     {
       "id": 8,
-      "name": "factorial",
+      "name": "main$factorial",
       "params": [
         0
       ],
@@ -461,7 +461,8 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "is_private": true
     }
   ],
   "classes": [],

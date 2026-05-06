@@ -363,7 +363,7 @@ unique_name=inputkt
     },
     {
       "id": 9,
-      "name": "inner",
+      "name": "outer$inner",
       "params": [
         0
       ],
@@ -403,7 +403,8 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "Int"
+      "return_ty": "Int",
+      "is_private": true
     }
   ],
   "classes": [],

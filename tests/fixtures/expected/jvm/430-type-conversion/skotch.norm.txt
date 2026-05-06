@@ -4,25 +4,22 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
-    0000 bipush 42
-    0002 op_0x87
+    0000 ldc2_w double(42)
     0003 dstore_0
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0007 dload_0
     0008 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0011 bipush 42
-    0013 op_0x85
+    0011 ldc2_w long(42)
     0014 lstore_0
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0018 lload_0
     0019 invokevirtual Method(java/io/PrintStream.println:(J)V)
-    0022 ldc2_w double(3.14)
-    0025 op_0x8E
-    0026 istore_0
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 iload_0
-    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0034 return
+    0022 iconst_3
+    0023 istore_0
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 iload_0
+    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0031 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -9,6 +9,8 @@ method        greet (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/la
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (13 bytes)
 method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
   code        max_stack=16 max_locals=32
@@ -71,4 +73,7 @@ method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0009
     0133 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0136 athrow
     sub_attr  StackMapTable (115 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    InnerClasses (10 bytes)

@@ -638,6 +638,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Unit"
+        },
+        {
+          "id": 10,
+          "name": "getItems",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Wrapper"
+            },
+            "IntArray"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Wrapper",
+                        "field_name": "items"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "IntArray"
         }
       ],
       "constructor": {

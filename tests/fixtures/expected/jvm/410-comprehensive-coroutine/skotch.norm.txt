@@ -69,7 +69,7 @@ method        doubleAfterDelay (ILkotlin/coroutines/Continuation;)Ljava/lang/Obj
     0149 imul
     0150 istore 6
     0152 iload 6
-    0154 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0154 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
     0157 astore 7
     0159 aload 7
     0161 areturn
@@ -79,6 +79,8 @@ method        doubleAfterDelay (ILkotlin/coroutines/Continuation;)Ljava/lang/Obj
     0168 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0171 athrow
     sub_attr  StackMapTable (141 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)
 method        main ()V 0x0019
   code        max_stack=4 max_locals=1
@@ -98,3 +100,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    InnerClasses (42 bytes)

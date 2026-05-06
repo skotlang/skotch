@@ -19,6 +19,9 @@ unique_name=inputkt
         {
           "Class": "Circle"
         },
+        {
+          "Class": "Shape"
+        },
         "String",
         "Unit"
       ],
@@ -50,16 +53,9 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "Virtual": {
-                        "class_name": "Circle",
-                        "method_name": "name"
-                      }
-                    },
-                    "args": [
-                      0
-                    ]
+                  "CheckCast": {
+                    "obj": 0,
+                    "target_class": "Shape"
                   }
                 }
               }
@@ -69,9 +65,27 @@ unique_name=inputkt
                 "dest": 2,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Shape",
+                        "method_name": "name"
+                      }
+                    },
                     "args": [
                       1
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 3,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      2
                     ]
                   }
                 }
@@ -83,7 +97,7 @@ unique_name=inputkt
       ],
       "return_ty": "Unit",
       "named_locals": [
-        0
+        1
       ]
     },
     {

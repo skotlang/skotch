@@ -522,6 +522,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Bool"
+        },
+        {
+          "id": 10,
+          "name": "getCode",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Secret"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Secret",
+                        "field_name": "code"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

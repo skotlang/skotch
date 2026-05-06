@@ -1,0 +1,25 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+
+define ptr @InputKt_fetchValue(ptr %arg0) {
+entry:
+  %t0 = add i64 0, 10
+  %t1 = call ptr @InputKt_delay(i64 %t0, ptr %arg0)
+  %t2 = add i32 0, 42
+  %t3 = inttoptr i64 0 to ptr
+  ret ptr %t3
+}
+
+define i32 @main() {
+entry:
+  %t0 = inttoptr i64 0 to ptr
+  %t1 = inttoptr i64 0 to ptr
+  %t2 = inttoptr i64 0 to ptr
+  %t3 = add i32 0, 1
+  %t4 = inttoptr i64 0 to ptr
+  %t5 = inttoptr i64 0 to ptr
+  ret i32 0
+}
+

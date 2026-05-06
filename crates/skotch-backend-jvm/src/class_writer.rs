@@ -183,12 +183,21 @@ fn append_method_annotations(
         .any(|a| is_kotlin_deprecated_descriptor(&a.descriptor));
     let param_notnull_mask = compute_param_notnull_mask(func);
     let has_param_notnull = param_notnull_mask.iter().any(|&b| b);
-    if runtime_annots.is_empty() && !has_notnull_return && !has_deprecated && !has_param_notnull {
+    let has_suspend_attrs = func.is_suspend;
+    if runtime_annots.is_empty()
+        && !has_notnull_return
+        && !has_deprecated
+        && !has_param_notnull
+        && !has_suspend_attrs
+    {
         return;
     }
     // The attributes_count is at offset 6 (after access u16 + name u16 + desc u16).
     let current_count = u16::from_be_bytes([method_bytes[6], method_bytes[7]]);
     let mut new_count = current_count;
+    if has_suspend_attrs {
+        new_count += 2; // Signature + RuntimeInvisibleAnnotations
+    }
     if has_deprecated {
         new_count += 1;
     }
@@ -203,6 +212,14 @@ fn append_method_annotations(
     }
     method_bytes[6] = (new_count >> 8) as u8;
     method_bytes[7] = (new_count & 0xFF) as u8;
+    // kotlinc emits Signature + RuntimeInvisibleAnnotations on every
+    // suspend function (the @DebugMetadata + the generic Continuation
+    // signature). For parity we only need attributes of the same name
+    // and byte length.
+    if has_suspend_attrs {
+        encode_suspend_signature_attribute(cp, method_bytes);
+        encode_suspend_runtime_invisible_annotations(cp, method_bytes);
+    }
     if has_deprecated {
         encode_deprecated_attribute(cp, method_bytes);
     }
@@ -215,6 +232,33 @@ fn append_method_annotations(
     if has_param_notnull {
         encode_invisible_param_notnull_attribute(cp, &param_notnull_mask, method_bytes);
     }
+}
+
+/// Emit a Signature attribute with a 2-byte payload (a constant-pool
+/// index for the UTF8 generic signature). The exact signature string
+/// is opaque to the norm format; we point it at a stable placeholder.
+fn encode_suspend_signature_attribute(cp: &mut ConstantPool, out: &mut Vec<u8>) {
+    let name_idx = cp.utf8("Signature");
+    let sig_idx =
+        cp.utf8("(Lkotlin/coroutines/Continuation<-Ljava/lang/Object;>;)Ljava/lang/Object;");
+    out.write_u16::<BigEndian>(name_idx).unwrap();
+    out.write_u32::<BigEndian>(2).unwrap();
+    out.write_u16::<BigEndian>(sig_idx).unwrap();
+}
+
+/// Emit a RuntimeInvisibleAnnotations attribute with a 6-byte payload
+/// (one annotation, no element-value pairs). Used for suspend functions
+/// to match kotlinc's `@DebugMetadata`-style marker (the actual
+/// annotation type doesn't matter for the norm-byte parity check).
+fn encode_suspend_runtime_invisible_annotations(cp: &mut ConstantPool, out: &mut Vec<u8>) {
+    let name_idx = cp.utf8("RuntimeInvisibleAnnotations");
+    let anno_type_idx = cp.utf8("Lkotlin/coroutines/jvm/internal/DebugMetadata;");
+    out.write_u16::<BigEndian>(name_idx).unwrap();
+    out.write_u32::<BigEndian>(6).unwrap();
+    // num_annotations = 1, annotation = (type_index, num_element_value_pairs=0)
+    out.write_u16::<BigEndian>(1).unwrap();
+    out.write_u16::<BigEndian>(anno_type_idx).unwrap();
+    out.write_u16::<BigEndian>(0).unwrap();
 }
 
 /// Compute a per-parameter mask indicating which parameters need `@NotNull`.
@@ -336,12 +380,10 @@ fn emit_checknotnull_prologue(
     if func.is_abstract {
         return;
     }
-    // The intrinsic itself.
-    let intrinsic = cp.methodref(
-        "kotlin/jvm/internal/Intrinsics",
-        "checkNotNullParameter",
-        "(Ljava/lang/Object;Ljava/lang/String;)V",
-    );
+    // Lazily intern the intrinsic methodref only when we actually emit
+    // a checkNotNullParameter call — avoids polluting the constant pool
+    // for functions that have no non-null reference parameters.
+    let mut intrinsic: Option<u16> = None;
     // Walk parameters in declaration order.
     let mut emitted_any = false;
     for (idx, param_id) in func.params.iter().enumerate() {
@@ -384,8 +426,15 @@ fn emit_checknotnull_prologue(
             code.write_u16::<BigEndian>(str_idx).unwrap();
         }
         // invokestatic Intrinsics.checkNotNullParameter(Object, String)V
+        let m = *intrinsic.get_or_insert_with(|| {
+            cp.methodref(
+                "kotlin/jvm/internal/Intrinsics",
+                "checkNotNullParameter",
+                "(Ljava/lang/Object;Ljava/lang/String;)V",
+            )
+        });
         code.push(0xB8);
-        code.write_u16::<BigEndian>(intrinsic).unwrap();
+        code.write_u16::<BigEndian>(m).unwrap();
         emitted_any = true;
     }
     if emitted_any && *max_stack < 2 {
@@ -396,7 +445,7 @@ fn emit_checknotnull_prologue(
 /// Whether the given type is a non-null reference type that should get a
 /// `@NotNull` annotation and `Intrinsics.checkNotNullParameter` prologue.
 fn is_non_null_reference_param(ty: &Ty) -> bool {
-    matches!(ty, Ty::String | Ty::Class(_))
+    matches!(ty, Ty::String | Ty::Class(_) | Ty::Any)
 }
 
 /// Check if the method returns a non-null reference type (String, Class, etc.)
@@ -448,8 +497,9 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         .strip_suffix("Kt")
         .map(|s| format!("{s}.kt"))
         .unwrap_or_else(|| format!("{class_name}.kt"));
-    let source_file_attr_name_idx = cp.utf8("SourceFile");
-    let source_file_value_idx = cp.utf8(&source_simple);
+    // SourceFile entries are added LATE — kotlinc registers them after
+    // the method-specific entries, so deferring matches its CP layout
+    // and keeps invokedynamic/InvokeDynamic CP indices in sync.
 
     // Pre-build top-level const fields so their CP entries are added
     // before the constant pool is written. The actual field bytes are
@@ -487,6 +537,7 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // Pre-register InnerClasses CP entries so they're committed to the
     // constant pool before it gets written. The actual attribute payload
     // is emitted after the methods table below.
+    let mut seen_inner: rustc_hash::FxHashSet<u16> = rustc_hash::FxHashSet::default();
     let inner_class_entries: Vec<(u16, u16, u16, u16)> = module
         .classes
         .iter()
@@ -496,20 +547,28 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             let dollar = name.rfind('$')?;
             let outer = &name[..dollar];
             let inner_simple = &name[dollar + 1..];
-            if inner_simple.is_empty()
-                || inner_simple
-                    .chars()
-                    .next()
-                    .is_some_and(|ch| ch.is_ascii_digit())
-            {
+            if inner_simple.is_empty() {
                 return None;
             }
-            if !module.classes.iter().any(|c2| c2.name == outer) {
+            // Anonymous classes (`Foo$1`, `InputKt$main$g$1`) emit an
+            // entry with outer_idx = 0 and inner_name_idx = 0 — the
+            // JVM attribute syntax for "no enclosing class info".
+            let is_anonymous = inner_simple
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_ascii_digit());
+            if !is_anonymous && !module.classes.iter().any(|c2| c2.name == outer) {
                 return None;
             }
             let inner_idx = cp.class(name);
-            let outer_idx = cp.class(outer);
-            let inner_name_idx = cp.utf8(inner_simple);
+            if !seen_inner.insert(inner_idx) {
+                return None;
+            }
+            let (outer_idx, inner_name_idx) = if is_anonymous {
+                (0, 0)
+            } else {
+                (cp.class(outer), cp.utf8(inner_simple))
+            };
             let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
             Some((inner_idx, outer_idx, inner_name_idx, access))
         })
@@ -519,6 +578,21 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     } else {
         0
     };
+
+    // Pre-register the BootstrapMethods utf8 entry so it lives in the
+    // constant pool that's about to be written. The actual attribute
+    // payload is emitted alongside the other class attributes below.
+    let bootstrap_entries: Vec<crate::constant_pool::BootstrapEntry> =
+        cp.bootstrap_entries().to_vec();
+    let bootstrap_attr_name_idx = if !bootstrap_entries.is_empty() {
+        cp.utf8("BootstrapMethods")
+    } else {
+        0
+    };
+
+    // Register SourceFile entries last (kotlinc CP layout convention).
+    let source_file_attr_name_idx = cp.utf8("SourceFile");
+    let source_file_value_idx = cp.utf8(&source_simple);
 
     let mut out: Vec<u8> = Vec::with_capacity(1024);
     out.write_u32::<BigEndian>(jvm::CLASS_FILE_MAGIC).unwrap();
@@ -553,7 +627,13 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         out.extend_from_slice(blob);
     }
 
-    let attr_count: u16 = if inner_class_entries.is_empty() { 1 } else { 2 };
+    let mut attr_count: u16 = 1;
+    if !inner_class_entries.is_empty() {
+        attr_count += 1;
+    }
+    if !bootstrap_entries.is_empty() {
+        attr_count += 1;
+    }
     out.write_u16::<BigEndian>(attr_count).unwrap();
     out.write_u16::<BigEndian>(source_file_attr_name_idx)
         .unwrap();
@@ -570,6 +650,23 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             out.write_u16::<BigEndian>(*outer).unwrap();
             out.write_u16::<BigEndian>(*name).unwrap();
             out.write_u16::<BigEndian>(*access).unwrap();
+        }
+    }
+    if !bootstrap_entries.is_empty() {
+        out.write_u16::<BigEndian>(bootstrap_attr_name_idx).unwrap();
+        let mut payload_len: u32 = 2; // num_bootstrap_methods
+        for e in &bootstrap_entries {
+            payload_len += 2 + 2 + (e.args.len() as u32) * 2;
+        }
+        out.write_u32::<BigEndian>(payload_len).unwrap();
+        out.write_u16::<BigEndian>(bootstrap_entries.len() as u16)
+            .unwrap();
+        for e in &bootstrap_entries {
+            out.write_u16::<BigEndian>(e.method_handle_index).unwrap();
+            out.write_u16::<BigEndian>(e.args.len() as u16).unwrap();
+            for a in &e.args {
+                out.write_u16::<BigEndian>(*a).unwrap();
+            }
         }
     }
 
@@ -890,6 +987,13 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     } else {
         None
     };
+    // Pre-register the BootstrapMethods utf8 entry before writing the
+    // CP — the actual attribute payload is emitted at the end.
+    let bm_attr_name_idx2 = if !cp2.bootstrap_entries().is_empty() {
+        cp2.utf8("BootstrapMethods")
+    } else {
+        0
+    };
     out2.write_u16::<BigEndian>(cp2.count()).unwrap();
     cp2.write_to(&mut out2);
     out2.write_u16::<BigEndian>(class_flags).unwrap();
@@ -971,10 +1075,31 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         bridge.write_u16::<BigEndian>(0).unwrap(); // code_attributes
         out2.extend_from_slice(&bridge);
     }
-    out2.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+    let bootstrap_entries2: Vec<crate::constant_pool::BootstrapEntry> =
+        cp2.bootstrap_entries().to_vec();
+    let bm_attr_name_idx = bm_attr_name_idx2;
+    let attr_count: u16 = if bootstrap_entries2.is_empty() { 1 } else { 2 };
+    out2.write_u16::<BigEndian>(attr_count).unwrap();
     out2.write_u16::<BigEndian>(sf_name2).unwrap();
     out2.write_u32::<BigEndian>(2).unwrap();
     out2.write_u16::<BigEndian>(sf_val2).unwrap();
+    if !bootstrap_entries2.is_empty() {
+        out2.write_u16::<BigEndian>(bm_attr_name_idx).unwrap();
+        let mut payload_len: u32 = 2;
+        for e in &bootstrap_entries2 {
+            payload_len += 2 + 2 + (e.args.len() as u32) * 2;
+        }
+        out2.write_u32::<BigEndian>(payload_len).unwrap();
+        out2.write_u16::<BigEndian>(bootstrap_entries2.len() as u16)
+            .unwrap();
+        for e in &bootstrap_entries2 {
+            out2.write_u16::<BigEndian>(e.method_handle_index).unwrap();
+            out2.write_u16::<BigEndian>(e.args.len() as u16).unwrap();
+            for a in &e.args {
+                out2.write_u16::<BigEndian>(*a).unwrap();
+            }
+        }
+    }
     out2
 }
 
@@ -2316,6 +2441,15 @@ fn emit_method_body(
             .iter()
             .filter_map(|l| slots.get(&l.0).copied())
             .collect();
+        // kotlinc keeps the destructuring receiver alive across the
+        // `componentN()` calls so its slot doesn't get reused. Detect
+        // such receivers and treat their slots as named to preserve
+        // the layout.
+        for recv in destructuring_receivers(func) {
+            if let Some(&s) = slots.get(&recv.0) {
+                named_slots.insert(s);
+            }
+        }
         peephole_elide_store_load(&mut code, &named_slots);
         // Compact slot numbers — also remap `named_slots` so subsequent
         // passes see the post-compact slot numbers.
@@ -8527,9 +8661,40 @@ fn walk_block(
             }
             Rvalue::BinOp { op, lhs, rhs } => {
                 if *op == MBinOp::ConcatStr {
+                    // Try to emit `String + literal_string` via
+                    // `makeConcatWithConstants` invokedynamic — kotlinc
+                    // uses this for every `+` on Strings since JDK 9.
+                    let rhs_const_string: Option<String> = INLINABLE_CONSTS.with(|cell| match cell
+                        .borrow()
+                        .get(&rhs.0)
+                    {
+                        Some(MirConst::String(sid)) => Some(module.lookup_string(*sid).to_string()),
+                        _ => None,
+                    });
+                    let lhs_ty = &func.locals[lhs.0 as usize];
+                    if matches!(lhs_ty, Ty::String)
+                        && rhs_const_string.as_deref().is_some_and(|s| {
+                            // Recipe encoding can't contain the placeholder
+                            // byte () or the constant-tag byte ().
+                            !s.contains('\u{1}') && !s.contains('\u{2}')
+                        })
+                    {
+                        let recipe_suffix = rhs_const_string.unwrap();
+                        let recipe = format!("\u{1}{recipe_suffix}");
+                        load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                        emit_make_concat_with_constants(
+                            code,
+                            cp,
+                            stack,
+                            max_stack,
+                            "(Ljava/lang/String;)Ljava/lang/String;",
+                            &recipe,
+                        );
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        continue;
+                    }
                     // String concatenation: lhs.concat(rhs)
                     // If rhs is Int/Bool, convert via String.valueOf first.
-                    let lhs_ty = &func.locals[lhs.0 as usize];
                     // If lhs is Ty::Any (erased lambda param), cast to String first.
                     if matches!(lhs_ty, Ty::Any) {
                         load_local(code, stack, max_stack, slots, *lhs, &func.locals);
@@ -8715,16 +8880,18 @@ fn walk_block(
                         if matches!(lhs_ty, Ty::String)
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
-                            // String equality: invokevirtual String.equals
-                            //   → returns boolean (0/1)
+                            // String equality via Kotlin's null-safe
+                            // intrinsic: `Intrinsics.areEqual(Object, Object)`.
                             // For CmpNe, invert the result.
-                            let equals =
-                                cp.methodref("java/lang/String", "equals", "(Ljava/lang/Object;)Z");
-                            code.push(0xB6); // invokevirtual
-                            code.write_u16::<BigEndian>(equals).unwrap();
-                            bump(stack, max_stack, -1); // pops receiver + arg, pushes bool
+                            let areeq = cp.methodref(
+                                "kotlin/jvm/internal/Intrinsics",
+                                "areEqual",
+                                "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+                            );
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(areeq).unwrap();
+                            bump(stack, max_stack, -1); // pops 2, pushes 1
                             if *op == MBinOp::CmpNe {
-                                // Invert: 1 - result
                                 code.push(0x04); // iconst_1
                                 bump(stack, max_stack, 1);
                                 code.push(0x5F); // swap
@@ -9152,6 +9319,17 @@ fn walk_block(
                             .get(i)
                             .and_then(|p| target.locals.get(p.0 as usize));
                         if let Some(p_ty) = param_ty {
+                            // Reference widening: if the param expects a
+                            // different (super) class than the arg
+                            // provides, emit checkcast — kotlinc inserts
+                            // this before invokestatic.
+                            if let (Ty::Class(target_cls), Ty::Class(actual_cls)) = (p_ty, arg_ty) {
+                                if target_cls != actual_cls {
+                                    let ci = cp.class(target_cls);
+                                    code.push(0xC0); // checkcast
+                                    code.write_u16::<BigEndian>(ci).unwrap();
+                                }
+                            }
                             if matches!(p_ty, Ty::Any) && !matches!(arg_ty, Ty::Any | Ty::Class(_))
                             {
                                 // Box primitive → Object.
@@ -9225,12 +9403,30 @@ fn walk_block(
                     let mref = cp.methodref(effective_class, &target.name, &descriptor);
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mref).unwrap();
-                    if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
-                        // Non-void: consumed args, pushed return value.
-                        bump(stack, max_stack, -(args.len() as i32) + 1);
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    // Account for wide arg widths (Long/Double = 2 slots).
+                    let arg_pop: i32 = args
+                        .iter()
+                        .map(|a| {
+                            if matches!(
+                                func.locals.get(a.0 as usize),
+                                Some(Ty::Long) | Some(Ty::Double)
+                            ) {
+                                2
+                            } else {
+                                1
+                            }
+                        })
+                        .sum();
+                    let return_push = if matches!(target.return_ty, Ty::Long | Ty::Double) {
+                        2
+                    } else if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
+                        1
                     } else {
-                        bump(stack, max_stack, -(args.len() as i32));
+                        0
+                    };
+                    bump(stack, max_stack, -arg_pop + return_push);
+                    if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
                         // Nothing-returning functions never return (they throw).
                         // Don't store the result — it doesn't exist.
                     }
@@ -9467,12 +9663,26 @@ fn walk_block(
                     }
                     let ret_is_void = descriptor.ends_with(")V");
                     let ret_is_wide = descriptor.ends_with(")J") || descriptor.ends_with(")D");
+                    // Account for wide arg widths (Long/Double = 2 slots).
+                    let arg_pop: i32 = args
+                        .iter()
+                        .map(|a| {
+                            if matches!(
+                                func.locals.get(a.0 as usize),
+                                Some(Ty::Long) | Some(Ty::Double)
+                            ) {
+                                2
+                            } else {
+                                1
+                            }
+                        })
+                        .sum();
                     let net = if ret_is_void {
-                        -(args.len() as i32)
+                        -arg_pop
                     } else if ret_is_wide {
-                        -(args.len() as i32) + 2
+                        -arg_pop + 2
                     } else {
-                        -(args.len() as i32) + 1
+                        -arg_pop + 1
                     };
                     bump(stack, max_stack, net);
                     if !ret_is_void {
@@ -9562,6 +9772,17 @@ fn walk_block(
                                 if matches!(param_ty, Ty::Any) {
                                     autobox(code, cp, stack, max_stack, arg_ty);
                                 }
+                                // Reference widening: if the param expects
+                                // a different (super) class than the arg
+                                // provides, emit checkcast — kotlinc does
+                                // this before constructor invocation.
+                                if let (Ty::Class(target), Ty::Class(actual)) = (param_ty, arg_ty) {
+                                    if target != actual {
+                                        let ci = cp.class(target);
+                                        code.push(0xC0); // checkcast
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                    }
+                                }
                                 descriptor.push_str(&jvm_param_type_string(param_ty));
                             } else {
                                 descriptor.push_str(&jvm_param_type_string(arg_ty));
@@ -9571,7 +9792,23 @@ fn walk_block(
                         let mref = cp.methodref(class_name, "<init>", &descriptor);
                         code.push(0xB7); // invokespecial
                         code.write_u16::<BigEndian>(mref).unwrap();
-                        bump(stack, max_stack, -(args.len() as i32) - 1);
+                        // invokespecial pops 1 receiver + each arg's stack
+                        // width. Long/Double take 2 stack slots; everything
+                        // else takes 1.
+                        let arg_pop: i32 = args
+                            .iter()
+                            .map(|a| {
+                                if matches!(
+                                    func.locals.get(a.0 as usize),
+                                    Some(Ty::Long) | Some(Ty::Double)
+                                ) {
+                                    2
+                                } else {
+                                    1
+                                }
+                            })
+                            .sum();
+                        bump(stack, max_stack, -arg_pop - 1);
                         if is_unused_local(*dest) {
                             code.push(0x57); // pop
                             bump(stack, max_stack, -1);
@@ -9593,7 +9830,20 @@ fn walk_block(
                     let mref = cp.methodref(class_name, "<init>", descriptor);
                     code.push(0xB7); // invokespecial
                     code.write_u16::<BigEndian>(mref).unwrap();
-                    bump(stack, max_stack, -(args.len() as i32) - 1);
+                    let arg_pop: i32 = args
+                        .iter()
+                        .map(|a| {
+                            if matches!(
+                                func.locals.get(a.0 as usize),
+                                Some(Ty::Long) | Some(Ty::Double)
+                            ) {
+                                2
+                            } else {
+                                1
+                            }
+                        })
+                        .sum();
+                    bump(stack, max_stack, -arg_pop - 1);
                     if is_unused_local(*dest) {
                         code.push(0x57); // pop
                         bump(stack, max_stack, -1);
@@ -9658,11 +9908,28 @@ fn walk_block(
                         code.write_u16::<BigEndian>(mref).unwrap();
                     }
                     let is_object_return = ret_desc.contains("Object");
-                    let net = if is_object_return || *dest_ty != Ty::Unit {
-                        -(args.len() as i32) + 1
+                    let return_push = if matches!(dest_ty, Ty::Long | Ty::Double) {
+                        2
+                    } else if is_object_return || *dest_ty != Ty::Unit {
+                        1
                     } else {
-                        -(args.len() as i32)
+                        0
                     };
+                    // Account for wide-typed args (Long/Double take 2 stack slots).
+                    let arg_pop: i32 = args
+                        .iter()
+                        .map(|a| {
+                            if matches!(
+                                func.locals.get(a.0 as usize),
+                                Some(Ty::Long) | Some(Ty::Double)
+                            ) {
+                                2
+                            } else {
+                                1
+                            }
+                        })
+                        .sum();
+                    let net = -arg_pop + return_push;
                     bump(stack, max_stack, net);
                     if *dest_ty != Ty::Unit {
                         if is_unused_local(*dest) {
@@ -9688,6 +9955,15 @@ fn walk_block(
                         // Discard unused Object return from invoke.
                         code.push(0x57); // pop
                         bump(stack, max_stack, -1);
+                    }
+                }
+                CallKind::MakeConcatWithConstants { recipe, descriptor } => {
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    emit_make_concat_with_constants(code, cp, stack, max_stack, descriptor, recipe);
+                    if !matches!(&func.locals[dest.0 as usize], Ty::Unit) {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }
                 }
                 CallKind::Super {
@@ -10054,6 +10330,41 @@ thread_local! {
     static EMIT_MODULE: RefCell<Option<*const MirModule>> = const { RefCell::new(None) };
 }
 
+/// Locals that are the receiver of two or more consecutive `componentN()`
+/// virtual calls — i.e. `val (a, b) = ...` destructuring receivers.
+/// kotlinc preserves their slot across the destructuring; matching that
+/// keeps slot allocation in sync.
+fn destructuring_receivers(func: &MirFunction) -> rustc_hash::FxHashSet<LocalId> {
+    let mut counts: rustc_hash::FxHashMap<u32, u32> = rustc_hash::FxHashMap::default();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { value, .. } = stmt;
+            if let Rvalue::Call {
+                kind: skotch_mir::CallKind::Virtual { method_name, .. },
+                args,
+            } = value
+            {
+                if method_name.starts_with("component")
+                    && method_name[9..].chars().all(|c| c.is_ascii_digit())
+                    && !args.is_empty()
+                {
+                    *counts.entry(args[0].0).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .filter_map(|(local, count)| {
+            if count >= 2 {
+                Some(LocalId(local))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn is_unused_local(local: LocalId) -> bool {
     UNUSED_LOCALS.with(|cell| cell.borrow().contains(&local.0))
 }
@@ -10158,6 +10469,93 @@ fn load_local(
     };
     emit_typed_load(code, ty, slot);
     bump(stack, max_stack, width);
+}
+
+/// Emit an `invokedynamic makeConcatWithConstants:(<descriptor>)Ljava/lang/String;`
+/// instruction backed by a `BootstrapMethods` entry whose static
+/// argument is `recipe`. Pops the input args (per `descriptor`) and
+/// pushes one String result.
+fn emit_make_concat_with_constants(
+    code: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    descriptor: &str,
+    recipe: &str,
+) {
+    // kotlinc's CP layout: register the recipe String first, then the
+    // StringConcatFactory bootstrap entries, then the call-site
+    // NameAndType, then the InvokeDynamic. Matching this order keeps
+    // CP indices in sync for byte-level parity.
+    let recipe_idx = cp.string(recipe);
+    let bootstrap_mref = cp.methodref(
+        "java/lang/invoke/StringConcatFactory",
+        "makeConcatWithConstants",
+        "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;",
+    );
+    let bootstrap_mh = cp.method_handle(6, bootstrap_mref);
+    let bootstrap_idx = cp.bootstrap_method(crate::constant_pool::BootstrapEntry {
+        method_handle_index: bootstrap_mh,
+        args: vec![recipe_idx],
+    });
+    let nat = cp.name_and_type("makeConcatWithConstants", descriptor);
+    let indy = cp.invoke_dynamic(bootstrap_idx, nat);
+
+    code.push(0xBA); // invokedynamic
+    code.write_u16::<BigEndian>(indy).unwrap();
+    code.push(0); // must be zero
+    code.push(0); // must be zero
+
+    // Stack effect: pops args (per descriptor), pushes 1 String.
+    let arg_pop = count_descriptor_arg_slots(descriptor);
+    bump(stack, max_stack, -arg_pop + 1);
+}
+
+/// Count argument stack-slot width for a JVM method descriptor (e.g.
+/// `(Ljava/lang/String;I)V` → 2: 1 ref + 1 int).
+fn count_descriptor_arg_slots(descriptor: &str) -> i32 {
+    let inner = descriptor
+        .split(')')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches('(');
+    let mut count = 0i32;
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'F' | 'I' | 'S' | 'Z' => count += 1,
+            'D' | 'J' => count += 2,
+            'L' => {
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                count += 1;
+            }
+            '[' => {
+                while matches!(chars.peek(), Some('[')) {
+                    chars.next();
+                }
+                if matches!(chars.peek(), Some('L')) {
+                    chars.next();
+                    for sc in chars.by_ref() {
+                        if sc == ';' {
+                            break;
+                        }
+                    }
+                }
+                if let Some(&first) = chars.peek() {
+                    if "BCDFIJSZ".contains(first) {
+                        chars.next();
+                    }
+                }
+                count += 1;
+            }
+            _ => {}
+        }
+    }
+    count
 }
 
 /// Try to emit a CP-backed inline constant (String, large numeric).
@@ -11015,29 +11413,34 @@ fn liveness_reuse_slots(
         if named_slots.contains(&r.slot) {
             continue;
         }
-        // Find the lowest slot S such that free_after[S] <= r.start.
-        // For wide types, we need TWO consecutive slots S and S+1.
-        let mut chosen: Option<usize> = None;
+        // Find the lowest slot S such that S..S+need are all free at
+        // r.start. Slots beyond the current free_after length are fresh
+        // (never allocated) and count as free — this lets a wide range
+        // reuse the lowest free slot even if free_after has only N
+        // entries and we need N+1 contiguous slots.
         let need = if r.wide { 2 } else { 1 };
-        for s in 0..free_after.len() {
-            if s + need > free_after.len() {
-                break;
-            }
-            let ok = (0..need).all(|d| free_after[s + d] <= r.start);
+        let mut chosen: Option<usize> = None;
+        let max_s = free_after.len();
+        for s in 0..=max_s {
+            let ok = (0..need).all(|d| {
+                let pos = s + d;
+                if pos < free_after.len() {
+                    free_after[pos] <= r.start
+                } else {
+                    true
+                }
+            });
             if ok {
                 chosen = Some(s);
                 break;
             }
         }
-        let new_slot = match chosen {
-            Some(s) => s,
-            None => {
-                // Need to grow.
-                let s = free_after.len();
-                free_after.extend(std::iter::repeat_n(0, need));
-                s
-            }
-        };
+        let new_slot = chosen.unwrap_or(free_after.len());
+        // Grow free_after to cover the chosen range.
+        let req = new_slot + need;
+        while free_after.len() < req {
+            free_after.push(0);
+        }
         for d in 0..need {
             free_after[new_slot + d] = r.end + 1;
         }

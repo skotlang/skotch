@@ -395,6 +395,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Unit"
+        },
+        {
+          "id": 9,
+          "name": "getTag",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Logger"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Logger",
+                        "field_name": "tag"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
         }
       ],
       "constructor": {

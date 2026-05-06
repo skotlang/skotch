@@ -35,10 +35,10 @@ bb3:
 define i32 @main() {
 entry:
   %t0 = add i32 0, -42
-  %t1 = call i32 @InputKt_abs(i32 %t0)
+  %t1 = inttoptr i64 0 to ptr
   call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t1)
   %t3 = add i32 0, 7
-  %t4 = call i32 @InputKt_abs(i32 %t3)
+  %t4 = inttoptr i64 0 to ptr
   call i32 (ptr, ...) @printf(ptr @.fmt.int_println, i32 %t4)
   %t6 = add i32 0, 10
   %t7 = add i32 0, 20

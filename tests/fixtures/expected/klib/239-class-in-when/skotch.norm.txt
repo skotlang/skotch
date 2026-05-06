@@ -441,6 +441,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getFactor",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Multiplier"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Multiplier",
+                        "field_name": "factor"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

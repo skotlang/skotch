@@ -17,7 +17,7 @@ unique_name=inputkt
       "params": [],
       "locals": [
         {
-          "Class": "Handler"
+          "Class": "InputKt$main$h$1"
         },
         "String",
         "String",
@@ -31,7 +31,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 0,
                 "value": {
-                  "NewInstance": "$Object$1"
+                  "NewInstance": "InputKt$main$h$1"
                 }
               }
             },
@@ -41,7 +41,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "Constructor": "$Object$1"
+                      "Constructor": "InputKt$main$h$1"
                     },
                     "args": []
                   }
@@ -75,7 +75,7 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "Virtual": {
-                        "class_name": "Handler",
+                        "class_name": "InputKt$main$h$1",
                         "method_name": "handle"
                       }
                     },
@@ -365,7 +365,7 @@ unique_name=inputkt
       }
     },
     {
-      "name": "$Object$1",
+      "name": "InputKt$main$h$1",
       "super_class": "Handler",
       "is_open": false,
       "is_abstract": false,
@@ -381,7 +381,7 @@ unique_name=inputkt
           ],
           "locals": [
             {
-              "Class": "$Object$1"
+              "Class": "InputKt$main$h$1"
             },
             "String",
             "String",
@@ -429,7 +429,7 @@ unique_name=inputkt
         ],
         "locals": [
           {
-            "Class": "$Object$1"
+            "Class": "InputKt$main$h$1"
           }
         ],
         "blocks": [

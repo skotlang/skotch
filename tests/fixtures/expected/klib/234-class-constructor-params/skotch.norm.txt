@@ -110,10 +110,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Point",
-                    "field_name": "x"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "getX"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -135,10 +141,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "GetField": {
-                    "receiver": 2,
-                    "class_name": "Point",
-                    "field_name": "y"
+                  "Call": {
+                    "kind": {
+                      "Virtual": {
+                        "class_name": "Point",
+                        "method_name": "getY"
+                      }
+                    },
+                    "args": [
+                      2
+                    ]
                   }
                 }
               }
@@ -478,6 +490,76 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 5
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
+          "name": "getY",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

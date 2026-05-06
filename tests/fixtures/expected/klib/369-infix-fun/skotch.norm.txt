@@ -385,6 +385,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "String"
+        },
+        {
+          "id": 9,
+          "name": "getName",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Builder"
+            },
+            "String"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Builder",
+                        "field_name": "name"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "String"
         }
       ],
       "constructor": {

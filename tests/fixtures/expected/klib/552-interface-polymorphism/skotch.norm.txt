@@ -525,6 +525,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Double"
+        },
+        {
+          "id": 10,
+          "name": "getRadius",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Circle"
+            },
+            "Double"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Circle",
+                        "field_name": "radius"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Double"
         }
       ],
       "constructor": {
@@ -680,6 +715,76 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 3
+              }
+            }
+          ],
+          "return_ty": "Double"
+        },
+        {
+          "id": 10,
+          "name": "getWidth",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rectangle"
+            },
+            "Double"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rectangle",
+                        "field_name": "width"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Double"
+        },
+        {
+          "id": 11,
+          "name": "getHeight",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Rectangle"
+            },
+            "Double"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Rectangle",
+                        "field_name": "height"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

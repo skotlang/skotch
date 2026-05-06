@@ -11,8 +11,11 @@ method        main ()V 0x0019
     0006 ldc "Hello, "
     0008 aload_0
     0009 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0012 ldc "!"
-    0014 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0012 op_0xBA
+    0013 nop
+    0014 iload_2
+    0015 nop
+    0016 nop
     0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0020 swap
     0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -27,8 +30,11 @@ method        main ()V 0x0019
     0042 iload_1
     0043 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
     0046 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0049 ldc " items"
-    0051 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0049 op_0xBA
+    0050 nop
+    0051 op_0x33
+    0052 nop
+    0053 nop
     0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0057 swap
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -37,3 +43,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (14 bytes)

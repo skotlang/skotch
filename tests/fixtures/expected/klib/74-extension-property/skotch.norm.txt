@@ -13,7 +13,7 @@ unique_name=inputkt
   "functions": [
     {
       "id": 0,
-      "name": "shout",
+      "name": "getShout",
       "params": [
         0
       ],
@@ -53,7 +53,10 @@ unique_name=inputkt
           }
         }
       ],
-      "return_ty": "String"
+      "return_ty": "String",
+      "param_names": [
+        "<this>"
+      ]
     },
     {
       "id": 1,

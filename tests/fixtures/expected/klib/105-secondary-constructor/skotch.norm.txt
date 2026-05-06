@@ -414,6 +414,41 @@ unique_name=inputkt
             }
           ],
           "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getSide",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Square"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Square",
+                        "field_name": "side"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
         }
       ],
       "constructor": {

@@ -1,6 +1,6 @@
 dex_version   035
-strings       24
-types         12
+strings       25
+types         13
 methods       7
 classes       1
 
@@ -17,18 +17,19 @@ classes       1
   "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Lkotlin/coroutines/CoroutineContext;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
   "Lkotlin/jvm/functions/Function2;"
   "Lkotlinx/coroutines/BuildersKt;"
   "V"
   "VL"
   "Z"
   "[Ljava/lang/String;"
+  "boxInt"
   "delay"
   "input.kt"
   "main"
   "pick"
   "runBlocking$default"
-  "valueOf"
 
 --- types ---
   I
@@ -38,6 +39,7 @@ classes       1
   Ljava/lang/Integer;
   Ljava/lang/Object;
   Lkotlin/coroutines/CoroutineContext;
+  Lkotlin/coroutines/jvm/internal/Boxing;
   Lkotlin/jvm/functions/Function2;
   Lkotlinx/coroutines/BuildersKt;
   V
@@ -50,7 +52,7 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.pick(ZLjava/lang/Object;)Ljava/lang/Object;
-  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxInt(I)Ljava/lang/Integer;
   Lkotlinx/coroutines/BuildersKt;.runBlocking$default(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;
 
 --- class[0] ---

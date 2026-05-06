@@ -85,17 +85,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      3
-                    ]
+                  "Const": {
+                    "String": 0
                   }
                 }
               }
@@ -127,17 +118,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 7,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/String;"
-                      }
-                    },
-                    "args": [
-                      6
-                    ]
+                  "Const": {
+                    "String": 1
                   }
                 }
               }
@@ -352,5 +334,8 @@ unique_name=inputkt
     }
   ],
   "classes": [],
-  "strings": []
+  "strings": [
+    "0",
+    "-1"
+  ]
 }

@@ -388,7 +388,78 @@ unique_name=inputkt
           "ty": "Int"
         }
       ],
-      "methods": [],
+      "methods": [
+        {
+          "id": 8,
+          "name": "getRows",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Matrix"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Matrix",
+                        "field_name": "rows"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getCols",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Matrix"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Matrix",
+                        "field_name": "cols"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        }
+      ],
       "constructor": {
         "id": 0,
         "name": "<init>",
@@ -642,6 +713,115 @@ unique_name=inputkt
               ],
               "terminator": {
                 "ReturnValue": 8
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getThis$0",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Matrix$Cell"
+            },
+            {
+              "Class": "Matrix"
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Matrix$Cell",
+                        "field_name": "this$0"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Class": "Matrix"
+          }
+        },
+        {
+          "id": 10,
+          "name": "getR",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Matrix$Cell"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Matrix$Cell",
+                        "field_name": "r"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 11,
+          "name": "getC",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Matrix$Cell"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Matrix$Cell",
+                        "field_name": "c"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
               }
             }
           ],

@@ -4,65 +4,69 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=14
-    0000 goto 3
-    0003 aload_0
-    0004 instanceof Class(java/lang/Integer)
-    0007 istore_1
-    0008 iload_1
-    0009 ifeq 29
-    0012 aload_0
-    0013 checkcast Class(java/lang/Integer)
-    0016 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0019 istore_2
-    0020 ldc "integer"
-    0022 astore_3
-    0023 aload_3
-    0024 astore 4
-    0026 goto 118
-    0029 aload_0
-    0030 instanceof Class(java/lang/String)
-    0033 istore 5
-    0035 iload 5
-    0037 ifeq 76
-    0040 aload_0
-    0041 checkcast Class(java/lang/String)
-    0044 astore 6
-    0046 ldc "string of length "
-    0048 astore 7
-    0050 aload 6
-    0052 invokevirtual Method(java/lang/String.length:()I)
-    0055 istore 8
-    0057 aload 7
-    0059 iload 8
-    0061 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0064 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0067 astore 9
-    0069 aload 9
-    0071 astore 4
-    0073 goto 118
-    0076 aload_0
-    0077 instanceof Class(java/lang/Boolean)
-    0080 istore 10
-    0082 iload 10
-    0084 ifeq 107
-    0087 aload_0
-    0088 checkcast Class(java/lang/Boolean)
-    0091 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
-    0094 istore 11
-    0096 ldc "boolean"
-    0098 astore 12
-    0100 aload 12
-    0102 astore 4
-    0104 goto 118
-    0107 ldc "unknown"
-    0109 astore 13
-    0111 aload 13
-    0113 astore 4
-    0115 goto 118
-    0118 aload 4
-    0120 areturn
+    0000 aload_0
+    0001 ldc "obj"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(java/lang/Integer)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 35
+    0018 aload_0
+    0019 checkcast Class(java/lang/Integer)
+    0022 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0025 istore_2
+    0026 ldc "integer"
+    0028 astore_3
+    0029 aload_3
+    0030 astore 4
+    0032 goto 124
+    0035 aload_0
+    0036 instanceof Class(java/lang/String)
+    0039 istore 5
+    0041 iload 5
+    0043 ifeq 82
+    0046 aload_0
+    0047 checkcast Class(java/lang/String)
+    0050 astore 6
+    0052 ldc "string of length "
+    0054 astore 7
+    0056 aload 6
+    0058 invokevirtual Method(java/lang/String.length:()I)
+    0061 istore 8
+    0063 aload 7
+    0065 iload 8
+    0067 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0070 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0073 astore 9
+    0075 aload 9
+    0077 astore 4
+    0079 goto 124
+    0082 aload_0
+    0083 instanceof Class(java/lang/Boolean)
+    0086 istore 10
+    0088 iload 10
+    0090 ifeq 113
+    0093 aload_0
+    0094 checkcast Class(java/lang/Boolean)
+    0097 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
+    0100 istore 11
+    0102 ldc "boolean"
+    0104 astore 12
+    0106 aload 12
+    0108 astore 4
+    0110 goto 124
+    0113 ldc "unknown"
+    0115 astore 13
+    0117 aload 13
+    0119 astore 4
+    0121 goto 124
+    0124 aload 4
+    0126 areturn
     sub_attr  StackMapTable (41 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 bipush 42

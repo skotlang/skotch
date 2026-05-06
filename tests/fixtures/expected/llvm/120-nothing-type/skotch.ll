@@ -1,0 +1,31 @@
+; ModuleID = 'InputKt'
+source_filename = "InputKt.kt"
+
+@.str.0 = private unnamed_addr constant [5 x i8] c"oops\00", align 1
+@.str.1 = private unnamed_addr constant [9 x i8] c"caught: \00", align 1
+@.fmt.int_println = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@.fmt.concat.0 = private unnamed_addr constant [12 x i8] c"caught: %s\0A\00", align 1
+
+declare i32 @printf(ptr, ...)
+
+define void @InputKt_fail(ptr %arg0) {
+entry:
+  %t0 = inttoptr i64 0 to ptr
+  unreachable
+}
+
+define i32 @main() {
+entry:
+  br label %bb1
+bb1:
+  call void @InputKt_fail(ptr @.str.0)
+  br label %bb3
+bb2:
+  %t0 = inttoptr i64 0 to ptr
+  %t1 = inttoptr i64 0 to ptr
+  call i32 (ptr, ...) @printf(ptr @.fmt.concat.0, ptr %t1)
+  br label %bb3
+bb3:
+  ret i32 0
+}
+

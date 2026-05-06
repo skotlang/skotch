@@ -390,6 +390,51 @@ unique_name=inputkt
           "named_locals": [
             2
           ]
+        },
+        {
+          "id": 9,
+          "name": "getGreet",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Greeter"
+            },
+            {
+              "Function": {
+                "params": [],
+                "ret": "String"
+              }
+            }
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Greeter",
+                        "field_name": "greet"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": {
+            "Function": {
+              "params": [],
+              "ret": "String"
+            }
+          }
         }
       ],
       "constructor": {

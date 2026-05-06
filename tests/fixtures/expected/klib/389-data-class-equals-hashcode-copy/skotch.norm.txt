@@ -595,6 +595,76 @@ unique_name=inputkt
       "methods": [
         {
           "id": 8,
+          "name": "getX",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "x"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 9,
+          "name": "getY",
+          "params": [
+            0
+          ],
+          "locals": [
+            {
+              "Class": "Point"
+            },
+            "Int"
+          ],
+          "blocks": [
+            {
+              "stmts": [
+                {
+                  "Assign": {
+                    "dest": 1,
+                    "value": {
+                      "GetField": {
+                        "receiver": 0,
+                        "class_name": "Point",
+                        "field_name": "y"
+                      }
+                    }
+                  }
+                }
+              ],
+              "terminator": {
+                "ReturnValue": 1
+              }
+            }
+          ],
+          "return_ty": "Int"
+        },
+        {
+          "id": 10,
           "name": "toString",
           "params": [
             0
@@ -799,7 +869,7 @@ unique_name=inputkt
           "return_ty": "String"
         },
         {
-          "id": 9,
+          "id": 11,
           "name": "component1",
           "params": [
             0
@@ -834,7 +904,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 10,
+          "id": 12,
           "name": "component2",
           "params": [
             0
@@ -869,7 +939,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 11,
+          "id": 13,
           "name": "equals",
           "params": [
             0,
@@ -1090,7 +1160,7 @@ unique_name=inputkt
           "return_ty": "Bool"
         },
         {
-          "id": 12,
+          "id": 14,
           "name": "hashCode",
           "params": [
             0
@@ -1175,7 +1245,7 @@ unique_name=inputkt
           "return_ty": "Int"
         },
         {
-          "id": 13,
+          "id": 15,
           "name": "copy",
           "params": [
             0,
