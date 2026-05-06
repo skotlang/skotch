@@ -214,6 +214,9 @@ pub struct Param {
 #[derive(Clone, Debug)]
 pub struct ValDecl {
     pub is_var: bool,
+    /// True for `const val` declarations. kotlinc emits these as
+    /// `public static final` fields with a `ConstantValue` attribute.
+    pub is_const: bool,
     pub name: Symbol,
     pub name_span: Span,
     pub ty: Option<TypeRef>,

@@ -44,33 +44,28 @@ method        first (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String; 0x0
     0071 checkcast Class(java/lang/String)
     0074 areturn
     sub_attr  StackMapTable (38 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "hello"
     0002 ldc "world"
-    0004 swap
-    0005 swap
-    0006 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 swap
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0016 aconst_null
-    0017 ldc "world"
-    0019 swap
-    0020 swap
-    0021 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 swap
-    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0031 aconst_null
-    0032 aconst_null
-    0033 swap
-    0034 swap
-    0035 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 swap
-    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0045 return
+    0004 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 swap
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0014 aconst_null
+    0015 ldc "world"
+    0017 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 swap
+    0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0027 aconst_null
+    0028 aconst_null
+    0029 invokestatic Method(InputKt.first:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 swap
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

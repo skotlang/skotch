@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=14
+  code        max_stack=3 max_locals=8
     0000 bipush 10
     0002 istore_0
     0003 bipush 20
@@ -13,57 +13,49 @@ method        main ()V 0x0019
     0009 iconst_3
     0010 op_0xBC
     0011 lconst_1
-    0012 astore 3
-    0014 iconst_0
-    0015 istore 4
-    0017 aload 3
-    0019 iload 4
-    0021 iload_0
-    0022 op_0x4F
-    0023 iconst_1
-    0024 istore 5
-    0026 aload 3
-    0028 iload 5
-    0030 iload_1
-    0031 op_0x4F
-    0032 iconst_2
-    0033 istore 6
-    0035 aload 3
-    0037 iload 6
-    0039 iload_2
-    0040 op_0x4F
-    0041 new Class(Wrapper)
-    0044 dup
-    0045 aload 3
-    0047 invokespecial Method(Wrapper.<init>:([I)V)
-    0050 astore 7
-    0052 iconst_1
-    0053 istore 8
-    0055 aload 7
-    0057 iload 8
-    0059 invokevirtual Method(Wrapper.get:(I)I)
-    0062 istore 9
-    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0067 iload 9
-    0069 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0072 iconst_1
-    0073 istore 10
-    0075 bipush 99
-    0077 istore 11
-    0079 aload 7
-    0081 iload 10
-    0083 iload 11
-    0085 invokevirtual Method(Wrapper.set:(II)V)
-    0088 iconst_1
-    0089 istore 12
-    0091 aload 7
-    0093 iload 12
-    0095 invokevirtual Method(Wrapper.get:(I)I)
-    0098 istore 13
-    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0103 iload 13
-    0105 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0108 return
+    0012 astore_3
+    0013 iconst_0
+    0014 istore 4
+    0016 aload_3
+    0017 iload 4
+    0019 iload_0
+    0020 op_0x4F
+    0021 iconst_1
+    0022 istore_0
+    0023 aload_3
+    0024 iload_0
+    0025 iload_1
+    0026 op_0x4F
+    0027 iconst_2
+    0028 istore_0
+    0029 aload_3
+    0030 iload_0
+    0031 iload_2
+    0032 op_0x4F
+    0033 new Class(Wrapper)
+    0036 dup
+    0037 aload_3
+    0038 invokespecial Method(Wrapper.<init>:([I)V)
+    0041 astore 7
+    0043 aload 7
+    0045 iconst_1
+    0046 invokevirtual Method(Wrapper.get:(I)I)
+    0049 istore_0
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 iload_0
+    0054 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0057 aload 7
+    0059 iconst_1
+    0060 bipush 99
+    0062 invokevirtual Method(Wrapper.set:(II)V)
+    0065 aload 7
+    0067 iconst_1
+    0068 invokevirtual Method(Wrapper.get:(I)I)
+    0071 istore_0
+    0072 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0075 iload_0
+    0076 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0079 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

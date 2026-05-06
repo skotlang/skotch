@@ -3,32 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=4
-    0000 ldc "Alice"
-    0002 astore_0
-    0003 bipush 30
-    0005 istore_1
-    0006 new Class(User)
-    0009 dup
-    0010 aload_0
-    0011 iload_1
-    0012 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
-    0015 astore_2
-    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0019 aload_2
-    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0023 aload_2
-    0024 getfield Field(User.name:Ljava/lang/String;)
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 swap
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 aload_2
-    0035 getfield Field(User.age:I)
-    0038 istore 3
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 iload 3
-    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0048 return
+  code        max_stack=4 max_locals=2
+    0000 new Class(User)
+    0003 dup
+    0004 ldc "Alice"
+    0006 bipush 30
+    0008 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
+    0011 astore_0
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 aload_0
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 aload_0
+    0020 invokevirtual Method(User.getName:()Ljava/lang/String;)
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 swap
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0030 aload_0
+    0031 invokevirtual Method(User.getAge:()I)
+    0034 istore_1
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload_1
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

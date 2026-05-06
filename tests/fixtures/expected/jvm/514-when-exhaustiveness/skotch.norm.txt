@@ -24,37 +24,42 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        name (LShape;)Ljava/lang/String; 0x0019
-  code        max_stack=1 max_locals=8
-    0000 goto 3
-    0003 aload_0
-    0004 instanceof Class(Circle)
-    0007 istore_1
-    0008 iload_1
-    0009 ifeq 26
-    0012 aload_0
-    0013 checkcast Class(Circle)
-    0016 astore_2
-    0017 ldc "circle"
-    0019 astore_3
-    0020 aload_3
-    0021 astore 4
-    0023 goto 60
-    0026 aload_0
-    0027 instanceof Class(Square)
-    0030 istore 5
-    0032 iload 5
-    0034 ifeq 54
-    0037 aload_0
-    0038 checkcast Class(Square)
-    0041 astore 6
-    0043 ldc "square"
-    0045 astore 7
-    0047 aload 7
-    0049 astore 4
-    0051 goto 60
-    0054 aconst_null
+  code        max_stack=2 max_locals=8
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(Circle)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 32
+    0018 aload_0
+    0019 checkcast Class(Circle)
+    0022 astore_2
+    0023 ldc "circle"
+    0025 astore_3
+    0026 aload_3
+    0027 astore 4
+    0029 goto 66
+    0032 aload_0
+    0033 instanceof Class(Square)
+    0036 istore 5
+    0038 iload 5
+    0040 ifeq 60
+    0043 aload_0
+    0044 checkcast Class(Square)
+    0047 astore 6
+    0049 ldc "square"
+    0051 astore 7
+    0053 aload 7
     0055 astore 4
-    0057 goto 60
-    0060 aload 4
-    0062 areturn
-    sub_attr  StackMapTable (38 bytes)
+    0057 goto 66
+    0060 aconst_null
+    0061 astore 4
+    0063 goto 66
+    0066 aload 4
+    0068 areturn
+    sub_attr  StackMapTable (21 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

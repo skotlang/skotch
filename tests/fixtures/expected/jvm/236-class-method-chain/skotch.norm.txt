@@ -3,30 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=4
-    0000 bipush 42
-    0002 istore_0
-    0003 new Class(Counter)
-    0006 dup
-    0007 iload_0
-    0008 invokespecial Method(Counter.<init>:(I)V)
+  code        max_stack=3 max_locals=2
+    0000 new Class(Counter)
+    0003 dup
+    0004 bipush 42
+    0006 invokespecial Method(Counter.<init>:(I)V)
+    0009 astore_0
+    0010 aload_0
     0011 invokevirtual Method(Counter.value:()I)
     0014 istore_1
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0018 iload_1
     0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0022 bipush 100
-    0024 istore_2
-    0025 new Class(Counter)
-    0028 dup
-    0029 iload_2
-    0030 invokespecial Method(Counter.<init>:(I)V)
-    0033 invokevirtual Method(Counter.value:()I)
-    0036 istore 3
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 iload 3
-    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0046 return
+    0022 new Class(Counter)
+    0025 dup
+    0026 bipush 100
+    0028 invokespecial Method(Counter.<init>:(I)V)
+    0031 invokevirtual Method(Counter.value:()I)
+    0034 istore_1
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload_1
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

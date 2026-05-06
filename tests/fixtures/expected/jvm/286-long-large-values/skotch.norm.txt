@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=6
+  code        max_stack=4 max_locals=4
     0000 ldc2_w long(9999999999)
     0003 lstore_0
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
@@ -17,11 +17,11 @@ method        main ()V 0x0019
     0018 lload_2
     0019 invokevirtual Method(java/io/PrintStream.println:(J)V)
     0022 ldc2_w long(3000000000)
-    0025 lstore 4
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 lload 4
-    0032 invokevirtual Method(java/io/PrintStream.println:(J)V)
-    0035 return
+    0025 lstore_2
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 lload_2
+    0030 invokevirtual Method(java/io/PrintStream.println:(J)V)
+    0033 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

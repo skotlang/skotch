@@ -279,6 +279,17 @@ pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
         runtime_cp.push_str(sep);
         runtime_cp.push_str(&jar.to_string_lossy());
     }
+    // Skotch-emitted bytecode uses Kotlin null-safety intrinsics
+    // (kotlin/jvm/internal/Intrinsics). Always include kotlin-stdlib on
+    // the runtime classpath if available, so test runs don't fail with
+    // NoClassDefFoundError.
+    if let Ok(kotlin_lib) = skotch_classinfo::find_kotlin_lib_dir() {
+        let stdlib = kotlin_lib.join("kotlin-stdlib.jar");
+        if stdlib.exists() && !runtime_cp.contains("kotlin-stdlib") {
+            runtime_cp.push_str(sep);
+            runtime_cp.push_str(&stdlib.to_string_lossy());
+        }
+    }
 
     // Create JUnit XML report directory.
     let xml_dir = project_dir.join("build/test-results/test");

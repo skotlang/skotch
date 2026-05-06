@@ -26,11 +26,11 @@ method        main ()V 0x0019
     0015 iconst_3
     0016 invokestatic Method(InputKt.addOne:(I)I)
     0019 invokestatic Method(InputKt.double:(I)I)
-    0022 istore 1
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 iload 1
-    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0032 return
+    0022 istore_1
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 iload_1
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

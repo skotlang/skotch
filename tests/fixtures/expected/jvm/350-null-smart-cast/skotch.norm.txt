@@ -35,6 +35,7 @@ method        greet (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0051 aload 7
     0053 areturn
     sub_attr  StackMapTable (15 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "world"

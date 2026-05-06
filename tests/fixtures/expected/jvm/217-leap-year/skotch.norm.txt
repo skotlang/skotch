@@ -67,7 +67,7 @@ method        isLeapYear (I)Z 0x0019
     0105 ireturn
     sub_attr  StackMapTable (61 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=1
     0000 sipush 2000
     0003 invokestatic Method(InputKt.isLeapYear:(I)Z)
     0006 istore_0
@@ -76,23 +76,23 @@ method        main ()V 0x0019
     0011 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0014 sipush 1900
     0017 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0020 istore_1
+    0020 istore_0
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload_1
+    0024 iload_0
     0025 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0028 sipush 2024
     0031 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0034 istore 2
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 iload 2
-    0041 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0044 sipush 2023
-    0047 invokestatic Method(InputKt.isLeapYear:(I)Z)
-    0050 istore 3
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 iload 3
-    0057 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0060 return
+    0034 istore_0
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload_0
+    0039 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0042 sipush 2023
+    0045 invokestatic Method(InputKt.isLeapYear:(I)Z)
+    0048 istore_0
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 iload_0
+    0053 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0056 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

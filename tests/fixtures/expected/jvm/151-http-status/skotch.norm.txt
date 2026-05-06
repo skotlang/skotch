@@ -93,6 +93,7 @@ method        httpStatus (I)Ljava/lang/String; 0x0019
     0178 aload 4
     0180 areturn
     sub_attr  StackMapTable (72 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 sipush 200

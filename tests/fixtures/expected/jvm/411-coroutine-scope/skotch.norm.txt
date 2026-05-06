@@ -3,28 +3,19 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=6
+  code        max_stack=4 max_locals=1
     0000 new Class(InputKt$Lambda$3)
     0003 dup
     0004 aconst_null
     0005 invokespecial Method(InputKt$Lambda$3.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0008 astore_0
-    0009 aconst_null
-    0010 astore_1
-    0011 aload_0
-    0012 checkcast Class(kotlin/jvm/functions/Function2)
-    0015 astore_2
-    0016 iconst_1
-    0017 istore 3
-    0019 aconst_null
-    0020 astore 4
-    0022 aload_1
-    0023 aload_2
-    0024 iload 3
-    0026 aload 4
-    0028 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
-    0031 astore 5
-    0033 return
+    0008 checkcast Class(kotlin/jvm/functions/Function2)
+    0011 aconst_null
+    0012 swap
+    0013 iconst_1
+    0014 aconst_null
+    0015 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0018 astore_0
+    0019 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
@@ -98,3 +89,4 @@ method        sumWithScope (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 
     0151 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0154 athrow
     sub_attr  StackMapTable (125 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

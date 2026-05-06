@@ -3,44 +3,41 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        greet (Ljava/lang/String;Ljava/lang/String;)V 0x0019
-  code        max_stack=3 max_locals=4
-    0000 ldc ", "
-    0002 astore_2
-    0003 ldc "!"
-    0005 astore_3
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 new Class(java/lang/StringBuilder)
-    0012 dup
-    0013 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0016 aload_1
-    0017 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0020 aload_2
-    0021 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0024 aload_0
-    0025 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0028 aload_3
-    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0032 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0038 return
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "greeting"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 new Class(java/lang/StringBuilder)
+    0018 dup
+    0019 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0022 aload_1
+    0023 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0026 ldc ", "
+    0028 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0031 aload_0
+    0032 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0035 ldc "!"
+    0037 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0040 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 return
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "world"
     0002 ldc "Hello"
-    0004 swap
-    0005 swap
-    0006 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
-    0009 ldc "Kotlin"
-    0011 ldc "Hello"
-    0013 swap
-    0014 swap
-    0015 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
-    0018 ldc "Kotlin"
-    0020 ldc "Hi"
-    0022 swap
-    0023 swap
-    0024 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
-    0027 return
+    0004 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
+    0007 ldc "Kotlin"
+    0009 ldc "Hello"
+    0011 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
+    0014 ldc "Kotlin"
+    0016 ldc "Hi"
+    0018 invokestatic Method(InputKt.greet:(Ljava/lang/String;Ljava/lang/String;)V)
+    0021 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

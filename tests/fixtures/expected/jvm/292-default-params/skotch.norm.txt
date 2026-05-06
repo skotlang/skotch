@@ -9,30 +9,22 @@ method        add (II)I 0x0019
     0002 iadd
     0003 ireturn
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=1
     0000 iconst_5
-    0001 istore_0
-    0002 bipush 10
-    0004 istore_1
-    0005 iload_0
-    0006 iload_1
-    0007 invokestatic Method(InputKt.add:(II)I)
-    0010 istore_2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 iload_2
-    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0018 iconst_5
-    0019 istore_3
-    0020 bipush 20
-    0022 istore 4
-    0024 iload_3
-    0025 iload 4
-    0027 invokestatic Method(InputKt.add:(II)I)
-    0030 istore 5
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 iload 5
-    0037 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0040 return
+    0001 bipush 10
+    0003 invokestatic Method(InputKt.add:(II)I)
+    0006 istore_0
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 iload_0
+    0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0014 iconst_5
+    0015 bipush 20
+    0017 invokestatic Method(InputKt.add:(II)I)
+    0020 istore_0
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 iload_0
+    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0028 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -40,30 +40,22 @@ method        gcd (II)I 0x0019
     0063 ireturn
     sub_attr  StackMapTable (13 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=1
     0000 bipush 48
-    0002 istore_0
-    0003 bipush 18
-    0005 istore_1
-    0006 iload_0
-    0007 iload_1
-    0008 invokestatic Method(InputKt.gcd:(II)I)
-    0011 istore_2
-    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 iload_2
-    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0019 bipush 100
-    0021 istore_3
-    0022 bipush 75
-    0024 istore 4
-    0026 iload_3
-    0027 iload 4
-    0029 invokestatic Method(InputKt.gcd:(II)I)
-    0032 istore 5
-    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 iload 5
-    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0042 return
+    0002 bipush 18
+    0004 invokestatic Method(InputKt.gcd:(II)I)
+    0007 istore_0
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_0
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 bipush 100
+    0017 bipush 75
+    0019 invokestatic Method(InputKt.gcd:(II)I)
+    0022 istore_0
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 iload_0
+    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0030 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

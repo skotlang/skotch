@@ -764,6 +764,12 @@ pub struct MirModule {
     /// (jvm_name, kind_str, is_data_class). Used for constructor calls.
     #[serde(skip)]
     pub cross_file_classes: rustc_hash::FxHashMap<String, (String, String, bool)>,
+    /// Top-level `const val` declarations to be emitted as static final
+    /// fields in the wrapper class. Each tuple is `(name, ty, value)`.
+    /// kotlinc emits these as `public static final` fields with a
+    /// ConstantValue attribute.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub top_level_consts: Vec<(String, Ty, MirConst)>,
 }
 
 impl MirModule {

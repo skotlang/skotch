@@ -1,6 +1,6 @@
 dex_version   035
-strings       22
-types         9
+strings       21
+types         8
 methods       6
 classes       1
 
@@ -12,7 +12,6 @@ classes       1
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
-  "Ljava/lang/AbstractStringBuilder;"
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/StringBuilder;"
@@ -31,7 +30,6 @@ classes       1
 --- types ---
   LInputKt;
   Ljava/io/PrintStream;
-  Ljava/lang/AbstractStringBuilder;
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/StringBuilder;
@@ -44,7 +42,7 @@ classes       1
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
   Ljava/lang/StringBuilder;.<init>()V
-  Ljava/lang/StringBuilder;.append(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
   Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
 
 --- class[0] ---

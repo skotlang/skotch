@@ -158,6 +158,7 @@ method        category (I)Ljava/lang/String; 0x0019
     0292 aload 7
     0294 areturn
     sub_attr  StackMapTable (125 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 bipush 95

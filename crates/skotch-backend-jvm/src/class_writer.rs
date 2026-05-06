@@ -162,8 +162,10 @@ fn encode_annotation_value(
 /// Append annotation attributes to a method that was already assembled.
 /// The method bytes have the format: access(u16) name(u16) desc(u16)
 /// attrs_count(u16) [attr_data...]. This function increments attrs_count
-/// and appends a RuntimeVisibleAnnotations attribute if the function has
-/// runtime-retention annotations.
+/// and appends:
+///   - `Deprecated` (JVM-level marker) if `@Deprecated` is present
+///   - `RuntimeVisibleAnnotations` if any runtime-retention annotations exist
+///   - `RuntimeInvisibleAnnotations` for `@NotNull` on non-null return types
 fn append_method_annotations(
     method_bytes: &mut Vec<u8>,
     func: &MirFunction,
@@ -174,16 +176,248 @@ fn append_method_annotations(
         .iter()
         .filter(|a| a.retention == skotch_mir::AnnotationRetention::Runtime)
         .collect();
-    if runtime_annots.is_empty() {
+    let has_notnull_return = method_returns_non_null_ref(func);
+    let has_deprecated = func
+        .annotations
+        .iter()
+        .any(|a| is_kotlin_deprecated_descriptor(&a.descriptor));
+    let param_notnull_mask = compute_param_notnull_mask(func);
+    let has_param_notnull = param_notnull_mask.iter().any(|&b| b);
+    if runtime_annots.is_empty() && !has_notnull_return && !has_deprecated && !has_param_notnull {
         return;
     }
     // The attributes_count is at offset 6 (after access u16 + name u16 + desc u16).
     let current_count = u16::from_be_bytes([method_bytes[6], method_bytes[7]]);
-    let new_count = current_count + 1;
+    let mut new_count = current_count;
+    if has_deprecated {
+        new_count += 1;
+    }
+    if !runtime_annots.is_empty() {
+        new_count += 1;
+    }
+    if has_notnull_return {
+        new_count += 1;
+    }
+    if has_param_notnull {
+        new_count += 1;
+    }
     method_bytes[6] = (new_count >> 8) as u8;
     method_bytes[7] = (new_count & 0xFF) as u8;
-    // Append the annotation attribute.
-    encode_annotation_attributes(&func.annotations, cp, method_bytes);
+    if has_deprecated {
+        encode_deprecated_attribute(cp, method_bytes);
+    }
+    if !runtime_annots.is_empty() {
+        encode_annotation_attributes(&func.annotations, cp, method_bytes);
+    }
+    if has_notnull_return {
+        encode_invisible_notnull_attribute(cp, method_bytes);
+    }
+    if has_param_notnull {
+        encode_invisible_param_notnull_attribute(cp, &param_notnull_mask, method_bytes);
+    }
+}
+
+/// Compute a per-parameter mask indicating which parameters need `@NotNull`.
+/// Mask length matches the number of *user-visible* parameters (excluding
+/// the implicit `this`).
+fn compute_param_notnull_mask(func: &MirFunction) -> Vec<bool> {
+    // The MIR's `params` includes `this` for instance methods at index 0.
+    // We don't know here whether this is an instance or static method, but
+    // for top-level functions (the common case) all params in `params` are
+    // user-visible. For instance methods, the first param is `this`. We
+    // detect this by checking whether the function name starts with capital
+    // letter — but actually that's unreliable. Instead, fall back to using
+    // `param_names`: param_names is for user-visible params only.
+    let n = func.param_names.len();
+    let offset = func.params.len().saturating_sub(n);
+    (0..n)
+        .map(|i| {
+            let id = func.params[offset + i];
+            let ty = &func.locals[id.0 as usize];
+            is_non_null_reference_param(ty)
+        })
+        .collect()
+}
+
+/// Encode a `RuntimeInvisibleParameterAnnotations` attribute. For each
+/// parameter in `mask`, emits a single `@NotNull` annotation if true,
+/// otherwise an empty annotation list.
+fn encode_invisible_param_notnull_attribute(
+    cp: &mut ConstantPool,
+    mask: &[bool],
+    out: &mut Vec<u8>,
+) {
+    let attr_name = cp.utf8("RuntimeInvisibleParameterAnnotations");
+    let type_idx = cp.utf8("Lorg/jetbrains/annotations/NotNull;");
+    let mut body = Vec::new();
+    body.push(mask.len() as u8); // num_parameters: u1
+    for &needs in mask {
+        if needs {
+            body.write_u16::<BigEndian>(1).unwrap(); // num_annotations
+            body.write_u16::<BigEndian>(type_idx).unwrap(); // type_index
+            body.write_u16::<BigEndian>(0).unwrap(); // num_element_value_pairs
+        } else {
+            body.write_u16::<BigEndian>(0).unwrap(); // no annotations
+        }
+    }
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(body.len() as u32).unwrap();
+    out.write_all(&body).unwrap();
+}
+
+/// Whether the given annotation descriptor refers to `kotlin.Deprecated` (or
+/// the equivalent `java.lang.Deprecated`). When present, we emit the JVM
+/// `Deprecated` marker attribute alongside the regular annotation.
+fn is_kotlin_deprecated_descriptor(desc: &str) -> bool {
+    desc == "Lkotlin/Deprecated;" || desc == "Ljava/lang/Deprecated;"
+}
+
+/// Emit a `public static final` field for a top-level `const val`.
+/// The field has a `ConstantValue` attribute pointing at the literal.
+fn emit_constval_field(
+    name: &str,
+    ty: &Ty,
+    value: &MirConst,
+    module: &MirModule,
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+) {
+    let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+    let name_idx = cp.utf8(name);
+    let desc = jvm_type_string(ty);
+    let desc_idx = cp.utf8(&desc);
+    out.write_u16::<BigEndian>(access).unwrap();
+    out.write_u16::<BigEndian>(name_idx).unwrap();
+    out.write_u16::<BigEndian>(desc_idx).unwrap();
+
+    // ConstantValue attribute referencing the literal.
+    let cv_idx: Option<u16> = match value {
+        MirConst::Int(v) => Some(cp.integer(*v)),
+        MirConst::Long(v) => Some(cp.long(*v)),
+        MirConst::Float(v) => Some(cp.float(*v)),
+        MirConst::Double(v) => Some(cp.double(*v)),
+        MirConst::String(sid) => {
+            let s = module.lookup_string(*sid);
+            Some(cp.string(s))
+        }
+        MirConst::Bool(b) => Some(cp.integer(if *b { 1 } else { 0 })),
+        _ => None,
+    };
+    if let Some(idx) = cv_idx {
+        out.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+        let attr_name = cp.utf8("ConstantValue");
+        out.write_u16::<BigEndian>(attr_name).unwrap();
+        out.write_u32::<BigEndian>(2).unwrap(); // length
+        out.write_u16::<BigEndian>(idx).unwrap();
+    } else {
+        out.write_u16::<BigEndian>(0).unwrap(); // no attributes
+    }
+}
+
+/// Encode the JVM `Deprecated` marker attribute (zero-length payload).
+fn encode_deprecated_attribute(cp: &mut ConstantPool, out: &mut Vec<u8>) {
+    let attr_name = cp.utf8("Deprecated");
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(0).unwrap();
+}
+
+/// Emit `Intrinsics.checkNotNullParameter(p, "name")` calls at the start of
+/// the method body for each non-null reference parameter. Matches kotlinc's
+/// null-safety intrinsic insertion.
+fn emit_checknotnull_prologue(
+    func: &MirFunction,
+    kind: &MethodKind,
+    slots: &FxHashMap<u32, u8>,
+    cp: &mut ConstantPool,
+    code: &mut Vec<u8>,
+    max_stack: &mut i32,
+) {
+    // Skip stub functions / abstract — they have no body to add prologue to.
+    if func.is_abstract {
+        return;
+    }
+    // The intrinsic itself.
+    let intrinsic = cp.methodref(
+        "kotlin/jvm/internal/Intrinsics",
+        "checkNotNullParameter",
+        "(Ljava/lang/Object;Ljava/lang/String;)V",
+    );
+    // Walk parameters in declaration order.
+    let mut emitted_any = false;
+    for (idx, param_id) in func.params.iter().enumerate() {
+        let ty = &func.locals[param_id.0 as usize];
+        if !is_non_null_reference_param(ty) {
+            continue;
+        }
+        // Skip the implicit `this` parameter for instance methods (slot 0).
+        if matches!(kind, MethodKind::Instance) && idx == 0 {
+            continue;
+        }
+        let Some(name) = func.param_names.get(idx) else {
+            continue;
+        };
+        // Skip synthetic compiler-injected parameters. kotlinc does not
+        // emit checkNotNullParameter for the trailing `$completion`
+        // continuation parameter on suspend functions, nor for other
+        // dollar-prefixed synthetics it generates.
+        if name.starts_with('$') {
+            continue;
+        }
+        // Get the JVM slot for this parameter.
+        let Some(&slot) = slots.get(&param_id.0) else {
+            continue;
+        };
+        // aload <slot>
+        if slot <= 3 {
+            code.push(0x2A + slot); // aload_0..3
+        } else {
+            code.push(0x19); // aload
+            code.push(slot);
+        }
+        // ldc "name"
+        let str_idx = cp.string(name);
+        if str_idx <= u8::MAX as u16 {
+            code.push(0x12); // ldc
+            code.push(str_idx as u8);
+        } else {
+            code.push(0x13); // ldc_w
+            code.write_u16::<BigEndian>(str_idx).unwrap();
+        }
+        // invokestatic Intrinsics.checkNotNullParameter(Object, String)V
+        code.push(0xB8);
+        code.write_u16::<BigEndian>(intrinsic).unwrap();
+        emitted_any = true;
+    }
+    if emitted_any && *max_stack < 2 {
+        *max_stack = 2;
+    }
+}
+
+/// Whether the given type is a non-null reference type that should get a
+/// `@NotNull` annotation and `Intrinsics.checkNotNullParameter` prologue.
+fn is_non_null_reference_param(ty: &Ty) -> bool {
+    matches!(ty, Ty::String | Ty::Class(_))
+}
+
+/// Check if the method returns a non-null reference type (String, Class, etc.)
+/// that should get a `@NotNull` invisible annotation.
+fn method_returns_non_null_ref(func: &MirFunction) -> bool {
+    matches!(&func.return_ty, Ty::String | Ty::Class(_))
+}
+
+/// Encode a `RuntimeInvisibleAnnotations` attribute containing exactly one
+/// `@org.jetbrains.annotations.NotNull` annotation. This is what kotlinc
+/// emits for non-null reference return types.
+fn encode_invisible_notnull_attribute(cp: &mut ConstantPool, out: &mut Vec<u8>) {
+    let attr_name = cp.utf8("RuntimeInvisibleAnnotations");
+    let type_idx = cp.utf8("Lorg/jetbrains/annotations/NotNull;");
+    let mut body = Vec::new();
+    body.write_u16::<BigEndian>(1).unwrap(); // num_annotations
+    body.write_u16::<BigEndian>(type_idx).unwrap(); // type_index
+    body.write_u16::<BigEndian>(0).unwrap(); // num_element_value_pairs
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(body.len() as u32).unwrap();
+    out.write_all(&body).unwrap();
 }
 
 /// Compile a [`MirModule`] to one (or more) `(internal_name, bytes)`
@@ -217,6 +451,16 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     let source_file_attr_name_idx = cp.utf8("SourceFile");
     let source_file_value_idx = cp.utf8(&source_simple);
 
+    // Pre-build top-level const fields so their CP entries are added
+    // before the constant pool is written. The actual field bytes are
+    // assembled here too — they're emitted into the class file later.
+    let mut const_field_blobs: Vec<Vec<u8>> = Vec::new();
+    for (name, ty, value) in &module.top_level_consts {
+        let mut blob = Vec::new();
+        emit_constval_field(name, ty, value, module, &mut cp, &mut blob);
+        const_field_blobs.push(blob);
+    }
+
     // Compile each method body first; the constant pool grows as a
     // side effect, and the methods reference its indices.
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
@@ -240,6 +484,42 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         }
     }
 
+    // Pre-register InnerClasses CP entries so they're committed to the
+    // constant pool before it gets written. The actual attribute payload
+    // is emitted after the methods table below.
+    let inner_class_entries: Vec<(u16, u16, u16, u16)> = module
+        .classes
+        .iter()
+        .filter(|c| !c.is_cross_file_stub)
+        .filter_map(|c| {
+            let name = &c.name;
+            let dollar = name.rfind('$')?;
+            let outer = &name[..dollar];
+            let inner_simple = &name[dollar + 1..];
+            if inner_simple.is_empty()
+                || inner_simple
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_digit())
+            {
+                return None;
+            }
+            if !module.classes.iter().any(|c2| c2.name == outer) {
+                return None;
+            }
+            let inner_idx = cp.class(name);
+            let outer_idx = cp.class(outer);
+            let inner_name_idx = cp.utf8(inner_simple);
+            let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+            Some((inner_idx, outer_idx, inner_name_idx, access))
+        })
+        .collect();
+    let inner_classes_name_idx = if !inner_class_entries.is_empty() {
+        cp.utf8("InnerClasses")
+    } else {
+        0
+    };
+
     let mut out: Vec<u8> = Vec::with_capacity(1024);
     out.write_u32::<BigEndian>(jvm::CLASS_FILE_MAGIC).unwrap();
     out.write_u16::<BigEndian>(jvm::CLASS_FILE_MINOR).unwrap();
@@ -259,7 +539,13 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     out.write_u16::<BigEndian>(super_class_idx).unwrap();
 
     out.write_u16::<BigEndian>(0).unwrap(); // interfaces_count
-    out.write_u16::<BigEndian>(0).unwrap(); // fields_count
+
+    // Top-level `const val` declarations as `public static final` fields.
+    out.write_u16::<BigEndian>(const_field_blobs.len() as u16)
+        .unwrap();
+    for blob in &const_field_blobs {
+        out.extend_from_slice(blob);
+    }
 
     out.write_u16::<BigEndian>(method_blobs.len() as u16)
         .unwrap();
@@ -267,11 +553,25 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         out.extend_from_slice(blob);
     }
 
-    out.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+    let attr_count: u16 = if inner_class_entries.is_empty() { 1 } else { 2 };
+    out.write_u16::<BigEndian>(attr_count).unwrap();
     out.write_u16::<BigEndian>(source_file_attr_name_idx)
         .unwrap();
     out.write_u32::<BigEndian>(2).unwrap();
     out.write_u16::<BigEndian>(source_file_value_idx).unwrap();
+    if !inner_class_entries.is_empty() {
+        out.write_u16::<BigEndian>(inner_classes_name_idx).unwrap();
+        let payload_len: u32 = 2 + (inner_class_entries.len() as u32) * 8;
+        out.write_u32::<BigEndian>(payload_len).unwrap();
+        out.write_u16::<BigEndian>(inner_class_entries.len() as u16)
+            .unwrap();
+        for (inner, outer, name, access) in &inner_class_entries {
+            out.write_u16::<BigEndian>(*inner).unwrap();
+            out.write_u16::<BigEndian>(*outer).unwrap();
+            out.write_u16::<BigEndian>(*name).unwrap();
+            out.write_u16::<BigEndian>(*access).unwrap();
+        }
+    }
 
     out
 }
@@ -1655,6 +1955,11 @@ fn emit_method_body(
     };
     INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
 
+    // Compute write-once-never-read locals so the call handlers can emit
+    // `pop` / `pop2` instead of an unused `store`.
+    let unused = compute_unused_locals(func);
+    UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
+
     // Compute reachable blocks — skip emitting dead blocks that follow
     // throw/return-terminated branches to avoid VerifyError from missing
     // StackMapTable entries on unreachable code.
@@ -1700,6 +2005,17 @@ fn emit_method_body(
             break;
         }
     }
+
+    // Emit the `Intrinsics.checkNotNullParameter(arg, "name")` prologue for
+    // every non-null reference parameter. kotlinc emits this at method entry
+    // to enforce Kotlin's null-safety on Java callers. We mirror this for
+    // bytecode parity.
+    emit_checknotnull_prologue(func, &kind, &slots, cp, &mut code, &mut max_stack);
+
+    // Stash CP / module pointers so `load_local` can emit CP-backed
+    // inline constants without threading them through every callsite.
+    EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
 
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
@@ -1963,6 +2279,22 @@ fn emit_method_body(
     //   - We only remove bytes after the last branch/cmp_target offset
     let mut max_locals = next_slot as u16;
     let no_branches = patches.is_empty() && cmp_targets.is_empty();
+    // Wide-aware param slot count: each Long/Double param takes 2 slots,
+    // every other param 1. Required so peephole/compaction passes don't
+    // truncate `max_locals` below the JVM-required slot count for wide
+    // params that aren't otherwise referenced after inlining.
+    let param_slot_count: u8 = func
+        .params
+        .iter()
+        .map(|p| {
+            let ty = &func.locals[p.0 as usize];
+            if matches!(ty, Ty::Long | Ty::Double) {
+                2
+            } else {
+                1
+            }
+        })
+        .sum();
     let initial_param_slots = match &kind {
         MethodKind::Static => {
             if func.name == "main" && func.params.is_empty() {
@@ -1970,27 +2302,38 @@ fn emit_method_body(
             } else if func.name == "main" {
                 1
             } else {
-                func.params.len() as u8
+                param_slot_count
             }
         }
-        MethodKind::Instance => (func.params.len()) as u8,
+        MethodKind::Instance => param_slot_count,
     };
     if no_branches {
-        // Compute JVM slots that correspond to named MIR locals (vals/vars).
-        // These slots must NOT be eliminated by the swap peephole — kotlinc
-        // preserves named local variables in the bytecode for parity and
-        // debugging.
-        let named_slots: FxHashSet<u8> = func
+        // Compute JVM slots for named MIR locals (vals/vars). These slots
+        // must NOT be eliminated by peephole optimizations — kotlinc
+        // preserves named locals for parity and the LocalVariableTable.
+        let mut named_slots: FxHashSet<u8> = func
             .named_locals
             .iter()
             .filter_map(|l| slots.get(&l.0).copied())
             .collect();
         peephole_elide_store_load(&mut code, &named_slots);
-        // After elision, some slots may be unused. Compact slot numbers so
-        // they're consecutive starting from the first param slot. This
-        // matches kotlinc's slot allocation.
-        let new_max = compact_local_slots(&mut code, initial_param_slots);
+        // Compact slot numbers — also remap `named_slots` so subsequent
+        // passes see the post-compact slot numbers.
+        let new_max = compact_local_slots(&mut code, initial_param_slots, &mut named_slots);
         max_locals = new_max as u16;
+        let safe_for_liveness =
+            matches!(kind, MethodKind::Static) && func.exception_handlers.is_empty();
+        if safe_for_liveness {
+            // Treat slots stored to multiple times as preserved (vars).
+            let preserved_slots = compute_repeated_store_slots(&code);
+            let mut effective_named = named_slots.clone();
+            effective_named.extend(preserved_slots.iter().copied());
+            let reused_max = liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
+            if reused_max > 0 && (reused_max as u16) < max_locals {
+                max_locals = reused_max as u16;
+            }
+        }
+        compress_to_compact_forms(&mut code);
     } else if patches.is_empty() {
         // Only intra-block (cmp_targets) branches: we can still elide
         // store+load pairs that are positioned AFTER the highest branch
@@ -1999,7 +2342,12 @@ fn emit_method_body(
         peephole_elide_tail_store_load(&mut code, max_branch_off);
         // Slot compaction is byte-preserving, so it's safe to run with
         // branches present too. This matches kotlinc's compact slot use.
-        let new_max = compact_local_slots(&mut code, initial_param_slots);
+        let mut named_slots: FxHashSet<u8> = func
+            .named_locals
+            .iter()
+            .filter_map(|l| slots.get(&l.0).copied())
+            .collect();
+        let new_max = compact_local_slots(&mut code, initial_param_slots, &mut named_slots);
         max_locals = new_max as u16;
     }
 
@@ -2297,24 +2645,19 @@ fn emit_method_body(
     // Safety: bump max_stack for string template concatenation with wide
     // types. Skotch's walk_block stack tracker undercounts when a
     // Long/Double append happens inside `new StringBuilder; dup; ...; append(J)`.
-    // Detect this specific pattern: StringBuilder allocation (`new+dup`)
+    // Detect this specific pattern: a `new StringBuilder` allocation
     // followed by a wide-type append, which the tracker doesn't fully
-    // account for. Conservative: only apply when both `new` (0xBB) and a
-    // wide-type append are present and the function uses Long/Double.
+    // account for. Restrict to actual StringBuilder allocations to avoid
+    // inflating max_stack on unrelated `new+dup` patterns.
     let has_wide = func
         .locals
         .iter()
         .any(|ty| matches!(ty, Ty::Long | Ty::Double));
-    let mut has_new_dup = false;
-    let mut i = 0;
-    while i < code.len() {
-        if code[i] == 0xBB && i + 3 < code.len() && code[i + 3] == 0x59 {
-            has_new_dup = true;
-            break;
-        }
-        i += instruction_len(&code, i);
-    }
-    if has_wide && has_new_dup && max_stack < 5 {
+    let has_string_builder_new = func
+        .locals
+        .iter()
+        .any(|t| matches!(t, Ty::Class(c) if c == "java/lang/StringBuilder"));
+    if has_wide && has_string_builder_new && max_stack < 5 {
         max_stack = 5;
     }
 
@@ -2353,6 +2696,9 @@ fn emit_method_body(
     method.write_all(&code_attr).unwrap();
     // Clear inlinable-constants table for the next function.
     INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
+    UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
+    EMIT_CP.with(|cell| *cell.borrow_mut() = None);
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
     method
 }
 
@@ -7848,9 +8194,16 @@ fn mark_non_binop_uses(rv: &Rvalue, set: &mut FxHashSet<u32>) {
             // A direct copy through a local — propagate the mark.
             set.insert(l.0);
         }
-        Rvalue::Call { args, .. } => {
-            for &a in args {
-                set.insert(a.0);
+        // For most calls, kotlinc emits simple constants inline at the
+        // call site rather than materializing them — let the inlinable-
+        // constants pass handle these. Println/Print are special: kotlinc
+        // materializes their args before pushing the System.out
+        // receiver, so mark those args as non-inlinable.
+        Rvalue::Call { kind, args } => {
+            if matches!(kind, CallKind::Println | CallKind::Print) {
+                for &a in args {
+                    set.insert(a.0);
+                }
             }
         }
         Rvalue::GetField { receiver, .. } => {
@@ -7893,14 +8246,22 @@ fn mark_non_binop_uses(rv: &Rvalue, set: &mut FxHashSet<u32>) {
 
 /// Whether a constant can be inlined without access to the constant pool.
 /// Matches the cases handled by `try_emit_simple_const`.
+/// Whether a constant can be inlined at the use site. Covers both
+/// simple inline encodings (iconst/lconst/fconst/dconst/bipush/sipush)
+/// and CP-backed encodings (ldc/ldc_w/ldc2_w for Strings, large numeric
+/// literals). The corresponding emission helpers are
+/// `try_emit_simple_const` and `try_emit_const_with_cp`.
 fn is_simply_inlinable(c: &MirConst) -> bool {
-    match c {
-        MirConst::Bool(_) | MirConst::Null => true,
-        MirConst::Int(v) => (-32768..=32767).contains(v),
-        MirConst::Long(v) => *v == 0 || *v == 1,
-        // Float, Double, String — need constant pool, can't inline simply
-        _ => false,
-    }
+    matches!(
+        c,
+        MirConst::Bool(_)
+            | MirConst::Null
+            | MirConst::Int(_)
+            | MirConst::Long(_)
+            | MirConst::Float(_)
+            | MirConst::Double(_)
+            | MirConst::String(_)
+    )
 }
 
 /// Increment use counts for every `LocalId` referenced in `rv`.
@@ -7945,7 +8306,16 @@ fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
         Rvalue::ArrayLength(a) => bump(*a),
         Rvalue::NewObjectArray(s) => bump(*s),
         Rvalue::NewTypedObjectArray { size, .. } => bump(*size),
-        _ => {}
+        Rvalue::ObjectArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            bump(*array);
+            bump(*index);
+            bump(*value);
+        }
+        Rvalue::CheckCast { obj, .. } => bump(*obj),
     }
 }
 
@@ -7976,9 +8346,12 @@ fn walk_block(
     for stmt in &block.stmts {
         let Stmt::Assign { dest, value } = stmt;
         // Skip emission of single-use constant assignments — they will be
-        // inlined at the use site by `load_local`.
+        // inlined at the use site by `load_local`. Also skip Const
+        // assignments to a write-once-never-read local (the lowerer
+        // sometimes emits a redundant Const for an unused receiver/temp).
         if matches!(value, Rvalue::Const(_))
-            && INLINABLE_CONSTS.with(|cell| cell.borrow().contains_key(&dest.0))
+            && (INLINABLE_CONSTS.with(|cell| cell.borrow().contains_key(&dest.0))
+                || is_unused_local(*dest))
         {
             continue;
         }
@@ -8242,8 +8615,57 @@ fn walk_block(
                     continue;
                 }
 
+                // Negation pattern: `0 - x` → `ineg/lneg/dneg`. When lhs is
+                // an inlinable constant 0, emit just the rhs and a negation
+                // opcode instead of `0; rhs; isub`. Matches kotlinc.
+                let lhs_is_zero = matches!(op, MBinOp::SubI | MBinOp::SubL | MBinOp::SubD)
+                    && INLINABLE_CONSTS.with(|cell| {
+                        let m = cell.borrow();
+                        match m.get(&lhs.0) {
+                            Some(MirConst::Int(0)) => matches!(op, MBinOp::SubI),
+                            Some(MirConst::Long(0)) => matches!(op, MBinOp::SubL),
+                            Some(MirConst::Double(d)) if *d == 0.0 => matches!(op, MBinOp::SubD),
+                            _ => false,
+                        }
+                    });
+                if lhs_is_zero {
+                    load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                    let neg_opcode: u8 = match op {
+                        MBinOp::SubI => 0x74, // ineg
+                        MBinOp::SubL => 0x75, // lneg
+                        MBinOp::SubD => 0x77, // dneg
+                        _ => unreachable!(),
+                    };
+                    code.push(neg_opcode);
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    continue;
+                }
+
                 load_local(code, stack, max_stack, slots, *lhs, &func.locals);
-                load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                // For integer comparisons against constant 0, skip the rhs
+                // load entirely — we'll use `if<COND>` (single operand) which
+                // doesn't need the 0 on the stack. This matches kotlinc and
+                // keeps max_stack accurate (no transient bump from push+pop).
+                let skip_rhs_load = matches!(
+                    op,
+                    MBinOp::CmpEq
+                        | MBinOp::CmpNe
+                        | MBinOp::CmpLt
+                        | MBinOp::CmpGe
+                        | MBinOp::CmpGt
+                        | MBinOp::CmpLe
+                ) && !matches!(
+                    &func.locals[lhs.0 as usize],
+                    Ty::Class(_) | Ty::String | Ty::Any | Ty::Nullable(_) | Ty::Long | Ty::Double
+                ) && INLINABLE_CONSTS.with(|cell| {
+                    matches!(
+                        cell.borrow().get(&rhs.0),
+                        Some(MirConst::Int(0)) | Some(MirConst::Bool(false))
+                    )
+                });
+                if !skip_rhs_load {
+                    load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                }
                 match op {
                     MBinOp::ConcatStr => unreachable!("handled above"),
                     MBinOp::AddI | MBinOp::SubI | MBinOp::MulI | MBinOp::DivI | MBinOp::ModI => {
@@ -8476,17 +8898,11 @@ fn walk_block(
                         // constants), pop the redundant 0 and use the
                         // single-operand `if*` opcode instead of `if_icmp*`.
 
-                        let rhs_is_zero = !is_ref
-                            && INLINABLE_CONSTS.with(|cell| {
-                                matches!(
-                                    cell.borrow().get(&rhs.0),
-                                    Some(MirConst::Int(0)) | Some(MirConst::Bool(false))
-                                )
-                            });
+                        // We already detected this case above as `skip_rhs_load`
+                        // and didn't push the rhs. We just need the matching
+                        // single-operand opcode emission below.
+                        let rhs_is_zero = skip_rhs_load;
                         if rhs_is_zero {
-                            debug_assert_eq!(code.last().copied(), Some(0x03));
-                            code.pop();
-                            bump(stack, max_stack, -1);
                             // Inverted single-operand branch.
                             let branch_op: u8 = match op {
                                 MBinOp::CmpEq => 0x9A, // ifne (inverse of ==)
@@ -8588,8 +9004,12 @@ fn walk_block(
                 bump(stack, max_stack, 1);
                 // Don't store yet — the Constructor call will consume one copy
                 // and the remaining copy is stored after invokespecial.
-                // Pre-assign the slot so load_local works later.
-                let _ = slot_for(slots, next_slot, *dest);
+                // Pre-assign the slot so load_local works later. Skip slot
+                // allocation when the dest is unused — the Constructor handler
+                // will emit `pop` instead of `astore`.
+                if !is_unused_local(*dest) {
+                    let _ = slot_for(slots, next_slot, *dest);
+                }
             }
             Rvalue::GetField {
                 receiver,
@@ -8637,16 +9057,40 @@ fn walk_block(
                     if let Some(&a) = args.first() {
                         load_local(code, stack, max_stack, slots, a, &func.locals);
                         let arg_ty = &func.locals[a.0 as usize];
-                        let descriptor = match arg_ty {
-                            Ty::Bool => "(Z)V",
-                            Ty::Char => "(C)V",
-                            Ty::Int | Ty::Byte | Ty::Short => "(I)V",
-                            Ty::Float => "(F)V",
-                            Ty::Long => "(J)V",
-                            Ty::Double => "(D)V",
+                        // Byte and Short don't have direct println overloads
+                        // — kotlinc autoboxes them to Byte/Short objects and
+                        // calls println(Object). Match that here.
+                        let (descriptor, autoboxed) = match arg_ty {
+                            Ty::Bool => ("(Z)V", false),
+                            Ty::Char => ("(C)V", false),
+                            Ty::Int => ("(I)V", false),
+                            Ty::Byte => {
+                                let m = cp.methodref(
+                                    "java/lang/Byte",
+                                    "valueOf",
+                                    "(B)Ljava/lang/Byte;",
+                                );
+                                code.push(0xB8);
+                                code.write_u16::<BigEndian>(m).unwrap();
+                                ("(Ljava/lang/Object;)V", true)
+                            }
+                            Ty::Short => {
+                                let m = cp.methodref(
+                                    "java/lang/Short",
+                                    "valueOf",
+                                    "(S)Ljava/lang/Short;",
+                                );
+                                code.push(0xB8);
+                                code.write_u16::<BigEndian>(m).unwrap();
+                                ("(Ljava/lang/Object;)V", true)
+                            }
+                            Ty::Float => ("(F)V", false),
+                            Ty::Long => ("(J)V", false),
+                            Ty::Double => ("(D)V", false),
                             // kotlinc uses println(Object) for all reference types
-                            _ => "(Ljava/lang/Object;)V",
+                            _ => ("(Ljava/lang/Object;)V", false),
                         };
+                        let _ = autoboxed;
                         let mref = cp.methodref("java/io/PrintStream", "println", descriptor);
                         code.push(0xB6); // invokevirtual
                         code.write_u16::<BigEndian>(mref).unwrap();
@@ -9032,7 +9476,14 @@ fn walk_block(
                     };
                     bump(stack, max_stack, net);
                     if !ret_is_void {
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        if is_unused_local(*dest) {
+                            let pop_opcode = if ret_is_wide { 0x58 } else { 0x57 };
+                            code.push(pop_opcode);
+                            let width = if ret_is_wide { -2 } else { -1 };
+                            bump(stack, max_stack, width);
+                        } else {
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        }
                     }
                 }
                 CallKind::Constructor(class_name) => {
@@ -9121,7 +9572,12 @@ fn walk_block(
                         code.push(0xB7); // invokespecial
                         code.write_u16::<BigEndian>(mref).unwrap();
                         bump(stack, max_stack, -(args.len() as i32) - 1);
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        if is_unused_local(*dest) {
+                            code.push(0x57); // pop
+                            bump(stack, max_stack, -1);
+                        } else {
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        }
                     }
                 }
                 CallKind::ConstructorJava {
@@ -9138,7 +9594,12 @@ fn walk_block(
                     code.push(0xB7); // invokespecial
                     code.write_u16::<BigEndian>(mref).unwrap();
                     bump(stack, max_stack, -(args.len() as i32) - 1);
-                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    if is_unused_local(*dest) {
+                        code.push(0x57); // pop
+                        bump(stack, max_stack, -1);
+                    } else {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
                 }
                 CallKind::Virtual {
                     class_name,
@@ -9204,7 +9665,25 @@ fn walk_block(
                     };
                     bump(stack, max_stack, net);
                     if *dest_ty != Ty::Unit {
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        if is_unused_local(*dest) {
+                            // Discard unused call result. Wide returns
+                            // (Long/Double) need pop2; everything else
+                            // is a single-slot pop.
+                            let pop_opcode = if matches!(dest_ty, Ty::Long | Ty::Double) {
+                                0x58 // pop2
+                            } else {
+                                0x57 // pop
+                            };
+                            code.push(pop_opcode);
+                            let width = if matches!(dest_ty, Ty::Long | Ty::Double) {
+                                -2
+                            } else {
+                                -1
+                            };
+                            bump(stack, max_stack, width);
+                        } else {
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        }
                     } else if is_object_return {
                         // Discard unused Object return from invoke.
                         code.push(0x57); // pop
@@ -9420,14 +9899,32 @@ fn emit_load_const(
             bump(stack, max_stack, 2); // Long takes 2 stack slots
         }
         MirConst::Float(v) => {
-            let idx = cp.float(*v);
-            emit_ldc(code, idx);
+            // Use the compact fconst_0/1/2 encodings when applicable;
+            // otherwise emit via the constant pool.
+            if *v == 0.0 {
+                code.push(0x0B); // fconst_0
+            } else if *v == 1.0 {
+                code.push(0x0C); // fconst_1
+            } else if *v == 2.0 {
+                code.push(0x0D); // fconst_2
+            } else {
+                let idx = cp.float(*v);
+                emit_ldc(code, idx);
+            }
             bump(stack, max_stack, 1);
         }
         MirConst::Double(v) => {
-            let idx = cp.double(*v);
-            code.push(0x14); // ldc2_w
-            code.write_u16::<BigEndian>(idx).unwrap();
+            // Use the compact dconst_0/1 encodings when applicable;
+            // otherwise emit ldc2_w.
+            if *v == 0.0 {
+                code.push(0x0E); // dconst_0
+            } else if *v == 1.0 {
+                code.push(0x0F); // dconst_1
+            } else {
+                let idx = cp.double(*v);
+                code.push(0x14); // ldc2_w
+                code.write_u16::<BigEndian>(idx).unwrap();
+            }
             bump(stack, max_stack, 2); // double takes 2 stack slots
         }
         MirConst::Null => {
@@ -9541,6 +10038,61 @@ thread_local! {
     /// behavior of avoiding redundant local materialization.
     static INLINABLE_CONSTS: RefCell<FxHashMap<u32, MirConst>> =
         RefCell::new(FxHashMap::default());
+
+    /// Locals that are written exactly once and never read. The
+    /// constructor / call handlers emit `pop` / `pop2` instead of a
+    /// store, matching kotlinc's discard-unused-result codegen.
+    static UNUSED_LOCALS: RefCell<FxHashSet<u32>> =
+        RefCell::new(FxHashSet::default());
+
+    /// Raw pointers to the active `ConstantPool` and `MirModule` so
+    /// `load_local` can emit CP-backed inline constants (Strings, large
+    /// numeric literals) without threading the references through 45+
+    /// callsites. Set/cleared in `emit_method_body` around walk_block.
+    /// SAFETY: only valid while emission is in progress for one method.
+    static EMIT_CP: RefCell<Option<*mut ConstantPool>> = const { RefCell::new(None) };
+    static EMIT_MODULE: RefCell<Option<*const MirModule>> = const { RefCell::new(None) };
+}
+
+fn is_unused_local(local: LocalId) -> bool {
+    UNUSED_LOCALS.with(|cell| cell.borrow().contains(&local.0))
+}
+
+/// Compute the set of locals that are assigned exactly once and never
+/// read. Excludes parameters and named locals (vars/vals declared in
+/// source). The constructor handler emits `pop` instead of `astore` for
+/// these to match kotlinc's bare-statement codegen.
+fn compute_unused_locals(func: &MirFunction) -> FxHashSet<u32> {
+    let mut assigned: FxHashSet<u32> = FxHashSet::default();
+    let mut use_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            assigned.insert(dest.0);
+            count_rvalue_uses(value, &mut use_counts);
+        }
+        match &block.terminator {
+            Terminator::Throw(l) | Terminator::ReturnValue(l) => {
+                *use_counts.entry(l.0).or_insert(0) += 1;
+            }
+            Terminator::Branch { cond, .. } => {
+                *use_counts.entry(cond.0).or_insert(0) += 1;
+            }
+            _ => {}
+        }
+    }
+    let param_set: FxHashSet<u32> = func.params.iter().map(|p| p.0).collect();
+    let named: FxHashSet<u32> = func.named_locals.iter().map(|l| l.0).collect();
+    let mut result: FxHashSet<u32> = FxHashSet::default();
+    for &local in &assigned {
+        if param_set.contains(&local) || named.contains(&local) {
+            continue;
+        }
+        if use_counts.get(&local).copied().unwrap_or(0) == 0 {
+            result.insert(local);
+        }
+    }
+    result
 }
 
 fn load_local(
@@ -9561,6 +10113,21 @@ fn load_local(
     if let Some(c) = inlined {
         if try_emit_simple_const(code, stack, max_stack, &c) {
             return;
+        }
+        // Try CP-backed inline emission (Strings, large numerics) using
+        // the active CP/module pointers stashed for this method.
+        let cp_ptr = EMIT_CP.with(|cell| *cell.borrow());
+        let mod_ptr = EMIT_MODULE.with(|cell| *cell.borrow());
+        if let (Some(cp_raw), Some(mod_raw)) = (cp_ptr, mod_ptr) {
+            // SAFETY: pointers are valid for the duration of emission of
+            // this method (set in `emit_method_body` before walk_block,
+            // cleared after). load_local is only called within that
+            // window.
+            let cp = unsafe { &mut *cp_raw };
+            let module = unsafe { &*mod_raw };
+            if try_emit_const_with_cp(code, cp, module, stack, max_stack, &c) {
+                return;
+            }
         }
     }
     // If the local was never stored (e.g. if-expression result in a
@@ -9591,6 +10158,65 @@ fn load_local(
     };
     emit_typed_load(code, ty, slot);
     bump(stack, max_stack, width);
+}
+
+/// Try to emit a CP-backed inline constant (String, large numeric).
+/// Returns `true` on success. The caller must already have ruled out
+/// `try_emit_simple_const` cases.
+fn try_emit_const_with_cp(
+    code: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    module: &MirModule,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    c: &MirConst,
+) -> bool {
+    let emit_ldc = |code: &mut Vec<u8>, idx: u16| {
+        if idx <= u8::MAX as u16 {
+            code.push(0x12); // ldc
+            code.push(idx as u8);
+        } else {
+            code.push(0x13); // ldc_w
+            code.write_u16::<BigEndian>(idx).unwrap();
+        }
+    };
+    match c {
+        MirConst::String(sid) => {
+            let s = &module.strings[sid.0 as usize];
+            let idx = cp.string(s);
+            emit_ldc(code, idx);
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Long(v) => {
+            let idx = cp.long(*v);
+            code.push(0x14); // ldc2_w
+            code.write_u16::<BigEndian>(idx).unwrap();
+            bump(stack, max_stack, 2);
+            true
+        }
+        MirConst::Float(v) => {
+            let idx = cp.float(*v);
+            emit_ldc(code, idx);
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Double(v) => {
+            let idx = cp.double(*v);
+            code.push(0x14); // ldc2_w
+            code.write_u16::<BigEndian>(idx).unwrap();
+            bump(stack, max_stack, 2);
+            true
+        }
+        MirConst::Int(v) => {
+            // Large int (outside [-32768, 32767]) needs ldc.
+            let idx = cp.integer(*v);
+            emit_ldc(code, idx);
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Bool(_) | MirConst::Null | MirConst::Unit => false,
+    }
 }
 
 /// Try to emit a simple constant inline (without needing the constant pool).
@@ -9649,7 +10275,32 @@ fn try_emit_simple_const(
             bump(stack, max_stack, 2);
             true
         }
-        // Float, Double, String, large Long, large Int — need constant pool
+        MirConst::Float(v) if *v == 0.0 => {
+            code.push(0x0B); // fconst_0
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Float(v) if *v == 1.0 => {
+            code.push(0x0C); // fconst_1
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Float(v) if *v == 2.0 => {
+            code.push(0x0D); // fconst_2
+            bump(stack, max_stack, 1);
+            true
+        }
+        MirConst::Double(v) if *v == 0.0 => {
+            code.push(0x0E); // dconst_0
+            bump(stack, max_stack, 2);
+            true
+        }
+        MirConst::Double(v) if *v == 1.0 => {
+            code.push(0x0F); // dconst_1
+            bump(stack, max_stack, 2);
+            true
+        }
+        // String, large Long/Float/Double, large Int — need constant pool
         _ => false,
     }
 }
@@ -9709,13 +10360,17 @@ fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
         let mut i = 0;
         while i < code.len() {
             if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
+                // Skip named locals (vals/vars). kotlinc preserves the slot
+                // even when adjacent store+load looks redundant — the var
+                // might be assigned to later or the value is used as a
+                // stable reference.
+                if named_slots.contains(&slot) {
+                    i += instruction_len(code, i);
+                    continue;
+                }
                 // Only safe to remove if this slot is never loaded again
                 // elsewhere in the method (the adjacent load we're removing
-                // is the ONLY use). Adjacent store+load of any slot is a
-                // pure copy — even named locals are safe to elide here
-                // since the slot can be reassigned later if needed. The
-                // swap pattern (below) is what really needs to preserve
-                // named slots.
+                // is the ONLY use).
                 let pair_end = i + store_len + load_len;
                 if !slot_loaded_elsewhere(code, slot, pair_end) {
                     removals.push((i, store_len + load_len));
@@ -9742,6 +10397,30 @@ fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
     // kotlinc's pattern for arguments computed inline before another value
     // (e.g., `println(literal)` where receiver is pushed after the arg).
     peephole_swap_pattern(code, named_slots);
+
+    // Third pass: cancel adjacent `swap; swap` pairs (each is a no-op).
+    peephole_cancel_double_swap(code);
+}
+
+/// Remove pairs of consecutive `swap` opcodes (0x5F). Two swaps in a row
+/// leave the stack unchanged and are pure dead code. Only safe in the
+/// no-branches path where the elision is run.
+fn peephole_cancel_double_swap(code: &mut Vec<u8>) {
+    loop {
+        let mut removed = false;
+        let mut i = 0;
+        while i + 1 < code.len() {
+            if code[i] == 0x5F && code[i + 1] == 0x5F {
+                code.drain(i..i + 2);
+                removed = true;
+                continue;
+            }
+            i += instruction_len(code, i);
+        }
+        if !removed {
+            break;
+        }
+    }
 }
 
 /// Peephole: replace `Xstore_N ; <pure-push> ; Xload_N` with `<pure-push> ; swap`
@@ -10148,7 +10827,11 @@ fn slot_loaded_elsewhere(code: &[u8], slot: u8, from: usize) -> bool {
 /// matches kotlinc's compact slot allocation.
 ///
 /// Only safe when there are no branch targets (no StackMapTable to update).
-fn compact_local_slots(code: &mut [u8], initial_param_slots: u8) -> u8 {
+fn compact_local_slots(
+    code: &mut [u8],
+    initial_param_slots: u8,
+    named_slots: &mut FxHashSet<u8>,
+) -> u8 {
     // Step 1: scan code to find which slots are used and which are wide.
     // Wide slots (Long/Double) occupy 2 consecutive slots.
     let mut used = [false; 256];
@@ -10168,31 +10851,32 @@ fn compact_local_slots(code: &mut [u8], initial_param_slots: u8) -> u8 {
         i += instruction_len(code, i);
     }
 
-    // If any wide types are used, skip compaction — wide types pin slot
-    // pairs together, and remapping them safely requires more analysis.
-    if wide.iter().any(|&w| w) {
-        // Compute max_locals from the highest used slot + 1.
-        let max_used = (0..=255usize)
-            .rev()
-            .find(|&s| used[s])
-            .map(|s| s as u16 + 1)
-            .unwrap_or(0);
-        return max_used.min(255) as u8;
-    }
-
-    // Step 2: build remapping table. Used slots are mapped to consecutive
-    // numbers starting from 0.
+    // Step 2: build remapping table that respects wide-type slot pairs.
+    // We walk used slots in order. For non-wide slots, assign the next
+    // available compact slot. For wide slots, ensure both N and N+1 map
+    // to consecutive compact slots.
     let mut remap = [0u8; 256];
     let mut next = 0u8;
-    for s in 0..=255usize {
+    let mut s = 0usize;
+    while s < 256 {
         if used[s] {
+            if wide[s] {
+                if next as usize + 1 > 255 {
+                    break;
+                }
+                remap[s] = next;
+                remap[s + 1] = next + 1;
+                next += 2;
+                s += 2;
+                continue;
+            }
             remap[s] = next;
             if next == 255 {
-                // Saturate; no further compaction possible.
                 break;
             }
             next += 1;
         }
+        s += 1;
     }
     let max_used = next;
 
@@ -10215,7 +10899,317 @@ fn compact_local_slots(code: &mut [u8], initial_param_slots: u8) -> u8 {
         i += instruction_len(code, i);
     }
 
+    // Update named_slots to reflect the new slot numbers.
+    let updated: FxHashSet<u8> = named_slots.iter().map(|&s| remap[s as usize]).collect();
+    *named_slots = updated;
+
     max_used
+}
+
+/// Liveness-based slot reuse: after compaction, two locals whose lifetimes
+/// don't overlap can share the same JVM slot. This matches kotlinc's
+/// behavior of reusing slot 0 across consecutive temporaries.
+///
+/// Only safe when there are no branches (jumps assume specific slot layout
+/// at branch targets). Operates byte-preservingly — only renumbers slots,
+/// doesn't change instruction lengths.
+/// Find slots that are stored to more than once in `code`. These are
+/// treated as "preserved" slots that liveness reuse should NOT remap to
+/// other locals — typically vars whose MIR uses repeated stores.
+fn compute_repeated_store_slots(code: &[u8]) -> FxHashSet<u8> {
+    let mut store_counts: FxHashMap<u8, u32> = FxHashMap::default();
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((slot, _w)) = decode_store_reference(code, i) {
+            *store_counts.entry(slot).or_insert(0) += 1;
+        }
+        i += instruction_len(code, i);
+    }
+    store_counts
+        .into_iter()
+        .filter_map(|(s, c)| if c > 1 { Some(s) } else { None })
+        .collect()
+}
+
+fn liveness_reuse_slots(
+    code: &mut [u8],
+    initial_param_slots: u8,
+    named_slots: &FxHashSet<u8>,
+) -> u8 {
+    // Step 1: collect live ranges. For each store at position P, find the
+    // last load of that slot after P (or the end of the method if no load).
+    // Build a list of (start_pos, end_pos, original_slot, is_wide).
+    struct Range {
+        start: usize, // bytecode offset of the store
+        end: usize,   // bytecode offset of the last load
+        slot: u8,
+        wide: bool,
+    }
+    let mut ranges: Vec<Range> = Vec::new();
+    let mut last_load_offset: FxHashMap<u8, usize> = FxHashMap::default();
+
+    // First pass: find last load offset for each slot.
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((slot, _is_wide)) = decode_load_reference(code, i) {
+            last_load_offset.insert(slot, i);
+        }
+        i += instruction_len(code, i);
+    }
+
+    // Second pass: build ranges from stores.
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((slot, is_wide)) = decode_store_reference(code, i) {
+            let end = last_load_offset.get(&slot).copied().unwrap_or(i);
+            ranges.push(Range {
+                start: i,
+                end,
+                slot,
+                wide: is_wide,
+            });
+        }
+        i += instruction_len(code, i);
+    }
+
+    if ranges.is_empty() {
+        // Just count used slots from initial params.
+        return initial_param_slots;
+    }
+
+    // Step 2: assign new slots to ranges using a greedy algorithm.
+    // Sort ranges by start position; assign each the lowest free slot.
+    ranges.sort_by_key(|r| r.start);
+    // Track when each new slot becomes free again. `free_after[s]` is the
+    // bytecode offset at or after which slot `s` is free for reuse.
+    let mut free_after: Vec<usize> = Vec::new();
+    let mut slot_remap_per_start: Vec<(usize, u8, u8, bool)> = Vec::new(); // (start, old_slot, new_slot, wide)
+
+    // Reserve initial param slots — these are always live from method entry.
+    // Assume params don't alias new ranges (the param slot is distinct from
+    // local slots in well-formed bytecode).
+    for _ in 0..initial_param_slots {
+        free_after.push(usize::MAX); // never free
+    }
+
+    // First, reserve named-local slots — they keep their original slot
+    // number and are "never free" for the rest of the method (kotlinc
+    // preserves named local variables for the LocalVariableTable).
+    for r in &ranges {
+        if !named_slots.contains(&r.slot) {
+            continue;
+        }
+        let need = if r.wide { 2 } else { 1 };
+        let req = r.slot as usize + need;
+        while free_after.len() < req {
+            free_after.push(0);
+        }
+        for d in 0..need {
+            free_after[r.slot as usize + d] = usize::MAX;
+        }
+        slot_remap_per_start.push((r.start, r.slot, r.slot, r.wide));
+    }
+
+    for r in &ranges {
+        // Skip named — handled above.
+        if named_slots.contains(&r.slot) {
+            continue;
+        }
+        // Find the lowest slot S such that free_after[S] <= r.start.
+        // For wide types, we need TWO consecutive slots S and S+1.
+        let mut chosen: Option<usize> = None;
+        let need = if r.wide { 2 } else { 1 };
+        for s in 0..free_after.len() {
+            if s + need > free_after.len() {
+                break;
+            }
+            let ok = (0..need).all(|d| free_after[s + d] <= r.start);
+            if ok {
+                chosen = Some(s);
+                break;
+            }
+        }
+        let new_slot = match chosen {
+            Some(s) => s,
+            None => {
+                // Need to grow.
+                let s = free_after.len();
+                free_after.extend(std::iter::repeat_n(0, need));
+                s
+            }
+        };
+        for d in 0..need {
+            free_after[new_slot + d] = r.end + 1;
+        }
+        if new_slot > 255 {
+            // Cannot represent — give up on reuse.
+            return initial_param_slots.max(
+                ranges
+                    .iter()
+                    .map(|r| r.slot + if r.wide { 1 } else { 0 } + 1)
+                    .max()
+                    .unwrap_or(0),
+            );
+        }
+        slot_remap_per_start.push((r.start, r.slot, new_slot as u8, r.wide));
+    }
+
+    // Step 3: rewrite store slots and (later) load slots.
+    // Build a map from old_slot -> new_slot. Two ranges might share an
+    // old_slot but if so they had non-overlapping ranges; for the rewrite
+    // we walk the code in order and re-assign the active mapping.
+    //
+    // Simpler approach: build a position-aware mapping. For each instruction,
+    // determine the active old→new mapping based on which range contains it.
+    let mut active_map: FxHashMap<u8, u8> = FxHashMap::default();
+    // Process each instruction in order. When we cross a range start, update
+    // the mapping for that slot. (We maintain a queue of upcoming starts.)
+    let mut starts = slot_remap_per_start.clone();
+    starts.sort_by_key(|t| t.0);
+    let mut start_idx = 0usize;
+
+    let mut max_used = initial_param_slots;
+    let mut i = 0;
+    while i < code.len() {
+        // Apply any range-starts at or before this position.
+        while start_idx < starts.len() && starts[start_idx].0 <= i {
+            let (_pos, old, new, w) = starts[start_idx];
+            active_map.insert(old, new);
+            // Wide types occupy slot N AND N+1.
+            let span = new + if w { 2 } else { 1 };
+            if span > max_used {
+                max_used = span;
+            }
+            start_idx += 1;
+        }
+        // Rewrite slot reference if this instruction has one.
+        rewrite_slot_in_place(code, i, &active_map);
+        i += instruction_len(code, i);
+    }
+
+    max_used
+}
+
+/// Decode a load instruction at `pos` returning the slot and whether it's wide.
+fn decode_load_reference(code: &[u8], pos: usize) -> Option<(u8, bool)> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    match op {
+        0x1A..=0x1D => Some((op - 0x1A, false)),
+        0x1E..=0x21 => Some((op - 0x1E, true)),
+        0x22..=0x25 => Some((op - 0x22, false)),
+        0x26..=0x29 => Some((op - 0x26, true)),
+        0x2A..=0x2D => Some((op - 0x2A, false)),
+        0x15 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        0x16 if pos + 1 < code.len() => Some((code[pos + 1], true)),
+        0x17 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        0x18 if pos + 1 < code.len() => Some((code[pos + 1], true)),
+        0x19 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        0x84 if pos + 1 < code.len() => Some((code[pos + 1], false)), // iinc reads
+        _ => None,
+    }
+}
+
+/// Decode a store instruction at `pos` returning the slot and whether it's wide.
+fn decode_store_reference(code: &[u8], pos: usize) -> Option<(u8, bool)> {
+    if pos >= code.len() {
+        return None;
+    }
+    let op = code[pos];
+    match op {
+        0x3B..=0x3E => Some((op - 0x3B, false)),
+        0x3F..=0x42 => Some((op - 0x3F, true)),
+        0x43..=0x46 => Some((op - 0x43, false)),
+        0x47..=0x4A => Some((op - 0x47, true)),
+        0x4B..=0x4E => Some((op - 0x4B, false)),
+        0x36 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        0x37 if pos + 1 < code.len() => Some((code[pos + 1], true)),
+        0x38 if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        0x39 if pos + 1 < code.len() => Some((code[pos + 1], true)),
+        0x3A if pos + 1 < code.len() => Some((code[pos + 1], false)),
+        _ => None,
+    }
+}
+
+/// In-place rewrite of the slot reference of the instruction at `pos`,
+/// using `map`. Handles compact (1-byte, slot in opcode) and generic
+/// (2-byte) load/store forms. No-op if the instruction has no slot.
+fn rewrite_slot_in_place(code: &mut [u8], pos: usize, map: &FxHashMap<u8, u8>) {
+    if pos >= code.len() {
+        return;
+    }
+    let op = code[pos];
+    match op {
+        // Compact loads/stores — rewrite the opcode if the new slot is also <= 3.
+        0x1A..=0x1D => rewrite_compact(code, pos, 0x1A, map),
+        0x1E..=0x21 => rewrite_compact(code, pos, 0x1E, map),
+        0x22..=0x25 => rewrite_compact(code, pos, 0x22, map),
+        0x26..=0x29 => rewrite_compact(code, pos, 0x26, map),
+        0x2A..=0x2D => rewrite_compact(code, pos, 0x2A, map),
+        0x3B..=0x3E => rewrite_compact(code, pos, 0x3B, map),
+        0x3F..=0x42 => rewrite_compact(code, pos, 0x3F, map),
+        0x43..=0x46 => rewrite_compact(code, pos, 0x43, map),
+        0x47..=0x4A => rewrite_compact(code, pos, 0x47, map),
+        0x4B..=0x4E => rewrite_compact(code, pos, 0x4B, map),
+        0x15..=0x19 | 0x36..=0x3A | 0x84 if pos + 1 < code.len() => {
+            let old = code[pos + 1];
+            if let Some(&new) = map.get(&old) {
+                code[pos + 1] = new;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn rewrite_compact(code: &mut [u8], pos: usize, base: u8, map: &FxHashMap<u8, u8>) {
+    let old = code[pos] - base;
+    if let Some(&new) = map.get(&old) {
+        if new <= 3 {
+            code[pos] = base + new;
+        }
+        // If new > 3, leave the compact form alone — we can't change byte
+        // length. This is fine because liveness reuse always reduces slot
+        // numbers (or keeps them).
+    }
+}
+
+/// Convert generic 2-byte load/store forms to compact 1-byte forms when the
+/// slot is in 0..=3. This shortens the bytecode and matches kotlinc's output.
+/// Only safe when there are no branches in the method (changing byte lengths
+/// would invalidate jump offsets).
+fn compress_to_compact_forms(code: &mut Vec<u8>) {
+    let mut i = 0;
+    while i < code.len() {
+        let op = code[i];
+        let len = instruction_len(code, i);
+        // Generic 2-byte load forms (iload, lload, fload, dload, aload)
+        // with operand slot in 0..=3.
+        if len == 2 && i + 1 < code.len() && code[i + 1] <= 3 {
+            let slot = code[i + 1];
+            let new_op = match op {
+                0x15 => Some(0x1A + slot), // iload N → iload_N
+                0x16 => Some(0x1E + slot), // lload N → lload_N
+                0x17 => Some(0x22 + slot), // fload N → fload_N
+                0x18 => Some(0x26 + slot), // dload N → dload_N
+                0x19 => Some(0x2A + slot), // aload N → aload_N
+                0x36 => Some(0x3B + slot), // istore N → istore_N
+                0x37 => Some(0x3F + slot), // lstore N → lstore_N
+                0x38 => Some(0x43 + slot), // fstore N → fstore_N
+                0x39 => Some(0x47 + slot), // dstore N → dstore_N
+                0x3A => Some(0x4B + slot), // astore N → astore_N
+                _ => None,
+            };
+            if let Some(new) = new_op {
+                code[i] = new;
+                code.remove(i + 1);
+                i += 1;
+                continue;
+            }
+        }
+        i += len;
+    }
 }
 
 /// Decode the slot referenced by the instruction at `pos`, if any.

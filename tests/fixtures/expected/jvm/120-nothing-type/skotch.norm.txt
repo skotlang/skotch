@@ -4,11 +4,15 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        fail (Ljava/lang/String;)V 0x0019
   code        max_stack=3 max_locals=1
-    0000 new Class(java/lang/IllegalStateException)
-    0003 dup
-    0004 aload_0
-    0005 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0008 athrow
+    0000 aload_0
+    0001 ldc "message"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/IllegalStateException)
+    0009 dup
+    0010 aload_0
+    0011 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0014 athrow
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=3 max_locals=4
     0000 goto 3

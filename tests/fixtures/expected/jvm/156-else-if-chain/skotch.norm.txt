@@ -3,50 +3,49 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=10
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 bipush 10
-    0007 istore_2
-    0008 iload_0
-    0009 iload_2
-    0010 if_icmple 17
-    0013 iconst_1
-    0014 goto 18
-    0017 iconst_0
-    0018 istore_3
-    0019 iload_3
-    0020 ifeq 34
-    0023 ldc "big"
+  code        max_stack=2 max_locals=9
+    0000 goto 3
+    0003 bipush 10
+    0005 istore_1
+    0006 iload_0
+    0007 iload_1
+    0008 if_icmple 15
+    0011 iconst_1
+    0012 goto 16
+    0015 iconst_0
+    0016 istore_2
+    0017 iload_2
+    0018 ifeq 30
+    0021 ldc "big"
+    0023 astore_3
+    0024 aload_3
     0025 astore 4
-    0027 aload 4
-    0029 astore 5
-    0031 goto 77
-    0034 iconst_3
-    0035 istore 6
-    0037 iload_0
-    0038 iload 6
-    0040 if_icmple 47
-    0043 iconst_1
-    0044 goto 48
-    0047 iconst_0
-    0048 istore 7
-    0050 iload 7
-    0052 ifeq 66
-    0055 ldc "medium"
-    0057 astore 8
-    0059 aload 8
-    0061 astore 5
-    0063 goto 77
-    0066 ldc "small"
-    0068 astore 9
-    0070 aload 9
-    0072 astore 5
-    0074 goto 77
-    0077 aload 5
-    0079 areturn
-    sub_attr  StackMapTable (43 bytes)
+    0027 goto 73
+    0030 iconst_3
+    0031 istore 5
+    0033 iload_0
+    0034 iload 5
+    0036 if_icmple 43
+    0039 iconst_1
+    0040 goto 44
+    0043 iconst_0
+    0044 istore 6
+    0046 iload 6
+    0048 ifeq 62
+    0051 ldc "medium"
+    0053 astore 7
+    0055 aload 7
+    0057 astore 4
+    0059 goto 73
+    0062 ldc "small"
+    0064 astore 8
+    0066 aload 8
+    0068 astore 4
+    0070 goto 73
+    0073 aload 4
+    0075 areturn
+    sub_attr  StackMapTable (39 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 bipush 15

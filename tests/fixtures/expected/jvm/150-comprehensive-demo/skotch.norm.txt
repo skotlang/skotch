@@ -91,7 +91,7 @@ method        isOdd (I)Z 0x0019
     0006 isub
     0007 ireturn
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=26
+  code        max_stack=3 max_locals=25
     0000 ldc "Sum of odds 1..10: "
     0002 astore_0
     0003 bipush 10
@@ -126,105 +126,103 @@ method        main ()V 0x0019
     0065 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
     0068 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
     0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0074 iconst_1
-    0075 istore 6
-    0077 goto 80
-    0080 bipush 10
-    0082 istore 7
-    0084 iload 7
-    0086 invokestatic Method(InputKt.sumOfOdds:(I)I)
-    0089 istore 8
-    0091 bipush 20
-    0093 istore 9
-    0095 iload 8
-    0097 iload 9
-    0099 if_icmple 106
-    0102 iconst_1
-    0103 goto 107
-    0106 iconst_0
-    0107 istore 10
-    0109 iload 10
-    0111 ifeq 125
-    0114 ldc "big"
-    0116 astore 11
-    0118 aload 11
-    0120 astore 12
-    0122 goto 136
-    0125 ldc "small"
-    0127 astore 13
-    0129 aload 13
-    0131 astore 12
-    0133 goto 136
-    0136 ldc "Classification: "
-    0138 astore 14
-    0140 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0143 new Class(java/lang/StringBuilder)
-    0146 dup
-    0147 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0150 aload 14
-    0152 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0155 aload 12
-    0157 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0160 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0163 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0166 iconst_1
+    0074 goto 77
+    0077 bipush 10
+    0079 istore 6
+    0081 iload 6
+    0083 invokestatic Method(InputKt.sumOfOdds:(I)I)
+    0086 istore 7
+    0088 bipush 20
+    0090 istore 8
+    0092 iload 7
+    0094 iload 8
+    0096 if_icmple 103
+    0099 iconst_1
+    0100 goto 104
+    0103 iconst_0
+    0104 istore 9
+    0106 iload 9
+    0108 ifeq 122
+    0111 ldc "big"
+    0113 astore 10
+    0115 aload 10
+    0117 astore 11
+    0119 goto 133
+    0122 ldc "small"
+    0124 astore 12
+    0126 aload 12
+    0128 astore 11
+    0130 goto 133
+    0133 ldc "Classification: "
+    0135 astore 13
+    0137 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0140 new Class(java/lang/StringBuilder)
+    0143 dup
+    0144 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0147 aload 13
+    0149 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0152 aload 11
+    0154 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0157 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0160 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0163 iconst_1
+    0164 istore 14
+    0166 iconst_5
     0167 istore 15
-    0169 iconst_5
-    0170 istore 16
-    0172 iload 15
-    0174 istore 17
-    0176 goto 179
-    0179 iload 17
-    0181 iload 16
-    0183 if_icmpgt 190
-    0186 iconst_1
-    0187 goto 191
-    0190 iconst_0
-    0191 istore 18
-    0193 iload 18
-    0195 ifeq 234
-    0198 ldc ": "
-    0200 astore 19
-    0202 iload 17
-    0204 invokestatic Method(InputKt.isOdd:(I)Z)
-    0207 istore 20
-    0209 iload 20
-    0211 ifeq 246
-    0214 goto 235
-    0217 iconst_1
-    0218 istore 21
-    0220 iload 17
-    0222 iload 21
-    0224 iadd
-    0225 istore 22
-    0227 iload 22
-    0229 istore 17
-    0231 goto 179
-    0234 return
-    0235 ldc "odd"
-    0237 astore 23
-    0239 aload 23
-    0241 astore 24
-    0243 goto 257
-    0246 ldc "even"
-    0248 astore 25
-    0250 aload 25
-    0252 astore 24
-    0254 goto 257
-    0257 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0260 new Class(java/lang/StringBuilder)
-    0263 dup
-    0264 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0267 iload 17
-    0269 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0272 aload 19
-    0274 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0277 aload 24
-    0279 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0282 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0285 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0288 goto 217
-    sub_attr  StackMapTable (205 bytes)
+    0169 iload 14
+    0171 istore 16
+    0173 goto 176
+    0176 iload 16
+    0178 iload 15
+    0180 if_icmpgt 187
+    0183 iconst_1
+    0184 goto 188
+    0187 iconst_0
+    0188 istore 17
+    0190 iload 17
+    0192 ifeq 231
+    0195 ldc ": "
+    0197 astore 18
+    0199 iload 16
+    0201 invokestatic Method(InputKt.isOdd:(I)Z)
+    0204 istore 19
+    0206 iload 19
+    0208 ifeq 243
+    0211 goto 232
+    0214 iconst_1
+    0215 istore 20
+    0217 iload 16
+    0219 iload 20
+    0221 iadd
+    0222 istore 21
+    0224 iload 21
+    0226 istore 16
+    0228 goto 176
+    0231 return
+    0232 ldc "odd"
+    0234 astore 22
+    0236 aload 22
+    0238 astore 23
+    0240 goto 254
+    0243 ldc "even"
+    0245 astore 24
+    0247 aload 24
+    0249 astore 23
+    0251 goto 254
+    0254 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0257 new Class(java/lang/StringBuilder)
+    0260 dup
+    0261 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0264 iload 16
+    0266 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0269 aload 18
+    0271 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0274 aload 23
+    0276 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0279 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0282 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0285 goto 214
+    sub_attr  StackMapTable (200 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

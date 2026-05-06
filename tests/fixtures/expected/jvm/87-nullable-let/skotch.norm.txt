@@ -3,25 +3,23 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=2
     0000 ldc "world"
     0002 astore_0
     0003 new Class(InputKt$Lambda$0)
     0006 dup
     0007 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0010 astore_1
+    0010 pop
     0011 new Class(InputKt$Lambda$1)
     0014 dup
     0015 invokespecial Method(InputKt$Lambda$1.<init>:()V)
     0018 aload_0
-    0019 swap
-    0020 swap
-    0021 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0024 astore 2
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 aload 2
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 return
+    0019 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0022 astore_1
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 aload_1
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0030 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -66,41 +66,29 @@ method        countMultiples (II)I 0x0019
     0108 goto 63
     sub_attr  StackMapTable (41 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=1
     0000 bipush 100
-    0002 istore_0
-    0003 iconst_3
-    0004 istore_1
-    0005 iload_0
-    0006 iload_1
-    0007 invokestatic Method(InputKt.countMultiples:(II)I)
-    0010 istore_2
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 iload_2
-    0015 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0018 bipush 100
-    0020 istore_3
-    0021 bipush 7
-    0023 istore 4
-    0025 iload_3
-    0026 iload 4
-    0028 invokestatic Method(InputKt.countMultiples:(II)I)
-    0031 istore 5
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 iload 5
-    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0041 bipush 50
-    0043 istore 6
-    0045 iconst_5
-    0046 istore 7
-    0048 iload 6
-    0050 iload 7
-    0052 invokestatic Method(InputKt.countMultiples:(II)I)
-    0055 istore 8
-    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 iload 8
-    0062 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0065 return
+    0002 iconst_3
+    0003 invokestatic Method(InputKt.countMultiples:(II)I)
+    0006 istore_0
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 iload_0
+    0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0014 bipush 100
+    0016 bipush 7
+    0018 invokestatic Method(InputKt.countMultiples:(II)I)
+    0021 istore_0
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 iload_0
+    0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0029 bipush 50
+    0031 iconst_5
+    0032 invokestatic Method(InputKt.countMultiples:(II)I)
+    0035 istore_0
+    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0039 iload_0
+    0040 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0043 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -4,94 +4,94 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        eval (LExpr;)I 0x0019
   code        max_stack=2 max_locals=12
-    0000 goto 3
-    0003 aload_0
-    0004 instanceof Class(Num)
-    0007 istore_1
-    0008 iload_1
-    0009 ifeq 28
-    0012 aload_0
-    0013 checkcast Class(Num)
-    0016 astore_2
-    0017 aload_2
-    0018 getfield Field(Num.value:I)
-    0021 istore_3
-    0022 iload_3
-    0023 istore 4
-    0025 goto 93
-    0028 aload_0
-    0029 instanceof Class(Sum)
-    0032 istore 5
-    0034 iload 5
-    0036 ifeq 87
-    0039 aload_0
-    0040 checkcast Class(Sum)
-    0043 astore 6
-    0045 aload 6
-    0047 getfield Field(Sum.left:LExpr;)
-    0050 astore 7
-    0052 aload 7
-    0054 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0057 istore 8
-    0059 aload 6
-    0061 getfield Field(Sum.right:LExpr;)
-    0064 astore 9
-    0066 aload 9
-    0068 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0071 istore 10
-    0073 iload 8
-    0075 iload 10
-    0077 iadd
-    0078 istore 11
-    0080 iload 11
-    0082 istore 4
-    0084 goto 93
-    0087 iconst_0
+    0000 aload_0
+    0001 ldc "e"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(Num)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 34
+    0018 aload_0
+    0019 checkcast Class(Num)
+    0022 astore_2
+    0023 aload_2
+    0024 invokevirtual Method(Num.getValue:()I)
+    0027 istore_3
+    0028 iload_3
+    0029 istore 4
+    0031 goto 99
+    0034 aload_0
+    0035 instanceof Class(Sum)
+    0038 istore 5
+    0040 iload 5
+    0042 ifeq 93
+    0045 aload_0
+    0046 checkcast Class(Sum)
+    0049 astore 6
+    0051 aload 6
+    0053 invokevirtual Method(Sum.getLeft:()LExpr;)
+    0056 astore 7
+    0058 aload 7
+    0060 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0063 istore 8
+    0065 aload 6
+    0067 invokevirtual Method(Sum.getRight:()LExpr;)
+    0070 astore 9
+    0072 aload 9
+    0074 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0077 istore 10
+    0079 iload 8
+    0081 iload 10
+    0083 iadd
+    0084 istore 11
+    0086 iload 11
     0088 istore 4
-    0090 goto 93
-    0093 iload 4
-    0095 ireturn
-    sub_attr  StackMapTable (14 bytes)
+    0090 goto 99
+    0093 iconst_0
+    0094 istore 4
+    0096 goto 99
+    0099 iload 4
+    0101 ireturn
+    sub_attr  StackMapTable (19 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=8
-    0000 iconst_1
-    0001 istore_0
-    0002 new Class(Num)
-    0005 dup
-    0006 iload_0
-    0007 invokespecial Method(Num.<init>:(I)V)
-    0010 astore_1
-    0011 iconst_2
-    0012 istore_2
-    0013 new Class(Num)
-    0016 dup
-    0017 iload_2
-    0018 invokespecial Method(Num.<init>:(I)V)
-    0021 astore_3
+  code        max_stack=4 max_locals=5
+    0000 new Class(Num)
+    0003 dup
+    0004 iconst_1
+    0005 invokespecial Method(Num.<init>:(I)V)
+    0008 astore_0
+    0009 new Class(Num)
+    0012 dup
+    0013 iconst_2
+    0014 invokespecial Method(Num.<init>:(I)V)
+    0017 astore_1
+    0018 new Class(Num)
+    0021 dup
     0022 iconst_3
-    0023 istore 4
-    0025 new Class(Num)
-    0028 dup
-    0029 iload 4
-    0031 invokespecial Method(Num.<init>:(I)V)
-    0034 astore 5
-    0036 new Class(Sum)
-    0039 dup
-    0040 aload_3
-    0041 aload 5
+    0023 invokespecial Method(Num.<init>:(I)V)
+    0026 astore_2
+    0027 new Class(Sum)
+    0030 dup
+    0031 aload_1
+    0032 aload_2
+    0033 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
+    0036 astore_1
+    0037 new Class(Sum)
+    0040 dup
+    0041 aload_0
+    0042 aload_1
     0043 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
-    0046 astore 6
-    0048 new Class(Sum)
-    0051 dup
-    0052 aload_1
-    0053 aload 6
-    0055 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
-    0058 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0061 istore 7
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 iload 7
-    0068 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0071 return
+    0046 astore 4
+    0048 aload 4
+    0050 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0053 istore_0
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 iload_0
+    0058 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0061 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

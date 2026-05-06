@@ -3,28 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=8
+  code        max_stack=3 max_locals=2
     0000 ldc2_w double(3.14)
     0003 dstore_0
     0004 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0007 dload_0
     0008 invokevirtual Method(java/io/PrintStream.println:(D)V)
     0011 ldc2_w double(-2.5)
-    0014 dstore_2
+    0014 dstore_0
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 dload_2
+    0018 dload_0
     0019 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0022 ldc2_w double(0)
-    0025 dstore 4
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 dload 4
-    0032 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0035 ldc2_w double(100)
-    0038 dstore 6
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 dload 6
-    0045 invokevirtual Method(java/io/PrintStream.println:(D)V)
-    0048 return
+    0022 dconst_0
+    0023 dstore_0
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 dload_0
+    0028 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0031 ldc2_w double(100)
+    0034 dstore_0
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 dload_0
+    0039 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

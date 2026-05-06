@@ -114,17 +114,24 @@ fn hello_lib_skotch_builds_to_gradle_layout() {
         .join("build/classes/kotlin/main/GreeterKt.class")
         .exists());
 
-    // JAR should run correctly.
+    // JAR should run correctly. skotch-emitted bytecode uses Kotlin
+    // null-safety intrinsics, so we need kotlin-stdlib on the classpath.
     if let Ok(java) = which::which("java") {
-        let stdout =
-            run_stdout(Command::new(&java).arg("-jar").arg(&outcome.output_path)).or_else(|| {
-                run_stdout(
-                    Command::new(&java)
-                        .arg("-cp")
-                        .arg(outcome.output_path.to_str().unwrap())
-                        .arg("MainKt"),
-                )
-            });
+        let stdlib_jar = skotch_classinfo::find_kotlin_lib_dir()
+            .ok()
+            .map(|d| d.join("kotlin-stdlib.jar"));
+        let cp_with_stdlib = if let Some(ref stdlib) = stdlib_jar {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            format!("{}{sep}{}", outcome.output_path.display(), stdlib.display())
+        } else {
+            outcome.output_path.to_string_lossy().to_string()
+        };
+        let stdout = run_stdout(
+            Command::new(&java)
+                .arg("-cp")
+                .arg(&cp_with_stdlib)
+                .arg("MainKt"),
+        );
         assert_eq!(stdout.as_deref(), Some("Hello, World!\n"));
     }
 
@@ -345,9 +352,27 @@ fn multi_lib_skotch_builds_and_runs() {
         "Missing MathUtilsKt.class from lib module"
     );
 
-    // Cross-module calls should work at runtime.
+    // Cross-module calls should work at runtime. Need kotlin-stdlib on
+    // the classpath because skotch emits Kotlin null-safety intrinsics.
     if let Ok(java) = which::which("java") {
-        let stdout = run_stdout(Command::new(&java).arg("-jar").arg(&outcome.output_path));
+        let stdlib_jar = skotch_classinfo::find_kotlin_lib_dir()
+            .ok()
+            .map(|d| d.join("kotlin-stdlib.jar"));
+        let stdout = if let Some(ref stdlib) = stdlib_jar {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            run_stdout(
+                Command::new(&java)
+                    .arg("-cp")
+                    .arg(format!(
+                        "{}{sep}{}",
+                        outcome.output_path.display(),
+                        stdlib.display()
+                    ))
+                    .arg("MainKt"),
+            )
+        } else {
+            run_stdout(Command::new(&java).arg("-jar").arg(&outcome.output_path))
+        };
         assert_eq!(
             stdout.as_deref(),
             Some("Hello, World!\n5\n"),
@@ -371,8 +396,24 @@ fn multi_lib_cross_module_function_calls() {
 
     if let Ok(java) = which::which("java") {
         let jar = result.unwrap().output_path;
-        let stdout = run_stdout(Command::new(&java).arg("-jar").arg(&jar))
-            .expect("JAR should run successfully");
+        // skotch-emitted bytecode now includes Kotlin null-safety
+        // intrinsics (Intrinsics.checkNotNullParameter), which need
+        // kotlin-stdlib on the classpath at runtime.
+        let stdlib_jar = skotch_classinfo::find_kotlin_lib_dir()
+            .ok()
+            .map(|d| d.join("kotlin-stdlib.jar"));
+        let stdout = if let Some(ref stdlib) = stdlib_jar {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            run_stdout(
+                Command::new(&java)
+                    .arg("-cp")
+                    .arg(format!("{}{sep}{}", jar.display(), stdlib.display()))
+                    .arg("MainKt"),
+            )
+        } else {
+            run_stdout(Command::new(&java).arg("-jar").arg(&jar))
+        }
+        .expect("JAR should run successfully");
         assert!(
             stdout.contains("Hello, World!"),
             "Cross-module greet() failed"

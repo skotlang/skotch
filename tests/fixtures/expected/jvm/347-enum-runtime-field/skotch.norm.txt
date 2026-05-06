@@ -4,62 +4,67 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        Coin$valueOf (Ljava/lang/String;)LCoin; 0x0019
   code        max_stack=5 max_locals=14
-    0000 ldc "PENNY"
-    0002 astore_1
-    0003 aload_0
-    0004 aload_1
-    0005 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0008 istore_2
-    0009 iload_2
-    0010 ifeq 72
-    0013 goto 97
-    0016 invokestatic Method(InputKt.PENNY:()LCoin;)
-    0019 astore_3
-    0020 aload_3
-    0021 areturn
-    0022 ldc "QUARTER"
-    0024 astore 4
-    0026 aload_0
-    0027 aload 4
-    0029 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0032 istore 5
-    0034 iload 5
-    0036 ifeq 16
-    0039 invokestatic Method(InputKt.QUARTER:()LCoin;)
-    0042 astore 6
-    0044 aload 6
-    0046 areturn
-    0047 ldc "DIME"
-    0049 astore 7
-    0051 aload_0
-    0052 aload 7
-    0054 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0057 istore 8
-    0059 iload 8
-    0061 ifeq 22
-    0064 invokestatic Method(InputKt.DIME:()LCoin;)
-    0067 astore 9
-    0069 aload 9
-    0071 areturn
-    0072 ldc "NICKEL"
-    0074 astore 10
-    0076 aload_0
-    0077 aload 10
-    0079 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0082 istore 11
-    0084 iload 11
-    0086 ifeq 47
-    0089 invokestatic Method(InputKt.NICKEL:()LCoin;)
-    0092 astore 12
-    0094 aload 12
-    0096 areturn
-    0097 invokestatic Method(InputKt.PENNY:()LCoin;)
-    0100 astore 13
-    0102 aload 13
-    0104 areturn
+    0000 aload_0
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 ldc "PENNY"
+    0008 astore_1
+    0009 aload_0
+    0010 aload_1
+    0011 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 78
+    0019 goto 103
+    0022 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0025 astore_3
+    0026 aload_3
+    0027 areturn
+    0028 ldc "QUARTER"
+    0030 astore 4
+    0032 aload_0
+    0033 aload 4
+    0035 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0038 istore 5
+    0040 iload 5
+    0042 ifeq 22
+    0045 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0048 astore 6
+    0050 aload 6
+    0052 areturn
+    0053 ldc "DIME"
+    0055 astore 7
+    0057 aload_0
+    0058 aload 7
+    0060 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0063 istore 8
+    0065 iload 8
+    0067 ifeq 28
+    0070 invokestatic Method(InputKt.DIME:()LCoin;)
+    0073 astore 9
+    0075 aload 9
+    0077 areturn
+    0078 ldc "NICKEL"
+    0080 astore 10
+    0082 aload_0
+    0083 aload 10
+    0085 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0088 istore 11
+    0090 iload 11
+    0092 ifeq 53
+    0095 invokestatic Method(InputKt.NICKEL:()LCoin;)
+    0098 astore 12
+    0100 aload 12
+    0102 areturn
+    0103 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0106 astore 13
+    0108 aload 13
+    0110 areturn
     sub_attr  StackMapTable (98 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Coin$values ()Ljava/util/ArrayList; 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=1
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
@@ -68,74 +73,63 @@ method        Coin$values ()Ljava/util/ArrayList; 0x0019
     0011 aload_0
     0012 swap
     0013 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0016 istore_1
+    0016 pop
     0017 invokestatic Method(InputKt.NICKEL:()LCoin;)
     0020 aload_0
     0021 swap
     0022 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0025 istore 2
-    0027 invokestatic Method(InputKt.DIME:()LCoin;)
-    0030 aload_0
-    0031 swap
-    0032 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0035 istore 3
-    0037 invokestatic Method(InputKt.QUARTER:()LCoin;)
-    0040 aload_0
-    0041 swap
-    0042 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0045 istore 4
-    0047 aload_0
-    0048 areturn
+    0025 pop
+    0026 invokestatic Method(InputKt.DIME:()LCoin;)
+    0029 aload_0
+    0030 swap
+    0031 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0034 pop
+    0035 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0038 aload_0
+    0039 swap
+    0040 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
+    0043 pop
+    0044 aload_0
+    0045 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        DIME ()LCoin; 0x0019
-  code        max_stack=4 max_locals=2
+  code        max_stack=4 max_locals=0
     0000 new Class(Coin)
     0003 dup
     0004 ldc "DIME"
-    0006 astore_0
-    0007 bipush 10
-    0009 istore_1
-    0010 aload_0
-    0011 iload_1
-    0012 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
-    0015 areturn
+    0006 bipush 10
+    0008 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0011 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        NICKEL ()LCoin; 0x0019
-  code        max_stack=4 max_locals=2
+  code        max_stack=4 max_locals=0
     0000 new Class(Coin)
     0003 dup
     0004 ldc "NICKEL"
-    0006 astore_0
-    0007 iconst_5
-    0008 istore_1
-    0009 aload_0
-    0010 iload_1
-    0011 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
-    0014 areturn
+    0006 iconst_5
+    0007 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0010 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        PENNY ()LCoin; 0x0019
-  code        max_stack=4 max_locals=2
+  code        max_stack=4 max_locals=0
     0000 new Class(Coin)
     0003 dup
     0004 ldc "PENNY"
-    0006 astore_0
-    0007 iconst_1
-    0008 istore_1
-    0009 aload_0
-    0010 iload_1
-    0011 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
-    0014 areturn
+    0006 iconst_1
+    0007 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0010 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        QUARTER ()LCoin; 0x0019
-  code        max_stack=4 max_locals=2
+  code        max_stack=4 max_locals=0
     0000 new Class(Coin)
     0003 dup
     0004 ldc "QUARTER"
-    0006 astore_0
-    0007 bipush 25
-    0009 istore_1
-    0010 aload_0
-    0011 iload_1
-    0012 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
-    0015 areturn
+    0006 bipush 25
+    0008 invokespecial Method(Coin.<init>:(Ljava/lang/String;I)V)
+    0011 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=1
     0000 invokestatic Method(InputKt.PENNY:()LCoin;)
     0003 invokestatic Method(InputKt.value:(LCoin;)I)
     0006 istore_0
@@ -144,23 +138,27 @@ method        main ()V 0x0019
     0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0014 invokestatic Method(InputKt.QUARTER:()LCoin;)
     0017 invokestatic Method(InputKt.value:(LCoin;)I)
-    0020 istore_1
+    0020 istore_0
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload_1
+    0024 iload_0
     0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0028 invokestatic Method(InputKt.DIME:()LCoin;)
     0031 getfield Field(Coin.cents:I)
-    0034 istore 2
-    0036 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0039 iload 2
-    0041 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0044 return
+    0034 istore_0
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload_0
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        value (LCoin;)I 0x0019
-  code        max_stack=1 max_locals=1
+  code        max_stack=2 max_locals=1
     0000 aload_0
-    0001 getfield Field(Coin.cents:I)
-    0004 ireturn
+    0001 ldc "c"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 getfield Field(Coin.cents:I)
+    0010 ireturn
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

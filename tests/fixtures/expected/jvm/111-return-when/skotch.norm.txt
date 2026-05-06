@@ -4,41 +4,46 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=9
-    0000 goto 3
-    0003 ldc "Saturday"
-    0005 astore_1
-    0006 aload_0
-    0007 aload_1
-    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0011 istore_2
-    0012 iload_2
-    0013 ifeq 25
-    0016 ldc "weekend"
-    0018 astore_3
-    0019 aload_3
-    0020 astore 4
-    0022 goto 64
-    0025 ldc "Sunday"
-    0027 astore 5
-    0029 aload_0
-    0030 aload 5
-    0032 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0035 istore 6
-    0037 iload 6
-    0039 ifeq 53
-    0042 ldc "weekend"
-    0044 astore 7
-    0046 aload 7
-    0048 astore 4
-    0050 goto 64
-    0053 ldc "weekday"
-    0055 astore 8
-    0057 aload 8
-    0059 astore 4
-    0061 goto 64
-    0064 aload 4
-    0066 areturn
+    0000 aload_0
+    0001 ldc "day"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 ldc "Saturday"
+    0011 astore_1
+    0012 aload_0
+    0013 aload_1
+    0014 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0017 istore_2
+    0018 iload_2
+    0019 ifeq 31
+    0022 ldc "weekend"
+    0024 astore_3
+    0025 aload_3
+    0026 astore 4
+    0028 goto 70
+    0031 ldc "Sunday"
+    0033 astore 5
+    0035 aload_0
+    0036 aload 5
+    0038 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0041 istore 6
+    0043 iload 6
+    0045 ifeq 59
+    0048 ldc "weekend"
+    0050 astore 7
+    0052 aload 7
+    0054 astore 4
+    0056 goto 70
+    0059 ldc "weekday"
+    0061 astore 8
+    0063 aload 8
+    0065 astore 4
+    0067 goto 70
+    0070 aload 4
+    0072 areturn
     sub_attr  StackMapTable (48 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "Monday"

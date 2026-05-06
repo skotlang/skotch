@@ -9,6 +9,7 @@ method        MINUS ()LOp; 0x0019
     0004 ldc "MINUS"
     0006 invokespecial Method(Op.<init>:(Ljava/lang/String;)V)
     0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Op$apply (LOp;II)I 0x0019
   code        max_stack=3 max_locals=11
     0000 aload_0
@@ -49,38 +50,43 @@ method        Op$apply (LOp;II)I 0x0019
     sub_attr  StackMapTable (20 bytes)
 method        Op$valueOf (Ljava/lang/String;)LOp; 0x0019
   code        max_stack=3 max_locals=8
-    0000 ldc "PLUS"
-    0002 astore_1
-    0003 aload_0
-    0004 aload_1
-    0005 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0008 istore_2
-    0009 iload_2
-    0010 ifeq 22
-    0013 goto 47
-    0016 invokestatic Method(InputKt.PLUS:()LOp;)
-    0019 astore_3
-    0020 aload_3
-    0021 areturn
-    0022 ldc "MINUS"
-    0024 astore 4
-    0026 aload_0
-    0027 aload 4
-    0029 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0032 istore 5
-    0034 iload 5
-    0036 ifeq 16
-    0039 invokestatic Method(InputKt.MINUS:()LOp;)
-    0042 astore 6
-    0044 aload 6
-    0046 areturn
-    0047 invokestatic Method(InputKt.PLUS:()LOp;)
-    0050 astore 7
-    0052 aload 7
-    0054 areturn
+    0000 aload_0
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 ldc "PLUS"
+    0008 astore_1
+    0009 aload_0
+    0010 aload_1
+    0011 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 28
+    0019 goto 53
+    0022 invokestatic Method(InputKt.PLUS:()LOp;)
+    0025 astore_3
+    0026 aload_3
+    0027 areturn
+    0028 ldc "MINUS"
+    0030 astore 4
+    0032 aload_0
+    0033 aload 4
+    0035 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0038 istore 5
+    0040 iload 5
+    0042 ifeq 22
+    0045 invokestatic Method(InputKt.MINUS:()LOp;)
+    0048 astore 6
+    0050 aload 6
+    0052 areturn
+    0053 invokestatic Method(InputKt.PLUS:()LOp;)
+    0056 astore 7
+    0058 aload 7
+    0060 areturn
     sub_attr  StackMapTable (25 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Op$values ()Ljava/util/ArrayList; 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=1
     0000 new Class(java/util/ArrayList)
     0003 dup
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
@@ -89,14 +95,15 @@ method        Op$values ()Ljava/util/ArrayList; 0x0019
     0011 aload_0
     0012 swap
     0013 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0016 istore_1
+    0016 pop
     0017 invokestatic Method(InputKt.MINUS:()LOp;)
     0020 aload_0
     0021 swap
     0022 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
-    0025 istore 2
-    0027 aload_0
-    0028 areturn
+    0025 pop
+    0026 aload_0
+    0027 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        PLUS ()LOp; 0x0019
   code        max_stack=3 max_locals=0
     0000 new Class(Op)
@@ -104,45 +111,26 @@ method        PLUS ()LOp; 0x0019
     0004 ldc "PLUS"
     0006 invokespecial Method(Op.<init>:(Ljava/lang/String;)V)
     0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=12
-    0000 iconst_3
-    0001 istore_0
-    0002 iconst_2
-    0003 istore_1
-    0004 invokestatic Method(InputKt.PLUS:()LOp;)
-    0007 astore_2
-    0008 iconst_3
-    0009 istore_3
-    0010 iconst_2
-    0011 istore 4
-    0013 aload_2
-    0014 iload_3
-    0015 iload 4
-    0017 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
-    0020 istore 5
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 iload 5
-    0027 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0030 iconst_3
-    0031 istore 6
-    0033 iconst_2
-    0034 istore 7
-    0036 invokestatic Method(InputKt.MINUS:()LOp;)
-    0039 astore 8
-    0041 iconst_3
-    0042 istore 9
-    0044 iconst_2
-    0045 istore 10
-    0047 aload 8
-    0049 iload 9
-    0051 iload 10
-    0053 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
-    0056 istore 11
-    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0061 iload 11
-    0063 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0066 return
+  code        max_stack=3 max_locals=1
+    0000 invokestatic Method(InputKt.PLUS:()LOp;)
+    0003 iconst_3
+    0004 iconst_2
+    0005 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
+    0008 istore_0
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 iload_0
+    0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0016 invokestatic Method(InputKt.MINUS:()LOp;)
+    0019 iconst_3
+    0020 iconst_2
+    0021 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
+    0024 istore_0
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload_0
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

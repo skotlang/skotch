@@ -4,67 +4,72 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=15
-    0000 goto 3
-    0003 ldc "en"
-    0005 astore_1
-    0006 aload_0
-    0007 aload_1
-    0008 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0011 istore_2
-    0012 iload_2
-    0013 ifeq 25
-    0016 ldc "Hello"
-    0018 astore_3
-    0019 aload_3
-    0020 astore 4
-    0022 goto 120
-    0025 ldc "es"
-    0027 astore 5
-    0029 aload_0
-    0030 aload 5
-    0032 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0035 istore 6
-    0037 iload 6
-    0039 ifeq 53
-    0042 ldc "Hola"
-    0044 astore 7
-    0046 aload 7
-    0048 astore 4
-    0050 goto 120
-    0053 ldc "fr"
-    0055 astore 8
-    0057 aload_0
-    0058 aload 8
-    0060 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0063 istore 9
-    0065 iload 9
-    0067 ifeq 81
-    0070 ldc "Bonjour"
-    0072 astore 10
-    0074 aload 10
-    0076 astore 4
-    0078 goto 120
-    0081 ldc "de"
-    0083 astore 11
-    0085 aload_0
-    0086 aload 11
-    0088 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0091 istore 12
-    0093 iload 12
-    0095 ifeq 109
-    0098 ldc "Hallo"
-    0100 astore 13
-    0102 aload 13
-    0104 astore 4
-    0106 goto 120
-    0109 ldc "Hi"
-    0111 astore 14
-    0113 aload 14
-    0115 astore 4
-    0117 goto 120
-    0120 aload 4
-    0122 areturn
+    0000 aload_0
+    0001 ldc "lang"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 ldc "en"
+    0011 astore_1
+    0012 aload_0
+    0013 aload_1
+    0014 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0017 istore_2
+    0018 iload_2
+    0019 ifeq 31
+    0022 ldc "Hello"
+    0024 astore_3
+    0025 aload_3
+    0026 astore 4
+    0028 goto 126
+    0031 ldc "es"
+    0033 astore 5
+    0035 aload_0
+    0036 aload 5
+    0038 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0041 istore 6
+    0043 iload 6
+    0045 ifeq 59
+    0048 ldc "Hola"
+    0050 astore 7
+    0052 aload 7
+    0054 astore 4
+    0056 goto 126
+    0059 ldc "fr"
+    0061 astore 8
+    0063 aload_0
+    0064 aload 8
+    0066 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0069 istore 9
+    0071 iload 9
+    0073 ifeq 87
+    0076 ldc "Bonjour"
+    0078 astore 10
+    0080 aload 10
+    0082 astore 4
+    0084 goto 126
+    0087 ldc "de"
+    0089 astore 11
+    0091 aload_0
+    0092 aload 11
+    0094 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0097 istore 12
+    0099 iload 12
+    0101 ifeq 115
+    0104 ldc "Hallo"
+    0106 astore 13
+    0108 aload 13
+    0110 astore 4
+    0112 goto 126
+    0115 ldc "Hi"
+    0117 astore 14
+    0119 aload 14
+    0121 astore 4
+    0123 goto 126
+    0126 aload 4
+    0128 areturn
     sub_attr  StackMapTable (64 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "en"

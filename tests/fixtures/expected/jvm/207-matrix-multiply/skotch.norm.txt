@@ -35,37 +35,37 @@ method        main ()V 0x0019
     0042 iload_0
     0043 iload 5
     0045 imul
-    0046 istore 11
+    0046 istore 8
     0048 iload_1
     0049 iload 7
     0051 imul
-    0052 istore 12
-    0054 iload 11
-    0056 iload 12
+    0052 istore 9
+    0054 iload 8
+    0056 iload 9
     0058 iadd
     0059 istore 13
     0061 iload_2
     0062 iload 4
     0064 imul
-    0065 istore 14
+    0065 istore 8
     0067 iload_3
     0068 iload 6
     0070 imul
-    0071 istore 15
-    0073 iload 14
-    0075 iload 15
+    0071 istore 9
+    0073 iload 8
+    0075 iload 9
     0077 iadd
     0078 istore 16
     0080 iload_2
     0081 iload 5
     0083 imul
-    0084 istore 17
+    0084 istore 8
     0086 iload_3
     0087 iload 7
     0089 imul
-    0090 istore 18
-    0092 iload 17
-    0094 iload 18
+    0090 istore 9
+    0092 iload 8
+    0094 iload 9
     0096 iadd
     0097 istore 19
     0099 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)

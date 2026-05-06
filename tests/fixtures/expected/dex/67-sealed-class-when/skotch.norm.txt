@@ -1,13 +1,14 @@
 dex_version   035
-strings       22
+strings       23
 types         9
-methods       6
+methods       9
 classes       1
 
 --- strings ---
   "<init>"
   "I"
   "IL"
+  "L"
   "LInputKt;"
   "LNum;"
   "LSum;"
@@ -20,13 +21,13 @@ classes       1
   "VLL"
   "[Ljava/lang/String;"
   "eval"
+  "getLeft"
+  "getRight"
+  "getValue"
   "input.kt"
-  "left"
   "main"
   "out"
   "println"
-  "right"
-  "value"
 
 --- types ---
   I
@@ -44,13 +45,16 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LNum;.<init>(I)V
+  LNum;.getValue()I
   LSum;.<init>(Ljava/lang/Object;Ljava/lang/Object;)V
+  LSum;.getLeft()Ljava/lang/Object;
+  LSum;.getRight()Ljava/lang/Object;
   Ljava/io/PrintStream;.println(I)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       eval(Ljava/lang/Object;)I flags=0x0019 regs=12 ins=1 outs=1 insns=34
+  method       eval(Ljava/lang/Object;)I flags=0x0019 regs=12 ins=1 outs=1 insns=40
   method       main()V flags=0x0019 regs=10 ins=0 outs=3 insns=38
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

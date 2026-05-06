@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=1
     0000 sipush 5000
     0003 invokestatic Method(InputKt.tax:(I)I)
     0006 istore_0
@@ -12,145 +12,143 @@ method        main ()V 0x0019
     0011 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0014 sipush 25000
     0017 invokestatic Method(InputKt.tax:(I)I)
-    0020 istore_1
+    0020 istore_0
     0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload_1
+    0024 iload_0
     0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0028 ldc int(60000)
     0030 invokestatic Method(InputKt.tax:(I)I)
-    0033 istore 2
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 iload 2
-    0040 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0043 ldc int(100000)
-    0045 invokestatic Method(InputKt.tax:(I)I)
-    0048 istore 3
-    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0053 iload 3
-    0055 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0058 return
+    0033 istore_0
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 iload_0
+    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0041 ldc int(100000)
+    0043 invokestatic Method(InputKt.tax:(I)I)
+    0046 istore_0
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 iload_0
+    0051 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0054 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        tax (I)I 0x0019
-  code        max_stack=2 max_locals=32
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 sipush 10000
-    0008 istore_2
-    0009 iload_0
-    0010 iload_2
-    0011 if_icmpgt 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore_3
-    0020 iload_3
-    0021 ifeq 34
-    0024 iconst_0
+  code        max_stack=2 max_locals=31
+    0000 goto 3
+    0003 sipush 10000
+    0006 istore_1
+    0007 iload_0
+    0008 iload_1
+    0009 if_icmpgt 16
+    0012 iconst_1
+    0013 goto 17
+    0016 iconst_0
+    0017 istore_2
+    0018 iload_2
+    0019 ifeq 30
+    0022 iconst_0
+    0023 istore_3
+    0024 iload_3
     0025 istore 4
-    0027 iload 4
-    0029 istore 5
-    0031 goto 220
-    0034 ldc int(40000)
-    0036 istore 6
-    0038 iload_0
-    0039 iload 6
-    0041 if_icmpgt 48
-    0044 iconst_1
-    0045 goto 49
-    0048 iconst_0
-    0049 istore 7
-    0051 iload 7
-    0053 ifeq 96
-    0056 sipush 10000
-    0059 istore 8
-    0061 iload_0
-    0062 iload 8
-    0064 isub
+    0027 goto 216
+    0030 ldc int(40000)
+    0032 istore 5
+    0034 iload_0
+    0035 iload 5
+    0037 if_icmpgt 44
+    0040 iconst_1
+    0041 goto 45
+    0044 iconst_0
+    0045 istore 6
+    0047 iload 6
+    0049 ifeq 92
+    0052 sipush 10000
+    0055 istore 7
+    0057 iload_0
+    0058 iload 7
+    0060 isub
+    0061 istore 8
+    0063 bipush 10
     0065 istore 9
-    0067 bipush 10
-    0069 istore 10
-    0071 iload 9
-    0073 iload 10
-    0075 imul
+    0067 iload 8
+    0069 iload 9
+    0071 imul
+    0072 istore 10
+    0074 bipush 100
     0076 istore 11
-    0078 bipush 100
-    0080 istore 12
-    0082 iload 11
-    0084 iload 12
-    0086 idiv
-    0087 istore 13
-    0089 iload 13
-    0091 istore 5
-    0093 goto 220
-    0096 ldc int(80000)
-    0098 istore 14
-    0100 iload_0
-    0101 iload 14
-    0103 if_icmpgt 110
-    0106 iconst_1
-    0107 goto 111
-    0110 iconst_0
-    0111 istore 15
-    0113 iload 15
-    0115 ifeq 169
-    0118 sipush 3000
+    0078 iload 10
+    0080 iload 11
+    0082 idiv
+    0083 istore 12
+    0085 iload 12
+    0087 istore 4
+    0089 goto 216
+    0092 ldc int(80000)
+    0094 istore 13
+    0096 iload_0
+    0097 iload 13
+    0099 if_icmpgt 106
+    0102 iconst_1
+    0103 goto 107
+    0106 iconst_0
+    0107 istore 14
+    0109 iload 14
+    0111 ifeq 165
+    0114 sipush 3000
+    0117 istore 15
+    0119 ldc int(40000)
     0121 istore 16
-    0123 ldc int(40000)
-    0125 istore 17
-    0127 iload_0
-    0128 iload 17
-    0130 isub
+    0123 iload_0
+    0124 iload 16
+    0126 isub
+    0127 istore 17
+    0129 bipush 20
     0131 istore 18
-    0133 bipush 20
-    0135 istore 19
-    0137 iload 18
-    0139 iload 19
-    0141 imul
+    0133 iload 17
+    0135 iload 18
+    0137 imul
+    0138 istore 19
+    0140 bipush 100
     0142 istore 20
-    0144 bipush 100
-    0146 istore 21
-    0148 iload 20
-    0150 iload 21
-    0152 idiv
-    0153 istore 22
-    0155 iload 16
-    0157 iload 22
-    0159 iadd
-    0160 istore 23
-    0162 iload 23
-    0164 istore 5
-    0166 goto 220
-    0169 sipush 11000
+    0144 iload 19
+    0146 iload 20
+    0148 idiv
+    0149 istore 21
+    0151 iload 15
+    0153 iload 21
+    0155 iadd
+    0156 istore 22
+    0158 iload 22
+    0160 istore 4
+    0162 goto 216
+    0165 sipush 11000
+    0168 istore 23
+    0170 ldc int(80000)
     0172 istore 24
-    0174 ldc int(80000)
-    0176 istore 25
-    0178 iload_0
-    0179 iload 25
-    0181 isub
+    0174 iload_0
+    0175 iload 24
+    0177 isub
+    0178 istore 25
+    0180 bipush 30
     0182 istore 26
-    0184 bipush 30
-    0186 istore 27
-    0188 iload 26
-    0190 iload 27
-    0192 imul
+    0184 iload 25
+    0186 iload 26
+    0188 imul
+    0189 istore 27
+    0191 bipush 100
     0193 istore 28
-    0195 bipush 100
-    0197 istore 29
-    0199 iload 28
-    0201 iload 29
-    0203 idiv
-    0204 istore 30
-    0206 iload 24
-    0208 iload 30
-    0210 iadd
-    0211 istore 31
-    0213 iload 31
-    0215 istore 5
-    0217 goto 220
-    0220 iload 5
-    0222 ireturn
-    sub_attr  StackMapTable (69 bytes)
+    0195 iload 27
+    0197 iload 28
+    0199 idiv
+    0200 istore 29
+    0202 iload 23
+    0204 iload 29
+    0206 iadd
+    0207 istore 30
+    0209 iload 30
+    0211 istore 4
+    0213 goto 216
+    0216 iload 4
+    0218 ireturn
+    sub_attr  StackMapTable (64 bytes)

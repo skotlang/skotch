@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=17
+  code        max_stack=3 max_locals=16
     0000 iconst_1
     0001 istore_0
     0002 iconst_2
@@ -50,30 +50,30 @@ method        main ()V 0x0019
     0069 new Class(InputKt$Lambda$0)
     0072 dup
     0073 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0076 astore 12
-    0078 new Class(InputKt$Lambda$1)
-    0081 dup
-    0082 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0085 astore 13
-    0087 aload 11
-    0089 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0094 astore 14
-    0096 goto 99
-    0099 aload 14
-    0101 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0106 istore 15
-    0108 iload 15
-    0110 ifeq 133
-    0113 aload 14
-    0115 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0120 astore 16
-    0122 aload 13
-    0124 aload 16
-    0126 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0129 pop
-    0130 goto 99
-    0133 return
-    sub_attr  StackMapTable (44 bytes)
+    0076 pop
+    0077 new Class(InputKt$Lambda$1)
+    0080 dup
+    0081 invokespecial Method(InputKt$Lambda$1.<init>:()V)
+    0084 astore 12
+    0086 aload 11
+    0088 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0093 astore 13
+    0095 goto 98
+    0098 aload 13
+    0100 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0105 istore 14
+    0107 iload 14
+    0109 ifeq 132
+    0112 aload 13
+    0114 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0119 astore 15
+    0121 aload 12
+    0123 aload 15
+    0125 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0128 pop
+    0129 goto 98
+    0132 return
+    sub_attr  StackMapTable (41 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

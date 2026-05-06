@@ -4,24 +4,24 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
-    0000 ldc "hello"
-    0002 astore_0
-    0003 new Class(Producer)
-    0006 dup
-    0007 aload_0
-    0008 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
-    0011 getfield Field(Producer.value:Ljava/lang/Object;)
+    0000 new Class(Producer)
+    0003 dup
+    0004 ldc "hello"
+    0006 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
+    0009 astore_0
+    0010 aload_0
+    0011 invokevirtual Method(Producer.getValue:()Ljava/lang/Object;)
     0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0017 swap
     0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0021 bipush 42
-    0023 istore_1
-    0024 new Class(Producer)
-    0027 dup
-    0028 iload_1
-    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0032 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
-    0035 getfield Field(Producer.value:Ljava/lang/Object;)
+    0021 new Class(Producer)
+    0024 dup
+    0025 bipush 42
+    0027 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0030 invokespecial Method(Producer.<init>:(Ljava/lang/Object;)V)
+    0033 astore_1
+    0034 aload_1
+    0035 invokevirtual Method(Producer.getValue:()Ljava/lang/Object;)
     0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0041 swap
     0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

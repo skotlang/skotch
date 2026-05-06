@@ -3,85 +3,84 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fizzbuzz (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=19
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 bipush 15
-    0007 istore_2
-    0008 iload_0
-    0009 iload_2
-    0010 irem
+  code        max_stack=2 max_locals=18
+    0000 goto 3
+    0003 bipush 15
+    0005 istore_1
+    0006 iload_0
+    0007 iload_1
+    0008 irem
+    0009 istore_2
+    0010 iconst_0
     0011 istore_3
-    0012 iconst_0
-    0013 istore 4
-    0015 iload_3
-    0016 iload 4
-    0018 if_icmpne 25
-    0021 iconst_1
-    0022 goto 26
-    0025 iconst_0
-    0026 istore 5
-    0028 iload 5
-    0030 ifeq 44
-    0033 ldc "FizzBuzz"
+    0012 iload_2
+    0013 iload_3
+    0014 if_icmpne 21
+    0017 iconst_1
+    0018 goto 22
+    0021 iconst_0
+    0022 istore 4
+    0024 iload 4
+    0026 ifeq 40
+    0029 ldc "FizzBuzz"
+    0031 astore 5
+    0033 aload 5
     0035 astore 6
-    0037 aload 6
-    0039 astore 7
-    0041 goto 141
-    0044 iconst_3
-    0045 istore 8
-    0047 iload_0
-    0048 iload 8
-    0050 irem
-    0051 istore 9
-    0053 iconst_0
-    0054 istore 10
-    0056 iload 9
-    0058 iload 10
-    0060 if_icmpne 67
-    0063 iconst_1
-    0064 goto 68
-    0067 iconst_0
-    0068 istore 11
-    0070 iload 11
-    0072 ifeq 86
-    0075 ldc "Fizz"
-    0077 astore 12
-    0079 aload 12
-    0081 astore 7
-    0083 goto 141
-    0086 iconst_5
-    0087 istore 13
-    0089 iload_0
-    0090 iload 13
-    0092 irem
-    0093 istore 14
-    0095 iconst_0
-    0096 istore 15
-    0098 iload 14
-    0100 iload 15
-    0102 if_icmpne 109
-    0105 iconst_1
-    0106 goto 110
-    0109 iconst_0
-    0110 istore 16
-    0112 iload 16
-    0114 ifeq 128
-    0117 ldc "Buzz"
-    0119 astore 17
-    0121 aload 17
-    0123 astore 7
-    0125 goto 141
-    0128 iload_0
-    0129 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
-    0132 astore 18
-    0134 aload 18
-    0136 astore 7
-    0138 goto 141
-    0141 aload 7
-    0143 areturn
-    sub_attr  StackMapTable (88 bytes)
+    0037 goto 137
+    0040 iconst_3
+    0041 istore 7
+    0043 iload_0
+    0044 iload 7
+    0046 irem
+    0047 istore 8
+    0049 iconst_0
+    0050 istore 9
+    0052 iload 8
+    0054 iload 9
+    0056 if_icmpne 63
+    0059 iconst_1
+    0060 goto 64
+    0063 iconst_0
+    0064 istore 10
+    0066 iload 10
+    0068 ifeq 82
+    0071 ldc "Fizz"
+    0073 astore 11
+    0075 aload 11
+    0077 astore 6
+    0079 goto 137
+    0082 iconst_5
+    0083 istore 12
+    0085 iload_0
+    0086 iload 12
+    0088 irem
+    0089 istore 13
+    0091 iconst_0
+    0092 istore 14
+    0094 iload 13
+    0096 iload 14
+    0098 if_icmpne 105
+    0101 iconst_1
+    0102 goto 106
+    0105 iconst_0
+    0106 istore 15
+    0108 iload 15
+    0110 ifeq 124
+    0113 ldc "Buzz"
+    0115 astore 16
+    0117 aload 16
+    0119 astore 6
+    0121 goto 137
+    0124 iload_0
+    0125 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0128 astore 17
+    0130 aload 17
+    0132 astore 6
+    0134 goto 137
+    0137 aload 6
+    0139 areturn
+    sub_attr  StackMapTable (82 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=7
     0000 iconst_1

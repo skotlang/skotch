@@ -5,38 +5,44 @@ access_flags  0x0031
 method        doubleBox (LBox;)I 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
-    0001 getfield Field(Box.value:I)
-    0004 iconst_2
-    0005 imul
-    0006 ireturn
+    0001 ldc "b"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(Box.getValue:()I)
+    0010 iconst_2
+    0011 imul
+    0012 ireturn
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=4
-    0000 bipush 21
-    0002 istore_0
-    0003 new Class(Box)
-    0006 dup
-    0007 iload_0
-    0008 invokespecial Method(Box.<init>:(I)V)
-    0011 astore_1
-    0012 aload_1
-    0013 invokestatic Method(InputKt.unbox:(LBox;)I)
-    0016 istore_2
-    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 iload_2
-    0021 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0024 aload_1
-    0025 invokestatic Method(InputKt.doubleBox:(LBox;)I)
-    0028 istore_3
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 iload_3
-    0033 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0036 return
+  code        max_stack=3 max_locals=2
+    0000 new Class(Box)
+    0003 dup
+    0004 bipush 21
+    0006 invokespecial Method(Box.<init>:(I)V)
+    0009 astore_0
+    0010 aload_0
+    0011 invokestatic Method(InputKt.unbox:(LBox;)I)
+    0014 istore_1
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 iload_1
+    0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0022 aload_0
+    0023 invokestatic Method(InputKt.doubleBox:(LBox;)I)
+    0026 istore_1
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_1
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        unbox (LBox;)I 0x0019
-  code        max_stack=1 max_locals=1
+  code        max_stack=2 max_locals=1
     0000 aload_0
-    0001 getfield Field(Box.value:I)
-    0004 ireturn
+    0001 ldc "b"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(Box.getValue:()I)
+    0010 ireturn
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

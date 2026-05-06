@@ -3,52 +3,40 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=11
-    0000 iconst_1
-    0001 istore_0
-    0002 bipush 10
-    0004 istore_1
-    0005 new Class(kotlin/ranges/IntRange)
-    0008 dup
-    0009 iload_0
-    0010 iload_1
-    0011 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
-    0014 astore_2
-    0015 iconst_5
-    0016 istore_3
-    0017 iconst_5
-    0018 istore 4
-    0020 aload_2
-    0021 iload 4
-    0023 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
-    0026 istore 5
-    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0031 iload 5
-    0033 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0036 bipush 11
-    0038 istore 6
-    0040 bipush 11
-    0042 istore 7
-    0044 aload_2
-    0045 iload 7
-    0047 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
-    0050 istore 8
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 iload 8
-    0057 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0060 aload_2
-    0061 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
-    0064 istore 9
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 iload 9
-    0071 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0074 aload_2
-    0075 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
-    0078 istore 10
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 iload 10
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 return
+  code        max_stack=4 max_locals=2
+    0000 new Class(kotlin/ranges/IntRange)
+    0003 dup
+    0004 iconst_1
+    0005 bipush 10
+    0007 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
+    0010 astore_0
+    0011 aload_0
+    0012 iconst_5
+    0013 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0016 istore_1
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 iload_1
+    0021 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0024 aload_0
+    0025 bipush 11
+    0027 invokevirtual Method(kotlin/ranges/IntRange.contains:(I)Z)
+    0030 istore_1
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 iload_1
+    0035 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0038 aload_0
+    0039 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
+    0042 istore_1
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 iload_1
+    0047 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0050 aload_0
+    0051 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
+    0054 istore_1
+    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0058 iload_1
+    0059 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0062 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

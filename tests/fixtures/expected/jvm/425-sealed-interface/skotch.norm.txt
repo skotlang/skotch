@@ -3,67 +3,66 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LResult;)Ljava/lang/String; 0x0019
-  code        max_stack=1 max_locals=10
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 aload_0
-    0006 instanceof Class(Ok)
-    0009 istore_2
-    0010 iload_2
-    0011 ifeq 30
-    0014 aload_0
-    0015 checkcast Class(Ok)
-    0018 astore_3
-    0019 ldc "ok"
-    0021 astore 4
-    0023 aload 4
-    0025 astore 5
-    0027 goto 69
-    0030 aload_0
-    0031 instanceof Class(Err)
-    0034 istore 6
-    0036 iload 6
-    0038 ifeq 58
-    0041 aload_0
-    0042 checkcast Class(Err)
-    0045 astore 7
-    0047 ldc "err"
-    0049 astore 8
-    0051 aload 8
-    0053 astore 5
-    0055 goto 69
-    0058 ldc "unknown"
-    0060 astore 9
-    0062 aload 9
-    0064 astore 5
-    0066 goto 69
-    0069 aload 5
-    0071 areturn
-    sub_attr  StackMapTable (43 bytes)
+  code        max_stack=2 max_locals=9
+    0000 aload_0
+    0001 ldc "r"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(Ok)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 32
+    0018 aload_0
+    0019 checkcast Class(Ok)
+    0022 astore_2
+    0023 ldc "ok"
+    0025 astore_3
+    0026 aload_3
+    0027 astore 4
+    0029 goto 71
+    0032 aload_0
+    0033 instanceof Class(Err)
+    0036 istore 5
+    0038 iload 5
+    0040 ifeq 60
+    0043 aload_0
+    0044 checkcast Class(Err)
+    0047 astore 6
+    0049 ldc "err"
+    0051 astore 7
+    0053 aload 7
+    0055 astore 4
+    0057 goto 71
+    0060 ldc "unknown"
+    0062 astore 8
+    0064 aload 8
+    0066 astore 4
+    0068 goto 71
+    0071 aload 4
+    0073 areturn
+    sub_attr  StackMapTable (21 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=2
-    0000 bipush 42
-    0002 istore_0
-    0003 new Class(Ok)
-    0006 dup
-    0007 iload_0
-    0008 invokespecial Method(Ok.<init>:(I)V)
-    0011 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 swap
-    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0021 ldc "fail"
-    0023 astore_1
-    0024 new Class(Err)
-    0027 dup
-    0028 aload_1
-    0029 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
-    0032 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 swap
-    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0042 return
+  code        max_stack=3 max_locals=0
+    0000 new Class(Ok)
+    0003 dup
+    0004 bipush 42
+    0006 invokespecial Method(Ok.<init>:(I)V)
+    0009 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 new Class(Err)
+    0022 dup
+    0023 ldc "fail"
+    0025 invokespecial Method(Err.<init>:(Ljava/lang/String;)V)
+    0028 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 swap
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0038 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

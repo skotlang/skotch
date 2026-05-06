@@ -305,8 +305,8 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "toString",
+                        "class_name": "java/lang/String",
+                        "method_name": "valueOf",
                         "descriptor": "(I)Ljava/lang/String;"
                       }
                     },

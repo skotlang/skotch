@@ -57,8 +57,8 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "StaticJava": {
-                        "class_name": "java/lang/Long",
-                        "method_name": "toString",
+                        "class_name": "java/lang/String",
+                        "method_name": "valueOf",
                         "descriptor": "(J)Ljava/lang/String;"
                       }
                     },
@@ -121,8 +121,8 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "StaticJava": {
-                        "class_name": "java/lang/Long",
-                        "method_name": "toString",
+                        "class_name": "java/lang/String",
+                        "method_name": "valueOf",
                         "descriptor": "(J)Ljava/lang/String;"
                       }
                     },

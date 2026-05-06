@@ -433,6 +433,7 @@ impl<'a> Parser<'a> {
             let mut is_inline = false;
             let mut is_annotation_class = false;
             let mut is_value_class = false;
+            let mut is_const = false;
             let mut visibility = Visibility::Public;
             // Check for `annotation class` and `value class` soft keywords.
             if self.peek_kind() == TokenKind::Ident {
@@ -473,6 +474,7 @@ impl<'a> Parser<'a> {
                     TokenKind::KwSealed => is_sealed = true,
                     TokenKind::KwSuspend => is_suspend = true,
                     TokenKind::KwInline => is_inline = true,
+                    TokenKind::KwConst => is_const = true,
                     TokenKind::KwPrivate => visibility = Visibility::Private,
                     TokenKind::KwProtected => visibility = Visibility::Protected,
                     TokenKind::KwInternal => visibility = Visibility::Internal,
@@ -501,6 +503,7 @@ impl<'a> Parser<'a> {
                     } else {
                         let mut v = self.parse_val_decl();
                         v.visibility = visibility;
+                        v.is_const = is_const;
                         v.annotations = annotations.clone();
                         decls.push(Decl::Val(v));
                     }
@@ -2220,6 +2223,7 @@ impl<'a> Parser<'a> {
             };
             return ValDecl {
                 is_var,
+                is_const: false,
                 name,
                 name_span,
                 ty,
@@ -2233,6 +2237,7 @@ impl<'a> Parser<'a> {
         let init = self.parse_expr();
         ValDecl {
             is_var,
+            is_const: false,
             name,
             name_span,
             ty,

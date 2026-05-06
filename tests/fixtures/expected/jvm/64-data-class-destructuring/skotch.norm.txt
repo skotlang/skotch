@@ -3,42 +3,34 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=7
-    0000 bipush 10
-    0002 istore_0
-    0003 bipush 20
-    0005 istore_1
-    0006 new Class(Point)
-    0009 dup
-    0010 iload_0
-    0011 iload_1
-    0012 invokespecial Method(Point.<init>:(II)V)
-    0015 astore_2
-    0016 aload_2
-    0017 invokevirtual Method(Point.component1:()I)
-    0020 istore_3
-    0021 aload_2
-    0022 invokevirtual Method(Point.component2:()I)
-    0025 istore 4
-    0027 ldc "x="
-    0029 astore 5
-    0031 ldc ", y="
-    0033 astore 6
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 new Class(java/lang/StringBuilder)
-    0041 dup
-    0042 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0045 aload 5
-    0047 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0050 iload_3
-    0051 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0054 aload 6
-    0056 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0059 iload 4
-    0061 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0064 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0070 return
+  code        max_stack=4 max_locals=2
+    0000 new Class(Point)
+    0003 dup
+    0004 bipush 10
+    0006 bipush 20
+    0008 invokespecial Method(Point.<init>:(II)V)
+    0011 astore_0
+    0012 aload_0
+    0013 invokevirtual Method(Point.component1:()I)
+    0016 istore_1
+    0017 aload_0
+    0018 invokevirtual Method(Point.component2:()I)
+    0021 istore_0
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 new Class(java/lang/StringBuilder)
+    0028 dup
+    0029 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0032 ldc "x="
+    0034 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0037 iload_1
+    0038 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0041 ldc ", y="
+    0043 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0046 iload_0
+    0047 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0050 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0056 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

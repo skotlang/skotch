@@ -964,7 +964,16 @@ pub fn lower_file(
     for decl in &file.decls {
         if let Decl::Val(v) = decl {
             if let Some(c) = lower_const_init(&v.init, &mut module) {
-                name_to_global.insert(v.name, c);
+                name_to_global.insert(v.name, c.clone());
+                // Track for emission as a static field in the wrapper
+                // class. kotlinc emits all top-level vals (including
+                // non-`const`) as static fields with getter methods,
+                // but we only handle `const val` here for now.
+                if v.is_const {
+                    let ty = const_ty(&c);
+                    let name_str = interner.resolve(v.name).to_string();
+                    module.top_level_consts.push((name_str, ty, c));
+                }
             }
             // If we can't extract a constant, typeck already errored;
             // we just don't register the global, and any reference to
@@ -3994,8 +4003,11 @@ fn lower_stmt(
         Stmt::LocalFun(f) => {
             // Lower local function as a synthetic top-level function.
             // Captured outer variables are passed as extra parameters.
+            // kotlinc names nested local functions as `outer$inner` and
+            // marks them private — match that here for parity.
             let fn_idx = module.functions.len();
-            let fn_name = interner.resolve(f.name).to_string();
+            let inner_simple = interner.resolve(f.name).to_string();
+            let fn_name = format!("{}${}", fb.mf.name, inner_simple);
             let return_ty = f
                 .return_ty
                 .as_ref()
@@ -4033,12 +4045,13 @@ fn lower_stmt(
                 suspend_state_machine: None,
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
-                is_private: false,
+                is_private: true,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
             // Build the function with captures as extra leading params.
             let mut inner_fb = FnBuilder::new(fn_idx, fn_name.clone(), return_ty.clone());
+            inner_fb.mf.is_private = true;
 
             // Add capture params first.
             let mut inner_scope: Vec<(Symbol, LocalId)> = Vec::new();
@@ -4436,15 +4449,43 @@ fn lower_val_stmt(
         } else {
             // Narrow integer/float literals to the annotated type.
             // e.g. `val b: Byte = 42` → Ty::Byte, `val s: Short = 1000` → Ty::Short
+            // Reference widening: prefer the annotated class type when
+            // it differs from the RHS class, so dispatch goes through
+            // the declared interface/superclass (kotlinc behaviour).
             let annotated = resolve_type(interner.resolve(tr.name), module);
             match (&annotated, &rhs_ty) {
                 (Ty::Byte | Ty::Short, Ty::Int) | (Ty::Float, Ty::Double) => annotated,
+                (Ty::Class(target), Ty::Class(actual)) if target != actual => annotated,
                 _ => rhs_ty,
             }
         }
     } else {
         rhs_ty
     };
+    // Reference widening: if the annotated type is a different class
+    // from the RHS class, emit a CheckCast and use the casted local.
+    // kotlinc emits `checkcast Greeter` for `val g: Greeter =
+    // FormalGreeter()` so subsequent virtual dispatch goes through the
+    // interface.
+    let actual_rhs_ty = fb.mf.locals[rhs.0 as usize].clone();
+    let rhs = if let (Ty::Class(target), Ty::Class(actual)) = (&ty, &actual_rhs_ty) {
+        if target != actual {
+            let cast = fb.new_local(Ty::Class(target.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: cast,
+                value: Rvalue::CheckCast {
+                    obj: rhs,
+                    target_class: target.clone(),
+                },
+            });
+            cast
+        } else {
+            rhs
+        }
+    } else {
+        rhs
+    };
+
     // When narrowing from Int→Byte/Short or Double→Float, patch the
     // RHS local's type in-place so backends emit the right opcodes
     // for load/store. This is safe because the RHS local is a
@@ -7105,6 +7146,12 @@ fn lower_expr(
                     ("toInt", Some("java/lang/String")) => "parseInt__on__java/lang/Integer",
                     ("toDouble", Some("java/lang/String")) => "parseDouble__on__java/lang/Double",
                     ("toLong", Some("java/lang/String")) => "parseLong__on__java/lang/Long",
+                    // Kotlin compiles `<primitive>.toString()` to
+                    // `String.valueOf(<primitive>)` for parity with Java.
+                    ("toString", Some("java/lang/Integer")) => "valueOf__on__java/lang/String",
+                    ("toString", Some("java/lang/Long")) => "valueOf__on__java/lang/String",
+                    ("toString", Some("java/lang/Double")) => "valueOf__on__java/lang/String",
+                    ("toString", Some("java/lang/Boolean")) => "valueOf__on__java/lang/String",
                     _ => method_name_str.as_str(),
                 };
 
@@ -7170,9 +7217,21 @@ fn lower_expr(
                     // For instance methods on reference types, try instance lookup first.
                     if !is_primitive_ty && !is_cross_class {
                         let instance_arg_count = args.len(); // don't count receiver
-                                                             // Try the JVM-renamed name first.
+                                                             // Build typed arg list (excluding the receiver) to pick the
+                                                             // best overload. all_args = [receiver, ...args] so we skip 1.
+                        let arg_tys: Vec<Ty> = all_args
+                            .iter()
+                            .skip(1)
+                            .map(|a| fb.mf.locals[a.0 as usize].clone())
+                            .collect();
+                        // Try the JVM-renamed name first.
                         if let Some((found_class, found_method, descriptor, ret_ty)) =
-                            lookup_java_instance(jvm_class, effective_method, instance_arg_count)
+                            lookup_java_instance_with_types(
+                                jvm_class,
+                                effective_method,
+                                instance_arg_count,
+                                &arg_tys,
+                            )
                         {
                             let dest = fb.new_local(ret_ty);
                             fb.push_stmt(MStmt::Assign {
@@ -7216,8 +7275,21 @@ fn lower_expr(
 
                     // For static methods (primitive types, cross-class redirections).
                     let static_arg_count = args.len() + 1; // count receiver as arg
+                                                           // Build typed arg list (receiver + args) for overload picking.
+                    let mut static_arg_types: Vec<Ty> = Vec::with_capacity(static_arg_count);
+                    static_arg_types.push(recv_ty.clone());
+                    for arg_local in &all_args {
+                        static_arg_types.push(fb.mf.locals[arg_local.0 as usize].clone());
+                    }
+                    // We pushed receiver twice (it's already in all_args at idx 0).
+                    static_arg_types.remove(0);
                     if let Some((found_class, found_method, descriptor, ret_ty)) =
-                        lookup_java_static(jvm_class, effective_method, static_arg_count)
+                        lookup_java_static_typed(
+                            jvm_class,
+                            effective_method,
+                            static_arg_count,
+                            &static_arg_types,
+                        )
                     {
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
@@ -7905,13 +7977,22 @@ fn lower_expr(
                         )?;
                         arg_locals.push(id);
                     }
-                    // Look up the actual constructor descriptor from the classpath
-                    // to get correct parameter types.
-                    let ctor_desc = skotch_classinfo::lookup_method_descriptor(
-                        &jvm_class,
-                        "<init>",
-                        arg_locals.len(),
-                    );
+                    // Look up the actual constructor descriptor from the
+                    // classpath. Use the typed lookup so overload resolution
+                    // matches arg types — e.g. `File("/tmp")` picks the
+                    // (String) constructor over the (URI) constructor.
+                    let arg_types: Vec<Ty> = arg_locals
+                        .iter()
+                        .map(|l| fb.mf.locals[l.0 as usize].clone())
+                        .collect();
+                    let ctor_desc = lookup_constructor(&jvm_class, arg_locals.len(), &arg_types)
+                        .or_else(|| {
+                            skotch_classinfo::lookup_method_descriptor(
+                                &jvm_class,
+                                "<init>",
+                                arg_locals.len(),
+                            )
+                        });
                     let dest = fb.new_local(Ty::Class(jvm_class.clone()));
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -11683,7 +11764,7 @@ fn lower_expr(
                     // Walk the inheritance chain to find the declaring class.
                     let mut declaring_class = class_name.clone();
                     let mut field_ty = Ty::Any;
-                    let mut search = Some(class_name);
+                    let mut search = Some(class_name.clone());
                     while let Some(ref cname) = search {
                         if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
                             if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
@@ -11697,6 +11778,11 @@ fn lower_expr(
                         }
                     }
                     // Check if this is a computed property (getter method).
+                    // For inheritance, dispatch on the receiver's static type
+                    // (`class_name`) rather than the declaring class — kotlinc
+                    // emits `invokevirtual Child.getX()` even when `x` is
+                    // declared on `Base`. The JVM resolves the inherited
+                    // getter at runtime.
                     let getter_name =
                         format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
                     if let Some(cls) = module.classes.iter().find(|c| c.name == declaring_class) {
@@ -11707,7 +11793,7 @@ fn lower_expr(
                                 dest,
                                 value: Rvalue::Call {
                                     kind: CallKind::Virtual {
-                                        class_name: declaring_class.clone(),
+                                        class_name: class_name.clone(),
                                         method_name: getter_name,
                                     },
                                     args: vec![recv_local],
@@ -13720,15 +13806,6 @@ fn lower_template_part(
     }
 }
 
-/// Look up a Java static method by class name and method name.
-fn lookup_java_static(
-    class_name: &str,
-    method_name: &str,
-    arg_count: usize,
-) -> Option<(String, String, String, Ty)> {
-    lookup_java_static_typed(class_name, method_name, arg_count, &[])
-}
-
 fn lookup_java_static_typed(
     class_name: &str,
     method_name: &str,
@@ -13960,13 +14037,23 @@ fn pick_best_overload<'a>(
         // No type info — prefer the most general overload (all Object params).
         let best = candidates
             .iter()
-            .max_by_key(|m| generality_score(&m.descriptor));
+            .max_by_key(|m| (generality_score(&m.descriptor), -bridge_penalty(m)));
         return best.copied();
     }
     let best = candidates
         .iter()
-        .max_by_key(|m| overload_score(&m.descriptor, arg_types));
+        .max_by_key(|m| (overload_score(&m.descriptor, arg_types), -bridge_penalty(m)));
     best.copied()
+}
+
+/// Penalize synthetic bridge methods so that the covariant override is
+/// picked first. JVM's `ACC_BRIDGE` is 0x0040.
+fn bridge_penalty(m: &skotch_classinfo::MethodInfo) -> i32 {
+    if m.access_flags & 0x0040 != 0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// Score how well a descriptor matches the given argument types.
@@ -15472,6 +15559,95 @@ fn lower_class(
             }
         }
         mir_methods.push(finished);
+    }
+
+    // Synthesize default getters/setters for fields without explicit
+    // accessors. kotlinc emits `getX()` for every public property
+    // (val/var) and `setX(T)` for every mutable one — external code
+    // reads/writes through these accessors.
+    {
+        // Identify which props are `var` (mutable) vs explicit getter/setter.
+        let prop_meta: FxHashMap<String, (bool, bool, bool)> = c
+            .properties
+            .iter()
+            .map(|p| {
+                let name = interner.resolve(p.name).to_string();
+                (name, (p.is_var, p.getter.is_some(), p.setter.is_some()))
+            })
+            .collect();
+        let ctor_var: FxHashMap<String, bool> = c
+            .constructor_params
+            .iter()
+            .filter(|p| p.is_val || p.is_var)
+            .map(|p| (interner.resolve(p.name).to_string(), p.is_var))
+            .collect();
+        let mut user_method_names: rustc_hash::FxHashSet<String> = c
+            .methods
+            .iter()
+            .map(|m| interner.resolve(m.name).to_string())
+            .collect();
+        // Include any synthetic methods already generated upstream (e.g.
+        // `by lazy` delegate getters) so we don't duplicate them.
+        for m in &mir_methods {
+            user_method_names.insert(m.name.clone());
+        }
+
+        for field in &fields {
+            let getter_name = format!("get{}{}", &field.name[..1].to_uppercase(), &field.name[1..]);
+            let setter_name = format!("set{}{}", &field.name[..1].to_uppercase(), &field.name[1..]);
+            let (is_var, has_explicit_getter, has_explicit_setter) =
+                if let Some(&meta) = prop_meta.get(&field.name) {
+                    meta
+                } else if let Some(&v) = ctor_var.get(&field.name) {
+                    (v, false, false)
+                } else {
+                    // Synthetic field (capture, delegate, $initialized) —
+                    // skip accessor synthesis.
+                    continue;
+                };
+
+            // Synthesize getX() unless the user wrote one OR a method
+            // with that name already exists.
+            if !has_explicit_getter && !user_method_names.contains(&getter_name) {
+                let fn_idx = module.functions.len() + mir_methods.len();
+                let mut fb = FnBuilder::new(fn_idx, getter_name, field.ty.clone());
+                let this_local = fb.new_local(Ty::Class(class_name.clone()));
+                fb.mf.params.push(this_local);
+                let load_local = fb.new_local(field.ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: load_local,
+                    value: Rvalue::GetField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                    },
+                });
+                fb.set_terminator(Terminator::ReturnValue(load_local));
+                mir_methods.push(fb.finish());
+            }
+
+            // Synthesize setX(value) for mutable properties.
+            if is_var && !has_explicit_setter && !user_method_names.contains(&setter_name) {
+                let fn_idx = module.functions.len() + mir_methods.len();
+                let mut fb = FnBuilder::new(fn_idx, setter_name, Ty::Unit);
+                let this_local = fb.new_local(Ty::Class(class_name.clone()));
+                fb.mf.params.push(this_local);
+                let value_local = fb.new_local(field.ty.clone());
+                fb.mf.params.push(value_local);
+                let unit_dest = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: unit_dest,
+                    value: Rvalue::PutField {
+                        receiver: this_local,
+                        class_name: class_name.clone(),
+                        field_name: field.name.clone(),
+                        value: value_local,
+                    },
+                });
+                fb.set_terminator(Terminator::Return);
+                mir_methods.push(fb.finish());
+            }
+        }
     }
 
     // Lower property getters as synthetic methods.

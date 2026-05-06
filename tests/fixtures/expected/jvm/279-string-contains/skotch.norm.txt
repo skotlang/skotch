@@ -3,50 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=2
     0000 ldc "Hello, World!"
     0002 astore_0
-    0003 ldc "World"
-    0005 astore_1
-    0006 ldc "World"
-    0008 aload_0
-    0009 swap
-    0010 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
-    0013 istore_2
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 iload_2
-    0018 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0021 ldc "Kotlin"
-    0023 astore 3
-    0025 ldc "Kotlin"
-    0027 aload_0
-    0028 swap
-    0029 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
-    0032 istore 4
-    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 iload 4
-    0039 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0042 ldc "Hello"
-    0044 astore 5
-    0046 ldc "Hello"
-    0048 aload_0
-    0049 swap
-    0050 invokevirtual Method(java/lang/String.startsWith:(Ljava/lang/String;)Z)
-    0053 istore 6
-    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0058 iload 6
-    0060 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0063 ldc "!"
-    0065 astore 7
-    0067 ldc "!"
-    0069 aload_0
-    0070 swap
-    0071 invokevirtual Method(java/lang/String.endsWith:(Ljava/lang/String;)Z)
-    0074 istore 8
-    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0079 iload 8
-    0081 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0084 return
+    0003 aload_0
+    0004 ldc "World"
+    0006 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
+    0009 istore_1
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 iload_1
+    0014 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0017 aload_0
+    0018 ldc "Kotlin"
+    0020 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
+    0023 istore_1
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 iload_1
+    0028 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0031 aload_0
+    0032 ldc "Hello"
+    0034 invokevirtual Method(java/lang/String.startsWith:(Ljava/lang/String;)Z)
+    0037 istore_1
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 iload_1
+    0042 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0045 aload_0
+    0046 ldc "!"
+    0048 invokevirtual Method(java/lang/String.endsWith:(Ljava/lang/String;)Z)
+    0051 istore_1
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 iload_1
+    0056 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0059 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

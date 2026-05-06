@@ -3,68 +3,67 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=13
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 bipush 90
-    0007 istore_2
-    0008 iload_0
-    0009 iload_2
-    0010 if_icmplt 17
-    0013 iconst_1
-    0014 goto 18
-    0017 iconst_0
-    0018 istore_3
-    0019 iload_3
-    0020 ifeq 34
-    0023 ldc "A"
+  code        max_stack=2 max_locals=12
+    0000 goto 3
+    0003 bipush 90
+    0005 istore_1
+    0006 iload_0
+    0007 iload_1
+    0008 if_icmplt 15
+    0011 iconst_1
+    0012 goto 16
+    0015 iconst_0
+    0016 istore_2
+    0017 iload_2
+    0018 ifeq 30
+    0021 ldc "A"
+    0023 astore_3
+    0024 aload_3
     0025 astore 4
-    0027 aload 4
-    0029 astore 5
-    0031 goto 111
-    0034 bipush 80
-    0036 istore 6
-    0038 iload_0
-    0039 iload 6
-    0041 if_icmplt 48
-    0044 iconst_1
-    0045 goto 49
-    0048 iconst_0
-    0049 istore 7
-    0051 iload 7
-    0053 ifeq 67
-    0056 ldc "B"
-    0058 astore 8
-    0060 aload 8
-    0062 astore 5
-    0064 goto 111
-    0067 bipush 70
-    0069 istore 9
-    0071 iload_0
-    0072 iload 9
-    0074 if_icmplt 81
-    0077 iconst_1
-    0078 goto 82
-    0081 iconst_0
-    0082 istore 10
-    0084 iload 10
-    0086 ifeq 100
-    0089 ldc "C"
-    0091 astore 11
-    0093 aload 11
-    0095 astore 5
-    0097 goto 111
-    0100 ldc "F"
-    0102 astore 12
-    0104 aload 12
-    0106 astore 5
-    0108 goto 111
-    0111 aload 5
-    0113 areturn
-    sub_attr  StackMapTable (54 bytes)
+    0027 goto 107
+    0030 bipush 80
+    0032 istore 5
+    0034 iload_0
+    0035 iload 5
+    0037 if_icmplt 44
+    0040 iconst_1
+    0041 goto 45
+    0044 iconst_0
+    0045 istore 6
+    0047 iload 6
+    0049 ifeq 63
+    0052 ldc "B"
+    0054 astore 7
+    0056 aload 7
+    0058 astore 4
+    0060 goto 107
+    0063 bipush 70
+    0065 istore 8
+    0067 iload_0
+    0068 iload 8
+    0070 if_icmplt 77
+    0073 iconst_1
+    0074 goto 78
+    0077 iconst_0
+    0078 istore 9
+    0080 iload 9
+    0082 ifeq 96
+    0085 ldc "C"
+    0087 astore 10
+    0089 aload 10
+    0091 astore 4
+    0093 goto 107
+    0096 ldc "F"
+    0098 astore 11
+    0100 aload 11
+    0102 astore 4
+    0104 goto 107
+    0107 aload 4
+    0109 areturn
+    sub_attr  StackMapTable (50 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=18
+  code        max_stack=4 max_locals=17
     0000 ldc "Alice"
     0002 astore_0
     0003 bipush 95
@@ -131,12 +130,12 @@ method        main ()V 0x0019
     0116 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0121 istore 16
     0123 iload 16
-    0125 ifeq 140
+    0125 ifeq 139
     0128 aload 15
     0130 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0135 astore 17
-    0137 goto 114
-    0140 return
+    0135 pop
+    0136 goto 114
+    0139 return
     sub_attr  StackMapTable (47 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

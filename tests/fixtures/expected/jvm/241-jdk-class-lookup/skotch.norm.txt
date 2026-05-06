@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=1
     0000 ldc "file.separator"
     0002 invokestatic Method(java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;)
     0005 invokevirtual Method(java/lang/String.length:()I)
@@ -13,17 +13,17 @@ method        main ()V 0x0019
     0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0016 ldc "100"
     0018 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
-    0021 istore 1
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 iload 1
-    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0031 bipush -99
-    0033 invokestatic Method(java/lang/Math.abs:(I)I)
-    0036 istore 2
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 iload 2
-    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0046 return
+    0021 istore_0
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 iload_0
+    0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0029 bipush -99
+    0031 invokestatic Method(java/lang/Math.abs:(I)I)
+    0034 istore_0
+    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0038 iload_0
+    0039 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0042 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

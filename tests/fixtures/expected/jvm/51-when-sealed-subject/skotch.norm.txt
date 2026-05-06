@@ -4,69 +4,70 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LShape;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=10
-    0000 goto 3
-    0003 aload_0
-    0004 instanceof Class(Circle)
-    0007 istore_1
-    0008 iload_1
-    0009 ifeq 41
-    0012 aload_0
-    0013 checkcast Class(Circle)
-    0016 astore_2
-    0017 ldc "circle: "
-    0019 astore_3
-    0020 aload_2
-    0021 getfield Field(Circle.name:Ljava/lang/String;)
-    0024 astore 4
-    0026 aload_3
-    0027 aload 4
-    0029 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0032 astore 5
-    0034 aload 5
-    0036 astore 6
-    0038 goto 75
-    0041 aload_0
-    0042 instanceof Class(Square)
-    0045 istore 7
-    0047 iload 7
-    0049 ifeq 69
-    0052 aload_0
-    0053 checkcast Class(Square)
-    0056 astore 8
-    0058 ldc "square"
-    0060 astore 9
-    0062 aload 9
-    0064 astore 6
-    0066 goto 75
-    0069 aconst_null
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(Circle)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 47
+    0018 aload_0
+    0019 checkcast Class(Circle)
+    0022 astore_2
+    0023 ldc "circle: "
+    0025 astore_3
+    0026 aload_2
+    0027 invokevirtual Method(Circle.getName:()Ljava/lang/String;)
+    0030 astore 4
+    0032 aload_3
+    0033 aload 4
+    0035 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0038 astore 5
+    0040 aload 5
+    0042 astore 6
+    0044 goto 81
+    0047 aload_0
+    0048 instanceof Class(Square)
+    0051 istore 7
+    0053 iload 7
+    0055 ifeq 75
+    0058 aload_0
+    0059 checkcast Class(Square)
+    0062 astore 8
+    0064 ldc "square"
+    0066 astore 9
+    0068 aload 9
     0070 astore 6
-    0072 goto 75
-    0075 aload 6
-    0077 areturn
-    sub_attr  StackMapTable (26 bytes)
+    0072 goto 81
+    0075 aconst_null
+    0076 astore 6
+    0078 goto 81
+    0081 aload 6
+    0083 areturn
+    sub_attr  StackMapTable (39 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=2
-    0000 ldc "big"
-    0002 astore_0
-    0003 new Class(Circle)
-    0006 dup
-    0007 aload_0
-    0008 invokespecial Method(Circle.<init>:(Ljava/lang/String;)V)
-    0011 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 swap
-    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0021 iconst_5
-    0022 istore_1
-    0023 new Class(Square)
-    0026 dup
-    0027 iload_1
-    0028 invokespecial Method(Square.<init>:(I)V)
-    0031 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
-    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0037 swap
-    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0041 return
+  code        max_stack=3 max_locals=0
+    0000 new Class(Circle)
+    0003 dup
+    0004 ldc "big"
+    0006 invokespecial Method(Circle.<init>:(Ljava/lang/String;)V)
+    0009 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 new Class(Square)
+    0022 dup
+    0023 iconst_5
+    0024 invokespecial Method(Square.<init>:(I)V)
+    0027 invokestatic Method(InputKt.describe:(LShape;)Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -3,59 +3,58 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=1 max_locals=13
-    0000 iconst_1
-    0001 istore_1
-    0002 goto 5
-    0005 aload_0
-    0006 instanceof Class(java/lang/String)
-    0009 istore_2
-    0010 iload_2
-    0011 ifeq 30
-    0014 aload_0
-    0015 checkcast Class(java/lang/String)
-    0018 astore_3
-    0019 ldc "string"
+  code        max_stack=1 max_locals=12
+    0000 goto 3
+    0003 aload_0
+    0004 instanceof Class(java/lang/String)
+    0007 istore_1
+    0008 iload_1
+    0009 ifeq 26
+    0012 aload_0
+    0013 checkcast Class(java/lang/String)
+    0016 astore_2
+    0017 ldc "string"
+    0019 astore_3
+    0020 aload_3
     0021 astore 4
-    0023 aload 4
-    0025 astore 5
-    0027 goto 103
-    0030 aload_0
-    0031 instanceof Class(java/lang/Integer)
-    0034 istore 6
-    0036 iload 6
-    0038 ifeq 61
-    0041 aload_0
-    0042 checkcast Class(java/lang/Integer)
-    0045 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0048 istore 7
-    0050 ldc "int"
-    0052 astore 8
-    0054 aload 8
-    0056 astore 5
-    0058 goto 103
-    0061 aload_0
-    0062 instanceof Class(java/lang/Boolean)
-    0065 istore 9
-    0067 iload 9
-    0069 ifeq 92
-    0072 aload_0
-    0073 checkcast Class(java/lang/Boolean)
-    0076 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
-    0079 istore 10
-    0081 ldc "bool"
-    0083 astore 11
-    0085 aload 11
-    0087 astore 5
-    0089 goto 103
-    0092 ldc "other"
-    0094 astore 12
-    0096 aload 12
-    0098 astore 5
-    0100 goto 103
-    0103 aload 5
-    0105 areturn
-    sub_attr  StackMapTable (44 bytes)
+    0023 goto 99
+    0026 aload_0
+    0027 instanceof Class(java/lang/Integer)
+    0030 istore 5
+    0032 iload 5
+    0034 ifeq 57
+    0037 aload_0
+    0038 checkcast Class(java/lang/Integer)
+    0041 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0044 istore 6
+    0046 ldc "int"
+    0048 astore 7
+    0050 aload 7
+    0052 astore 4
+    0054 goto 99
+    0057 aload_0
+    0058 instanceof Class(java/lang/Boolean)
+    0061 istore 8
+    0063 iload 8
+    0065 ifeq 88
+    0068 aload_0
+    0069 checkcast Class(java/lang/Boolean)
+    0072 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
+    0075 istore 9
+    0077 ldc "bool"
+    0079 astore 10
+    0081 aload 10
+    0083 astore 4
+    0085 goto 99
+    0088 ldc "other"
+    0090 astore 11
+    0092 aload 11
+    0094 astore 4
+    0096 goto 99
+    0099 aload 4
+    0101 areturn
+    sub_attr  StackMapTable (39 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "hello"

@@ -3,90 +3,76 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=18
-    0000 ldc "hello"
-    0002 astore_0
-    0003 bipush 42
-    0005 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0008 astore_1
-    0009 new Class(kotlin/Pair)
-    0012 dup
-    0013 aload_0
-    0014 aload_1
-    0015 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
-    0018 astore_2
-    0019 aload_2
-    0020 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
-    0023 astore 3
-    0025 aload_2
-    0026 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
-    0029 astore 4
-    0031 ldc " "
-    0033 astore 5
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 new Class(java/lang/StringBuilder)
-    0041 dup
-    0042 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0045 aload 3
+  code        max_stack=5 max_locals=3
+    0000 bipush 42
+    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0005 astore_0
+    0006 new Class(kotlin/Pair)
+    0009 dup
+    0010 ldc "hello"
+    0012 aload_0
+    0013 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0016 astore_0
+    0017 aload_0
+    0018 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
+    0021 astore_1
+    0022 aload_0
+    0023 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
+    0026 astore_0
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 new Class(java/lang/StringBuilder)
+    0033 dup
+    0034 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0037 aload_1
+    0038 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0041 ldc " "
+    0043 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0046 aload_0
     0047 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0050 aload 5
-    0052 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0055 aload 4
-    0057 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0060 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0066 iconst_1
-    0067 istore 6
-    0069 iconst_2
-    0070 istore 7
-    0072 iconst_3
-    0073 istore 8
-    0075 iload 6
-    0077 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0080 astore 9
-    0082 iload 7
-    0084 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0087 astore 10
-    0089 iload 8
-    0091 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0094 astore 11
-    0096 new Class(kotlin/Triple)
-    0099 dup
-    0100 aload 9
-    0102 aload 10
-    0104 aload 11
-    0106 invokespecial Method(kotlin/Triple.<init>:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V)
-    0109 astore 12
-    0111 aload 12
-    0113 invokevirtual Method(kotlin/Triple.component1:()Ljava/lang/Object;)
-    0116 astore 13
-    0118 aload 12
-    0120 invokevirtual Method(kotlin/Triple.component2:()Ljava/lang/Object;)
-    0123 astore 14
-    0125 aload 12
-    0127 invokevirtual Method(kotlin/Triple.component3:()Ljava/lang/Object;)
-    0130 astore 15
-    0132 ldc " "
-    0134 astore 16
-    0136 ldc " "
-    0138 astore 17
-    0140 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0143 new Class(java/lang/StringBuilder)
-    0146 dup
-    0147 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0150 aload 13
-    0152 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0155 aload 16
-    0157 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0160 aload 14
-    0162 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0165 aload 17
-    0167 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0170 aload 15
-    0172 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0175 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0178 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0181 return
+    0050 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0056 iconst_1
+    0057 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0060 astore_0
+    0061 iconst_2
+    0062 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0065 astore_1
+    0066 iconst_3
+    0067 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0070 astore_2
+    0071 new Class(kotlin/Triple)
+    0074 dup
+    0075 aload_0
+    0076 aload_1
+    0077 aload_2
+    0078 invokespecial Method(kotlin/Triple.<init>:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V)
+    0081 astore_0
+    0082 aload_0
+    0083 invokevirtual Method(kotlin/Triple.component1:()Ljava/lang/Object;)
+    0086 astore_1
+    0087 aload_0
+    0088 invokevirtual Method(kotlin/Triple.component2:()Ljava/lang/Object;)
+    0091 astore_2
+    0092 aload_0
+    0093 invokevirtual Method(kotlin/Triple.component3:()Ljava/lang/Object;)
+    0096 astore_0
+    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0100 new Class(java/lang/StringBuilder)
+    0103 dup
+    0104 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0107 aload_1
+    0108 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0111 ldc " "
+    0113 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0116 aload_2
+    0117 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0120 ldc " "
+    0122 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0125 aload_0
+    0126 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0129 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0132 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0135 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

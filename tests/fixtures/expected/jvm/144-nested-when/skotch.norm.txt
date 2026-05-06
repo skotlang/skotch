@@ -3,207 +3,186 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (II)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=29
-    0000 iconst_1
-    0001 istore_2
-    0002 goto 5
-    0005 iconst_0
-    0006 istore_3
-    0007 iload_0
-    0008 iload_3
-    0009 if_icmple 16
-    0012 iconst_1
-    0013 goto 17
+  code        max_stack=3 max_locals=28
+    0000 goto 3
+    0003 iconst_0
+    0004 istore_2
+    0005 iload_0
+    0006 iload_2
+    0007 if_icmple 14
+    0010 iconst_1
+    0011 goto 15
+    0014 iconst_0
+    0015 istore_3
     0016 iconst_0
     0017 istore 4
-    0019 iconst_0
-    0020 istore 5
-    0022 iload 4
-    0024 ifeq 192
-    0027 goto 169
-    0030 ldc "Q1"
+    0019 iload_3
+    0020 ifeq 188
+    0023 goto 165
+    0026 ldc "Q1"
+    0028 astore 5
+    0030 aload 5
     0032 astore 6
-    0034 aload 6
-    0036 astore 7
-    0038 goto 166
-    0041 iconst_0
-    0042 istore 8
-    0044 iload_0
-    0045 iload 8
-    0047 if_icmpge 54
-    0050 iconst_1
-    0051 goto 55
-    0054 iconst_0
-    0055 istore 9
-    0057 iconst_0
-    0058 istore 10
-    0060 iload 9
-    0062 ifeq 223
-    0065 goto 200
-    0068 ldc "Q2"
-    0070 astore 11
-    0072 aload 11
-    0074 astore 7
-    0076 goto 166
-    0079 iconst_0
-    0080 istore 12
-    0082 iload_0
-    0083 iload 12
-    0085 if_icmpge 92
-    0088 iconst_1
-    0089 goto 93
-    0092 iconst_0
-    0093 istore 13
-    0095 iconst_0
-    0096 istore 14
-    0098 iload 13
-    0100 ifeq 254
-    0103 goto 231
-    0106 ldc "Q3"
-    0108 astore 15
-    0110 aload 15
-    0112 astore 7
-    0114 goto 166
-    0117 iconst_0
-    0118 istore 16
-    0120 iload_0
-    0121 iload 16
-    0123 if_icmple 130
-    0126 iconst_1
-    0127 goto 131
-    0130 iconst_0
-    0131 istore 17
-    0133 iconst_0
-    0134 istore 18
-    0136 iload 17
-    0138 ifeq 285
-    0141 goto 262
-    0144 ldc "Q4"
-    0146 astore 19
-    0148 aload 19
-    0150 astore 7
-    0152 goto 166
-    0155 ldc "axis"
-    0157 astore 20
-    0159 aload 20
-    0161 astore 7
-    0163 goto 166
-    0166 aload 7
-    0168 areturn
-    0169 iconst_0
-    0170 istore 21
-    0172 iload_1
-    0173 iload 21
-    0175 if_icmple 182
-    0178 iconst_1
-    0179 goto 183
-    0182 iconst_0
-    0183 istore 22
-    0185 iload 22
-    0187 istore 5
-    0189 goto 192
-    0192 iload 5
-    0194 ifeq 41
-    0197 goto 30
-    0200 iconst_0
-    0201 istore 23
-    0203 iload_1
-    0204 iload 23
-    0206 if_icmple 213
-    0209 iconst_1
-    0210 goto 214
-    0213 iconst_0
-    0214 istore 24
-    0216 iload 24
-    0218 istore 10
-    0220 goto 223
-    0223 iload 10
-    0225 ifeq 79
-    0228 goto 68
-    0231 iconst_0
-    0232 istore 25
-    0234 iload_1
-    0235 iload 25
-    0237 if_icmpge 244
-    0240 iconst_1
-    0241 goto 245
-    0244 iconst_0
-    0245 istore 26
-    0247 iload 26
-    0249 istore 14
-    0251 goto 254
-    0254 iload 14
-    0256 ifeq 117
-    0259 goto 106
-    0262 iconst_0
-    0263 istore 27
-    0265 iload_1
-    0266 iload 27
-    0268 if_icmpge 275
-    0271 iconst_1
-    0272 goto 276
-    0275 iconst_0
-    0276 istore 28
-    0278 iload 28
-    0280 istore 18
-    0282 goto 285
-    0285 iload 18
-    0287 ifeq 155
-    0290 goto 144
-    sub_attr  StackMapTable (359 bytes)
+    0034 goto 162
+    0037 iconst_0
+    0038 istore 7
+    0040 iload_0
+    0041 iload 7
+    0043 if_icmpge 50
+    0046 iconst_1
+    0047 goto 51
+    0050 iconst_0
+    0051 istore 8
+    0053 iconst_0
+    0054 istore 9
+    0056 iload 8
+    0058 ifeq 219
+    0061 goto 196
+    0064 ldc "Q2"
+    0066 astore 10
+    0068 aload 10
+    0070 astore 6
+    0072 goto 162
+    0075 iconst_0
+    0076 istore 11
+    0078 iload_0
+    0079 iload 11
+    0081 if_icmpge 88
+    0084 iconst_1
+    0085 goto 89
+    0088 iconst_0
+    0089 istore 12
+    0091 iconst_0
+    0092 istore 13
+    0094 iload 12
+    0096 ifeq 250
+    0099 goto 227
+    0102 ldc "Q3"
+    0104 astore 14
+    0106 aload 14
+    0108 astore 6
+    0110 goto 162
+    0113 iconst_0
+    0114 istore 15
+    0116 iload_0
+    0117 iload 15
+    0119 if_icmple 126
+    0122 iconst_1
+    0123 goto 127
+    0126 iconst_0
+    0127 istore 16
+    0129 iconst_0
+    0130 istore 17
+    0132 iload 16
+    0134 ifeq 281
+    0137 goto 258
+    0140 ldc "Q4"
+    0142 astore 18
+    0144 aload 18
+    0146 astore 6
+    0148 goto 162
+    0151 ldc "axis"
+    0153 astore 19
+    0155 aload 19
+    0157 astore 6
+    0159 goto 162
+    0162 aload 6
+    0164 areturn
+    0165 iconst_0
+    0166 istore 20
+    0168 iload_1
+    0169 iload 20
+    0171 if_icmple 178
+    0174 iconst_1
+    0175 goto 179
+    0178 iconst_0
+    0179 istore 21
+    0181 iload 21
+    0183 istore 4
+    0185 goto 188
+    0188 iload 4
+    0190 ifeq 37
+    0193 goto 26
+    0196 iconst_0
+    0197 istore 22
+    0199 iload_1
+    0200 iload 22
+    0202 if_icmple 209
+    0205 iconst_1
+    0206 goto 210
+    0209 iconst_0
+    0210 istore 23
+    0212 iload 23
+    0214 istore 9
+    0216 goto 219
+    0219 iload 9
+    0221 ifeq 75
+    0224 goto 64
+    0227 iconst_0
+    0228 istore 24
+    0230 iload_1
+    0231 iload 24
+    0233 if_icmpge 240
+    0236 iconst_1
+    0237 goto 241
+    0240 iconst_0
+    0241 istore 25
+    0243 iload 25
+    0245 istore 13
+    0247 goto 250
+    0250 iload 13
+    0252 ifeq 113
+    0255 goto 102
+    0258 iconst_0
+    0259 istore 26
+    0261 iload_1
+    0262 iload 26
+    0264 if_icmpge 271
+    0267 iconst_1
+    0268 goto 272
+    0271 iconst_0
+    0272 istore 27
+    0274 iload 27
+    0276 istore 17
+    0278 goto 281
+    0281 iload 17
+    0283 ifeq 151
+    0286 goto 140
+    sub_attr  StackMapTable (344 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=0
     0000 iconst_1
-    0001 istore_0
-    0002 iconst_1
-    0003 istore_1
-    0004 iload_0
-    0005 iload_1
-    0006 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 swap
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0016 iconst_m1
-    0017 istore_2
-    0018 iconst_1
-    0019 istore 3
-    0021 iload_2
-    0022 iload 3
-    0024 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 swap
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 iconst_m1
-    0035 istore 4
+    0001 iconst_1
+    0002 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 iconst_m1
+    0013 iconst_1
+    0014 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 iconst_m1
+    0025 iconst_m1
+    0026 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 iconst_1
     0037 iconst_m1
-    0038 istore 5
-    0040 iload 4
-    0042 iload 5
-    0044 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
-    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0050 swap
-    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0054 iconst_1
-    0055 istore 6
-    0057 iconst_m1
-    0058 istore 7
-    0060 iload 6
-    0062 iload 7
-    0064 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
-    0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0070 swap
-    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0074 iconst_0
-    0075 istore 8
-    0077 iconst_5
-    0078 istore 9
-    0080 iload 8
-    0082 iload 9
-    0084 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
-    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0090 swap
-    0091 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0094 return
+    0038 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 swap
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 iconst_0
+    0049 iconst_5
+    0050 invokestatic Method(InputKt.classify:(II)Ljava/lang/String;)
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 swap
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

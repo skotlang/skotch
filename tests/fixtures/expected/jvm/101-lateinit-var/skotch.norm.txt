@@ -3,23 +3,20 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=2
+  code        max_stack=2 max_locals=1
     0000 new Class(Service)
     0003 dup
     0004 invokespecial Method(Service.<init>:()V)
     0007 astore_0
-    0008 ldc "myService"
-    0010 astore_1
-    0011 ldc "myService"
-    0013 aload_0
-    0014 swap
-    0015 invokevirtual Method(Service.setup:(Ljava/lang/String;)V)
-    0018 aload_0
-    0019 getfield Field(Service.name:Ljava/lang/String;)
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 swap
-    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0029 return
+    0008 aload_0
+    0009 ldc "myService"
+    0011 invokevirtual Method(Service.setup:(Ljava/lang/String;)V)
+    0014 aload_0
+    0015 invokevirtual Method(Service.getName:()Ljava/lang/String;)
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 swap
+    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0025 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -4,76 +4,77 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LResult;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=12
-    0000 goto 3
-    0003 aload_0
-    0004 instanceof Class(Success)
-    0007 istore_1
-    0008 iload_1
-    0009 ifeq 41
-    0012 aload_0
-    0013 checkcast Class(Success)
-    0016 astore_2
-    0017 ldc "OK: "
-    0019 astore_3
-    0020 aload_2
-    0021 getfield Field(Success.value:Ljava/lang/String;)
-    0024 astore 4
-    0026 aload_3
-    0027 aload 4
-    0029 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0032 astore 5
-    0034 aload 5
-    0036 astore 6
-    0038 goto 91
-    0041 aload_0
-    0042 instanceof Class(Failure)
-    0045 istore 7
-    0047 iload 7
-    0049 ifeq 85
-    0052 aload_0
-    0053 checkcast Class(Failure)
-    0056 astore 8
-    0058 ldc "ERR: "
-    0060 astore 9
-    0062 aload 8
-    0064 getfield Field(Failure.error:Ljava/lang/String;)
-    0067 astore 10
-    0069 aload 9
-    0071 aload 10
-    0073 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0076 astore 11
-    0078 aload 11
-    0080 astore 6
-    0082 goto 91
-    0085 aconst_null
+    0000 aload_0
+    0001 ldc "r"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 goto 9
+    0009 aload_0
+    0010 instanceof Class(Success)
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 47
+    0018 aload_0
+    0019 checkcast Class(Success)
+    0022 astore_2
+    0023 ldc "OK: "
+    0025 astore_3
+    0026 aload_2
+    0027 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
+    0030 astore 4
+    0032 aload_3
+    0033 aload 4
+    0035 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0038 astore 5
+    0040 aload 5
+    0042 astore 6
+    0044 goto 97
+    0047 aload_0
+    0048 instanceof Class(Failure)
+    0051 istore 7
+    0053 iload 7
+    0055 ifeq 91
+    0058 aload_0
+    0059 checkcast Class(Failure)
+    0062 astore 8
+    0064 ldc "ERR: "
+    0066 astore 9
+    0068 aload 8
+    0070 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
+    0073 astore 10
+    0075 aload 9
+    0077 aload 10
+    0079 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0082 astore 11
+    0084 aload 11
     0086 astore 6
-    0088 goto 91
-    0091 aload 6
-    0093 areturn
-    sub_attr  StackMapTable (26 bytes)
+    0088 goto 97
+    0091 aconst_null
+    0092 astore 6
+    0094 goto 97
+    0097 aload 6
+    0099 areturn
+    sub_attr  StackMapTable (39 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=2
-    0000 ldc "hello"
-    0002 astore_0
-    0003 new Class(Success)
-    0006 dup
-    0007 aload_0
-    0008 invokespecial Method(Success.<init>:(Ljava/lang/String;)V)
-    0011 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0017 swap
-    0018 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0021 ldc "oops"
-    0023 astore_1
-    0024 new Class(Failure)
-    0027 dup
-    0028 aload_1
-    0029 invokespecial Method(Failure.<init>:(Ljava/lang/String;)V)
-    0032 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
-    0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0038 swap
-    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0042 return
+  code        max_stack=3 max_locals=0
+    0000 new Class(Success)
+    0003 dup
+    0004 ldc "hello"
+    0006 invokespecial Method(Success.<init>:(Ljava/lang/String;)V)
+    0009 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 new Class(Failure)
+    0022 dup
+    0023 ldc "oops"
+    0025 invokespecial Method(Failure.<init>:(Ljava/lang/String;)V)
+    0028 invokestatic Method(InputKt.describe:(LResult;)Ljava/lang/String;)
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 swap
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0038 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

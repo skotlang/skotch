@@ -3,23 +3,25 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=0
+  code        max_stack=2 max_locals=1
     0000 bipush 42
-    0002 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
-    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0008 swap
-    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0012 iconst_0
-    0013 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
-    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0019 swap
-    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0023 iconst_m1
-    0024 invokestatic Method(java/lang/Integer.toString:(I)Ljava/lang/String;)
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 swap
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 return
+    0002 istore_0
+    0003 iload_0
+    0004 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 swap
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0014 iconst_0
+    0015 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 swap
+    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0025 iconst_m1
+    0026 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

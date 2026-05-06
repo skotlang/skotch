@@ -57,7 +57,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/String",
                         "method_name": "compareTo",
-                        "descriptor": "(Ljava/lang/Object;)I"
+                        "descriptor": "(Ljava/lang/String;)I"
                       }
                     },
                     "args": [
@@ -90,7 +90,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/String",
                         "method_name": "compareTo",
-                        "descriptor": "(Ljava/lang/Object;)I"
+                        "descriptor": "(Ljava/lang/String;)I"
                       }
                     },
                     "args": [
@@ -123,7 +123,7 @@ unique_name=inputkt
                       "VirtualJava": {
                         "class_name": "java/lang/String",
                         "method_name": "compareTo",
-                        "descriptor": "(Ljava/lang/Object;)I"
+                        "descriptor": "(Ljava/lang/String;)I"
                       }
                     },
                     "args": [

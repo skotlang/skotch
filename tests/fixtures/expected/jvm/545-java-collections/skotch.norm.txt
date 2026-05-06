@@ -3,80 +3,62 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=18
+  code        max_stack=3 max_locals=3
     0000 new Class(java/util/LinkedList)
     0003 dup
     0004 invokespecial Method(java/util/LinkedList.<init>:()V)
     0007 astore_0
-    0008 ldc "hello"
-    0010 astore_1
-    0011 ldc "hello"
-    0013 aload_0
-    0014 swap
-    0015 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0020 istore_2
-    0021 ldc "world"
-    0023 astore 3
-    0025 ldc "world"
-    0027 aload_0
-    0028 swap
-    0029 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0034 istore 4
-    0036 aload_0
-    0037 invokevirtual Method(java/util/LinkedList.size:()I)
-    0040 istore 5
+    0008 aload_0
+    0009 ldc "hello"
+    0011 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0016 pop
+    0017 aload_0
+    0018 ldc "world"
+    0020 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0025 pop
+    0026 aload_0
+    0027 invokevirtual Method(java/util/LinkedList.size:()I)
+    0030 istore_1
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 iload_1
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 aload_0
+    0039 invokevirtual Method(java/util/LinkedList.getFirst:()Ljava/lang/Object;)
     0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0045 iload 5
-    0047 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0050 aload_0
-    0051 invokevirtual Method(java/util/LinkedList.getFirst:()Ljava/lang/Object;)
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 swap
-    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0061 new Class(java/util/TreeMap)
-    0064 dup
-    0065 invokespecial Method(java/util/TreeMap.<init>:()V)
-    0068 astore 6
-    0070 ldc "b"
-    0072 astore 7
-    0074 iconst_2
-    0075 istore 8
-    0077 ldc "b"
-    0079 astore 9
-    0081 iconst_2
-    0082 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0085 astore 10
-    0087 aload 6
-    0089 aload 9
-    0091 aload 10
-    0093 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0098 astore 11
-    0100 ldc "a"
-    0102 astore 12
-    0104 iconst_1
-    0105 istore 13
-    0107 ldc "a"
-    0109 astore 14
-    0111 iconst_1
-    0112 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0115 astore 15
-    0117 aload 6
-    0119 aload 14
-    0121 aload 15
-    0123 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
-    0128 astore 16
-    0130 aload 6
-    0132 invokevirtual Method(java/util/TreeMap.size:()I)
-    0135 istore 17
-    0137 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0140 iload 17
-    0142 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0145 aload 6
-    0147 invokevirtual Method(java/util/TreeMap.firstKey:()Ljava/lang/Object;)
-    0150 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0153 swap
-    0154 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0157 return
+    0045 swap
+    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0049 new Class(java/util/TreeMap)
+    0052 dup
+    0053 invokespecial Method(java/util/TreeMap.<init>:()V)
+    0056 astore_2
+    0057 iconst_2
+    0058 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0061 astore_1
+    0062 aload_2
+    0063 ldc "b"
+    0065 aload_1
+    0066 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0071 pop
+    0072 iconst_1
+    0073 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0076 astore_1
+    0077 aload_2
+    0078 ldc "a"
+    0080 aload_1
+    0081 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0086 pop
+    0087 aload_2
+    0088 invokevirtual Method(java/util/TreeMap.size:()I)
+    0091 istore_1
+    0092 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0095 iload_1
+    0096 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0099 aload_2
+    0100 invokevirtual Method(java/util/TreeMap.firstKey:()Ljava/lang/Object;)
+    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0106 swap
+    0107 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0110 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

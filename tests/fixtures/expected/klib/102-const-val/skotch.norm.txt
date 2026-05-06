@@ -291,5 +291,28 @@ unique_name=inputkt
   "classes": [],
   "strings": [
     "skotch"
+  ],
+  "top_level_consts": [
+    [
+      "PI",
+      "Double",
+      {
+        "Double": 3.14159
+      }
+    ],
+    [
+      "APP_NAME",
+      "String",
+      {
+        "String": 0
+      }
+    ],
+    [
+      "MAX_RETRIES",
+      "Int",
+      {
+        "Int": 5
+      }
+    ]
   ]
 }

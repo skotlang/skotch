@@ -38,7 +38,7 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
-  Ljava/lang/String;.compareTo(Ljava/lang/Object;)I
+  Ljava/lang/String;.compareTo(Ljava/lang/String;)I
 
 --- class[0] ---
   descriptor   LInputKt;

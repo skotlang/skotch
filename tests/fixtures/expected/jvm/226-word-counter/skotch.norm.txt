@@ -4,56 +4,60 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        countVowels (Ljava/lang/String;)I 0x0019
   code        max_stack=4 max_locals=13
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_1
-    0003 istore_2
-    0004 ldc "hello"
-    0006 astore_3
-    0007 aload_0
-    0008 aload_3
-    0009 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0012 istore 4
-    0014 iload 4
-    0016 ifeq 25
-    0019 iconst_2
-    0020 istore 5
-    0022 iload 5
-    0024 ireturn
-    0025 goto 28
-    0028 ldc "world"
-    0030 astore 6
-    0032 aload_0
-    0033 aload 6
-    0035 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0038 istore 7
-    0040 iload 7
-    0042 ifeq 51
-    0045 iconst_1
-    0046 istore 8
-    0048 iload 8
-    0050 ireturn
-    0051 goto 54
-    0054 ldc "kotlin"
-    0056 astore 9
-    0058 aload_0
-    0059 aload 9
-    0061 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0064 istore 10
-    0066 iload 10
-    0068 ifeq 77
-    0071 iconst_2
-    0072 istore 11
-    0074 iload 11
-    0076 ireturn
-    0077 goto 80
-    0080 iload_2
-    0081 istore 12
-    0083 iload 12
-    0085 ireturn
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 istore_1
+    0008 iload_1
+    0009 istore_2
+    0010 ldc "hello"
+    0012 astore_3
+    0013 aload_0
+    0014 aload_3
+    0015 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0018 istore 4
+    0020 iload 4
+    0022 ifeq 31
+    0025 iconst_2
+    0026 istore 5
+    0028 iload 5
+    0030 ireturn
+    0031 goto 34
+    0034 ldc "world"
+    0036 astore 6
+    0038 aload_0
+    0039 aload 6
+    0041 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0044 istore 7
+    0046 iload 7
+    0048 ifeq 57
+    0051 iconst_1
+    0052 istore 8
+    0054 iload 8
+    0056 ireturn
+    0057 goto 60
+    0060 ldc "kotlin"
+    0062 astore 9
+    0064 aload_0
+    0065 aload 9
+    0067 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0070 istore 10
+    0072 iload 10
+    0074 ifeq 83
+    0077 iconst_2
+    0078 istore 11
+    0080 iload 11
+    0082 ireturn
+    0083 goto 86
+    0086 iload_2
+    0087 istore 12
+    0089 iload 12
+    0091 ireturn
     sub_attr  StackMapTable (37 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=1
     0000 ldc "hello"
     0002 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
     0005 istore_0
@@ -62,17 +66,17 @@ method        main ()V 0x0019
     0010 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0013 ldc "world"
     0015 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
-    0018 istore_1
+    0018 istore_0
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 iload_1
+    0022 iload_0
     0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0026 ldc "kotlin"
     0028 invokestatic Method(InputKt.countVowels:(Ljava/lang/String;)I)
-    0031 istore 2
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 iload 2
-    0038 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0041 return
+    0031 istore_0
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 iload_0
+    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0039 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
