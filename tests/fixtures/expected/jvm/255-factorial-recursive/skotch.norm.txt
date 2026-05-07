@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        factorial (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=7
     0000 iload_0
     0001 iconst_1
@@ -36,6 +37,39 @@ method        factorial (I)I 0x0019
     0048 iload 6
     0050 ireturn
     sub_attr  StackMapTable (9 bytes)
+=======
+  code        max_stack=3 max_locals=9
+    0000 iconst_1
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpgt 11
+    0007 iconst_1
+    0008 istore_3
+    0009 iload_3
+    0010 ireturn
+    0011 iconst_1
+    0012 istore 4
+    0014 iload_0
+    0015 iload 4
+    0017 isub
+    0018 istore 5
+    0020 iload 5
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 astore 6
+    0027 aload 6
+    0029 checkcast Class(java/lang/Integer)
+    0032 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0035 invokestatic Method(InputKt.factorial:(I)I)
+    0038 istore 7
+    0040 iload_0
+    0041 iload 7
+    0043 imul
+    0044 istore 8
+    0046 iload 8
+    0048 ireturn
+    sub_attr  StackMapTable (6 bytes)
+>>>>>>> Stashed changes
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_5

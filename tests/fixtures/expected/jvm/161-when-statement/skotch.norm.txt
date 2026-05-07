@@ -18,6 +18,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        printCategory (I)V 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=8
     0000 iload_0
     0001 ifge 8
@@ -69,3 +70,46 @@ method        printCategory (I)V 0x0019
     0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0101 return
     sub_attr  StackMapTable (34 bytes)
+=======
+  code        max_stack=2 max_locals=11
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 20
+    0007 ldc "negative"
+    0009 astore_3
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 aload_3
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 goto 81
+    0020 iconst_0
+    0021 istore 4
+    0023 iload_0
+    0024 iload 4
+    0026 if_icmpne 44
+    0029 ldc "zero"
+    0031 astore 6
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload 6
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 goto 81
+    0044 bipush 10
+    0046 istore 7
+    0048 iload_0
+    0049 iload 7
+    0051 if_icmpge 69
+    0054 ldc "small"
+    0056 astore 9
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 aload 9
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0066 goto 81
+    0069 ldc "large"
+    0071 astore 10
+    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0076 aload 10
+    0078 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0081 return
+    sub_attr  StackMapTable (27 bytes)
+>>>>>>> Stashed changes

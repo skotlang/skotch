@@ -22,6 +22,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        main$factorial (I)I 0x001A
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=8
     0000 iload_0
     0001 iconst_1
@@ -58,3 +59,39 @@ method        main$factorial (I)I 0x001A
     0056 iload_3
     0057 ireturn
     sub_attr  StackMapTable (14 bytes)
+=======
+  code        max_stack=2 max_locals=10
+    0000 iconst_1
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpgt 15
+    0007 iconst_1
+    0008 istore_3
+    0009 iload_3
+    0010 istore 4
+    0012 goto 54
+    0015 iconst_1
+    0016 istore 5
+    0018 iload_0
+    0019 iload 5
+    0021 isub
+    0022 istore 6
+    0024 iload 6
+    0026 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0029 astore 7
+    0031 aload 7
+    0033 checkcast Class(java/lang/Integer)
+    0036 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0039 invokestatic Method(InputKt.main$factorial:(I)I)
+    0042 istore 8
+    0044 iload_0
+    0045 iload 8
+    0047 imul
+    0048 istore 9
+    0050 iload 9
+    0052 istore 4
+    0054 iload 4
+    0056 ireturn
+    sub_attr  StackMapTable (12 bytes)
+>>>>>>> Stashed changes

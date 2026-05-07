@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fibonacci (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=15
     0000 iload_0
     0001 iconst_1
@@ -62,6 +63,59 @@ method        fibonacci (I)I 0x0019
     0095 iload 14
     0097 ireturn
     sub_attr  StackMapTable (31 bytes)
+=======
+  code        max_stack=3 max_locals=17
+    0000 iconst_1
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpgt 9
+    0007 iload_0
+    0008 ireturn
+    0009 iconst_0
+    0010 istore_3
+    0011 iload_3
+    0012 istore 4
+    0014 iconst_1
+    0015 istore 5
+    0017 iload 5
+    0019 istore 6
+    0021 iconst_2
+    0022 istore 7
+    0024 iload 7
+    0026 istore 8
+    0028 iload 8
+    0030 iload_0
+    0031 if_icmpgt 78
+    0034 iload 4
+    0036 istore 10
+    0038 iload 6
+    0040 istore 11
+    0042 iload 10
+    0044 iload 11
+    0046 iadd
+    0047 istore 12
+    0049 iload 6
+    0051 istore 13
+    0053 iload 13
+    0055 istore 4
+    0057 iload 12
+    0059 istore 6
+    0061 iconst_1
+    0062 istore 14
+    0064 iload 8
+    0066 iload 14
+    0068 iadd
+    0069 istore 15
+    0071 iload 15
+    0073 istore 8
+    0075 goto 28
+    0078 iload 6
+    0080 istore 16
+    0082 iload 16
+    0084 ireturn
+    sub_attr  StackMapTable (23 bytes)
+>>>>>>> Stashed changes
 method        isEven (I)Z 0x0019
   code        max_stack=2 max_locals=1
     0000 iload_0
@@ -82,6 +136,7 @@ method        isOdd (I)Z 0x0019
     0006 isub
     0007 ireturn
 method        main ()V 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=15
     0000 bipush 10
     0002 invokestatic Method(InputKt.sumOfOdds:(I)I)
@@ -185,6 +240,123 @@ method        main ()V 0x0019
     0179 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0182 goto 133
     sub_attr  StackMapTable (87 bytes)
+=======
+  code        max_stack=3 max_locals=25
+    0000 ldc "Sum of odds 1..10: "
+    0002 astore_0
+    0003 bipush 10
+    0005 istore_1
+    0006 iload_1
+    0007 invokestatic Method(InputKt.sumOfOdds:(I)I)
+    0010 istore_2
+    0011 aload_0
+    0012 iload_2
+    0013 op_0xBA
+    0014 nop
+    0015 fload_1
+    0016 nop
+    0017 nop
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 swap
+    0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0025 ldc "Fib(10): "
+    0027 astore_3
+    0028 bipush 10
+    0030 istore 4
+    0032 iload 4
+    0034 invokestatic Method(InputKt.fibonacci:(I)I)
+    0037 istore 5
+    0039 aload_3
+    0040 iload 5
+    0042 op_0xBA
+    0043 nop
+    0044 fload_1
+    0045 nop
+    0046 nop
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 swap
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0054 bipush 10
+    0056 istore 6
+    0058 iload 6
+    0060 invokestatic Method(InputKt.sumOfOdds:(I)I)
+    0063 istore 7
+    0065 bipush 20
+    0067 istore 8
+    0069 iload 7
+    0071 iload 8
+    0073 if_icmple 87
+    0076 ldc "big"
+    0078 astore 10
+    0080 aload 10
+    0082 astore 11
+    0084 goto 95
+    0087 ldc "small"
+    0089 astore 12
+    0091 aload 12
+    0093 astore 11
+    0095 ldc "Classification: "
+    0097 astore 13
+    0099 aload 13
+    0101 aload 11
+    0103 op_0xBA
+    0104 nop
+    0105 istore_1
+    0106 nop
+    0107 nop
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 swap
+    0112 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0115 iconst_1
+    0116 istore 14
+    0118 iconst_5
+    0119 istore 15
+    0121 iload 14
+    0123 istore 16
+    0125 iload 16
+    0127 iload 15
+    0129 if_icmpgt 168
+    0132 ldc ": "
+    0134 astore 18
+    0136 iload 16
+    0138 invokestatic Method(InputKt.isOdd:(I)Z)
+    0141 istore 19
+    0143 iload 19
+    0145 ifeq 180
+    0148 goto 169
+    0151 iconst_1
+    0152 istore 20
+    0154 iload 16
+    0156 iload 20
+    0158 iadd
+    0159 istore 21
+    0161 iload 21
+    0163 istore 16
+    0165 goto 125
+    0168 return
+    0169 ldc "odd"
+    0171 astore 22
+    0173 aload 22
+    0175 astore 23
+    0177 goto 188
+    0180 ldc "even"
+    0182 astore 24
+    0184 aload 24
+    0186 astore 23
+    0188 iload 16
+    0190 aload 18
+    0192 aload 23
+    0194 op_0xBA
+    0195 nop
+    0196 dstore_2
+    0197 nop
+    0198 nop
+    0199 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0202 swap
+    0203 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0206 goto 151
+    sub_attr  StackMapTable (189 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
@@ -201,6 +373,7 @@ method        sumOfOdds (I)I 0x0019
     0007 istore 4
     0009 iload 4
     0011 iload_0
+<<<<<<< Updated upstream
     0012 if_icmpgt 19
     0015 iconst_1
     0016 goto 20
@@ -235,3 +408,37 @@ method        sumOfOdds (I)I 0x0019
     0071 goto 39
     sub_attr  StackMapTable (29 bytes)
 class_attr    BootstrapMethods (26 bytes)
+=======
+    0012 if_icmpgt 47
+    0015 iload 4
+    0017 invokestatic Method(InputKt.isEven:(I)Z)
+    0020 istore 6
+    0022 iload 6
+    0024 ifeq 56
+    0027 goto 53
+    0030 iconst_1
+    0031 istore 7
+    0033 iload 4
+    0035 iload 7
+    0037 iadd
+    0038 istore 8
+    0040 iload 8
+    0042 istore 4
+    0044 goto 9
+    0047 iload_2
+    0048 istore 9
+    0050 iload 9
+    0052 ireturn
+    0053 goto 30
+    0056 iload_2
+    0057 istore 10
+    0059 iload 10
+    0061 iload 4
+    0063 iadd
+    0064 istore 11
+    0066 iload 11
+    0068 istore_2
+    0069 goto 30
+    sub_attr  StackMapTable (28 bytes)
+class_attr    BootstrapMethods (14 bytes)
+>>>>>>> Stashed changes

@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fizzbuzz (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=12
     0000 iload_0
     0001 bipush 15
@@ -63,11 +64,71 @@ method        fizzbuzz (I)Ljava/lang/String; 0x0019
     0104 aload 4
     0106 areturn
     sub_attr  StackMapTable (49 bytes)
+=======
+  code        max_stack=2 max_locals=18
+    0000 bipush 15
+    0002 istore_1
+    0003 iload_0
+    0004 iload_1
+    0005 irem
+    0006 istore_2
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_2
+    0010 iload_3
+    0011 if_icmpne 25
+    0014 ldc "FizzBuzz"
+    0016 astore 5
+    0018 aload 5
+    0020 astore 6
+    0022 goto 95
+    0025 iconst_3
+    0026 istore 7
+    0028 iload_0
+    0029 iload 7
+    0031 irem
+    0032 istore 8
+    0034 iconst_0
+    0035 istore 9
+    0037 iload 8
+    0039 iload 9
+    0041 if_icmpne 55
+    0044 ldc "Fizz"
+    0046 astore 11
+    0048 aload 11
+    0050 astore 6
+    0052 goto 95
+    0055 iconst_5
+    0056 istore 12
+    0058 iload_0
+    0059 iload 12
+    0061 irem
+    0062 istore 13
+    0064 iconst_0
+    0065 istore 14
+    0067 iload 13
+    0069 iload 14
+    0071 if_icmpne 85
+    0074 ldc "Buzz"
+    0076 astore 16
+    0078 aload 16
+    0080 astore 6
+    0082 goto 95
+    0085 iload_0
+    0086 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0089 astore 17
+    0091 aload 17
+    0093 astore 6
+    0095 aload 6
+    0097 areturn
+    sub_attr  StackMapTable (63 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=5
     0000 iconst_1
     0001 istore_0
+<<<<<<< Updated upstream
     0002 iload_0
     0003 istore_1
     0004 iload_1
@@ -94,6 +155,32 @@ method        main ()V 0x0019
     0040 goto 4
     0043 return
     sub_attr  StackMapTable (14 bytes)
+=======
+    0002 bipush 15
+    0004 istore_1
+    0005 iload_0
+    0006 istore_2
+    0007 iload_2
+    0008 iload_1
+    0009 if_icmpgt 41
+    0012 iload_2
+    0013 invokestatic Method(InputKt.fizzbuzz:(I)Ljava/lang/String;)
+    0016 astore 4
+    0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0021 aload 4
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 iconst_1
+    0027 istore 5
+    0029 iload_2
+    0030 iload 5
+    0032 iadd
+    0033 istore 6
+    0035 iload 6
+    0037 istore_2
+    0038 goto 7
+    0041 return
+    sub_attr  StackMapTable (9 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

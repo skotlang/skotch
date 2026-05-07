@@ -5,6 +5,7 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=7
     0000 iconst_1
+<<<<<<< Updated upstream
     0001 iconst_1
     0002 isub
     0003 istore_0
@@ -42,6 +43,67 @@ method        main ()V 0x0019
     0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0061 return
     sub_attr  StackMapTable (15 bytes)
+=======
+    0001 istore_0
+    0002 iconst_1
+    0003 istore_1
+    0004 iload_1
+    0005 iload_0
+    0006 isub
+    0007 istore_2
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_2
+    0012 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0015 iconst_0
+    0016 istore_3
+    0017 iconst_1
+    0018 istore 4
+    0020 iload 4
+    0022 iload_3
+    0023 isub
+    0024 istore 5
+    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0029 iload 5
+    0031 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0034 iconst_5
+    0035 istore 6
+    0037 iconst_3
+    0038 istore 7
+    0040 iload 6
+    0042 iload 7
+    0044 if_icmple 51
+    0047 iconst_1
+    0048 goto 52
+    0051 iconst_0
+    0052 istore 8
+    0054 iconst_1
+    0055 istore 9
+    0057 iload 9
+    0059 iload 8
+    0061 isub
+    0062 istore 10
+    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0067 iload 10
+    0069 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0072 iconst_0
+    0073 istore 11
+    0075 iconst_1
+    0076 istore 12
+    0078 iload 12
+    0080 iload 11
+    0082 isub
+    0083 istore 13
+    0085 iload 13
+    0087 ifeq 105
+    0090 ldc "yes"
+    0092 astore 14
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 aload 14
+    0099 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0102 goto 105
+    0105 return
+    sub_attr  StackMapTable (40 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

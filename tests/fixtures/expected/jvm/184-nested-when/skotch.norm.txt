@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=10
     0000 iload_0
     0001 ifge 8
@@ -55,6 +56,50 @@ method        classify (I)Ljava/lang/String; 0x0019
     0092 aload 8
     0094 areturn
     sub_attr  StackMapTable (50 bytes)
+=======
+  code        max_stack=3 max_locals=13
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 10
+    0007 goto 39
+    0010 iconst_0
+    0011 istore_3
+    0012 iload_0
+    0013 iload_3
+    0014 if_icmpne 28
+    0017 ldc "zero"
+    0019 astore 5
+    0021 aload 5
+    0023 astore 6
+    0025 goto 36
+    0028 ldc "positive"
+    0030 astore 7
+    0032 aload 7
+    0034 astore 6
+    0036 aload 6
+    0038 areturn
+    0039 bipush -100
+    0041 istore 8
+    0043 iload_0
+    0044 iload 8
+    0046 if_icmpge 60
+    0049 ldc "very negative"
+    0051 astore 10
+    0053 aload 10
+    0055 astore 11
+    0057 goto 68
+    0060 ldc "negative"
+    0062 astore 12
+    0064 aload 12
+    0066 astore 11
+    0068 aload 11
+    0070 astore 6
+    0072 aload 11
+    0074 areturn
+    sub_attr  StackMapTable (52 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

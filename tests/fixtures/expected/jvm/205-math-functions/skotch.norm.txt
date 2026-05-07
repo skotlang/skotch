@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        abs (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=1 max_locals=4
     0000 iload_0
     0001 ifge 8
@@ -23,20 +24,43 @@ method        abs (I)I 0x0019
     0024 iload_3
     0025 ireturn
     sub_attr  StackMapTable (14 bytes)
+=======
+  code        max_stack=2 max_locals=6
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 21
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_3
+    0010 iload_0
+    0011 isub
+    0012 istore 4
+    0014 iload 4
+    0016 istore 5
+    0018 goto 24
+    0021 iload_0
+    0022 istore 5
+    0024 iload 5
+    0026 ireturn
+    sub_attr  StackMapTable (19 bytes)
+>>>>>>> Stashed changes
 method        gcd (II)I 0x0019
   code        max_stack=2 max_locals=13
     0000 iload_0
-    0001 invokestatic Method(java/lang/Math.abs:(I)I)
+    0001 invokestatic Method(InputKt.abs:(I)I)
     0004 istore_2
     0005 iload_2
     0006 istore_3
     0007 iload_1
-    0008 invokestatic Method(java/lang/Math.abs:(I)I)
+    0008 invokestatic Method(InputKt.abs:(I)I)
     0011 istore 4
     0013 iload 4
     0015 istore 5
     0017 iload 5
     0019 istore 6
+<<<<<<< Updated upstream
     0021 iload 6
     0023 ifeq 30
     0026 iconst_1
@@ -65,6 +89,33 @@ method        gcd (II)I 0x0019
     0069 iload 12
     0071 ireturn
     sub_attr  StackMapTable (25 bytes)
+=======
+    0021 iconst_0
+    0022 istore 7
+    0024 iload 6
+    0026 iload 7
+    0028 if_icmpeq 59
+    0031 iload 5
+    0033 istore 9
+    0035 iload_3
+    0036 istore 10
+    0038 iload 5
+    0040 istore 11
+    0042 iload 10
+    0044 iload 11
+    0046 irem
+    0047 istore 12
+    0049 iload 12
+    0051 istore 5
+    0053 iload 9
+    0055 istore_3
+    0056 goto 17
+    0059 iload_3
+    0060 istore 13
+    0062 iload 13
+    0064 ireturn
+    sub_attr  StackMapTable (20 bytes)
+>>>>>>> Stashed changes
 method        lcm (II)I 0x0019
   code        max_stack=3 max_locals=2
     0000 iload_0
@@ -78,7 +129,7 @@ method        lcm (II)I 0x0019
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush -42
-    0002 invokestatic Method(java/lang/Math.abs:(I)I)
+    0002 invokestatic Method(InputKt.abs:(I)I)
     0005 istore_0
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0009 iload_0
@@ -120,6 +171,7 @@ method        max (II)I 0x0019
   code        max_stack=2 max_locals=4
     0000 iload_0
     0001 iload_1
+<<<<<<< Updated upstream
     0002 if_icmple 9
     0005 iconst_1
     0006 goto 10
@@ -135,10 +187,22 @@ method        max (II)I 0x0019
     0022 iload_3
     0023 ireturn
     sub_attr  StackMapTable (13 bytes)
+=======
+    0002 if_icmple 10
+    0005 iload_0
+    0006 istore_3
+    0007 goto 12
+    0010 iload_1
+    0011 istore_3
+    0012 iload_3
+    0013 ireturn
+    sub_attr  StackMapTable (8 bytes)
+>>>>>>> Stashed changes
 method        min (II)I 0x0019
   code        max_stack=2 max_locals=4
     0000 iload_0
     0001 iload_1
+<<<<<<< Updated upstream
     0002 if_icmpge 9
     0005 iconst_1
     0006 goto 10
@@ -154,3 +218,14 @@ method        min (II)I 0x0019
     0022 iload_3
     0023 ireturn
     sub_attr  StackMapTable (13 bytes)
+=======
+    0002 if_icmpge 10
+    0005 iload_0
+    0006 istore_3
+    0007 goto 12
+    0010 iload_1
+    0011 istore_3
+    0012 iload_3
+    0013 ireturn
+    sub_attr  StackMapTable (8 bytes)
+>>>>>>> Stashed changes

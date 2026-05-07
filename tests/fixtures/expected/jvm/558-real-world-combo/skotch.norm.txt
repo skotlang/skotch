@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=9
     0000 iload_0
     0001 bipush 90
@@ -52,6 +53,45 @@ method        classify (I)Ljava/lang/String; 0x0019
     0086 astore_3
     0087 aload_3
     0088 areturn
+=======
+  code        max_stack=2 max_locals=12
+    0000 bipush 90
+    0002 istore_1
+    0003 iload_0
+    0004 iload_1
+    0005 if_icmplt 17
+    0008 ldc "A"
+    0010 astore_3
+    0011 aload_3
+    0012 astore 4
+    0014 goto 67
+    0017 bipush 80
+    0019 istore 5
+    0021 iload_0
+    0022 iload 5
+    0024 if_icmplt 38
+    0027 ldc "B"
+    0029 astore 7
+    0031 aload 7
+    0033 astore 4
+    0035 goto 67
+    0038 bipush 70
+    0040 istore 8
+    0042 iload_0
+    0043 iload 8
+    0045 if_icmplt 59
+    0048 ldc "C"
+    0050 astore 10
+    0052 aload 10
+    0054 astore 4
+    0056 goto 67
+    0059 ldc "F"
+    0061 astore 11
+    0063 aload 11
+    0065 astore 4
+    0067 aload 4
+    0069 areturn
+>>>>>>> Stashed changes
     sub_attr  StackMapTable (39 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
@@ -65,6 +105,7 @@ method        main ()V 0x0019
     0012 new Class(Student)
     0015 dup
     0016 ldc "Bob"
+<<<<<<< Updated upstream
     0018 bipush 82
     0020 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
     0023 astore_1
@@ -110,6 +151,69 @@ method        main ()V 0x0019
     0097 goto 75
     0100 return
     sub_attr  StackMapTable (32 bytes)
+=======
+    0018 astore_3
+    0019 bipush 82
+    0021 istore 4
+    0023 new Class(Student)
+    0026 dup
+    0027 aload_3
+    0028 iload 4
+    0030 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0033 astore 5
+    0035 ldc "Carol"
+    0037 astore 6
+    0039 bipush 67
+    0041 istore 7
+    0043 new Class(Student)
+    0046 dup
+    0047 aload 6
+    0049 iload 7
+    0051 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0054 astore 8
+    0056 iconst_3
+    0057 istore 9
+    0059 iload 9
+    0061 op_0xBD
+    0062 nop
+    0063 iconst_1
+    0064 astore 10
+    0066 iconst_0
+    0067 istore 11
+    0069 aload 10
+    0071 iload 11
+    0073 aload_2
+    0074 op_0x53
+    0075 iconst_1
+    0076 istore 12
+    0078 aload 10
+    0080 iload 12
+    0082 aload 5
+    0084 op_0x53
+    0085 iconst_2
+    0086 istore 13
+    0088 aload 10
+    0090 iload 13
+    0092 aload 8
+    0094 op_0x53
+    0095 aload 10
+    0097 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0100 astore 14
+    0102 aload 14
+    0104 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0109 astore 15
+    0111 aload 15
+    0113 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0118 istore 16
+    0120 iload 16
+    0122 ifeq 136
+    0125 aload 15
+    0127 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0132 pop
+    0133 goto 111
+    0136 return
+    sub_attr  StackMapTable (47 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -32,6 +32,7 @@ method        main ()V 0x0019
     0046 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
     0049 astore 5
     0051 iconst_3
+<<<<<<< Updated upstream
     0052 istore 6
     0054 iload 6
     0056 op_0xBD
@@ -89,6 +90,85 @@ method        main ()V 0x0019
     0166 goto 102
     0169 return
     sub_attr  StackMapTable (44 bytes)
+=======
+    0052 istore 9
+    0054 iload 9
+    0056 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0059 astore 10
+    0061 new Class(kotlin/Pair)
+    0064 dup
+    0065 aload 8
+    0067 aload 10
+    0069 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0072 astore 11
+    0074 iconst_3
+    0075 istore 12
+    0077 iload 12
+    0079 op_0xBD
+    0080 nop
+    0081 bipush 58
+    0083 fconst_2
+    0084 iconst_0
+    0085 istore 14
+    0087 aload 13
+    0089 iload 14
+    0091 aload_3
+    0092 op_0x53
+    0093 iconst_1
+    0094 istore 15
+    0096 aload 13
+    0098 iload 15
+    0100 aload 7
+    0102 op_0x53
+    0103 iconst_2
+    0104 istore 16
+    0106 aload 13
+    0108 iload 16
+    0110 aload 11
+    0112 op_0x53
+    0113 aload 13
+    0115 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
+    0118 astore 17
+    0120 aload 17
+    0122 invokeinterface InterfaceMethod(java/util/Map.entrySet:()Ljava/util/Set;)
+    0127 astore 18
+    0129 aload 18
+    0131 invokeinterface InterfaceMethod(java/util/Set.iterator:()Ljava/util/Iterator;)
+    0136 astore 19
+    0138 aload 19
+    0140 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0145 istore 20
+    0147 iload 20
+    0149 ifeq 211
+    0152 aload 19
+    0154 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0159 astore 21
+    0161 aload 21
+    0163 checkcast Class(java/util/Map$Entry)
+    0166 astore 22
+    0168 aload 22
+    0170 invokeinterface InterfaceMethod(java/util/Map$Entry.getKey:()Ljava/lang/Object;)
+    0175 astore 23
+    0177 aload 22
+    0179 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
+    0184 astore 24
+    0186 ldc "="
+    0188 astore 25
+    0190 aload 23
+    0192 aload 25
+    0194 aload 24
+    0196 op_0xBA
+    0197 nop
+    0198 dstore_3
+    0199 nop
+    0200 nop
+    0201 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0204 swap
+    0205 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0208 goto 138
+    0211 return
+    sub_attr  StackMapTable (57 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

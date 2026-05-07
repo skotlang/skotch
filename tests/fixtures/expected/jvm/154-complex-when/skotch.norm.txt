@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fizzBuzz (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=12
     0000 iload_0
     0001 bipush 15
@@ -62,6 +63,64 @@ method        fizzBuzz (I)Ljava/lang/String; 0x0019
     0102 aload 4
     0104 areturn
     sub_attr  StackMapTable (49 bytes)
+=======
+  code        max_stack=2 max_locals=18
+    0000 bipush 15
+    0002 istore_1
+    0003 iload_0
+    0004 iload_1
+    0005 irem
+    0006 istore_2
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_2
+    0010 iload_3
+    0011 if_icmpne 25
+    0014 ldc "FizzBuzz"
+    0016 astore 5
+    0018 aload 5
+    0020 astore 6
+    0022 goto 93
+    0025 iconst_3
+    0026 istore 7
+    0028 iload_0
+    0029 iload 7
+    0031 irem
+    0032 istore 8
+    0034 iconst_0
+    0035 istore 9
+    0037 iload 8
+    0039 iload 9
+    0041 if_icmpne 55
+    0044 ldc "Fizz"
+    0046 astore 11
+    0048 aload 11
+    0050 astore 6
+    0052 goto 93
+    0055 iconst_5
+    0056 istore 12
+    0058 iload_0
+    0059 iload 12
+    0061 irem
+    0062 istore 13
+    0064 iconst_0
+    0065 istore 14
+    0067 iload 13
+    0069 iload 14
+    0071 if_icmpne 85
+    0074 ldc "Buzz"
+    0076 astore 16
+    0078 aload 16
+    0080 astore 6
+    0082 goto 93
+    0085 ldc "other"
+    0087 astore 17
+    0089 aload 17
+    0091 astore 6
+    0093 aload 6
+    0095 areturn
+    sub_attr  StackMapTable (63 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

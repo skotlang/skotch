@@ -18,6 +18,7 @@ method        main ()V 0x0019
     0013 istore_2
     0014 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0017 iload_2
+<<<<<<< Updated upstream
     0018 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0021 iconst_1
     0022 istore 4
@@ -62,6 +63,108 @@ method        main ()V 0x0019
     0102 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0105 return
     sub_attr  StackMapTable (28 bytes)
+=======
+    0018 ifeq 41
+    0021 bipush 10
+    0023 istore 4
+    0025 iload_0
+    0026 iload 4
+    0028 if_icmpge 35
+    0031 iconst_1
+    0032 goto 36
+    0035 iconst_0
+    0036 istore 5
+    0038 iload 5
+    0040 istore_3
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload_3
+    0045 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0048 iconst_0
+    0049 istore 6
+    0051 iload_0
+    0052 iload 6
+    0054 if_icmple 61
+    0057 iconst_1
+    0058 goto 62
+    0061 iconst_0
+    0062 istore 7
+    0064 iconst_1
+    0065 istore 8
+    0067 iload 7
+    0069 ifeq 75
+    0072 goto 96
+    0075 bipush -10
+    0077 istore 9
+    0079 iload_0
+    0080 iload 9
+    0082 if_icmpge 89
+    0085 iconst_1
+    0086 goto 90
+    0089 iconst_0
+    0090 istore 10
+    0092 iload 10
+    0094 istore 8
+    0096 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0099 iload 8
+    0101 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0104 iconst_0
+    0105 istore 11
+    0107 iload_0
+    0108 iload 11
+    0110 if_icmpge 117
+    0113 iconst_1
+    0114 goto 118
+    0117 iconst_0
+    0118 istore 12
+    0120 iconst_0
+    0121 istore 13
+    0123 iload 12
+    0125 ifeq 149
+    0128 bipush -10
+    0130 istore 14
+    0132 iload_0
+    0133 iload 14
+    0135 if_icmple 142
+    0138 iconst_1
+    0139 goto 143
+    0142 iconst_0
+    0143 istore 15
+    0145 iload 15
+    0147 istore 13
+    0149 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0152 iload 13
+    0154 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0157 iconst_0
+    0158 istore 16
+    0160 iload_0
+    0161 iload 16
+    0163 if_icmpge 170
+    0166 iconst_1
+    0167 goto 171
+    0170 iconst_0
+    0171 istore 17
+    0173 iconst_1
+    0174 istore 18
+    0176 iload 17
+    0178 ifeq 184
+    0181 goto 205
+    0184 bipush 10
+    0186 istore 19
+    0188 iload_0
+    0189 iload 19
+    0191 if_icmple 198
+    0194 iconst_1
+    0195 goto 199
+    0198 iconst_0
+    0199 istore 20
+    0201 iload 20
+    0203 istore 18
+    0205 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0208 iload 18
+    0210 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0213 return
+    sub_attr  StackMapTable (83 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

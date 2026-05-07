@@ -697,10 +697,15 @@ fn method_returns_non_null_ref(func: &MirFunction) -> bool {
     matches!(&func.return_ty, Ty::String | Ty::Class(_))
 }
 
+<<<<<<< Updated upstream
 /// True if the method's return type is a Nullable reference — kotlinc
 /// emits `@org.jetbrains.annotations.Nullable` on those. Primitives wrapped
 /// in nullable (`Int?` etc.) box to a wrapper class, which IS a reference,
 /// so they get @Nullable too.
+=======
+/// True if the method's return type is a Nullable reference. kotlinc emits
+/// `@org.jetbrains.annotations.Nullable` for those.
+>>>>>>> Stashed changes
 fn method_returns_nullable_ref(func: &MirFunction) -> bool {
     if func.is_private {
         return false;
@@ -2495,6 +2500,7 @@ fn emit_method_body(
         );
     }
 
+    let mut goto_was_omitted = false;
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
 
@@ -2754,16 +2760,31 @@ fn emit_method_body(
                 }
             }
             Terminator::Goto(target) => {
-                let insn_pos = code.len();
-                code.push(0xA7); // goto
-                let offset_pos = code.len();
-                code.write_i16::<BigEndian>(0).unwrap();
-                patches.push(JumpPatch {
-                    offset_pos,
-                    insn_pos,
-                    target_block: *target,
-                });
-                is_target[*target as usize] = true;
+                // Skip emitting goto when the target is the next reachable
+                // block: control falls through naturally. kotlinc omits these
+                // (e.g. empty else-blocks of `if (cond) return` patterns).
+                let mut next_reachable = bi + 1;
+                while next_reachable < func.blocks.len() && !reachable[next_reachable] {
+                    next_reachable += 1;
+                }
+                if (*target as usize) != next_reachable {
+                    let insn_pos = code.len();
+                    code.push(0xA7); // goto
+                    let offset_pos = code.len();
+                    code.write_i16::<BigEndian>(0).unwrap();
+                    patches.push(JumpPatch {
+                        offset_pos,
+                        insn_pos,
+                        target_block: *target,
+                    });
+                    is_target[*target as usize] = true;
+                } else {
+                    // Goto was omitted (fall-through). Track this so the
+                    // no_branches peephole path doesn't shrink code without
+                    // updating block_offsets — it's only safe when there's
+                    // truly no inter-block control flow.
+                    goto_was_omitted = true;
+                }
             }
         }
     }
@@ -2779,11 +2800,17 @@ fn emit_method_body(
 
     // Pass 2.5: Fuse `cmp; iconst materialization; istore_M; iload_M; ifeq Z`
     // into a direct `if_icmp<COND> Z`. kotlinc emits the fused form for any
+<<<<<<< Updated upstream
     // boolean used only for an `if`/`while` test; we emit the materialized
     // form because MIR splits the cmp and branch over a temp local. This
     // peephole runs after Pass 2 because it reads the resolved relative
     // offsets of the inter-block ifeq.
     if false && !cmp_targets.is_empty() {
+=======
+    // boolean used only for an `if`/`while` test. Runs after Pass 2 because
+    // it reads the resolved relative offsets of the inter-block ifeq.
+    if !cmp_targets.is_empty() {
+>>>>>>> Stashed changes
         let mut fuse_named_slots: FxHashSet<u8> = func
             .named_locals
             .iter()
@@ -2802,6 +2829,7 @@ fn emit_method_body(
         );
     }
 
+<<<<<<< Updated upstream
     // Pass 2.8: Thread `goto X → goto Y` chains so each branch jumps
     // directly to its final target. After threading, an inner goto block
     // typically becomes unreachable; dead-code elimination drops them.
@@ -2823,12 +2851,14 @@ fn emit_method_body(
         peephole_drop_redundant_gotos(&mut code, &mut cmp_targets, &mut block_offsets);
     }
 
+=======
+>>>>>>> Stashed changes
     // Pass 3: Peephole optimization — elide adjacent store+load of same slot.
     // Safe when:
     //   - No inter-block branches (`patches`), OR
     //   - We only remove bytes after the last branch/cmp_target offset
-    let mut max_locals = next_slot as u16;
-    let no_branches = patches.is_empty() && cmp_targets.is_empty();
+    let mut max_locals: u16 = next_slot as u16;
+    let no_branches = patches.is_empty() && cmp_targets.is_empty() && !goto_was_omitted;
     // Wide-aware param slot count: each Long/Double param takes 2 slots,
     // every other param 1. Required so peephole/compaction passes don't
     // truncate `max_locals` below the JVM-required slot count for wide
@@ -2906,7 +2936,7 @@ fn emit_method_body(
         if recomputed > max_stack {
             max_stack = recomputed;
         }
-    } else if patches.is_empty() {
+    } else if patches.is_empty() && !goto_was_omitted {
         // Only intra-block (cmp_targets) branches: we can still elide
         // store+load pairs that are positioned AFTER the highest branch
         // target, since the JVM verifier won't reach them via any branch.
@@ -9628,9 +9658,14 @@ fn jvm_type_string(ty: &Ty) -> String {
     match ty {
         Ty::Class(name) => format!("L{name};"),
         // Nullable reference types use the inner reference's descriptor —
+<<<<<<< Updated upstream
         // kotlinc emits `String?` as `Ljava/lang/String;`, `Foo?` as `LFoo;`
         // — the JVM allows `null` for any reference type. Nullable primitives
         // box to their wrapper class.
+=======
+        // kotlinc emits `String?` as `Ljava/lang/String;`, `Foo?` as `LFoo;`.
+        // Nullable primitives box to their wrapper class.
+>>>>>>> Stashed changes
         Ty::Nullable(inner) => match inner.as_ref() {
             Ty::Class(name) => format!("L{name};"),
             Ty::String => "Ljava/lang/String;".to_string(),
@@ -12882,6 +12917,7 @@ fn peephole_elide_middle_store_load(
     }
 }
 
+<<<<<<< Updated upstream
 /// Fuse the kotlinc-compatible `if_icmp<INV>+7; iconst_1; goto+4; iconst_0;
 /// istore_M; iload_M; ifeq Z` (or `ifne Z`) sequence into a direct
 /// comparison branch `if_icmp<COND> Z'`.
@@ -12906,6 +12942,22 @@ fn peephole_elide_middle_store_load(
 ///
 /// We drain bytes `[i+3, i+8+sl+ll+3)` and adjust all branch instructions,
 /// `cmp_targets`, and `block_offsets` like `peephole_elide_middle_store_load`.
+=======
+/// Fuse the kotlinc-compatible boolean materialization + branch into a
+/// direct comparison branch.
+///
+/// Pattern (positions relative to `i` where the cmp pattern starts):
+///   i+0:        if_icmp<INV>  +7     (3 bytes)
+///   i+3:        iconst_1             (1 byte)
+///   i+4:        goto +4              (3 bytes)
+///   i+7:        iconst_0             (1 byte)
+///   i+8:        istore_M             (sl bytes)
+///   i+8+sl:     iload_M              (ll bytes)
+///   i+8+sl+ll:  ifeq/ifne Z          (3 bytes)
+///
+/// Replacement: `if_icmp<COND> Z'` where the condition is flipped for ifne.
+/// Drains `8+sl+ll` bytes between `i+3` and `i+11+sl+ll`.
+>>>>>>> Stashed changes
 fn peephole_fuse_cmp_branch(
     code: &mut Vec<u8>,
     cmp_targets: &mut Vec<CmpBranchTarget>,
@@ -12914,6 +12966,7 @@ fn peephole_fuse_cmp_branch(
 ) {
     loop {
         let mut applied: Option<(usize, usize, usize, u8, usize, u8, i32)> = None;
+<<<<<<< Updated upstream
         // (cmp_start, sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel)
         let mut i = 0;
         while i < code.len() {
@@ -12924,24 +12977,44 @@ fn peephole_fuse_cmp_branch(
                 let z_orig = ifeq_pos as i32 + ifeq_rel;
                 // Z must lie outside the drain range and outside [i, i+3) (the
                 // remaining if_icmp bytes).
+=======
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel)) =
+                match_cmp_branch_pattern(code, i, named_slots)
+            {
+                let drain_start = i + 3;
+                let drain_end = ifeq_pos + 3;
+                let z_orig = ifeq_pos as i32 + ifeq_rel;
+                // Z must lie outside the drain range and outside [i, i+3).
+>>>>>>> Stashed changes
                 if z_orig >= i as i32 && z_orig < drain_end as i32 {
                     i += instruction_len(code, i);
                     continue;
                 }
+<<<<<<< Updated upstream
                 // Slot must be dead after the ifeq — both fall-through and
                 // taken branch should never read it.
+=======
+>>>>>>> Stashed changes
                 let after_ifeq = ifeq_pos + 3;
                 if slot_alive_at(code, slot, after_ifeq) {
                     i += instruction_len(code, i);
                     continue;
                 }
+<<<<<<< Updated upstream
                 // No taken-branch reads of the slot at z_orig either.
+=======
+>>>>>>> Stashed changes
                 if (z_orig as usize) < code.len() && slot_alive_at(code, slot, z_orig as usize) {
                     i += instruction_len(code, i);
                     continue;
                 }
+<<<<<<< Updated upstream
                 // No other cmp_target's offset/cmp_start may sit strictly
                 // inside the drain range (would belong to a foreign pattern).
+=======
+>>>>>>> Stashed changes
                 let foreign_conflict = cmp_targets.iter().any(|t| {
                     t.cmp_start != i
                         && ((t.offset > drain_start && t.offset < drain_end)
@@ -12951,8 +13024,11 @@ fn peephole_fuse_cmp_branch(
                     i += instruction_len(code, i);
                     continue;
                 }
+<<<<<<< Updated upstream
                 // No block_offset may land strictly inside the drain range
                 // (would leave a frame at a now-dead position).
+=======
+>>>>>>> Stashed changes
                 let block_conflict = block_offsets
                     .iter()
                     .any(|&b| b > drain_start && b < drain_end);
@@ -12977,16 +13053,24 @@ fn peephole_fuse_cmp_branch(
         if ifeq_op == 0x9A {
             code[cmp_start] = flip_cmp_branch_op(code[cmp_start]);
         }
+<<<<<<< Updated upstream
         // Set if_icmp's pre-drain offset to (i+8+sl+ll - i) + ifeq_rel = the
         // distance from cmp_start to z_orig in PRE-drain coords. The standard
         // adjust loop below collapses this to the correct post-drain offset.
+=======
+        // Set if_icmp's pre-drain offset.
+>>>>>>> Stashed changes
         let new_rel_pre = (8 + sl + ll) as i32 + ifeq_rel;
         let bytes = (new_rel_pre as i16).to_be_bytes();
         code[cmp_start + 1] = bytes[0];
         code[cmp_start + 2] = bytes[1];
+<<<<<<< Updated upstream
         // Adjust all branch instructions. Branches inside the drain range get
         // adjusted then dropped; branches spanning the range have their
         // relative offsets shrunk/grown. (Mirrors peephole_elide_middle_store_load.)
+=======
+        // Adjust all branch instructions; mirror peephole_elide_middle_store_load.
+>>>>>>> Stashed changes
         let mut j = 0;
         while j < code.len() {
             let op = code[j];
@@ -13047,7 +13131,10 @@ fn peephole_fuse_cmp_branch(
                 ct.cmp_start -= drain_size;
             }
         }
+<<<<<<< Updated upstream
         // Shift block_offsets past the drain.
+=======
+>>>>>>> Stashed changes
         for b in block_offsets.iter_mut() {
             if *b >= drain_end {
                 *b -= drain_size;
@@ -13067,22 +13154,34 @@ fn match_cmp_branch_pattern(
     if i + 8 >= code.len() {
         return None;
     }
+<<<<<<< Updated upstream
     // i+0: if_icmp<INV> (0x9F..=0xA4) | if_acmp<INV> (0xA5/0xA6) | single-operand if<INV> (0x99..=0x9E)
+=======
+>>>>>>> Stashed changes
     let op = code[i];
     let is_branch = matches!(op, 0x99..=0xA6);
     if !is_branch {
         return None;
     }
+<<<<<<< Updated upstream
     // The branch must point to i+7 (offset = +7).
+=======
+>>>>>>> Stashed changes
     let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
     if rel != 7 {
         return None;
     }
+<<<<<<< Updated upstream
     // i+3: iconst_1 (0x04)
     if code[i + 3] != 0x04 {
         return None;
     }
     // i+4: goto (0xA7) with offset +4
+=======
+    if code[i + 3] != 0x04 {
+        return None;
+    }
+>>>>>>> Stashed changes
     if code[i + 4] != 0xA7 {
         return None;
     }
@@ -13090,6 +13189,7 @@ fn match_cmp_branch_pattern(
     if goto_rel != 4 {
         return None;
     }
+<<<<<<< Updated upstream
     // i+7: iconst_0 (0x03)
     if code[i + 7] != 0x03 {
         return None;
@@ -13105,6 +13205,16 @@ fn match_cmp_branch_pattern(
     // i+8+sl: iload_M matching the same slot
     let ll = decode_aload_of_slot(code, i + 8 + sl, slot, true)?;
     // i+8+sl+ll: ifeq (0x99) or ifne (0x9A)
+=======
+    if code[i + 7] != 0x03 {
+        return None;
+    }
+    let (slot, sl) = decode_istore_at_int(code, i + 8)?;
+    if named_slots.contains(&slot) {
+        return None;
+    }
+    let ll = decode_aload_of_slot(code, i + 8 + sl, slot, true)?;
+>>>>>>> Stashed changes
     let ifeq_pos = i + 8 + sl + ll;
     if ifeq_pos + 2 >= code.len() {
         return None;
@@ -13117,9 +13227,14 @@ fn match_cmp_branch_pattern(
     Some((sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel))
 }
 
+<<<<<<< Updated upstream
 /// Decode an istore at `pos` returning `(slot, instr_len)`. Only handles
 /// integer stores (no astore/lstore/etc.).
 fn decode_istore_at(code: &[u8], pos: usize) -> Option<(u8, usize)> {
+=======
+/// Decode an istore at `pos` (int kind only). Returns `(slot, instr_len)`.
+fn decode_istore_at_int(code: &[u8], pos: usize) -> Option<(u8, usize)> {
+>>>>>>> Stashed changes
     if pos >= code.len() {
         return None;
     }
@@ -13130,9 +13245,13 @@ fn decode_istore_at(code: &[u8], pos: usize) -> Option<(u8, usize)> {
     }
 }
 
+<<<<<<< Updated upstream
 /// Flip the comparison opcode of a JVM branch instruction so the fused
 /// branch fires under the inverted condition. Used when fusing with `ifne`
 /// (branch on TRUE) where the original `if_icmp<INV>` branched on FALSE.
+=======
+/// Flip the comparison opcode to its inverse (ifeq ↔ ifne, if_icmpeq ↔ if_icmpne, etc.).
+>>>>>>> Stashed changes
 fn flip_cmp_branch_op(op: u8) -> u8 {
     match op {
         0x99 => 0x9A, // ifeq → ifne
@@ -13142,6 +13261,7 @@ fn flip_cmp_branch_op(op: u8) -> u8 {
         0x9D => 0x9E, // ifgt → ifle
         0x9E => 0x9D, // ifle → ifgt
         0x9F => 0xA0, // if_icmpeq → if_icmpne
+<<<<<<< Updated upstream
         0xA0 => 0x9F, // if_icmpne → if_icmpeq
         0xA1 => 0xA2, // if_icmplt → if_icmpge
         0xA2 => 0xA1, // if_icmpge → if_icmplt
@@ -13151,10 +13271,22 @@ fn flip_cmp_branch_op(op: u8) -> u8 {
         0xA6 => 0xA5, // if_acmpne → if_acmpeq
         0xC6 => 0xC7, // ifnull → ifnonnull
         0xC7 => 0xC6, // ifnonnull → ifnull
+=======
+        0xA0 => 0x9F,
+        0xA1 => 0xA2, // if_icmplt → if_icmpge
+        0xA2 => 0xA1,
+        0xA3 => 0xA4, // if_icmpgt → if_icmple
+        0xA4 => 0xA3,
+        0xA5 => 0xA6, // if_acmpeq → if_acmpne
+        0xA6 => 0xA5,
+        0xC6 => 0xC7,
+        0xC7 => 0xC6,
+>>>>>>> Stashed changes
         other => other,
     }
 }
 
+<<<<<<< Updated upstream
 /// Replace `iload_M; <int constant>; iadd|isub; istore_M` with the
 /// equivalent `iinc M, <const>`. kotlinc compiles `i++`, `i--`, `i += k`,
 /// and `i -= k` into a single `iinc` whenever the constant fits in a signed
@@ -15341,6 +15473,8 @@ fn peephole_drop_redundant_gotos(
     }
 }
 
+=======
+>>>>>>> Stashed changes
 fn peephole_elide_tail_store_load(code: &mut Vec<u8>, min_offset: usize) {
     loop {
         let mut removals: Vec<(usize, usize)> = Vec::new();

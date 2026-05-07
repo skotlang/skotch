@@ -26,6 +26,7 @@ method        printTimes (Ljava/lang/String;I)V 0x0019
     0009 istore_3
     0010 iload_3
     0011 iload_1
+<<<<<<< Updated upstream
     0012 if_icmpgt 19
     0015 iconst_1
     0016 goto 20
@@ -45,4 +46,21 @@ method        printTimes (Ljava/lang/String;I)V 0x0019
     0042 goto 10
     0045 return
     sub_attr  StackMapTable (14 bytes)
+=======
+    0012 if_icmpgt 37
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 aload_0
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 iconst_1
+    0023 istore 5
+    0025 iload_3
+    0026 iload 5
+    0028 iadd
+    0029 istore 6
+    0031 iload 6
+    0033 istore_3
+    0034 goto 10
+    0037 return
+    sub_attr  StackMapTable (8 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

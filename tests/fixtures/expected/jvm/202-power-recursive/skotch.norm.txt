@@ -31,6 +31,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        power (II)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=16
     0000 iload_1
     0001 ifne 8
@@ -105,3 +106,79 @@ method        power (II)I 0x0019
     0134 iload 15
     0136 ireturn
     sub_attr  StackMapTable (20 bytes)
+=======
+  code        max_stack=4 max_locals=21
+    0000 iconst_0
+    0001 istore_2
+    0002 iload_1
+    0003 iload_2
+    0004 if_icmpne 13
+    0007 iconst_1
+    0008 istore 4
+    0010 iload 4
+    0012 ireturn
+    0013 iconst_2
+    0014 istore 5
+    0016 iload_1
+    0017 iload 5
+    0019 irem
+    0020 istore 6
+    0022 iconst_0
+    0023 istore 7
+    0025 iload 6
+    0027 iload 7
+    0029 if_icmpne 85
+    0032 iconst_2
+    0033 istore 9
+    0035 iload_1
+    0036 iload 9
+    0038 idiv
+    0039 istore 10
+    0041 iload_0
+    0042 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0045 astore 11
+    0047 iload 10
+    0049 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0052 astore 12
+    0054 aload 11
+    0056 checkcast Class(java/lang/Integer)
+    0059 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0062 aload 12
+    0064 checkcast Class(java/lang/Integer)
+    0067 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0070 invokestatic Method(InputKt.power:(II)I)
+    0073 istore 13
+    0075 iload 13
+    0077 iload 13
+    0079 imul
+    0080 istore 14
+    0082 iload 14
+    0084 ireturn
+    0085 iconst_1
+    0086 istore 15
+    0088 iload_1
+    0089 iload 15
+    0091 isub
+    0092 istore 16
+    0094 iload_0
+    0095 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0098 astore 17
+    0100 iload 16
+    0102 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0105 astore 18
+    0107 aload 17
+    0109 checkcast Class(java/lang/Integer)
+    0112 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0115 aload 18
+    0117 checkcast Class(java/lang/Integer)
+    0120 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0123 invokestatic Method(InputKt.power:(II)I)
+    0126 istore 19
+    0128 iload_0
+    0129 iload 19
+    0131 imul
+    0132 istore 20
+    0134 iload 20
+    0136 ireturn
+    sub_attr  StackMapTable (21 bytes)
+>>>>>>> Stashed changes

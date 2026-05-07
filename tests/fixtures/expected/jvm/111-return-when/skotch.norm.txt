@@ -7,6 +7,7 @@ method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0000 aload_0
     0001 ldc "day"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+<<<<<<< Updated upstream
     0006 aload_0
     0007 ldc "Saturday"
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
@@ -36,6 +37,41 @@ method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0055 aload_3
     0056 areturn
     sub_attr  StackMapTable (27 bytes)
+=======
+    0006 ldc "Saturday"
+    0008 astore_1
+    0009 aload_0
+    0010 aload_1
+    0011 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 28
+    0019 ldc "weekend"
+    0021 astore_3
+    0022 aload_3
+    0023 astore 4
+    0025 goto 64
+    0028 ldc "Sunday"
+    0030 astore 5
+    0032 aload_0
+    0033 aload 5
+    0035 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0038 istore 6
+    0040 iload 6
+    0042 ifeq 56
+    0045 ldc "weekend"
+    0047 astore 7
+    0049 aload 7
+    0051 astore 4
+    0053 goto 64
+    0056 ldc "weekday"
+    0058 astore 8
+    0060 aload 8
+    0062 astore 4
+    0064 aload 4
+    0066 areturn
+    sub_attr  StackMapTable (47 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
