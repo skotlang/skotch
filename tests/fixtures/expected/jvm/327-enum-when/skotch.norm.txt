@@ -27,64 +27,56 @@ method        SUMMER ()LSeason; 0x0019
     0009 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Season$valueOf (Ljava/lang/String;)LSeason; 0x0019
-  code        max_stack=5 max_locals=14
+  code        max_stack=2 max_locals=10
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 ldc "SPRING"
-    0008 astore_1
-    0009 aload_0
-    0010 aload_1
-    0011 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0014 istore_2
-    0015 iload_2
-    0016 ifeq 78
-    0019 goto 103
-    0022 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0025 astore_3
-    0026 aload_3
-    0027 areturn
-    0028 ldc "WINTER"
-    0030 astore 4
-    0032 aload_0
-    0033 aload 4
-    0035 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0038 istore 5
-    0040 iload 5
-    0042 ifeq 22
-    0045 invokestatic Method(InputKt.WINTER:()LSeason;)
-    0048 astore 6
-    0050 aload 6
-    0052 areturn
-    0053 ldc "AUTUMN"
-    0055 astore 7
-    0057 aload_0
-    0058 aload 7
-    0060 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0063 istore 8
-    0065 iload 8
-    0067 ifeq 28
-    0070 invokestatic Method(InputKt.AUTUMN:()LSeason;)
-    0073 astore 9
-    0075 aload 9
-    0077 areturn
-    0078 ldc "SUMMER"
-    0080 astore 10
-    0082 aload_0
-    0083 aload 10
-    0085 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0088 istore 11
-    0090 iload 11
-    0092 ifeq 53
-    0095 invokestatic Method(InputKt.SUMMER:()LSeason;)
-    0098 astore 12
-    0100 aload 12
-    0102 areturn
-    0103 invokestatic Method(InputKt.SPRING:()LSeason;)
-    0106 astore 13
-    0108 aload 13
-    0110 areturn
-    sub_attr  StackMapTable (98 bytes)
+    0006 aload_0
+    0007 ldc "SPRING"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0012 istore_1
+    0013 iload_1
+    0014 ifeq 66
+    0017 goto 87
+    0020 invokestatic Method(InputKt.SPRING:()LSeason;)
+    0023 astore_2
+    0024 aload_2
+    0025 areturn
+    0026 aload_0
+    0027 ldc "WINTER"
+    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0032 istore_3
+    0033 iload_3
+    0034 ifeq 20
+    0037 invokestatic Method(InputKt.WINTER:()LSeason;)
+    0040 astore 4
+    0042 aload 4
+    0044 areturn
+    0045 aload_0
+    0046 ldc "AUTUMN"
+    0048 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0051 istore 5
+    0053 iload 5
+    0055 ifeq 26
+    0058 invokestatic Method(InputKt.AUTUMN:()LSeason;)
+    0061 astore 6
+    0063 aload 6
+    0065 areturn
+    0066 aload_0
+    0067 ldc "SUMMER"
+    0069 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0072 istore 7
+    0074 iload 7
+    0076 ifeq 45
+    0079 invokestatic Method(InputKt.SUMMER:()LSeason;)
+    0082 astore 8
+    0084 aload 8
+    0086 areturn
+    0087 invokestatic Method(InputKt.SPRING:()LSeason;)
+    0090 astore 9
+    0092 aload 9
+    0094 areturn
+    sub_attr  StackMapTable (65 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Season$values ()Ljava/util/ArrayList; 0x0019
@@ -125,71 +117,61 @@ method        WINTER ()LSeason; 0x0019
     0009 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        describe (Ljava/lang/String;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=15
+  code        max_stack=2 max_locals=11
     0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 goto 9
-    0009 ldc "SPRING"
-    0011 astore_1
-    0012 aload_0
-    0013 aload_1
-    0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0017 istore_2
-    0018 iload_2
-    0019 ifeq 31
-    0022 ldc "flowers bloom"
-    0024 astore_3
-    0025 aload_3
-    0026 astore 4
-    0028 goto 126
-    0031 ldc "SUMMER"
-    0033 astore 5
-    0035 aload_0
-    0036 aload 5
-    0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0041 istore 6
-    0043 iload 6
-    0045 ifeq 59
-    0048 ldc "sun shines"
-    0050 astore 7
-    0052 aload 7
-    0054 astore 4
-    0056 goto 126
-    0059 ldc "AUTUMN"
-    0061 astore 8
-    0063 aload_0
-    0064 aload 8
-    0066 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0069 istore 9
-    0071 iload 9
-    0073 ifeq 87
-    0076 ldc "leaves fall"
-    0078 astore 10
-    0080 aload 10
-    0082 astore 4
-    0084 goto 126
-    0087 ldc "WINTER"
-    0089 astore 11
-    0091 aload_0
-    0092 aload 11
-    0094 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0097 istore 12
-    0099 iload 12
-    0101 ifeq 115
-    0104 ldc "snow falls"
-    0106 astore 13
-    0108 aload 13
-    0110 astore 4
-    0112 goto 126
-    0115 ldc "unknown"
-    0117 astore 14
-    0119 aload 14
-    0121 astore 4
-    0123 goto 126
-    0126 aload 4
-    0128 areturn
-    sub_attr  StackMapTable (64 bytes)
+    0006 aload_0
+    0007 ldc "SPRING"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0012 istore_1
+    0013 iload_1
+    0014 ifeq 25
+    0017 ldc "flowers bloom"
+    0019 astore_2
+    0020 aload_2
+    0021 astore_3
+    0022 goto 101
+    0025 aload_0
+    0026 ldc "SUMMER"
+    0028 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0031 istore 4
+    0033 iload 4
+    0035 ifeq 48
+    0038 ldc "sun shines"
+    0040 astore 5
+    0042 aload 5
+    0044 astore_3
+    0045 goto 101
+    0048 aload_0
+    0049 ldc "AUTUMN"
+    0051 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0054 istore 6
+    0056 iload 6
+    0058 ifeq 71
+    0061 ldc "leaves fall"
+    0063 astore 7
+    0065 aload 7
+    0067 astore_3
+    0068 goto 101
+    0071 aload_0
+    0072 ldc "WINTER"
+    0074 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0077 istore 8
+    0079 iload 8
+    0081 ifeq 94
+    0084 ldc "snow falls"
+    0086 astore 9
+    0088 aload 9
+    0090 astore_3
+    0091 goto 101
+    0094 ldc "unknown"
+    0096 astore 10
+    0098 aload 10
+    0100 astore_3
+    0101 aload_3
+    0102 areturn
+    sub_attr  StackMapTable (37 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

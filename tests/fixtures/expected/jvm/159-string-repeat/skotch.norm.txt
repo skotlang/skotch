@@ -22,7 +22,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        repeat (Ljava/lang/String;I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=11
     0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -34,38 +34,34 @@ method        repeat (Ljava/lang/String;I)Ljava/lang/String; 0x0019
     0012 istore 4
     0014 iload 4
     0016 istore 5
-    0018 goto 21
-    0021 iload 5
-    0023 iload_1
-    0024 if_icmpgt 31
-    0027 iconst_1
-    0028 goto 32
-    0031 iconst_0
-    0032 istore 6
-    0034 iload 6
-    0036 ifeq 73
-    0039 aload_3
-    0040 astore 7
-    0042 aload 7
-    0044 aload_0
-    0045 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0048 astore 8
-    0050 aload 8
-    0052 astore_3
-    0053 goto 56
-    0056 iconst_1
-    0057 istore 9
-    0059 iload 5
-    0061 iload 9
-    0063 iadd
-    0064 istore 10
-    0066 iload 10
-    0068 istore 5
-    0070 goto 21
-    0073 aload_3
-    0074 astore 11
-    0076 aload 11
-    0078 areturn
-    sub_attr  StackMapTable (37 bytes)
+    0018 iload 5
+    0020 iload_1
+    0021 if_icmpgt 28
+    0024 iconst_1
+    0025 goto 29
+    0028 iconst_0
+    0029 istore 6
+    0031 iload 6
+    0033 ifeq 63
+    0036 aload_3
+    0037 astore 7
+    0039 aload 7
+    0041 aload_0
+    0042 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0045 astore 8
+    0047 aload 8
+    0049 astore_3
+    0050 iload 5
+    0052 iconst_1
+    0053 iadd
+    0054 istore 9
+    0056 iload 9
+    0058 istore 5
+    0060 goto 18
+    0063 aload_3
+    0064 astore 10
+    0066 aload 10
+    0068 areturn
+    sub_attr  StackMapTable (28 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

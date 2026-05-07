@@ -22,44 +22,39 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        main$factorial (I)I 0x001A
-  code        max_stack=2 max_locals=10
-    0000 iconst_1
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpgt 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_2
-    0013 iload_2
-    0014 ifeq 25
-    0017 iconst_1
+  code        max_stack=2 max_locals=8
+    0000 iload_0
+    0001 iconst_1
+    0002 if_icmpgt 9
+    0005 iconst_1
+    0006 goto 10
+    0009 iconst_0
+    0010 istore_1
+    0011 iload_1
+    0012 ifeq 22
+    0015 iconst_1
+    0016 istore_2
+    0017 iload_2
     0018 istore_3
-    0019 iload_3
-    0020 istore 4
-    0022 goto 67
-    0025 iconst_1
-    0026 istore 5
-    0028 iload_0
-    0029 iload 5
-    0031 isub
-    0032 istore 6
-    0034 iload 6
-    0036 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0039 astore 7
-    0041 aload 7
-    0043 checkcast Class(java/lang/Integer)
-    0046 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0049 invokestatic Method(InputKt.main$factorial:(I)I)
-    0052 istore 8
-    0054 iload_0
-    0055 iload 8
-    0057 imul
-    0058 istore 9
-    0060 iload 9
-    0062 istore 4
-    0064 goto 67
-    0067 iload 4
-    0069 ireturn
-    sub_attr  StackMapTable (17 bytes)
+    0019 goto 56
+    0022 iload_0
+    0023 iconst_1
+    0024 isub
+    0025 istore 4
+    0027 iload 4
+    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0032 astore 5
+    0034 aload 5
+    0036 checkcast Class(java/lang/Integer)
+    0039 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0042 invokestatic Method(InputKt.main$factorial:(I)I)
+    0045 istore 6
+    0047 iload_0
+    0048 iload 6
+    0050 imul
+    0051 istore 7
+    0053 iload 7
+    0055 istore_3
+    0056 iload_3
+    0057 ireturn
+    sub_attr  StackMapTable (14 bytes)

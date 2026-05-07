@@ -3,33 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        guard (I)Ljava/lang/String; 0x0019
-  code        max_stack=4 max_locals=6
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmplt 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_2
-    0013 iload_2
-    0014 ifeq 24
-    0017 iload_0
-    0018 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0021 astore_3
-    0022 aload_3
-    0023 areturn
-    0024 ldc "negative"
-    0026 astore 4
-    0028 new Class(java/lang/IllegalArgumentException)
-    0031 dup
-    0032 aload 4
-    0034 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0037 astore 5
-    0039 aload 5
-    0041 athrow
-    sub_attr  StackMapTable (12 bytes)
+  code        max_stack=3 max_locals=4
+    0000 iload_0
+    0001 iflt 8
+    0004 iconst_1
+    0005 goto 9
+    0008 iconst_0
+    0009 istore_1
+    0010 iload_1
+    0011 ifeq 21
+    0014 iload_0
+    0015 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0018 astore_2
+    0019 aload_2
+    0020 areturn
+    0021 new Class(java/lang/IllegalArgumentException)
+    0024 dup
+    0025 ldc "negative"
+    0027 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0030 astore_3
+    0031 aload_3
+    0032 athrow
+    sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
@@ -50,28 +45,22 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safe (I)I 0x0019
-  code        max_stack=3 max_locals=5
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_2
-    0013 iload_2
-    0014 ifeq 33
-    0017 ldc "neg"
-    0019 astore_3
-    0020 new Class(java/lang/IllegalArgumentException)
-    0023 dup
-    0024 aload_3
-    0025 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0028 astore 4
-    0030 aload 4
-    0032 athrow
-    0033 goto 36
-    0036 iload_0
-    0037 ireturn
-    sub_attr  StackMapTable (13 bytes)
+  code        max_stack=3 max_locals=3
+    0000 iload_0
+    0001 ifge 8
+    0004 iconst_1
+    0005 goto 9
+    0008 iconst_0
+    0009 istore_1
+    0010 iload_1
+    0011 ifeq 26
+    0014 new Class(java/lang/IllegalArgumentException)
+    0017 dup
+    0018 ldc "neg"
+    0020 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0023 astore_2
+    0024 aload_2
+    0025 athrow
+    0026 iload_0
+    0027 ireturn
+    sub_attr  StackMapTable (9 bytes)

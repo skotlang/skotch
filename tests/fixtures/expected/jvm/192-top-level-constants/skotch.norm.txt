@@ -3,42 +3,35 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        clamp (I)I 0x0019
-  code        max_stack=3 max_locals=7
-    0000 bipush 100
-    0002 istore_1
-    0003 iload_0
-    0004 iload_1
-    0005 if_icmple 12
-    0008 iconst_1
-    0009 goto 13
-    0012 iconst_0
-    0013 istore_2
-    0014 iload_2
-    0015 ifeq 23
-    0018 bipush 100
-    0020 istore_3
-    0021 iload_3
-    0022 ireturn
-    0023 goto 26
-    0026 iconst_0
-    0027 istore 4
-    0029 iload_0
-    0030 iload 4
-    0032 if_icmpge 39
-    0035 iconst_1
-    0036 goto 40
-    0039 iconst_0
-    0040 istore 5
-    0042 iload 5
-    0044 ifeq 53
-    0047 iconst_0
-    0048 istore 6
-    0050 iload 6
-    0052 ireturn
-    0053 goto 56
-    0056 iload_0
-    0057 ireturn
-    sub_attr  StackMapTable (25 bytes)
+  code        max_stack=2 max_locals=5
+    0000 iload_0
+    0001 bipush 100
+    0003 if_icmple 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 istore_1
+    0012 iload_1
+    0013 ifeq 21
+    0016 bipush 100
+    0018 istore_2
+    0019 iload_2
+    0020 ireturn
+    0021 iload_0
+    0022 ifge 29
+    0025 iconst_1
+    0026 goto 30
+    0029 iconst_0
+    0030 istore_3
+    0031 iload_3
+    0032 ifeq 41
+    0035 iconst_0
+    0036 istore 4
+    0038 iload 4
+    0040 ireturn
+    0041 iload_0
+    0042 ireturn
+    sub_attr  StackMapTable (17 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 ldc "Hello"

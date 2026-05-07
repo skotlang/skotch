@@ -3,58 +3,43 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=7
     0000 iconst_5
     0001 istore_0
-    0002 bipush 10
-    0004 istore_1
-    0005 iload_0
-    0006 iload_1
-    0007 if_icmple 14
-    0010 iconst_1
-    0011 goto 15
-    0014 iconst_0
-    0015 istore_2
-    0016 iload_2
-    0017 ifeq 33
-    0020 ldc "big"
-    0022 astore_3
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 aload_3
-    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0030 goto 57
-    0033 iconst_3
-    0034 istore 4
-    0036 iload_0
-    0037 iload 4
-    0039 if_icmple 46
-    0042 iconst_1
-    0043 goto 47
-    0046 iconst_0
-    0047 istore 5
-    0049 iload 5
-    0051 ifeq 85
-    0054 goto 70
-    0057 ldc "done"
-    0059 astore 6
-    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0064 aload 6
-    0066 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0069 return
-    0070 ldc "medium"
-    0072 astore 7
-    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0077 aload 7
-    0079 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0082 goto 100
-    0085 ldc "small"
-    0087 astore 8
-    0089 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0092 aload 8
-    0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0097 goto 100
-    0100 goto 57
-    sub_attr  StackMapTable (31 bytes)
+    0002 iconst_0
+    0003 istore_1
+    0004 iload_1
+    0005 ifeq 21
+    0008 ldc "big"
+    0010 astore_2
+    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0014 aload_2
+    0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0018 goto 30
+    0021 iconst_1
+    0022 istore_3
+    0023 iload_3
+    0024 ifeq 58
+    0027 goto 43
+    0030 ldc "done"
+    0032 astore 4
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 aload 4
+    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0042 return
+    0043 ldc "medium"
+    0045 astore 5
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 aload 5
+    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0055 goto 30
+    0058 ldc "small"
+    0060 astore 6
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 aload 6
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0070 goto 30
+    sub_attr  StackMapTable (14 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -3,43 +3,37 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=7
     0000 iconst_5
     0001 istore_0
     0002 iload_0
     0003 istore_1
-    0004 goto 7
-    0007 iload_1
-    0008 istore_2
-    0009 iconst_0
-    0010 istore_3
-    0011 iload_2
-    0012 iload_3
-    0013 if_icmple 20
-    0016 iconst_1
-    0017 goto 21
-    0020 iconst_0
+    0004 iload_1
+    0005 istore_2
+    0006 iload_2
+    0007 ifle 14
+    0010 iconst_1
+    0011 goto 15
+    0014 iconst_0
+    0015 istore_3
+    0016 iload_3
+    0017 ifeq 46
+    0020 iload_1
     0021 istore 4
-    0023 iload 4
-    0025 ifeq 58
-    0028 iload_1
-    0029 istore 5
-    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 iload 4
+    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0031 iload_1
+    0032 istore 5
     0034 iload 5
-    0036 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0039 iload_1
-    0040 istore 6
-    0042 iconst_1
-    0043 istore 7
-    0045 iload 6
-    0047 iload 7
-    0049 isub
-    0050 istore 8
-    0052 iload 8
-    0054 istore_1
-    0055 goto 7
-    0058 return
-    sub_attr  StackMapTable (18 bytes)
+    0036 iconst_1
+    0037 isub
+    0038 istore 6
+    0040 iload 6
+    0042 istore_1
+    0043 goto 4
+    0046 return
+    sub_attr  StackMapTable (17 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

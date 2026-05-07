@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        countVowels (Ljava/lang/String;)I 0x0019
-  code        max_stack=4 max_locals=13
+  code        max_stack=2 max_locals=10
     0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -11,50 +11,41 @@ method        countVowels (Ljava/lang/String;)I 0x0019
     0007 istore_1
     0008 iload_1
     0009 istore_2
-    0010 ldc "hello"
-    0012 astore_3
-    0013 aload_0
-    0014 aload_3
-    0015 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0018 istore 4
-    0020 iload 4
-    0022 ifeq 31
-    0025 iconst_2
-    0026 istore 5
-    0028 iload 5
-    0030 ireturn
-    0031 goto 34
-    0034 ldc "world"
-    0036 astore 6
-    0038 aload_0
-    0039 aload 6
-    0041 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0044 istore 7
-    0046 iload 7
-    0048 ifeq 57
-    0051 iconst_1
-    0052 istore 8
-    0054 iload 8
-    0056 ireturn
-    0057 goto 60
-    0060 ldc "kotlin"
-    0062 astore 9
-    0064 aload_0
-    0065 aload 9
-    0067 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0070 istore 10
-    0072 iload 10
-    0074 ifeq 83
-    0077 iconst_2
-    0078 istore 11
-    0080 iload 11
-    0082 ireturn
-    0083 goto 86
-    0086 iload_2
-    0087 istore 12
-    0089 iload 12
-    0091 ireturn
-    sub_attr  StackMapTable (37 bytes)
+    0010 aload_0
+    0011 ldc "hello"
+    0013 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0016 istore_3
+    0017 iload_3
+    0018 ifeq 27
+    0021 iconst_2
+    0022 istore 4
+    0024 iload 4
+    0026 ireturn
+    0027 aload_0
+    0028 ldc "world"
+    0030 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0033 istore 5
+    0035 iload 5
+    0037 ifeq 46
+    0040 iconst_1
+    0041 istore 6
+    0043 iload 6
+    0045 ireturn
+    0046 aload_0
+    0047 ldc "kotlin"
+    0049 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0052 istore 7
+    0054 iload 7
+    0056 ifeq 65
+    0059 iconst_2
+    0060 istore 8
+    0062 iload 8
+    0064 ireturn
+    0065 iload_2
+    0066 istore 9
+    0068 iload 9
+    0070 ireturn
+    sub_attr  StackMapTable (18 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1

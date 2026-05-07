@@ -35,471 +35,416 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        toRoman (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=122
+  code        max_stack=2 max_locals=83
     0000 ldc ""
     0002 astore_1
     0003 aload_1
     0004 astore_2
     0005 iload_0
     0006 istore_3
-    0007 goto 10
-    0010 iload_3
-    0011 istore 4
-    0013 sipush 1000
-    0016 istore 5
-    0018 iload 4
-    0020 iload 5
-    0022 if_icmplt 29
-    0025 iconst_1
-    0026 goto 30
-    0029 iconst_0
-    0030 istore 6
-    0032 iload 6
-    0034 ifeq 77
-    0037 aload_2
-    0038 astore 7
-    0040 ldc "M"
-    0042 astore 8
-    0044 aload 7
-    0046 aload 8
-    0048 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0051 astore 9
-    0053 aload 9
-    0055 astore_2
-    0056 iload_3
-    0057 istore 10
-    0059 sipush 1000
-    0062 istore 11
-    0064 iload 10
-    0066 iload 11
-    0068 isub
-    0069 istore 12
-    0071 iload 12
-    0073 istore_3
-    0074 goto 10
-    0077 goto 80
-    0080 iload_3
-    0081 istore 13
-    0083 sipush 900
-    0086 istore 14
-    0088 iload 13
-    0090 iload 14
-    0092 if_icmplt 99
-    0095 iconst_1
-    0096 goto 100
-    0099 iconst_0
-    0100 istore 15
-    0102 iload 15
-    0104 ifeq 147
-    0107 aload_2
-    0108 astore 16
-    0110 ldc "CM"
-    0112 astore 17
-    0114 aload 16
-    0116 aload 17
-    0118 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0121 astore 18
-    0123 aload 18
-    0125 astore_2
-    0126 iload_3
-    0127 istore 19
-    0129 sipush 900
-    0132 istore 20
-    0134 iload 19
-    0136 iload 20
-    0138 isub
-    0139 istore 21
-    0141 iload 21
-    0143 istore_3
-    0144 goto 80
-    0147 goto 150
-    0150 iload_3
-    0151 istore 22
-    0153 sipush 500
-    0156 istore 23
-    0158 iload 22
-    0160 iload 23
-    0162 if_icmplt 169
-    0165 iconst_1
-    0166 goto 170
-    0169 iconst_0
-    0170 istore 24
-    0172 iload 24
-    0174 ifeq 217
-    0177 aload_2
-    0178 astore 25
-    0180 ldc "D"
-    0182 astore 26
-    0184 aload 25
-    0186 aload 26
-    0188 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0191 astore 27
-    0193 aload 27
-    0195 astore_2
-    0196 iload_3
-    0197 istore 28
-    0199 sipush 500
-    0202 istore 29
-    0204 iload 28
-    0206 iload 29
-    0208 isub
-    0209 istore 30
-    0211 iload 30
-    0213 istore_3
-    0214 goto 150
-    0217 goto 220
-    0220 iload_3
-    0221 istore 31
-    0223 sipush 400
-    0226 istore 32
-    0228 iload 31
-    0230 iload 32
-    0232 if_icmplt 239
-    0235 iconst_1
-    0236 goto 240
-    0239 iconst_0
-    0240 istore 33
-    0242 iload 33
-    0244 ifeq 287
-    0247 aload_2
-    0248 astore 34
-    0250 ldc "CD"
-    0252 astore 35
-    0254 aload 34
-    0256 aload 35
-    0258 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0261 astore 36
-    0263 aload 36
-    0265 astore_2
-    0266 iload_3
-    0267 istore 37
-    0269 sipush 400
-    0272 istore 38
-    0274 iload 37
-    0276 iload 38
-    0278 isub
-    0279 istore 39
-    0281 iload 39
-    0283 istore_3
-    0284 goto 220
-    0287 goto 290
-    0290 iload_3
-    0291 istore 40
-    0293 bipush 100
-    0295 istore 41
-    0297 iload 40
-    0299 iload 41
-    0301 if_icmplt 308
-    0304 iconst_1
-    0305 goto 309
-    0308 iconst_0
-    0309 istore 42
-    0311 iload 42
-    0313 ifeq 355
-    0316 aload_2
-    0317 astore 43
-    0319 ldc "C"
-    0321 astore 44
-    0323 aload 43
-    0325 aload 44
-    0327 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0330 astore 45
-    0332 aload 45
-    0334 astore_2
-    0335 iload_3
-    0336 istore 46
-    0338 bipush 100
-    0340 istore 47
-    0342 iload 46
-    0344 iload 47
-    0346 isub
-    0347 istore 48
-    0349 iload 48
-    0351 istore_3
-    0352 goto 290
-    0355 goto 358
-    0358 iload_3
-    0359 istore 49
-    0361 bipush 90
-    0363 istore 50
-    0365 iload 49
-    0367 iload 50
-    0369 if_icmplt 376
-    0372 iconst_1
-    0373 goto 377
-    0376 iconst_0
-    0377 istore 51
-    0379 iload 51
-    0381 ifeq 423
-    0384 aload_2
-    0385 astore 52
-    0387 ldc "XC"
-    0389 astore 53
-    0391 aload 52
-    0393 aload 53
-    0395 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0398 astore 54
-    0400 aload 54
-    0402 astore_2
-    0403 iload_3
-    0404 istore 55
-    0406 bipush 90
-    0408 istore 56
-    0410 iload 55
-    0412 iload 56
-    0414 isub
-    0415 istore 57
-    0417 iload 57
-    0419 istore_3
-    0420 goto 358
-    0423 goto 426
-    0426 iload_3
-    0427 istore 58
-    0429 bipush 50
-    0431 istore 59
-    0433 iload 58
-    0435 iload 59
-    0437 if_icmplt 444
-    0440 iconst_1
-    0441 goto 445
-    0444 iconst_0
-    0445 istore 60
-    0447 iload 60
-    0449 ifeq 491
-    0452 aload_2
-    0453 astore 61
-    0455 ldc "L"
-    0457 astore 62
-    0459 aload 61
-    0461 aload 62
-    0463 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0466 astore 63
-    0468 aload 63
-    0470 astore_2
-    0471 iload_3
-    0472 istore 64
-    0474 bipush 50
-    0476 istore 65
-    0478 iload 64
-    0480 iload 65
-    0482 isub
-    0483 istore 66
-    0485 iload 66
-    0487 istore_3
-    0488 goto 426
-    0491 goto 494
-    0494 iload_3
-    0495 istore 67
-    0497 bipush 40
-    0499 istore 68
-    0501 iload 67
-    0503 iload 68
-    0505 if_icmplt 512
-    0508 iconst_1
-    0509 goto 513
-    0512 iconst_0
-    0513 istore 69
-    0515 iload 69
-    0517 ifeq 559
-    0520 aload_2
-    0521 astore 70
-    0523 ldc "XL"
-    0525 astore 71
-    0527 aload 70
-    0529 aload 71
-    0531 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0534 astore 72
-    0536 aload 72
-    0538 astore_2
-    0539 iload_3
-    0540 istore 73
-    0542 bipush 40
-    0544 istore 74
-    0546 iload 73
-    0548 iload 74
-    0550 isub
-    0551 istore 75
-    0553 iload 75
-    0555 istore_3
-    0556 goto 494
-    0559 goto 562
-    0562 iload_3
-    0563 istore 76
-    0565 bipush 10
-    0567 istore 77
-    0569 iload 76
-    0571 iload 77
-    0573 if_icmplt 580
-    0576 iconst_1
-    0577 goto 581
-    0580 iconst_0
-    0581 istore 78
-    0583 iload 78
-    0585 ifeq 627
-    0588 aload_2
-    0589 astore 79
-    0591 ldc "X"
-    0593 astore 80
-    0595 aload 79
-    0597 aload 80
-    0599 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0602 astore 81
-    0604 aload 81
-    0606 astore_2
-    0607 iload_3
-    0608 istore 82
-    0610 bipush 10
-    0612 istore 83
-    0614 iload 82
-    0616 iload 83
-    0618 isub
-    0619 istore 84
-    0621 iload 84
-    0623 istore_3
-    0624 goto 562
-    0627 goto 630
-    0630 iload_3
-    0631 istore 85
-    0633 bipush 9
-    0635 istore 86
-    0637 iload 85
-    0639 iload 86
-    0641 if_icmplt 648
-    0644 iconst_1
-    0645 goto 649
-    0648 iconst_0
-    0649 istore 87
-    0651 iload 87
-    0653 ifeq 695
-    0656 aload_2
-    0657 astore 88
-    0659 ldc "IX"
-    0661 astore 89
-    0663 aload 88
-    0665 aload 89
-    0667 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0670 astore 90
-    0672 aload 90
-    0674 astore_2
-    0675 iload_3
-    0676 istore 91
-    0678 bipush 9
-    0680 istore 92
-    0682 iload 91
-    0684 iload 92
-    0686 isub
-    0687 istore 93
-    0689 iload 93
-    0691 istore_3
-    0692 goto 630
-    0695 goto 698
-    0698 iload_3
-    0699 istore 94
-    0701 iconst_5
-    0702 istore 95
-    0704 iload 94
-    0706 iload 95
-    0708 if_icmplt 715
-    0711 iconst_1
-    0712 goto 716
-    0715 iconst_0
-    0716 istore 96
-    0718 iload 96
-    0720 ifeq 761
-    0723 aload_2
-    0724 astore 97
-    0726 ldc "V"
-    0728 astore 98
-    0730 aload 97
-    0732 aload 98
-    0734 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0737 astore 99
-    0739 aload 99
-    0741 astore_2
-    0742 iload_3
-    0743 istore 100
-    0745 iconst_5
-    0746 istore 101
-    0748 iload 100
-    0750 iload 101
-    0752 isub
-    0753 istore 102
-    0755 iload 102
-    0757 istore_3
-    0758 goto 698
-    0761 goto 764
-    0764 iload_3
-    0765 istore 103
-    0767 iconst_4
-    0768 istore 104
-    0770 iload 103
-    0772 iload 104
-    0774 if_icmplt 781
-    0777 iconst_1
-    0778 goto 782
-    0781 iconst_0
-    0782 istore 105
-    0784 iload 105
-    0786 ifeq 827
-    0789 aload_2
-    0790 astore 106
-    0792 ldc "IV"
-    0794 astore 107
-    0796 aload 106
-    0798 aload 107
-    0800 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0803 astore 108
-    0805 aload 108
-    0807 astore_2
-    0808 iload_3
-    0809 istore 109
-    0811 iconst_4
-    0812 istore 110
-    0814 iload 109
-    0816 iload 110
-    0818 isub
-    0819 istore 111
-    0821 iload 111
-    0823 istore_3
-    0824 goto 764
-    0827 goto 830
-    0830 iload_3
-    0831 istore 112
-    0833 iconst_1
-    0834 istore 113
-    0836 iload 112
-    0838 iload 113
-    0840 if_icmplt 847
-    0843 iconst_1
-    0844 goto 848
-    0847 iconst_0
-    0848 istore 114
-    0850 iload 114
-    0852 ifeq 893
-    0855 aload_2
-    0856 astore 115
-    0858 ldc "I"
-    0860 astore 116
-    0862 aload 115
-    0864 aload 116
-    0866 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0869 astore 117
-    0871 aload 117
-    0873 astore_2
-    0874 iload_3
-    0875 istore 118
-    0877 iconst_1
-    0878 istore 119
-    0880 iload 118
-    0882 iload 119
-    0884 isub
-    0885 istore 120
-    0887 iload 120
-    0889 istore_3
-    0890 goto 830
-    0893 aload_2
-    0894 astore 121
-    0896 aload 121
-    0898 areturn
-    sub_attr  StackMapTable (1013 bytes)
+    0007 iload_3
+    0008 istore 4
+    0010 iload 4
+    0012 sipush 1000
+    0015 if_icmplt 22
+    0018 iconst_1
+    0019 goto 23
+    0022 iconst_0
+    0023 istore 5
+    0025 iload 5
+    0027 ifeq 62
+    0030 aload_2
+    0031 astore 6
+    0033 aload 6
+    0035 op_0xBA
+    0036 nop
+    0037 iload 0
+    0039 nop
+    0040 astore 7
+    0042 aload 7
+    0044 astore_2
+    0045 iload_3
+    0046 istore 8
+    0048 iload 8
+    0050 sipush 1000
+    0053 isub
+    0054 istore 9
+    0056 iload 9
+    0058 istore_3
+    0059 goto 7
+    0062 iload_3
+    0063 istore 10
+    0065 iload 10
+    0067 sipush 900
+    0070 if_icmplt 77
+    0073 iconst_1
+    0074 goto 78
+    0077 iconst_0
+    0078 istore 11
+    0080 iload 11
+    0082 ifeq 117
+    0085 aload_2
+    0086 astore 12
+    0088 aload 12
+    0090 op_0xBA
+    0091 nop
+    0092 dload 0
+    0094 nop
+    0095 astore 13
+    0097 aload 13
+    0099 astore_2
+    0100 iload_3
+    0101 istore 14
+    0103 iload 14
+    0105 sipush 900
+    0108 isub
+    0109 istore 15
+    0111 iload 15
+    0113 istore_3
+    0114 goto 62
+    0117 iload_3
+    0118 istore 16
+    0120 iload 16
+    0122 sipush 500
+    0125 if_icmplt 132
+    0128 iconst_1
+    0129 goto 133
+    0132 iconst_0
+    0133 istore 17
+    0135 iload 17
+    0137 ifeq 172
+    0140 aload_2
+    0141 astore 18
+    0143 aload 18
+    0145 op_0xBA
+    0146 nop
+    0147 iload_1
+    0148 nop
+    0149 nop
+    0150 astore 19
+    0152 aload 19
+    0154 astore_2
+    0155 iload_3
+    0156 istore 20
+    0158 iload 20
+    0160 sipush 500
+    0163 isub
+    0164 istore 21
+    0166 iload 21
+    0168 istore_3
+    0169 goto 117
+    0172 iload_3
+    0173 istore 22
+    0175 iload 22
+    0177 sipush 400
+    0180 if_icmplt 187
+    0183 iconst_1
+    0184 goto 188
+    0187 iconst_0
+    0188 istore 23
+    0190 iload 23
+    0192 ifeq 227
+    0195 aload_2
+    0196 astore 24
+    0198 aload 24
+    0200 op_0xBA
+    0201 nop
+    0202 lload_0
+    0203 nop
+    0204 nop
+    0205 astore 25
+    0207 aload 25
+    0209 astore_2
+    0210 iload_3
+    0211 istore 26
+    0213 iload 26
+    0215 sipush 400
+    0218 isub
+    0219 istore 27
+    0221 iload 27
+    0223 istore_3
+    0224 goto 172
+    0227 iload_3
+    0228 istore 28
+    0230 iload 28
+    0232 bipush 100
+    0234 if_icmplt 241
+    0237 iconst_1
+    0238 goto 242
+    0241 iconst_0
+    0242 istore 29
+    0244 iload 29
+    0246 ifeq 280
+    0249 aload_2
+    0250 astore 30
+    0252 aload 30
+    0254 op_0xBA
+    0255 nop
+    0256 lload_3
+    0257 nop
+    0258 nop
+    0259 astore 31
+    0261 aload 31
+    0263 astore_2
+    0264 iload_3
+    0265 istore 32
+    0267 iload 32
+    0269 bipush 100
+    0271 isub
+    0272 istore 33
+    0274 iload 33
+    0276 istore_3
+    0277 goto 227
+    0280 iload_3
+    0281 istore 34
+    0283 iload 34
+    0285 bipush 90
+    0287 if_icmplt 294
+    0290 iconst_1
+    0291 goto 295
+    0294 iconst_0
+    0295 istore 35
+    0297 iload 35
+    0299 ifeq 333
+    0302 aload_2
+    0303 astore 36
+    0305 aload 36
+    0307 op_0xBA
+    0308 nop
+    0309 fload_2
+    0310 nop
+    0311 nop
+    0312 astore 37
+    0314 aload 37
+    0316 astore_2
+    0317 iload_3
+    0318 istore 38
+    0320 iload 38
+    0322 bipush 90
+    0324 isub
+    0325 istore 39
+    0327 iload 39
+    0329 istore_3
+    0330 goto 280
+    0333 iload_3
+    0334 istore 40
+    0336 iload 40
+    0338 bipush 50
+    0340 if_icmplt 347
+    0343 iconst_1
+    0344 goto 348
+    0347 iconst_0
+    0348 istore 41
+    0350 iload 41
+    0352 ifeq 386
+    0355 aload_2
+    0356 astore 42
+    0358 aload 42
+    0360 op_0xBA
+    0361 nop
+    0362 dload_1
+    0363 nop
+    0364 nop
+    0365 astore 43
+    0367 aload 43
+    0369 astore_2
+    0370 iload_3
+    0371 istore 44
+    0373 iload 44
+    0375 bipush 50
+    0377 isub
+    0378 istore 45
+    0380 iload 45
+    0382 istore_3
+    0383 goto 333
+    0386 iload_3
+    0387 istore 46
+    0389 iload 46
+    0391 bipush 40
+    0393 if_icmplt 400
+    0396 iconst_1
+    0397 goto 401
+    0400 iconst_0
+    0401 istore 47
+    0403 iload 47
+    0405 ifeq 439
+    0408 aload_2
+    0409 astore 48
+    0411 aload 48
+    0413 op_0xBA
+    0414 nop
+    0415 aload_0
+    0416 nop
+    0417 nop
+    0418 astore 49
+    0420 aload 49
+    0422 astore_2
+    0423 iload_3
+    0424 istore 50
+    0426 iload 50
+    0428 bipush 40
+    0430 isub
+    0431 istore 51
+    0433 iload 51
+    0435 istore_3
+    0436 goto 386
+    0439 iload_3
+    0440 istore 52
+    0442 iload 52
+    0444 bipush 10
+    0446 if_icmplt 453
+    0449 iconst_1
+    0450 goto 454
+    0453 iconst_0
+    0454 istore 53
+    0456 iload 53
+    0458 ifeq 492
+    0461 aload_2
+    0462 astore 54
+    0464 aload 54
+    0466 op_0xBA
+    0467 nop
+    0468 aload_3
+    0469 nop
+    0470 nop
+    0471 astore 55
+    0473 aload 55
+    0475 astore_2
+    0476 iload_3
+    0477 istore 56
+    0479 iload 56
+    0481 bipush 10
+    0483 isub
+    0484 istore 57
+    0486 iload 57
+    0488 istore_3
+    0489 goto 439
+    0492 iload_3
+    0493 istore 58
+    0495 iload 58
+    0497 bipush 9
+    0499 if_icmplt 506
+    0502 iconst_1
+    0503 goto 507
+    0506 iconst_0
+    0507 istore 59
+    0509 iload 59
+    0511 ifeq 545
+    0514 aload_2
+    0515 astore 60
+    0517 aload 60
+    0519 op_0xBA
+    0520 nop
+    0521 op_0x30
+    0522 nop
+    0523 nop
+    0524 astore 61
+    0526 aload 61
+    0528 astore_2
+    0529 iload_3
+    0530 istore 62
+    0532 iload 62
+    0534 bipush 9
+    0536 isub
+    0537 istore 63
+    0539 iload 63
+    0541 istore_3
+    0542 goto 492
+    0545 iload_3
+    0546 istore 64
+    0548 iload 64
+    0550 iconst_5
+    0551 if_icmplt 558
+    0554 iconst_1
+    0555 goto 559
+    0558 iconst_0
+    0559 istore 65
+    0561 iload 65
+    0563 ifeq 596
+    0566 aload_2
+    0567 astore 66
+    0569 aload 66
+    0571 op_0xBA
+    0572 nop
+    0573 op_0x33
+    0574 nop
+    0575 nop
+    0576 astore 67
+    0578 aload 67
+    0580 astore_2
+    0581 iload_3
+    0582 istore 68
+    0584 iload 68
+    0586 iconst_5
+    0587 isub
+    0588 istore 69
+    0590 iload 69
+    0592 istore_3
+    0593 goto 545
+    0596 iload_3
+    0597 istore 70
+    0599 iload 70
+    0601 iconst_4
+    0602 if_icmplt 609
+    0605 iconst_1
+    0606 goto 610
+    0609 iconst_0
+    0610 istore 71
+    0612 iload 71
+    0614 ifeq 647
+    0617 aload_2
+    0618 astore 72
+    0620 aload 72
+    0622 op_0xBA
+    0623 nop
+    0624 istore 0
+    0626 nop
+    0627 astore 73
+    0629 aload 73
+    0631 astore_2
+    0632 iload_3
+    0633 istore 74
+    0635 iload 74
+    0637 iconst_4
+    0638 isub
+    0639 istore 75
+    0641 iload 75
+    0643 istore_3
+    0644 goto 596
+    0647 iload_3
+    0648 istore 76
+    0650 iload 76
+    0652 iconst_1
+    0653 if_icmplt 660
+    0656 iconst_1
+    0657 goto 661
+    0660 iconst_0
+    0661 istore 77
+    0663 iload 77
+    0665 ifeq 698
+    0668 aload_2
+    0669 astore 78
+    0671 aload 78
+    0673 op_0xBA
+    0674 nop
+    0675 dstore 0
+    0677 nop
+    0678 astore 79
+    0680 aload 79
+    0682 astore_2
+    0683 iload_3
+    0684 istore 80
+    0686 iload 80
+    0688 iconst_1
+    0689 isub
+    0690 istore 81
+    0692 iload 81
+    0694 istore_3
+    0695 goto 647
+    0698 aload_2
+    0699 astore 82
+    0701 aload 82
+    0703 areturn
+    sub_attr  StackMapTable (754 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (80 bytes)

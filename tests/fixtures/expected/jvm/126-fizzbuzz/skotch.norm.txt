@@ -3,78 +3,60 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fizzbuzz (I)Ljava/lang/String; 0x0019
-  code        max_stack=4 max_locals=17
-    0000 bipush 15
-    0002 istore_1
-    0003 iload_0
-    0004 iload_1
-    0005 irem
-    0006 istore_2
-    0007 iconst_0
-    0008 istore_3
-    0009 iload_2
-    0010 iload_3
-    0011 if_icmpne 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore 4
-    0021 iload 4
-    0023 ifeq 33
-    0026 ldc "FizzBuzz"
-    0028 astore 5
-    0030 aload 5
-    0032 areturn
-    0033 goto 36
-    0036 iconst_3
-    0037 istore 6
-    0039 iload_0
-    0040 iload 6
-    0042 irem
-    0043 istore 7
-    0045 iconst_0
-    0046 istore 8
-    0048 iload 7
-    0050 iload 8
-    0052 if_icmpne 59
-    0055 iconst_1
-    0056 goto 60
-    0059 iconst_0
-    0060 istore 9
-    0062 iload 9
-    0064 ifeq 74
-    0067 ldc "Fizz"
-    0069 astore 10
-    0071 aload 10
-    0073 areturn
-    0074 goto 77
-    0077 iconst_5
-    0078 istore 11
-    0080 iload_0
-    0081 iload 11
-    0083 irem
-    0084 istore 12
-    0086 iconst_0
-    0087 istore 13
-    0089 iload 12
-    0091 iload 13
-    0093 if_icmpne 100
-    0096 iconst_1
-    0097 goto 101
-    0100 iconst_0
-    0101 istore 14
-    0103 iload 14
-    0105 ifeq 115
-    0108 ldc "Buzz"
-    0110 astore 15
-    0112 aload 15
-    0114 areturn
-    0115 goto 118
-    0118 ldc "other"
-    0120 astore 16
-    0122 aload 16
-    0124 areturn
-    sub_attr  StackMapTable (66 bytes)
+  code        max_stack=2 max_locals=11
+    0000 iload_0
+    0001 bipush 15
+    0003 irem
+    0004 istore_1
+    0005 iload_1
+    0006 ifne 13
+    0009 iconst_1
+    0010 goto 14
+    0013 iconst_0
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 24
+    0019 ldc "FizzBuzz"
+    0021 astore_3
+    0022 aload_3
+    0023 areturn
+    0024 iload_0
+    0025 iconst_3
+    0026 irem
+    0027 istore 4
+    0029 iload 4
+    0031 ifne 38
+    0034 iconst_1
+    0035 goto 39
+    0038 iconst_0
+    0039 istore 5
+    0041 iload 5
+    0043 ifeq 53
+    0046 ldc "Fizz"
+    0048 astore 6
+    0050 aload 6
+    0052 areturn
+    0053 iload_0
+    0054 iconst_5
+    0055 irem
+    0056 istore 7
+    0058 iload 7
+    0060 ifne 67
+    0063 iconst_1
+    0064 goto 68
+    0067 iconst_0
+    0068 istore 8
+    0070 iload 8
+    0072 ifeq 82
+    0075 ldc "Buzz"
+    0077 astore 9
+    0079 aload 9
+    0081 areturn
+    0082 ldc "other"
+    0084 astore 10
+    0086 aload 10
+    0088 areturn
+    sub_attr  StackMapTable (34 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

@@ -3,37 +3,35 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=6
+  code        max_stack=2 max_locals=5
     0000 ldc "hello"
     0002 astore_0
-    0003 aconst_null
-    0004 astore_1
-    0005 aload_0
-    0006 aload_1
-    0007 if_acmpne 14
-    0010 iconst_1
-    0011 goto 15
-    0014 iconst_0
-    0015 istore_2
-    0016 iload_2
-    0017 ifeq 30
-    0020 new Class(java/lang/NullPointerException)
-    0023 dup
-    0024 invokespecial Method(java/lang/NullPointerException.<init>:()V)
-    0027 astore_3
-    0028 aload_3
-    0029 athrow
-    0030 aload_0
-    0031 checkcast Class(java/lang/String)
-    0034 astore 4
-    0036 aload 4
-    0038 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0041 astore 5
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 aload 5
-    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0051 return
-    sub_attr  StackMapTable (17 bytes)
+    0003 aload_0
+    0004 aconst_null
+    0005 if_acmpne 12
+    0008 iconst_1
+    0009 goto 13
+    0012 iconst_0
+    0013 istore_1
+    0014 iload_1
+    0015 ifeq 28
+    0018 new Class(java/lang/NullPointerException)
+    0021 dup
+    0022 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0025 astore_2
+    0026 aload_2
+    0027 athrow
+    0028 aload_0
+    0029 checkcast Class(java/lang/String)
+    0032 astore_3
+    0033 aload_3
+    0034 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0037 astore 4
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 aload 4
+    0044 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0047 return
+    sub_attr  StackMapTable (14 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

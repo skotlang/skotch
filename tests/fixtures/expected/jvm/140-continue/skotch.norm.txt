@@ -3,58 +3,45 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=6
     0000 iconst_1
     0001 istore_0
-    0002 bipush 10
-    0004 istore_1
-    0005 iload_0
-    0006 istore_2
-    0007 goto 10
-    0010 iload_2
-    0011 iload_1
-    0012 if_icmpgt 19
-    0015 iconst_1
-    0016 goto 20
-    0019 iconst_0
-    0020 istore_3
-    0021 iload_3
-    0022 ifeq 74
-    0025 iconst_2
-    0026 istore 4
-    0028 iload_2
-    0029 iload 4
-    0031 irem
-    0032 istore 5
-    0034 iconst_0
-    0035 istore 6
-    0037 iload 5
-    0039 iload 6
-    0041 if_icmpne 48
-    0044 iconst_1
-    0045 goto 49
-    0048 iconst_0
-    0049 istore 7
-    0051 iload 7
-    0053 ifeq 78
-    0056 goto 75
-    0059 iconst_1
-    0060 istore 8
-    0062 iload_2
-    0063 iload 8
-    0065 iadd
-    0066 istore 9
-    0068 iload 9
-    0070 istore_2
-    0071 goto 10
-    0074 return
-    0075 goto 59
-    0078 goto 81
-    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0084 iload_2
-    0085 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0088 goto 59
-    sub_attr  StackMapTable (59 bytes)
+    0002 iload_0
+    0003 istore_1
+    0004 iload_1
+    0005 bipush 10
+    0007 if_icmpgt 14
+    0010 iconst_1
+    0011 goto 15
+    0014 iconst_0
+    0015 istore_2
+    0016 iload_2
+    0017 ifeq 51
+    0020 iload_1
+    0021 iconst_2
+    0022 irem
+    0023 istore_3
+    0024 iload_3
+    0025 ifne 32
+    0028 iconst_1
+    0029 goto 33
+    0032 iconst_0
+    0033 istore 4
+    0035 iload 4
+    0037 ifeq 52
+    0040 iload_1
+    0041 iconst_1
+    0042 iadd
+    0043 istore 5
+    0045 iload 5
+    0047 istore_1
+    0048 goto 4
+    0051 return
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 iload_1
+    0056 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0059 goto 40
+    sub_attr  StackMapTable (29 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

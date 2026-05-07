@@ -137,6 +137,30 @@ impl ConstantPool {
         self.add(Key::Methodref(c, nt), Entry::Methodref(c, nt))
     }
 
+    /// Look up an existing Methodref without adding it. Returns `None` if
+    /// any of the underlying utf8/class/nameandtype entries are missing —
+    /// callers can skip work when the referenced symbol isn't already
+    /// interned (avoids polluting the CP for peephole searches).
+    pub fn lookup_methodref(
+        &self,
+        class_internal: &str,
+        name: &str,
+        descriptor: &str,
+    ) -> Option<u16> {
+        let class_utf8 = *self.dedupe.get(&Key::Utf8(class_internal.to_string()))?;
+        let class_idx = *self.dedupe.get(&Key::Class(class_utf8))?;
+        let name_utf8 = *self.dedupe.get(&Key::Utf8(name.to_string()))?;
+        let desc_utf8 = *self.dedupe.get(&Key::Utf8(descriptor.to_string()))?;
+        let nt_idx = *self.dedupe.get(&Key::NameAndType(name_utf8, desc_utf8))?;
+        self.dedupe.get(&Key::Methodref(class_idx, nt_idx)).copied()
+    }
+
+    /// Look up an existing Class entry without adding it.
+    pub fn lookup_class(&self, internal_name: &str) -> Option<u16> {
+        let utf = *self.dedupe.get(&Key::Utf8(internal_name.to_string()))?;
+        self.dedupe.get(&Key::Class(utf)).copied()
+    }
+
     /// CONSTANT_MethodHandle. `kind` is the reference-kind byte (1..=9
     /// per JVMS §4.4.8). `reference_index` points at the underlying
     /// (Field|Method|InterfaceMethod)ref entry.

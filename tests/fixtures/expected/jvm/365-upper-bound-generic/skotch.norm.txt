@@ -44,11 +44,10 @@ method        maxOf (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; 0x0
     0030 ifeq 39
     0033 aload_0
     0034 astore 5
-    0036 goto 45
+    0036 goto 42
     0039 aload_1
     0040 astore 5
-    0042 goto 45
-    0045 aload 5
-    0047 areturn
+    0042 aload 5
+    0044 areturn
     sub_attr  StackMapTable (19 bytes)
   attr        Signature (2 bytes)

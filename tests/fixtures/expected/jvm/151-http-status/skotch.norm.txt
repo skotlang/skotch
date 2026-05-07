@@ -3,96 +3,84 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        httpStatus (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=18
-    0000 goto 3
-    0003 sipush 200
-    0006 istore_1
-    0007 iload_0
-    0008 iload_1
-    0009 if_icmpne 16
-    0012 iconst_1
-    0013 goto 17
-    0016 iconst_0
-    0017 istore_2
-    0018 iload_2
-    0019 ifeq 31
-    0022 ldc "OK"
-    0024 astore_3
-    0025 aload_3
-    0026 astore 4
-    0028 goto 178
-    0031 sipush 201
-    0034 istore 5
-    0036 iload_0
-    0037 iload 5
-    0039 if_icmpne 46
-    0042 iconst_1
-    0043 goto 47
-    0046 iconst_0
-    0047 istore 6
-    0049 iload 6
-    0051 ifeq 65
-    0054 ldc "Created"
-    0056 astore 7
-    0058 aload 7
-    0060 astore 4
-    0062 goto 178
-    0065 sipush 400
-    0068 istore 8
-    0070 iload_0
-    0071 iload 8
-    0073 if_icmpne 80
-    0076 iconst_1
-    0077 goto 81
-    0080 iconst_0
-    0081 istore 9
-    0083 iload 9
-    0085 ifeq 99
-    0088 ldc "Bad Request"
-    0090 astore 10
-    0092 aload 10
-    0094 astore 4
-    0096 goto 178
-    0099 sipush 404
-    0102 istore 11
-    0104 iload_0
-    0105 iload 11
-    0107 if_icmpne 114
-    0110 iconst_1
-    0111 goto 115
-    0114 iconst_0
-    0115 istore 12
-    0117 iload 12
-    0119 ifeq 133
-    0122 ldc "Not Found"
-    0124 astore 13
-    0126 aload 13
-    0128 astore 4
-    0130 goto 178
-    0133 sipush 500
-    0136 istore 14
-    0138 iload_0
-    0139 iload 14
-    0141 if_icmpne 148
-    0144 iconst_1
-    0145 goto 149
-    0148 iconst_0
-    0149 istore 15
-    0151 iload 15
-    0153 ifeq 167
-    0156 ldc "Internal Server Error"
-    0158 astore 16
-    0160 aload 16
-    0162 astore 4
-    0164 goto 178
-    0167 ldc "Unknown"
-    0169 astore 17
-    0171 aload 17
-    0173 astore 4
-    0175 goto 178
-    0178 aload 4
-    0180 areturn
-    sub_attr  StackMapTable (72 bytes)
+  code        max_stack=2 max_locals=13
+    0000 iload_0
+    0001 sipush 200
+    0004 if_icmpne 11
+    0007 iconst_1
+    0008 goto 12
+    0011 iconst_0
+    0012 istore_1
+    0013 iload_1
+    0014 ifeq 25
+    0017 ldc "OK"
+    0019 astore_2
+    0020 aload_2
+    0021 astore_3
+    0022 goto 148
+    0025 iload_0
+    0026 sipush 201
+    0029 if_icmpne 36
+    0032 iconst_1
+    0033 goto 37
+    0036 iconst_0
+    0037 istore 4
+    0039 iload 4
+    0041 ifeq 54
+    0044 ldc "Created"
+    0046 astore 5
+    0048 aload 5
+    0050 astore_3
+    0051 goto 148
+    0054 iload_0
+    0055 sipush 400
+    0058 if_icmpne 65
+    0061 iconst_1
+    0062 goto 66
+    0065 iconst_0
+    0066 istore 6
+    0068 iload 6
+    0070 ifeq 83
+    0073 ldc "Bad Request"
+    0075 astore 7
+    0077 aload 7
+    0079 astore_3
+    0080 goto 148
+    0083 iload_0
+    0084 sipush 404
+    0087 if_icmpne 94
+    0090 iconst_1
+    0091 goto 95
+    0094 iconst_0
+    0095 istore 8
+    0097 iload 8
+    0099 ifeq 112
+    0102 ldc "Not Found"
+    0104 astore 9
+    0106 aload 9
+    0108 astore_3
+    0109 goto 148
+    0112 iload_0
+    0113 sipush 500
+    0116 if_icmpne 123
+    0119 iconst_1
+    0120 goto 124
+    0123 iconst_0
+    0124 istore 10
+    0126 iload 10
+    0128 ifeq 141
+    0131 ldc "Internal Server Error"
+    0133 astore 11
+    0135 aload 11
+    0137 astore_3
+    0138 goto 148
+    0141 ldc "Unknown"
+    0143 astore 12
+    0145 aload 12
+    0147 astore_3
+    0148 aload_3
+    0149 areturn
+    sub_attr  StackMapTable (55 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

@@ -3,28 +3,24 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=3
     0000 goto 3
     0003 bipush 10
-    0005 istore_0
-    0006 iconst_0
-    0007 istore_1
-    0008 iload_0
-    0009 iload_1
-    0010 idiv
-    0011 istore_2
-    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0015 iload_2
-    0016 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0019 goto 38
-    0022 astore_3
-    0023 ldc "caught: division by zero"
-    0025 astore 4
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 aload 4
-    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0035 goto 38
-    0038 return
+    0005 iconst_0
+    0006 idiv
+    0007 istore_0
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_0
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 goto 32
+    0018 astore_1
+    0019 ldc "caught: division by zero"
+    0021 astore_2
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 aload_2
+    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0029 goto 32
+    0032 return
     sub_attr  StackMapTable (8 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

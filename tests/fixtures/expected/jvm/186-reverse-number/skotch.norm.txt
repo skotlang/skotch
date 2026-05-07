@@ -28,62 +28,52 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        reverse (I)I 0x0019
-  code        max_stack=2 max_locals=18
+  code        max_stack=2 max_locals=14
     0000 iload_0
     0001 istore_1
     0002 iconst_0
     0003 istore_2
     0004 iload_2
     0005 istore_3
-    0006 goto 9
-    0009 iload_1
-    0010 istore 4
-    0012 iconst_0
-    0013 istore 5
-    0015 iload 4
-    0017 iload 5
-    0019 if_icmple 26
-    0022 iconst_1
-    0023 goto 27
-    0026 iconst_0
+    0006 iload_1
+    0007 istore 4
+    0009 iload 4
+    0011 ifle 18
+    0014 iconst_1
+    0015 goto 19
+    0018 iconst_0
+    0019 istore 5
+    0021 iload 5
+    0023 ifeq 72
+    0026 iload_3
     0027 istore 6
     0029 iload 6
-    0031 ifeq 92
-    0034 iload_3
-    0035 istore 7
-    0037 bipush 10
-    0039 istore 8
-    0041 iload 7
-    0043 iload 8
-    0045 imul
-    0046 istore 9
-    0048 iload_1
-    0049 istore 10
-    0051 bipush 10
-    0053 istore 11
-    0055 iload 10
-    0057 iload 11
-    0059 irem
-    0060 istore 12
-    0062 iload 9
-    0064 iload 12
-    0066 iadd
-    0067 istore 13
-    0069 iload 13
-    0071 istore_3
-    0072 iload_1
-    0073 istore 14
-    0075 bipush 10
-    0077 istore 15
-    0079 iload 14
-    0081 iload 15
-    0083 idiv
-    0084 istore 16
-    0086 iload 16
-    0088 istore_1
-    0089 goto 9
-    0092 iload_3
-    0093 istore 17
-    0095 iload 17
-    0097 ireturn
-    sub_attr  StackMapTable (19 bytes)
+    0031 bipush 10
+    0033 imul
+    0034 istore 7
+    0036 iload_1
+    0037 istore 8
+    0039 iload 8
+    0041 bipush 10
+    0043 irem
+    0044 istore 9
+    0046 iload 7
+    0048 iload 9
+    0050 iadd
+    0051 istore 10
+    0053 iload 10
+    0055 istore_3
+    0056 iload_1
+    0057 istore 11
+    0059 iload 11
+    0061 bipush 10
+    0063 idiv
+    0064 istore 12
+    0066 iload 12
+    0068 istore_1
+    0069 goto 6
+    0072 iload_3
+    0073 istore 13
+    0075 iload 13
+    0077 ireturn
+    sub_attr  StackMapTable (18 bytes)

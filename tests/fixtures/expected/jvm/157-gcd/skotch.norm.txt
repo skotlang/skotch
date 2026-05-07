@@ -3,45 +3,41 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        gcd (II)I 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=11
     0000 iload_0
     0001 istore_2
     0002 iload_1
     0003 istore_3
-    0004 goto 7
-    0007 iload_3
-    0008 istore 4
-    0010 iconst_0
-    0011 istore 5
-    0013 iload 4
-    0015 iload 5
-    0017 if_icmpeq 24
-    0020 iconst_1
-    0021 goto 25
-    0024 iconst_0
+    0004 iload_3
+    0005 istore 4
+    0007 iload 4
+    0009 ifeq 16
+    0012 iconst_1
+    0013 goto 17
+    0016 iconst_0
+    0017 istore 5
+    0019 iload 5
+    0021 ifeq 49
+    0024 iload_3
     0025 istore 6
-    0027 iload 6
-    0029 ifeq 57
-    0032 iload_3
-    0033 istore 7
-    0035 iload_2
-    0036 istore 8
-    0038 iload_3
-    0039 istore 9
-    0041 iload 8
-    0043 iload 9
-    0045 irem
-    0046 istore 10
-    0048 iload 10
-    0050 istore_3
-    0051 iload 7
-    0053 istore_2
-    0054 goto 7
-    0057 iload_2
-    0058 istore 11
-    0060 iload 11
-    0062 ireturn
-    sub_attr  StackMapTable (18 bytes)
+    0027 iload_2
+    0028 istore 7
+    0030 iload_3
+    0031 istore 8
+    0033 iload 7
+    0035 iload 8
+    0037 irem
+    0038 istore 9
+    0040 iload 9
+    0042 istore_3
+    0043 iload 6
+    0045 istore_2
+    0046 goto 4
+    0049 iload_2
+    0050 istore 10
+    0052 iload 10
+    0054 ireturn
+    sub_attr  StackMapTable (17 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 12

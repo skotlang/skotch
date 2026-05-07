@@ -7,39 +7,37 @@ method        f (LS;)Ljava/lang/String; 0x0019
     0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 goto 9
-    0009 aload_0
-    0010 instanceof Class(A)
-    0013 istore_1
-    0014 iload_1
-    0015 ifeq 32
-    0018 aload_0
-    0019 checkcast Class(A)
-    0022 astore_2
-    0023 ldc "a"
-    0025 astore_3
-    0026 aload_3
-    0027 astore 4
-    0029 goto 66
-    0032 aload_0
-    0033 instanceof Class(B)
-    0036 istore 5
-    0038 iload 5
-    0040 ifeq 60
-    0043 aload_0
-    0044 checkcast Class(B)
-    0047 astore 6
-    0049 ldc "b"
-    0051 astore 7
-    0053 aload 7
-    0055 astore 4
-    0057 goto 66
-    0060 aconst_null
-    0061 astore 4
-    0063 goto 66
-    0066 aload 4
-    0068 areturn
-    sub_attr  StackMapTable (21 bytes)
+    0006 aload_0
+    0007 instanceof Class(A)
+    0010 istore_1
+    0011 iload_1
+    0012 ifeq 29
+    0015 aload_0
+    0016 checkcast Class(A)
+    0019 astore_2
+    0020 ldc "a"
+    0022 astore_3
+    0023 aload_3
+    0024 astore 4
+    0026 goto 60
+    0029 aload_0
+    0030 instanceof Class(B)
+    0033 istore 5
+    0035 iload 5
+    0037 ifeq 57
+    0040 aload_0
+    0041 checkcast Class(B)
+    0044 astore 6
+    0046 ldc "b"
+    0048 astore 7
+    0050 aload 7
+    0052 astore 4
+    0054 goto 60
+    0057 aconst_null
+    0058 astore 4
+    0060 aload 4
+    0062 areturn
+    sub_attr  StackMapTable (20 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

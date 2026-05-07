@@ -3,38 +3,32 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=4
     0000 iconst_5
     0001 istore_0
-    0002 iconst_1
+    0002 iload_0
     0003 istore_1
-    0004 iload_0
-    0005 istore_2
-    0006 goto 9
-    0009 iload_2
-    0010 iload_1
-    0011 if_icmplt 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore_3
-    0020 iload_3
-    0021 ifeq 49
-    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0027 iload_2
-    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0031 goto 34
-    0034 iconst_1
-    0035 istore 4
-    0037 iload_2
-    0038 iload 4
-    0040 isub
-    0041 istore 5
-    0043 iload 5
-    0045 istore_2
-    0046 goto 9
-    0049 return
-    sub_attr  StackMapTable (16 bytes)
+    0004 iload_1
+    0005 iconst_1
+    0006 if_icmplt 13
+    0009 iconst_1
+    0010 goto 14
+    0013 iconst_0
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 35
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 iload_1
+    0023 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0026 iload_1
+    0027 iconst_1
+    0028 isub
+    0029 istore_3
+    0030 iload_3
+    0031 istore_1
+    0032 goto 4
+    0035 return
+    sub_attr  StackMapTable (14 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

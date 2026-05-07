@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=41
+  code        max_stack=2 max_locals=39
     0000 iconst_5
     0001 istore_0
     0002 iload_0
@@ -26,150 +26,137 @@ method        main ()V 0x0019
     0028 istore 9
     0030 iconst_1
     0031 istore 10
-    0033 iconst_4
-    0034 istore 11
-    0036 iload 10
-    0038 istore 12
-    0040 goto 43
-    0043 iload 12
-    0045 iload 11
-    0047 if_icmpgt 54
-    0050 iconst_1
-    0051 goto 55
-    0054 iconst_0
-    0055 istore 13
-    0057 iload 13
-    0059 ifeq 107
-    0062 iload_1
-    0063 istore 14
-    0065 iload_3
-    0066 istore 15
-    0068 iload 14
-    0070 iload 15
-    0072 if_icmple 79
-    0075 iconst_1
-    0076 goto 80
-    0079 iconst_0
-    0080 istore 16
-    0082 iload 16
-    0084 ifeq 181
-    0087 goto 166
-    0090 iconst_1
-    0091 istore 17
-    0093 iload 12
-    0095 iload 17
-    0097 iadd
-    0098 istore 18
-    0100 iload 18
-    0102 istore 12
-    0104 goto 43
-    0107 iload_1
-    0108 istore 19
+    0033 iload 10
+    0035 istore 11
+    0037 iload 11
+    0039 iconst_4
+    0040 if_icmpgt 47
+    0043 iconst_1
+    0044 goto 48
+    0047 iconst_0
+    0048 istore 12
+    0050 iload 12
+    0052 ifeq 96
+    0055 iload_1
+    0056 istore 13
+    0058 iload_3
+    0059 istore 14
+    0061 iload 13
+    0063 iload 14
+    0065 if_icmple 72
+    0068 iconst_1
+    0069 goto 73
+    0072 iconst_0
+    0073 istore 15
+    0075 iload 15
+    0077 ifeq 167
+    0080 goto 155
+    0083 iload 11
+    0085 iconst_1
+    0086 iadd
+    0087 istore 16
+    0089 iload 16
+    0091 istore 11
+    0093 goto 37
+    0096 iload_1
+    0097 istore 17
+    0099 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0102 iload 17
+    0104 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0107 iload_3
+    0108 istore 18
     0110 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0113 iload 19
+    0113 iload 18
     0115 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0118 iload_3
-    0119 istore 20
-    0121 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0124 iload 20
-    0126 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0129 iload 5
-    0131 istore 21
-    0133 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0136 iload 21
-    0138 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0141 iload 7
-    0143 istore 22
-    0145 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0148 iload 22
-    0150 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0153 iload 9
-    0155 istore 23
-    0157 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0160 iload 23
-    0162 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0165 return
-    0166 iload_1
-    0167 istore 24
-    0169 iload_3
-    0170 istore 25
-    0172 iload 25
-    0174 istore_1
-    0175 iload 24
-    0177 istore_3
-    0178 goto 184
-    0181 goto 184
-    0184 iload_3
-    0185 istore 26
-    0187 iload 5
-    0189 istore 27
-    0191 iload 26
-    0193 iload 27
-    0195 if_icmple 202
-    0198 iconst_1
-    0199 goto 203
-    0202 iconst_0
-    0203 istore 28
-    0205 iload 28
-    0207 ifeq 227
-    0210 iload_3
-    0211 istore 29
-    0213 iload 5
-    0215 istore 30
+    0118 iload 5
+    0120 istore 19
+    0122 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0125 iload 19
+    0127 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0130 iload 7
+    0132 istore 20
+    0134 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0137 iload 20
+    0139 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0142 iload 9
+    0144 istore 21
+    0146 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0149 iload 21
+    0151 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0154 return
+    0155 iload_1
+    0156 istore 22
+    0158 iload_3
+    0159 istore 23
+    0161 iload 23
+    0163 istore_1
+    0164 iload 22
+    0166 istore_3
+    0167 iload_3
+    0168 istore 24
+    0170 iload 5
+    0172 istore 25
+    0174 iload 24
+    0176 iload 25
+    0178 if_icmple 185
+    0181 iconst_1
+    0182 goto 186
+    0185 iconst_0
+    0186 istore 26
+    0188 iload 26
+    0190 ifeq 207
+    0193 iload_3
+    0194 istore 27
+    0196 iload 5
+    0198 istore 28
+    0200 iload 28
+    0202 istore_3
+    0203 iload 27
+    0205 istore 5
+    0207 iload 5
+    0209 istore 29
+    0211 iload 7
+    0213 istore 30
+    0215 iload 29
     0217 iload 30
-    0219 istore_3
-    0220 iload 29
-    0222 istore 5
-    0224 goto 230
-    0227 goto 230
-    0230 iload 5
-    0232 istore 31
-    0234 iload 7
+    0219 if_icmple 226
+    0222 iconst_1
+    0223 goto 227
+    0226 iconst_0
+    0227 istore 31
+    0229 iload 31
+    0231 ifeq 250
+    0234 iload 5
     0236 istore 32
-    0238 iload 31
-    0240 iload 32
-    0242 if_icmple 249
-    0245 iconst_1
-    0246 goto 250
-    0249 iconst_0
-    0250 istore 33
-    0252 iload 33
-    0254 ifeq 276
-    0257 iload 5
-    0259 istore 34
-    0261 iload 7
-    0263 istore 35
-    0265 iload 35
-    0267 istore 5
-    0269 iload 34
-    0271 istore 7
-    0273 goto 279
-    0276 goto 279
-    0279 iload 7
-    0281 istore 36
-    0283 iload 9
-    0285 istore 37
-    0287 iload 36
+    0238 iload 7
+    0240 istore 33
+    0242 iload 33
+    0244 istore 5
+    0246 iload 32
+    0248 istore 7
+    0250 iload 7
+    0252 istore 34
+    0254 iload 9
+    0256 istore 35
+    0258 iload 34
+    0260 iload 35
+    0262 if_icmple 269
+    0265 iconst_1
+    0266 goto 270
+    0269 iconst_0
+    0270 istore 36
+    0272 iload 36
+    0274 ifeq 83
+    0277 iload 7
+    0279 istore 37
+    0281 iload 9
+    0283 istore 38
+    0285 iload 38
+    0287 istore 7
     0289 iload 37
-    0291 if_icmple 298
-    0294 iconst_1
-    0295 goto 299
-    0298 iconst_0
-    0299 istore 38
-    0301 iload 38
-    0303 ifeq 325
-    0306 iload 7
-    0308 istore 39
-    0310 iload 9
-    0312 istore 40
-    0314 iload 40
-    0316 istore 7
-    0318 iload 39
-    0320 istore 9
-    0322 goto 328
-    0325 goto 328
-    0328 goto 90
-    sub_attr  StackMapTable (249 bytes)
+    0291 istore 9
+    0293 goto 83
+    sub_attr  StackMapTable (231 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

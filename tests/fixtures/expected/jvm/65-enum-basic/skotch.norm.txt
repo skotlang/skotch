@@ -3,64 +3,56 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        Direction$valueOf (Ljava/lang/String;)LDirection; 0x0019
-  code        max_stack=5 max_locals=14
+  code        max_stack=2 max_locals=10
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 ldc "NORTH"
-    0008 astore_1
-    0009 aload_0
-    0010 aload_1
-    0011 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0014 istore_2
-    0015 iload_2
-    0016 ifeq 78
-    0019 goto 103
-    0022 invokestatic Method(InputKt.NORTH:()LDirection;)
-    0025 astore_3
-    0026 aload_3
-    0027 areturn
-    0028 ldc "WEST"
-    0030 astore 4
-    0032 aload_0
-    0033 aload 4
-    0035 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0038 istore 5
-    0040 iload 5
-    0042 ifeq 22
-    0045 invokestatic Method(InputKt.WEST:()LDirection;)
-    0048 astore 6
-    0050 aload 6
-    0052 areturn
-    0053 ldc "EAST"
-    0055 astore 7
-    0057 aload_0
-    0058 aload 7
-    0060 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0063 istore 8
-    0065 iload 8
-    0067 ifeq 28
-    0070 invokestatic Method(InputKt.EAST:()LDirection;)
-    0073 astore 9
-    0075 aload 9
-    0077 areturn
-    0078 ldc "SOUTH"
-    0080 astore 10
-    0082 aload_0
-    0083 aload 10
-    0085 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0088 istore 11
-    0090 iload 11
-    0092 ifeq 53
-    0095 invokestatic Method(InputKt.SOUTH:()LDirection;)
-    0098 astore 12
-    0100 aload 12
-    0102 areturn
-    0103 invokestatic Method(InputKt.NORTH:()LDirection;)
-    0106 astore 13
-    0108 aload 13
-    0110 areturn
-    sub_attr  StackMapTable (98 bytes)
+    0006 aload_0
+    0007 ldc "NORTH"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0012 istore_1
+    0013 iload_1
+    0014 ifeq 66
+    0017 goto 87
+    0020 invokestatic Method(InputKt.NORTH:()LDirection;)
+    0023 astore_2
+    0024 aload_2
+    0025 areturn
+    0026 aload_0
+    0027 ldc "WEST"
+    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0032 istore_3
+    0033 iload_3
+    0034 ifeq 20
+    0037 invokestatic Method(InputKt.WEST:()LDirection;)
+    0040 astore 4
+    0042 aload 4
+    0044 areturn
+    0045 aload_0
+    0046 ldc "EAST"
+    0048 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0051 istore 5
+    0053 iload 5
+    0055 ifeq 26
+    0058 invokestatic Method(InputKt.EAST:()LDirection;)
+    0061 astore 6
+    0063 aload 6
+    0065 areturn
+    0066 aload_0
+    0067 ldc "SOUTH"
+    0069 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0072 istore 7
+    0074 iload 7
+    0076 ifeq 45
+    0079 invokestatic Method(InputKt.SOUTH:()LDirection;)
+    0082 astore 8
+    0084 aload 8
+    0086 areturn
+    0087 invokestatic Method(InputKt.NORTH:()LDirection;)
+    0090 astore 9
+    0092 aload 9
+    0094 areturn
+    sub_attr  StackMapTable (65 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Direction$values ()Ljava/util/ArrayList; 0x0019

@@ -3664,6 +3664,43 @@ fn lower_stmt(
             //   → var i = a
             //     val _end = b
             //     while (i <= _end) { body; i = i + 1 }
+            //
+            // For inclusive (`..`), non-descending ranges with a literal-int
+            // end, kotlinc folds `i <= K` to `i < K+1`. We mirror that here.
+            let inclusive_const_end_plus_one: Option<i32> = if !*exclusive && !*descending {
+                if let Expr::IntLit(v, _) = range_end {
+                    let plus_one = (*v as i64) + 1;
+                    if plus_one >= i32::MIN as i64 && plus_one <= i32::MAX as i64 {
+                        Some(plus_one as i32)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            // For descending (`downTo`) ranges with a literal-int end K,
+            // kotlinc rewrites `i >= K` as `K-1 < i`. The constant K-1 is
+            // on the LHS and the loop variable on the RHS (operand order
+            // swapped), and the cmp is `CmpLt`. Matches kotlinc's
+            // `iconst <K-1>; iload <i>; if_icmpge EXIT` pattern.
+            let descending_const_end_minus_one: Option<i32> = if *descending && step_expr.is_none()
+            {
+                if let Expr::IntLit(v, _) = range_end {
+                    let minus_one = (*v as i64) - 1;
+                    if minus_one >= i32::MIN as i64 && minus_one <= i32::MAX as i64 {
+                        Some(minus_one as i32)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let Some(start_val) = lower_expr(
                 range_start,
                 fb,
@@ -3677,18 +3714,35 @@ fn lower_stmt(
             ) else {
                 return false;
             };
-            let Some(end_val) = lower_expr(
-                range_end,
-                fb,
-                scope,
-                module,
-                name_to_func,
-                name_to_global,
-                interner,
-                diags,
-                loop_ctx,
-            ) else {
-                return false;
+            let end_val = if let Some(plus_one) = inclusive_const_end_plus_one {
+                let local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: local,
+                    value: Rvalue::Const(MirConst::Int(plus_one)),
+                });
+                local
+            } else if let Some(minus_one) = descending_const_end_minus_one {
+                let local = fb.new_local(Ty::Int);
+                fb.push_stmt(MStmt::Assign {
+                    dest: local,
+                    value: Rvalue::Const(MirConst::Int(minus_one)),
+                });
+                local
+            } else {
+                let Some(v) = lower_expr(
+                    range_end,
+                    fb,
+                    scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    loop_ctx,
+                ) else {
+                    return false;
+                };
+                v
             };
 
             // Create the loop variable.
@@ -3708,23 +3762,34 @@ fn lower_stmt(
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
 
             // Condition depends on range kind:
-            // ..     → loop_var <= end_val
+            // ..     → loop_var <= end_val   (folded to `<` against end+1
+            //          when end is a literal — see above)
             // until  → loop_var <  end_val
-            // downTo → loop_var >= end_val
-            let cmp_op = if *descending {
+            // downTo → loop_var >= end_val   (folded to `end-1 < loop_var`
+            //          with operands swapped when end is a literal — see
+            //          above; matches kotlinc's reversed-operand emission)
+            let descending_swap = descending_const_end_minus_one.is_some();
+            let cmp_op = if descending_swap {
+                MBinOp::CmpLt
+            } else if *descending {
                 MBinOp::CmpGe
-            } else if *exclusive {
+            } else if *exclusive || inclusive_const_end_plus_one.is_some() {
                 MBinOp::CmpLt
             } else {
                 MBinOp::CmpLe
+            };
+            let (cmp_lhs, cmp_rhs) = if descending_swap {
+                (end_val, loop_var)
+            } else {
+                (loop_var, end_val)
             };
             let cmp = fb.new_local(Ty::Bool);
             fb.push_stmt(MStmt::Assign {
                 dest: cmp,
                 value: Rvalue::BinOp {
                     op: cmp_op,
-                    lhs: loop_var,
-                    rhs: end_val,
+                    lhs: cmp_lhs,
+                    rhs: cmp_rhs,
                 },
             });
             fb.terminate_and_switch(
@@ -3735,6 +3800,17 @@ fn lower_stmt(
                 },
                 body_block,
             );
+
+            // For variable-end inclusive ranges (no constant fold), we add
+            // a termination check `i == end` AFTER the body to mirror
+            // kotlinc's shape. DISABLED — produces SMT slot-type
+            // inconsistencies in some when/if branches inside the body.
+            let variable_end_termination = false
+                && !*exclusive
+                && !*descending
+                && step_expr.is_none()
+                && inclusive_const_end_plus_one.is_none()
+                && descending_const_end_minus_one.is_none();
 
             // Body — continue goes to incr_block, break goes to exit_block
             let lctx = Some((incr_block, exit_block));
@@ -3752,8 +3828,29 @@ fn lower_stmt(
                 );
             }
 
-            // After body: goto increment block
-            fb.terminate_and_switch(Terminator::Goto(incr_block), incr_block);
+            if variable_end_termination {
+                // Termination check: `i != end` continues (otherwise exit).
+                let term_cmp = fb.new_local(Ty::Bool);
+                fb.push_stmt(MStmt::Assign {
+                    dest: term_cmp,
+                    value: Rvalue::BinOp {
+                        op: MBinOp::CmpNe,
+                        lhs: loop_var,
+                        rhs: end_val,
+                    },
+                });
+                fb.terminate_and_switch(
+                    Terminator::Branch {
+                        cond: term_cmp,
+                        then_block: incr_block,
+                        else_block: exit_block,
+                    },
+                    incr_block,
+                );
+            } else {
+                // After body: goto increment block
+                fb.terminate_and_switch(Terminator::Goto(incr_block), incr_block);
+            }
 
             // Step block: i = i + step (ascending) or i = i - step (descending)
             // When a `step` expression is provided, always ADD (the step
@@ -3806,7 +3903,15 @@ fn lower_stmt(
                 value: Rvalue::Local(incremented),
             });
 
-            fb.terminate_and_switch(Terminator::Goto(cond_block), exit_block);
+            // Back-edge target: variable-end termination check loops back
+            // to body (skipping the now-redundant initial check). Other
+            // shapes loop back to cond as before.
+            let back_edge = if variable_end_termination {
+                body_block
+            } else {
+                cond_block
+            };
+            fb.terminate_and_switch(Terminator::Goto(back_edge), exit_block);
             true
         }
         Stmt::ForIn {
@@ -10197,34 +10302,41 @@ fn lower_expr(
             }
 
             // Handle stdlib top-level functions as StaticJava calls.
-            // Math functions map to java.lang.Math static methods.
-            let stdlib_call = match (callee_str, arg_locals.len()) {
-                ("maxOf", 2) => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
-                ("minOf", 2) => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
-                // kotlin.math functions
-                ("abs", 1) => {
-                    let arg_ty = &fb.mf.locals[arg_locals[0].0 as usize];
-                    match arg_ty {
-                        Ty::Double => Some(("java/lang/Math", "abs", "(D)D", Ty::Double)),
-                        Ty::Long => Some(("java/lang/Math", "abs", "(J)J", Ty::Long)),
-                        _ => Some(("java/lang/Math", "abs", "(I)I", Ty::Int)),
+            // Math functions map to java.lang.Math static methods. A
+            // user-defined function with the same name takes precedence —
+            // skip the stdlib mapping if the callee is in `name_to_func`.
+            let stdlib_call: Option<(&str, &str, &str, Ty)> =
+                if name_to_func.contains_key(&callee_name) {
+                    None
+                } else {
+                    match (callee_str, arg_locals.len()) {
+                        ("maxOf", 2) => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
+                        ("minOf", 2) => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                        // kotlin.math functions
+                        ("abs", 1) => {
+                            let arg_ty = &fb.mf.locals[arg_locals[0].0 as usize];
+                            match arg_ty {
+                                Ty::Double => Some(("java/lang/Math", "abs", "(D)D", Ty::Double)),
+                                Ty::Long => Some(("java/lang/Math", "abs", "(J)J", Ty::Long)),
+                                _ => Some(("java/lang/Math", "abs", "(I)I", Ty::Int)),
+                            }
+                        }
+                        ("sqrt", 1) => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double)),
+                        ("ceil", 1) => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double)),
+                        ("floor", 1) => Some(("java/lang/Math", "floor", "(D)D", Ty::Double)),
+                        ("round", 1) => Some(("java/lang/Math", "round", "(D)J", Ty::Long)),
+                        ("pow", 2) => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double)),
+                        ("sin", 1) => Some(("java/lang/Math", "sin", "(D)D", Ty::Double)),
+                        ("cos", 1) => Some(("java/lang/Math", "cos", "(D)D", Ty::Double)),
+                        ("tan", 1) => Some(("java/lang/Math", "tan", "(D)D", Ty::Double)),
+                        ("log", 1) => Some(("java/lang/Math", "log", "(D)D", Ty::Double)),
+                        ("log10", 1) => Some(("java/lang/Math", "log10", "(D)D", Ty::Double)),
+                        ("exp", 1) => Some(("java/lang/Math", "exp", "(D)D", Ty::Double)),
+                        // readLine() → reads a line from stdin
+                        ("readLine", 0) | ("readln", 0) => None, // handled separately below
+                        _ => None,
                     }
-                }
-                ("sqrt", 1) => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double)),
-                ("ceil", 1) => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double)),
-                ("floor", 1) => Some(("java/lang/Math", "floor", "(D)D", Ty::Double)),
-                ("round", 1) => Some(("java/lang/Math", "round", "(D)J", Ty::Long)),
-                ("pow", 2) => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double)),
-                ("sin", 1) => Some(("java/lang/Math", "sin", "(D)D", Ty::Double)),
-                ("cos", 1) => Some(("java/lang/Math", "cos", "(D)D", Ty::Double)),
-                ("tan", 1) => Some(("java/lang/Math", "tan", "(D)D", Ty::Double)),
-                ("log", 1) => Some(("java/lang/Math", "log", "(D)D", Ty::Double)),
-                ("log10", 1) => Some(("java/lang/Math", "log10", "(D)D", Ty::Double)),
-                ("exp", 1) => Some(("java/lang/Math", "exp", "(D)D", Ty::Double)),
-                // readLine() → reads a line from stdin
-                ("readLine", 0) | ("readln", 0) => None, // handled separately below
-                _ => None,
-            };
+                };
             if let Some((class, method, desc, ret_ty)) = stdlib_call {
                 let dest = fb.new_local(ret_ty);
                 fb.push_stmt(MStmt::Assign {
@@ -11435,7 +11547,12 @@ fn lower_expr(
                     Some(dest)
                 }
                 skotch_syntax::UnaryOp::Not => {
-                    // !bool → 1 - bool (since bools are 0/1 ints)
+                    // !bool → (bool == 0). kotlinc emits this as a cmp +
+                    // branch + iconst_0/iconst_1 materialization, which our
+                    // cmp-branch fusion peephole then collapses to a single
+                    // direct branch when the result is consumed by an `if`.
+                    // The arithmetic `1 - bool` form is shorter but doesn't
+                    // match kotlinc's emission shape.
                     let val = lower_expr(
                         operand,
                         fb,
@@ -11447,18 +11564,18 @@ fn lower_expr(
                         diags,
                         loop_ctx,
                     )?;
-                    let one = fb.new_local(Ty::Int);
+                    let zero = fb.new_local(Ty::Int);
                     fb.push_stmt(MStmt::Assign {
-                        dest: one,
-                        value: Rvalue::Const(MirConst::Int(1)),
+                        dest: zero,
+                        value: Rvalue::Const(MirConst::Int(0)),
                     });
                     let dest = fb.new_local(Ty::Bool);
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::BinOp {
-                            op: MBinOp::SubI,
-                            lhs: one,
-                            rhs: val,
+                            op: MBinOp::CmpEq,
+                            lhs: val,
+                            rhs: zero,
                         },
                     });
                     Some(dest)
@@ -13110,6 +13227,27 @@ fn lower_expr(
                     other
                 }
             };
+            // Const-fold when `obj`'s static type already matches the
+            // checked type — kotlinc emits `iconst_1` for an `is` against
+            // the same class. Limited to exact-match (no subtype walk yet).
+            if !*negated {
+                let obj_ty = fb.mf.locals[obj.0 as usize].clone();
+                let obj_class = match &obj_ty {
+                    Ty::Class(n) => Some(n.as_str()),
+                    Ty::String if jvm_type == "java/lang/String" => Some("java/lang/String"),
+                    _ => None,
+                };
+                if let Some(class) = obj_class {
+                    if class == jvm_type {
+                        let dest = fb.new_local(Ty::Bool);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Bool(true)),
+                        });
+                        return Some(dest);
+                    }
+                }
+            }
             let dest = fb.new_local(Ty::Bool);
             fb.push_stmt(MStmt::Assign {
                 dest,

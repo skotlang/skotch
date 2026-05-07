@@ -3,80 +3,70 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        grade (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=15
-    0000 goto 3
-    0003 bipush 10
-    0005 istore_1
-    0006 iload_0
-    0007 iload_1
-    0008 if_icmpne 15
-    0011 iconst_1
-    0012 goto 16
-    0015 iconst_0
-    0016 istore_2
-    0017 iload_2
-    0018 ifeq 30
-    0021 ldc "A"
-    0023 astore_3
-    0024 aload_3
-    0025 astore 4
-    0027 goto 140
-    0030 bipush 9
-    0032 istore 5
-    0034 iload_0
-    0035 iload 5
-    0037 if_icmpne 44
-    0040 iconst_1
-    0041 goto 45
-    0044 iconst_0
-    0045 istore 6
-    0047 iload 6
-    0049 ifeq 63
-    0052 ldc "A"
-    0054 astore 7
-    0056 aload 7
-    0058 astore 4
-    0060 goto 140
-    0063 bipush 8
-    0065 istore 8
-    0067 iload_0
-    0068 iload 8
-    0070 if_icmpne 77
-    0073 iconst_1
-    0074 goto 78
-    0077 iconst_0
-    0078 istore 9
-    0080 iload 9
-    0082 ifeq 96
-    0085 ldc "B"
-    0087 astore 10
-    0089 aload 10
-    0091 astore 4
-    0093 goto 140
-    0096 bipush 7
-    0098 istore 11
-    0100 iload_0
-    0101 iload 11
-    0103 if_icmpne 110
-    0106 iconst_1
-    0107 goto 111
-    0110 iconst_0
-    0111 istore 12
-    0113 iload 12
-    0115 ifeq 129
-    0118 ldc "C"
-    0120 astore 13
-    0122 aload 13
-    0124 astore 4
-    0126 goto 140
-    0129 ldc "F"
-    0131 astore 14
-    0133 aload 14
-    0135 astore 4
-    0137 goto 140
-    0140 aload 4
-    0142 areturn
-    sub_attr  StackMapTable (61 bytes)
+  code        max_stack=2 max_locals=11
+    0000 iload_0
+    0001 bipush 10
+    0003 if_icmpne 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 istore_1
+    0012 iload_1
+    0013 ifeq 24
+    0016 ldc "A"
+    0018 astore_2
+    0019 aload_2
+    0020 astore_3
+    0021 goto 115
+    0024 iload_0
+    0025 bipush 9
+    0027 if_icmpne 34
+    0030 iconst_1
+    0031 goto 35
+    0034 iconst_0
+    0035 istore 4
+    0037 iload 4
+    0039 ifeq 52
+    0042 ldc "A"
+    0044 astore 5
+    0046 aload 5
+    0048 astore_3
+    0049 goto 115
+    0052 iload_0
+    0053 bipush 8
+    0055 if_icmpne 62
+    0058 iconst_1
+    0059 goto 63
+    0062 iconst_0
+    0063 istore 6
+    0065 iload 6
+    0067 ifeq 80
+    0070 ldc "B"
+    0072 astore 7
+    0074 aload 7
+    0076 astore_3
+    0077 goto 115
+    0080 iload_0
+    0081 bipush 7
+    0083 if_icmpne 90
+    0086 iconst_1
+    0087 goto 91
+    0090 iconst_0
+    0091 istore 8
+    0093 iload 8
+    0095 ifeq 108
+    0098 ldc "C"
+    0100 astore 9
+    0102 aload 9
+    0104 astore_3
+    0105 goto 115
+    0108 ldc "F"
+    0110 astore 10
+    0112 aload 10
+    0114 astore_3
+    0115 aload_3
+    0116 areturn
+    sub_attr  StackMapTable (47 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

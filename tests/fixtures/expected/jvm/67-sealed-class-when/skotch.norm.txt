@@ -7,54 +7,52 @@ method        eval (LExpr;)I 0x0019
     0000 aload_0
     0001 ldc "e"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 goto 9
-    0009 aload_0
-    0010 instanceof Class(Num)
-    0013 istore_1
-    0014 iload_1
-    0015 ifeq 34
-    0018 aload_0
-    0019 checkcast Class(Num)
-    0022 astore_2
-    0023 aload_2
-    0024 invokevirtual Method(Num.getValue:()I)
-    0027 istore_3
-    0028 iload_3
-    0029 istore 4
-    0031 goto 99
-    0034 aload_0
-    0035 instanceof Class(Sum)
-    0038 istore 5
-    0040 iload 5
-    0042 ifeq 93
-    0045 aload_0
-    0046 checkcast Class(Sum)
-    0049 astore 6
-    0051 aload 6
-    0053 invokevirtual Method(Sum.getLeft:()LExpr;)
-    0056 astore 7
-    0058 aload 7
-    0060 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0063 istore 8
-    0065 aload 6
-    0067 invokevirtual Method(Sum.getRight:()LExpr;)
-    0070 astore 9
-    0072 aload 9
-    0074 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0077 istore 10
-    0079 iload 8
-    0081 iload 10
-    0083 iadd
-    0084 istore 11
-    0086 iload 11
-    0088 istore 4
-    0090 goto 99
-    0093 iconst_0
-    0094 istore 4
-    0096 goto 99
-    0099 iload 4
-    0101 ireturn
-    sub_attr  StackMapTable (19 bytes)
+    0006 aload_0
+    0007 instanceof Class(Num)
+    0010 istore_1
+    0011 iload_1
+    0012 ifeq 31
+    0015 aload_0
+    0016 checkcast Class(Num)
+    0019 astore_2
+    0020 aload_2
+    0021 invokevirtual Method(Num.getValue:()I)
+    0024 istore_3
+    0025 iload_3
+    0026 istore 4
+    0028 goto 93
+    0031 aload_0
+    0032 instanceof Class(Sum)
+    0035 istore 5
+    0037 iload 5
+    0039 ifeq 90
+    0042 aload_0
+    0043 checkcast Class(Sum)
+    0046 astore 6
+    0048 aload 6
+    0050 invokevirtual Method(Sum.getLeft:()LExpr;)
+    0053 astore 7
+    0055 aload 7
+    0057 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0060 istore 8
+    0062 aload 6
+    0064 invokevirtual Method(Sum.getRight:()LExpr;)
+    0067 astore 9
+    0069 aload 9
+    0071 invokestatic Method(InputKt.eval:(LExpr;)I)
+    0074 istore 10
+    0076 iload 8
+    0078 iload 10
+    0080 iadd
+    0081 istore 11
+    0083 iload 11
+    0085 istore 4
+    0087 goto 93
+    0090 iconst_0
+    0091 istore 4
+    0093 iload 4
+    0095 ireturn
+    sub_attr  StackMapTable (18 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=4 max_locals=5

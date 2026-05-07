@@ -3,152 +3,122 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (II)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=28
-    0000 goto 3
-    0003 iconst_0
-    0004 istore_2
-    0005 iload_0
-    0006 iload_2
-    0007 if_icmple 14
-    0010 iconst_1
-    0011 goto 15
-    0014 iconst_0
-    0015 istore_3
-    0016 iconst_0
-    0017 istore 4
-    0019 iload_3
-    0020 ifeq 188
-    0023 goto 165
-    0026 ldc "Q1"
-    0028 astore 5
-    0030 aload 5
-    0032 astore 6
-    0034 goto 162
-    0037 iconst_0
-    0038 istore 7
-    0040 iload_0
-    0041 iload 7
-    0043 if_icmpge 50
-    0046 iconst_1
-    0047 goto 51
-    0050 iconst_0
-    0051 istore 8
-    0053 iconst_0
-    0054 istore 9
-    0056 iload 8
-    0058 ifeq 219
-    0061 goto 196
-    0064 ldc "Q2"
-    0066 astore 10
-    0068 aload 10
-    0070 astore 6
-    0072 goto 162
-    0075 iconst_0
-    0076 istore 11
-    0078 iload_0
-    0079 iload 11
-    0081 if_icmpge 88
-    0084 iconst_1
-    0085 goto 89
-    0088 iconst_0
-    0089 istore 12
-    0091 iconst_0
-    0092 istore 13
-    0094 iload 12
-    0096 ifeq 250
-    0099 goto 227
-    0102 ldc "Q3"
-    0104 astore 14
-    0106 aload 14
-    0108 astore 6
-    0110 goto 162
-    0113 iconst_0
-    0114 istore 15
-    0116 iload_0
-    0117 iload 15
-    0119 if_icmple 126
-    0122 iconst_1
-    0123 goto 127
-    0126 iconst_0
-    0127 istore 16
-    0129 iconst_0
-    0130 istore 17
-    0132 iload 16
-    0134 ifeq 281
-    0137 goto 258
-    0140 ldc "Q4"
-    0142 astore 18
-    0144 aload 18
-    0146 astore 6
-    0148 goto 162
-    0151 ldc "axis"
-    0153 astore 19
-    0155 aload 19
-    0157 astore 6
-    0159 goto 162
-    0162 aload 6
-    0164 areturn
-    0165 iconst_0
-    0166 istore 20
-    0168 iload_1
-    0169 iload 20
-    0171 if_icmple 178
-    0174 iconst_1
-    0175 goto 179
-    0178 iconst_0
-    0179 istore 21
-    0181 iload 21
-    0183 istore 4
-    0185 goto 188
-    0188 iload 4
-    0190 ifeq 37
-    0193 goto 26
-    0196 iconst_0
-    0197 istore 22
-    0199 iload_1
-    0200 iload 22
-    0202 if_icmple 209
-    0205 iconst_1
-    0206 goto 210
-    0209 iconst_0
-    0210 istore 23
-    0212 iload 23
-    0214 istore 9
-    0216 goto 219
-    0219 iload 9
-    0221 ifeq 75
-    0224 goto 64
-    0227 iconst_0
-    0228 istore 24
-    0230 iload_1
-    0231 iload 24
-    0233 if_icmpge 240
-    0236 iconst_1
-    0237 goto 241
-    0240 iconst_0
-    0241 istore 25
-    0243 iload 25
-    0245 istore 13
-    0247 goto 250
-    0250 iload 13
-    0252 ifeq 113
-    0255 goto 102
-    0258 iconst_0
-    0259 istore 26
-    0261 iload_1
-    0262 iload 26
-    0264 if_icmpge 271
-    0267 iconst_1
-    0268 goto 272
-    0271 iconst_0
-    0272 istore 27
-    0274 iload 27
-    0276 istore 17
-    0278 goto 281
-    0281 iload 17
-    0283 ifeq 151
-    0286 goto 140
-    sub_attr  StackMapTable (344 bytes)
+  code        max_stack=1 max_locals=20
+    0000 iload_0
+    0001 ifle 8
+    0004 iconst_1
+    0005 goto 9
+    0008 iconst_0
+    0009 istore_2
+    0010 iconst_0
+    0011 istore_3
+    0012 iload_2
+    0013 ifeq 154
+    0016 goto 140
+    0019 ldc "Q1"
+    0021 astore 4
+    0023 aload 4
+    0025 astore 5
+    0027 goto 137
+    0030 iload_0
+    0031 ifge 38
+    0034 iconst_1
+    0035 goto 39
+    0038 iconst_0
+    0039 istore 6
+    0041 iconst_0
+    0042 istore 7
+    0044 iload 6
+    0046 ifeq 176
+    0049 goto 161
+    0052 ldc "Q2"
+    0054 astore 8
+    0056 aload 8
+    0058 astore 5
+    0060 goto 137
+    0063 iload_0
+    0064 ifge 71
+    0067 iconst_1
+    0068 goto 72
+    0071 iconst_0
+    0072 istore 9
+    0074 iconst_0
+    0075 istore 10
+    0077 iload 9
+    0079 ifeq 199
+    0082 goto 184
+    0085 ldc "Q3"
+    0087 astore 11
+    0089 aload 11
+    0091 astore 5
+    0093 goto 137
+    0096 iload_0
+    0097 ifle 104
+    0100 iconst_1
+    0101 goto 105
+    0104 iconst_0
+    0105 istore 12
+    0107 iconst_0
+    0108 istore 13
+    0110 iload 12
+    0112 ifeq 222
+    0115 goto 207
+    0118 ldc "Q4"
+    0120 astore 14
+    0122 aload 14
+    0124 astore 5
+    0126 goto 137
+    0129 ldc "axis"
+    0131 astore 15
+    0133 aload 15
+    0135 astore 5
+    0137 aload 5
+    0139 areturn
+    0140 iload_1
+    0141 ifle 148
+    0144 iconst_1
+    0145 goto 149
+    0148 iconst_0
+    0149 istore 16
+    0151 iload 16
+    0153 istore_3
+    0154 iload_3
+    0155 ifeq 30
+    0158 goto 19
+    0161 iload_1
+    0162 ifle 169
+    0165 iconst_1
+    0166 goto 170
+    0169 iconst_0
+    0170 istore 17
+    0172 iload 17
+    0174 istore 7
+    0176 iload 7
+    0178 ifeq 63
+    0181 goto 52
+    0184 iload_1
+    0185 ifge 192
+    0188 iconst_1
+    0189 goto 193
+    0192 iconst_0
+    0193 istore 18
+    0195 iload 18
+    0197 istore 10
+    0199 iload 10
+    0201 ifeq 96
+    0204 goto 85
+    0207 iload_1
+    0208 ifge 215
+    0211 iconst_1
+    0212 goto 216
+    0215 iconst_0
+    0216 istore 19
+    0218 iload 19
+    0220 istore 13
+    0222 iload 13
+    0224 ifeq 129
+    0227 goto 118
+    sub_attr  StackMapTable (111 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

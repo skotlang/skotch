@@ -3,42 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        gcd (II)I 0x0019
-  code        max_stack=3 max_locals=8
-    0000 iconst_0
-    0001 istore_2
-    0002 iload_1
-    0003 iload_2
-    0004 if_icmpne 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_3
-    0013 iload_3
-    0014 ifeq 19
-    0017 iload_0
-    0018 ireturn
-    0019 goto 22
-    0022 iload_0
-    0023 iload_1
-    0024 irem
-    0025 istore 4
-    0027 iload_1
-    0028 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0031 astore 5
-    0033 iload 4
-    0035 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0038 astore 6
+  code        max_stack=2 max_locals=7
+    0000 iload_1
+    0001 ifne 8
+    0004 iconst_1
+    0005 goto 9
+    0008 iconst_0
+    0009 istore_2
+    0010 iload_2
+    0011 ifeq 16
+    0014 iload_0
+    0015 ireturn
+    0016 iload_0
+    0017 iload_1
+    0018 irem
+    0019 istore_3
+    0020 iload_1
+    0021 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0024 astore 4
+    0026 iload_3
+    0027 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0030 astore 5
+    0032 aload 4
+    0034 checkcast Class(java/lang/Integer)
+    0037 invokevirtual Method(java/lang/Integer.intValue:()I)
     0040 aload 5
     0042 checkcast Class(java/lang/Integer)
     0045 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0048 aload 6
-    0050 checkcast Class(java/lang/Integer)
-    0053 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0056 invokestatic Method(InputKt.gcd:(II)I)
-    0059 istore 7
-    0061 iload 7
-    0063 ireturn
-    sub_attr  StackMapTable (13 bytes)
+    0048 invokestatic Method(InputKt.gcd:(II)I)
+    0051 istore 6
+    0053 iload 6
+    0055 ireturn
+    sub_attr  StackMapTable (9 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 48

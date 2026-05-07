@@ -31,7 +31,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        power (II)I 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=11
     0000 iconst_1
     0001 istore_2
     0002 iload_2
@@ -40,36 +40,32 @@ method        power (II)I 0x0019
     0005 istore 4
     0007 iload 4
     0009 istore 5
-    0011 goto 14
-    0014 iload 5
-    0016 iload_1
-    0017 if_icmpgt 24
-    0020 iconst_1
-    0021 goto 25
-    0024 iconst_0
-    0025 istore 6
-    0027 iload 6
-    0029 ifeq 64
-    0032 iload_3
-    0033 istore 7
-    0035 iload 7
-    0037 iload_0
-    0038 imul
-    0039 istore 8
-    0041 iload 8
-    0043 istore_3
-    0044 goto 47
-    0047 iconst_1
-    0048 istore 9
-    0050 iload 5
-    0052 iload 9
-    0054 iadd
+    0011 iload 5
+    0013 iload_1
+    0014 if_icmpgt 21
+    0017 iconst_1
+    0018 goto 22
+    0021 iconst_0
+    0022 istore 6
+    0024 iload 6
+    0026 ifeq 54
+    0029 iload_3
+    0030 istore 7
+    0032 iload 7
+    0034 iload_0
+    0035 imul
+    0036 istore 8
+    0038 iload 8
+    0040 istore_3
+    0041 iload 5
+    0043 iconst_1
+    0044 iadd
+    0045 istore 9
+    0047 iload 9
+    0049 istore 5
+    0051 goto 11
+    0054 iload_3
     0055 istore 10
     0057 iload 10
-    0059 istore 5
-    0061 goto 14
-    0064 iload_3
-    0065 istore 11
-    0067 iload 11
-    0069 ireturn
-    sub_attr  StackMapTable (27 bytes)
+    0059 ireturn
+    sub_attr  StackMapTable (22 bytes)

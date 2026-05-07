@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        joinNumbers (I)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=17
+  code        max_stack=2 max_locals=14
     0000 ldc ""
     0002 astore_1
     0003 aload_1
@@ -12,70 +12,62 @@ method        joinNumbers (I)Ljava/lang/String; 0x0019
     0006 istore_3
     0007 iload_3
     0008 istore 4
-    0010 goto 13
-    0013 iload 4
-    0015 iload_0
-    0016 if_icmpgt 23
-    0019 iconst_1
-    0020 goto 24
-    0023 iconst_0
-    0024 istore 5
-    0026 iload 5
-    0028 ifeq 73
-    0031 iconst_1
-    0032 istore 6
-    0034 iload 4
-    0036 iload 6
-    0038 if_icmple 45
-    0041 iconst_1
-    0042 goto 46
-    0045 iconst_0
-    0046 istore 7
-    0048 iload 7
-    0050 ifeq 101
-    0053 goto 79
-    0056 iconst_1
-    0057 istore 8
-    0059 iload 4
-    0061 iload 8
-    0063 iadd
-    0064 istore 9
-    0066 iload 9
-    0068 istore 4
-    0070 goto 13
-    0073 aload_2
-    0074 astore 10
-    0076 aload 10
-    0078 areturn
-    0079 aload_2
-    0080 astore 11
-    0082 ldc ", "
-    0084 astore 12
-    0086 aload 11
-    0088 aload 12
-    0090 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0093 astore 13
-    0095 aload 13
-    0097 astore_2
-    0098 goto 104
-    0101 goto 104
-    0104 aload_2
-    0105 astore 14
-    0107 iload 4
-    0109 op_0xBA
-    0110 nop
-    0111 iload_2
-    0112 nop
-    0113 nop
-    0114 astore 15
-    0116 aload 14
-    0118 aload 15
-    0120 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0123 astore 16
-    0125 aload 16
-    0127 astore_2
-    0128 goto 56
-    sub_attr  StackMapTable (86 bytes)
+    0010 iload 4
+    0012 iload_0
+    0013 if_icmpgt 20
+    0016 iconst_1
+    0017 goto 21
+    0020 iconst_0
+    0021 istore 5
+    0023 iload 5
+    0025 ifeq 62
+    0028 iload 4
+    0030 iconst_1
+    0031 if_icmple 38
+    0034 iconst_1
+    0035 goto 39
+    0038 iconst_0
+    0039 istore 6
+    0041 iload 6
+    0043 ifeq 83
+    0046 goto 68
+    0049 iload 4
+    0051 iconst_1
+    0052 iadd
+    0053 istore 7
+    0055 iload 7
+    0057 istore 4
+    0059 goto 10
+    0062 aload_2
+    0063 astore 8
+    0065 aload 8
+    0067 areturn
+    0068 aload_2
+    0069 astore 9
+    0071 aload 9
+    0073 op_0xBA
+    0074 nop
+    0075 iload 0
+    0077 nop
+    0078 astore 10
+    0080 aload 10
+    0082 astore_2
+    0083 aload_2
+    0084 astore 11
+    0086 iload 4
+    0088 op_0xBA
+    0089 nop
+    0090 aload 0
+    0092 nop
+    0093 astore 12
+    0095 aload 11
+    0097 aload 12
+    0099 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0102 astore 13
+    0104 aload 13
+    0106 astore_2
+    0107 goto 49
+    sub_attr  StackMapTable (80 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
@@ -94,4 +86,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (8 bytes)
+class_attr    BootstrapMethods (14 bytes)

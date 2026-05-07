@@ -3,161 +3,138 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        category (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=33
-    0000 goto 3
-    0003 bipush 90
-    0005 istore_1
-    0006 bipush 100
-    0008 istore_2
-    0009 iload_0
-    0010 iload_1
-    0011 if_icmplt 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore_3
-    0020 iload_0
-    0021 iload_2
-    0022 if_icmpgt 29
-    0025 iconst_1
-    0026 goto 30
-    0029 iconst_0
-    0030 istore 4
-    0032 iload_3
-    0033 iload 4
-    0035 imul
-    0036 istore 5
-    0038 iload 5
-    0040 ifeq 54
-    0043 ldc "A"
-    0045 astore 6
-    0047 aload 6
-    0049 astore 7
-    0051 goto 292
-    0054 bipush 80
-    0056 istore 8
-    0058 bipush 89
-    0060 istore 9
-    0062 iload_0
-    0063 iload 8
-    0065 if_icmplt 72
-    0068 iconst_1
-    0069 goto 73
-    0072 iconst_0
-    0073 istore 10
-    0075 iload_0
-    0076 iload 9
-    0078 if_icmpgt 85
-    0081 iconst_1
-    0082 goto 86
-    0085 iconst_0
-    0086 istore 11
-    0088 iload 10
-    0090 iload 11
-    0092 imul
-    0093 istore 12
-    0095 iload 12
-    0097 ifeq 111
-    0100 ldc "B"
-    0102 astore 13
-    0104 aload 13
-    0106 astore 7
-    0108 goto 292
-    0111 bipush 70
-    0113 istore 14
-    0115 bipush 79
-    0117 istore 15
-    0119 iload_0
-    0120 iload 14
-    0122 if_icmplt 129
-    0125 iconst_1
-    0126 goto 130
-    0129 iconst_0
-    0130 istore 16
-    0132 iload_0
-    0133 iload 15
-    0135 if_icmpgt 142
-    0138 iconst_1
-    0139 goto 143
-    0142 iconst_0
-    0143 istore 17
-    0145 iload 16
-    0147 iload 17
-    0149 imul
-    0150 istore 18
-    0152 iload 18
-    0154 ifeq 168
-    0157 ldc "C"
-    0159 astore 19
-    0161 aload 19
-    0163 astore 7
-    0165 goto 292
-    0168 bipush 60
-    0170 istore 20
-    0172 bipush 69
-    0174 istore 21
-    0176 iload_0
-    0177 iload 20
-    0179 if_icmplt 186
-    0182 iconst_1
-    0183 goto 187
-    0186 iconst_0
-    0187 istore 22
-    0189 iload_0
-    0190 iload 21
-    0192 if_icmpgt 199
-    0195 iconst_1
-    0196 goto 200
-    0199 iconst_0
-    0200 istore 23
-    0202 iload 22
-    0204 iload 23
-    0206 imul
-    0207 istore 24
-    0209 iload 24
-    0211 ifeq 225
-    0214 ldc "D"
-    0216 astore 25
-    0218 aload 25
-    0220 astore 7
-    0222 goto 292
-    0225 iconst_0
-    0226 istore 26
-    0228 bipush 59
-    0230 istore 27
-    0232 iload_0
-    0233 iload 26
-    0235 if_icmplt 242
-    0238 iconst_1
-    0239 goto 243
-    0242 iconst_0
-    0243 istore 28
-    0245 iload_0
-    0246 iload 27
-    0248 if_icmpgt 255
-    0251 iconst_1
-    0252 goto 256
-    0255 iconst_0
-    0256 istore 29
-    0258 iload 28
-    0260 iload 29
-    0262 imul
-    0263 istore 30
-    0265 iload 30
-    0267 ifeq 281
-    0270 ldc "F"
-    0272 astore 31
-    0274 aload 31
-    0276 astore 7
-    0278 goto 292
-    0281 ldc "Invalid"
-    0283 astore 32
-    0285 aload 32
-    0287 astore 7
-    0289 goto 292
-    0292 aload 7
-    0294 areturn
-    sub_attr  StackMapTable (125 bytes)
+  code        max_stack=2 max_locals=23
+    0000 iload_0
+    0001 bipush 90
+    0003 if_icmplt 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 istore_1
+    0012 iload_0
+    0013 bipush 100
+    0015 if_icmpgt 22
+    0018 iconst_1
+    0019 goto 23
+    0022 iconst_0
+    0023 istore_2
+    0024 iload_1
+    0025 iload_2
+    0026 imul
+    0027 istore_3
+    0028 iload_3
+    0029 ifeq 43
+    0032 ldc "A"
+    0034 astore 4
+    0036 aload 4
+    0038 astore 5
+    0040 goto 245
+    0043 iload_0
+    0044 bipush 80
+    0046 if_icmplt 53
+    0049 iconst_1
+    0050 goto 54
+    0053 iconst_0
+    0054 istore 6
+    0056 iload_0
+    0057 bipush 89
+    0059 if_icmpgt 66
+    0062 iconst_1
+    0063 goto 67
+    0066 iconst_0
+    0067 istore 7
+    0069 iload 6
+    0071 iload 7
+    0073 imul
+    0074 istore 8
+    0076 iload 8
+    0078 ifeq 92
+    0081 ldc "B"
+    0083 astore 9
+    0085 aload 9
+    0087 astore 5
+    0089 goto 245
+    0092 iload_0
+    0093 bipush 70
+    0095 if_icmplt 102
+    0098 iconst_1
+    0099 goto 103
+    0102 iconst_0
+    0103 istore 10
+    0105 iload_0
+    0106 bipush 79
+    0108 if_icmpgt 115
+    0111 iconst_1
+    0112 goto 116
+    0115 iconst_0
+    0116 istore 11
+    0118 iload 10
+    0120 iload 11
+    0122 imul
+    0123 istore 12
+    0125 iload 12
+    0127 ifeq 141
+    0130 ldc "C"
+    0132 astore 13
+    0134 aload 13
+    0136 astore 5
+    0138 goto 245
+    0141 iload_0
+    0142 bipush 60
+    0144 if_icmplt 151
+    0147 iconst_1
+    0148 goto 152
+    0151 iconst_0
+    0152 istore 14
+    0154 iload_0
+    0155 bipush 69
+    0157 if_icmpgt 164
+    0160 iconst_1
+    0161 goto 165
+    0164 iconst_0
+    0165 istore 15
+    0167 iload 14
+    0169 iload 15
+    0171 imul
+    0172 istore 16
+    0174 iload 16
+    0176 ifeq 190
+    0179 ldc "D"
+    0181 astore 17
+    0183 aload 17
+    0185 astore 5
+    0187 goto 245
+    0190 iload_0
+    0191 iflt 198
+    0194 iconst_1
+    0195 goto 199
+    0198 iconst_0
+    0199 istore 18
+    0201 iload_0
+    0202 bipush 59
+    0204 if_icmpgt 211
+    0207 iconst_1
+    0208 goto 212
+    0211 iconst_0
+    0212 istore 19
+    0214 iload 18
+    0216 iload 19
+    0218 imul
+    0219 istore 20
+    0221 iload 20
+    0223 ifeq 237
+    0226 ldc "F"
+    0228 astore 21
+    0230 aload 21
+    0232 astore 5
+    0234 goto 245
+    0237 ldc "Invalid"
+    0239 astore 22
+    0241 aload 22
+    0243 astore 5
+    0245 aload 5
+    0247 areturn
+    sub_attr  StackMapTable (92 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

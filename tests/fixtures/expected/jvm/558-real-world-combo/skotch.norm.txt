@@ -3,140 +3,113 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
-    0000 goto 3
-    0003 bipush 90
-    0005 istore_1
-    0006 iload_0
-    0007 iload_1
-    0008 if_icmplt 15
-    0011 iconst_1
-    0012 goto 16
-    0015 iconst_0
-    0016 istore_2
-    0017 iload_2
-    0018 ifeq 30
-    0021 ldc "A"
-    0023 astore_3
-    0024 aload_3
-    0025 astore 4
-    0027 goto 107
-    0030 bipush 80
-    0032 istore 5
-    0034 iload_0
-    0035 iload 5
-    0037 if_icmplt 44
-    0040 iconst_1
-    0041 goto 45
-    0044 iconst_0
-    0045 istore 6
-    0047 iload 6
-    0049 ifeq 63
-    0052 ldc "B"
-    0054 astore 7
-    0056 aload 7
-    0058 astore 4
-    0060 goto 107
-    0063 bipush 70
-    0065 istore 8
-    0067 iload_0
-    0068 iload 8
-    0070 if_icmplt 77
-    0073 iconst_1
-    0074 goto 78
-    0077 iconst_0
-    0078 istore 9
-    0080 iload 9
-    0082 ifeq 96
-    0085 ldc "C"
-    0087 astore 10
-    0089 aload 10
-    0091 astore 4
-    0093 goto 107
-    0096 ldc "F"
-    0098 astore 11
-    0100 aload 11
-    0102 astore 4
-    0104 goto 107
-    0107 aload 4
-    0109 areturn
-    sub_attr  StackMapTable (50 bytes)
+  code        max_stack=2 max_locals=9
+    0000 iload_0
+    0001 bipush 90
+    0003 if_icmplt 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 istore_1
+    0012 iload_1
+    0013 ifeq 24
+    0016 ldc "A"
+    0018 astore_2
+    0019 aload_2
+    0020 astore_3
+    0021 goto 87
+    0024 iload_0
+    0025 bipush 80
+    0027 if_icmplt 34
+    0030 iconst_1
+    0031 goto 35
+    0034 iconst_0
+    0035 istore 4
+    0037 iload 4
+    0039 ifeq 52
+    0042 ldc "B"
+    0044 astore 5
+    0046 aload 5
+    0048 astore_3
+    0049 goto 87
+    0052 iload_0
+    0053 bipush 70
+    0055 if_icmplt 62
+    0058 iconst_1
+    0059 goto 63
+    0062 iconst_0
+    0063 istore 6
+    0065 iload 6
+    0067 ifeq 80
+    0070 ldc "C"
+    0072 astore 7
+    0074 aload 7
+    0076 astore_3
+    0077 goto 87
+    0080 ldc "F"
+    0082 astore 8
+    0084 aload 8
+    0086 astore_3
+    0087 aload_3
+    0088 areturn
+    sub_attr  StackMapTable (39 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=17
-    0000 ldc "Alice"
-    0002 astore_0
-    0003 bipush 95
-    0005 istore_1
-    0006 new Class(Student)
-    0009 dup
-    0010 aload_0
-    0011 iload_1
-    0012 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0015 astore_2
+  code        max_stack=4 max_locals=8
+    0000 new Class(Student)
+    0003 dup
+    0004 ldc "Alice"
+    0006 bipush 95
+    0008 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0011 astore_0
+    0012 new Class(Student)
+    0015 dup
     0016 ldc "Bob"
-    0018 astore_3
-    0019 bipush 82
-    0021 istore 4
-    0023 new Class(Student)
-    0026 dup
-    0027 aload_3
-    0028 iload 4
-    0030 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0033 astore 5
-    0035 ldc "Carol"
-    0037 astore 6
-    0039 bipush 67
-    0041 istore 7
-    0043 new Class(Student)
-    0046 dup
-    0047 aload 6
-    0049 iload 7
-    0051 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0054 astore 8
-    0056 iconst_3
-    0057 istore 9
-    0059 iload 9
-    0061 op_0xBD
-    0062 nop
-    0063 iconst_1
-    0064 astore 10
-    0066 iconst_0
-    0067 istore 11
-    0069 aload 10
-    0071 iload 11
-    0073 aload_2
-    0074 op_0x53
-    0075 iconst_1
-    0076 istore 12
-    0078 aload 10
-    0080 iload 12
-    0082 aload 5
-    0084 op_0x53
-    0085 iconst_2
-    0086 istore 13
-    0088 aload 10
-    0090 iload 13
-    0092 aload 8
-    0094 op_0x53
-    0095 aload 10
-    0097 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0100 astore 14
-    0102 aload 14
-    0104 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0109 astore 15
-    0111 goto 114
-    0114 aload 15
-    0116 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0121 istore 16
-    0123 iload 16
-    0125 ifeq 139
-    0128 aload 15
-    0130 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0135 pop
-    0136 goto 114
-    0139 return
-    sub_attr  StackMapTable (47 bytes)
+    0018 bipush 82
+    0020 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0023 astore_1
+    0024 new Class(Student)
+    0027 dup
+    0028 ldc "Carol"
+    0030 bipush 67
+    0032 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0035 astore_2
+    0036 iconst_3
+    0037 istore_3
+    0038 iload_3
+    0039 op_0xBD
+    0040 nop
+    0041 iconst_1
+    0042 astore 4
+    0044 aload 4
+    0046 iconst_0
+    0047 aload_0
+    0048 op_0x53
+    0049 aload 4
+    0051 iconst_1
+    0052 aload_1
+    0053 op_0x53
+    0054 aload 4
+    0056 iconst_2
+    0057 aload_2
+    0058 op_0x53
+    0059 aload 4
+    0061 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0064 astore 5
+    0066 aload 5
+    0068 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0073 astore 6
+    0075 aload 6
+    0077 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0082 istore 7
+    0084 iload 7
+    0086 ifeq 100
+    0089 aload 6
+    0091 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0096 pop
+    0097 goto 75
+    0100 return
+    sub_attr  StackMapTable (32 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

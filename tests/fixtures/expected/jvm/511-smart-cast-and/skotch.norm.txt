@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=11
+  code        max_stack=2 max_locals=10
     0000 aload_0
     0001 ldc "x"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -13,48 +13,44 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0011 iconst_0
     0012 istore_2
     0013 iload_1
-    0014 ifeq 51
+    0014 ifeq 44
     0017 aload_0
     0018 checkcast Class(java/lang/String)
     0021 astore_3
     0022 aload_3
     0023 invokevirtual Method(java/lang/String.length:()I)
     0026 istore 4
-    0028 iconst_3
-    0029 istore 5
-    0031 iload 4
-    0033 iload 5
-    0035 if_icmple 42
-    0038 iconst_1
-    0039 goto 43
-    0042 iconst_0
-    0043 istore 6
-    0045 iload 6
-    0047 istore_2
-    0048 goto 51
-    0051 iload_2
-    0052 ifeq 80
-    0055 aload_0
-    0056 checkcast Class(java/lang/String)
+    0028 iload 4
+    0030 iconst_3
+    0031 if_icmple 38
+    0034 iconst_1
+    0035 goto 39
+    0038 iconst_0
+    0039 istore 5
+    0041 iload 5
+    0043 istore_2
+    0044 iload_2
+    0045 ifeq 73
+    0048 aload_0
+    0049 checkcast Class(java/lang/String)
+    0052 astore 6
+    0054 aload 6
+    0056 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
     0059 astore 7
     0061 aload 7
-    0063 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0066 astore 8
-    0068 aload 8
-    0070 op_0xBA
-    0071 nop
-    0072 fload_3
-    0073 nop
-    0074 nop
+    0063 op_0xBA
+    0064 nop
+    0065 fload_3
+    0066 nop
+    0067 nop
+    0068 astore 8
+    0070 aload 8
+    0072 areturn
+    0073 ldc "other"
     0075 astore 9
     0077 aload 9
     0079 areturn
-    0080 goto 83
-    0083 ldc "other"
-    0085 astore 10
-    0087 aload 10
-    0089 areturn
-    sub_attr  StackMapTable (24 bytes)
+    sub_attr  StackMapTable (22 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

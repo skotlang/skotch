@@ -3,45 +3,39 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        dayType (Ljava/lang/String;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=7
     0000 aload_0
     0001 ldc "day"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 goto 9
-    0009 ldc "Saturday"
-    0011 astore_1
-    0012 aload_0
-    0013 aload_1
-    0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0017 istore_2
-    0018 iload_2
-    0019 ifeq 31
-    0022 ldc "weekend"
-    0024 astore_3
-    0025 aload_3
-    0026 astore 4
-    0028 goto 70
-    0031 ldc "Sunday"
-    0033 astore 5
-    0035 aload_0
-    0036 aload 5
-    0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0041 istore 6
-    0043 iload 6
-    0045 ifeq 59
-    0048 ldc "weekend"
-    0050 astore 7
-    0052 aload 7
-    0054 astore 4
-    0056 goto 70
-    0059 ldc "weekday"
-    0061 astore 8
-    0063 aload 8
-    0065 astore 4
-    0067 goto 70
-    0070 aload 4
-    0072 areturn
-    sub_attr  StackMapTable (48 bytes)
+    0006 aload_0
+    0007 ldc "Saturday"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0012 istore_1
+    0013 iload_1
+    0014 ifeq 25
+    0017 ldc "weekend"
+    0019 astore_2
+    0020 aload_2
+    0021 astore_3
+    0022 goto 55
+    0025 aload_0
+    0026 ldc "Sunday"
+    0028 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0031 istore 4
+    0033 iload 4
+    0035 ifeq 48
+    0038 ldc "weekend"
+    0040 astore 5
+    0042 aload 5
+    0044 astore_3
+    0045 goto 55
+    0048 ldc "weekday"
+    0050 astore 6
+    0052 aload 6
+    0054 astore_3
+    0055 aload_3
+    0056 areturn
+    sub_attr  StackMapTable (27 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

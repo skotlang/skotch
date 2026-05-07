@@ -3,118 +3,95 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=23
+  code        max_stack=3 max_locals=15
     0000 iconst_1
     0001 istore_0
-    0002 iconst_5
+    0002 iload_0
     0003 istore_1
-    0004 iload_0
-    0005 istore_2
-    0006 goto 9
-    0009 iload_2
-    0010 iload_1
-    0011 if_icmpgt 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore_3
-    0020 iload_3
-    0021 ifeq 42
-    0024 goto 43
-    0027 iconst_1
-    0028 istore 4
-    0030 iload_2
-    0031 iload 4
-    0033 iadd
-    0034 istore 5
-    0036 iload 5
-    0038 istore_2
-    0039 goto 9
-    0042 return
-    0043 iconst_2
-    0044 istore 6
-    0046 iload_2
-    0047 iload 6
-    0049 if_icmpgt 56
-    0052 iconst_1
-    0053 goto 57
-    0056 iconst_0
-    0057 istore 7
-    0059 iload 7
-    0061 ifeq 75
-    0064 ldc "small"
-    0066 astore 8
-    0068 aload 8
-    0070 astore 9
-    0072 goto 118
-    0075 iconst_4
-    0076 istore 10
-    0078 iload_2
-    0079 iload 10
-    0081 if_icmpgt 88
-    0084 iconst_1
-    0085 goto 89
-    0088 iconst_0
-    0089 istore 11
-    0091 iload 11
-    0093 ifeq 107
-    0096 ldc "medium"
-    0098 astore 12
-    0100 aload 12
-    0102 astore 9
-    0104 goto 118
-    0107 ldc "large"
-    0109 astore 13
-    0111 aload 13
-    0113 astore 9
-    0115 goto 118
-    0118 goto 121
-    0121 iconst_2
-    0122 istore 14
-    0124 iload_2
-    0125 iload 14
-    0127 irem
-    0128 istore 15
-    0130 iconst_0
-    0131 istore 16
-    0133 iload 15
-    0135 iload 16
-    0137 if_icmpne 144
-    0140 iconst_1
-    0141 goto 145
-    0144 iconst_0
-    0145 istore 17
-    0147 iload 17
-    0149 ifeq 163
-    0152 ldc "even"
-    0154 astore 18
-    0156 aload 18
-    0158 astore 19
-    0160 goto 174
-    0163 ldc "odd"
-    0165 astore 20
-    0167 aload 20
-    0169 astore 19
-    0171 goto 174
-    0174 ldc ": "
-    0176 astore 21
-    0178 ldc ", "
-    0180 astore 22
-    0182 iload_2
-    0183 aload 21
-    0185 aload 9
-    0187 aload 22
-    0189 aload 19
-    0191 op_0xBA
-    0192 nop
-    0193 lload_2
-    0194 nop
-    0195 nop
-    0196 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0199 swap
-    0200 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0203 goto 27
-    sub_attr  StackMapTable (144 bytes)
+    0004 iload_1
+    0005 iconst_5
+    0006 if_icmpgt 13
+    0009 iconst_1
+    0010 goto 14
+    0013 iconst_0
+    0014 istore_2
+    0015 iload_2
+    0016 ifeq 31
+    0019 goto 32
+    0022 iload_1
+    0023 iconst_1
+    0024 iadd
+    0025 istore_3
+    0026 iload_3
+    0027 istore_1
+    0028 goto 4
+    0031 return
+    0032 iload_1
+    0033 iconst_2
+    0034 if_icmpgt 41
+    0037 iconst_1
+    0038 goto 42
+    0041 iconst_0
+    0042 istore 4
+    0044 iload 4
+    0046 ifeq 60
+    0049 ldc "small"
+    0051 astore 5
+    0053 aload 5
+    0055 astore 6
+    0057 goto 96
+    0060 iload_1
+    0061 iconst_4
+    0062 if_icmpgt 69
+    0065 iconst_1
+    0066 goto 70
+    0069 iconst_0
+    0070 istore 7
+    0072 iload 7
+    0074 ifeq 88
+    0077 ldc "medium"
+    0079 astore 8
+    0081 aload 8
+    0083 astore 6
+    0085 goto 96
+    0088 ldc "large"
+    0090 astore 9
+    0092 aload 9
+    0094 astore 6
+    0096 iload_1
+    0097 iconst_2
+    0098 irem
+    0099 istore 10
+    0101 iload 10
+    0103 ifne 110
+    0106 iconst_1
+    0107 goto 111
+    0110 iconst_0
+    0111 istore 11
+    0113 iload 11
+    0115 ifeq 129
+    0118 ldc "even"
+    0120 astore 12
+    0122 aload 12
+    0124 astore 13
+    0126 goto 137
+    0129 ldc "odd"
+    0131 astore 14
+    0133 aload 14
+    0135 astore 13
+    0137 iload_1
+    0138 aload 6
+    0140 aload 13
+    0142 op_0xBA
+    0143 nop
+    0144 iload_2
+    0145 nop
+    0146 nop
+    0147 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0150 swap
+    0151 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0154 goto 22
+    sub_attr  StackMapTable (112 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

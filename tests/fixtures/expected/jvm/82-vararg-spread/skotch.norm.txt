@@ -44,7 +44,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        sum ([I)I 0x0099
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=11
     0000 iconst_0
     0001 istore_1
     0002 iload_1
@@ -54,39 +54,36 @@ method        sum ([I)I 0x0099
     0006 aload_0
     0007 op_0xBE
     0008 istore 4
-    0010 goto 13
-    0013 iload_3
-    0014 iload 4
-    0016 if_icmpge 23
-    0019 iconst_1
-    0020 goto 24
-    0023 iconst_0
-    0024 istore 5
-    0026 iload 5
-    0028 ifeq 64
-    0031 aload_0
-    0032 iload_3
-    0033 op_0x2E
-    0034 istore 6
-    0036 iload_2
-    0037 istore 7
-    0039 iload 7
-    0041 iload 6
-    0043 iadd
-    0044 istore 8
-    0046 iload 8
-    0048 istore_2
-    0049 iconst_1
-    0050 istore 9
-    0052 iload_3
-    0053 iload 9
-    0055 iadd
-    0056 istore 10
-    0058 iload 10
-    0060 istore_3
-    0061 goto 13
-    0064 iload_2
-    0065 istore 11
-    0067 iload 11
-    0069 ireturn
+    0010 iload_3
+    0011 iload 4
+    0013 if_icmpge 20
+    0016 iconst_1
+    0017 goto 21
+    0020 iconst_0
+    0021 istore 5
+    0023 iload 5
+    0025 ifeq 57
+    0028 aload_0
+    0029 iload_3
+    0030 op_0x2E
+    0031 istore 6
+    0033 iload_2
+    0034 istore 7
+    0036 iload 7
+    0038 iload 6
+    0040 iadd
+    0041 istore 8
+    0043 iload 8
+    0045 istore_2
+    0046 iload_3
+    0047 iconst_1
+    0048 iadd
+    0049 istore 9
+    0051 iload 9
+    0053 istore_3
+    0054 goto 10
+    0057 iload_2
+    0058 istore 10
+    0060 iload 10
+    0062 ireturn
     sub_attr  StackMapTable (23 bytes)

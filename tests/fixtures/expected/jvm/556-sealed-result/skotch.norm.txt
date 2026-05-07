@@ -7,55 +7,53 @@ method        describe (LResult;)Ljava/lang/String; 0x0019
     0000 aload_0
     0001 ldc "r"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 goto 9
-    0009 aload_0
-    0010 instanceof Class(Success)
-    0013 istore_1
-    0014 iload_1
-    0015 ifeq 43
-    0018 aload_0
-    0019 checkcast Class(Success)
-    0022 astore_2
-    0023 aload_2
-    0024 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
-    0027 astore_3
-    0028 aload_3
-    0029 op_0xBA
+    0006 aload_0
+    0007 instanceof Class(Success)
+    0010 istore_1
+    0011 iload_1
+    0012 ifeq 40
+    0015 aload_0
+    0016 checkcast Class(Success)
+    0019 astore_2
+    0020 aload_2
+    0021 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
+    0024 astore_3
+    0025 aload_3
+    0026 op_0xBA
+    0027 nop
+    0028 lload_3
+    0029 nop
     0030 nop
-    0031 lload_3
-    0032 nop
-    0033 nop
-    0034 astore 4
-    0036 aload 4
-    0038 astore 5
-    0040 goto 89
-    0043 aload_0
-    0044 instanceof Class(Failure)
-    0047 istore 6
-    0049 iload 6
-    0051 ifeq 83
-    0054 aload_0
-    0055 checkcast Class(Failure)
-    0058 astore 7
-    0060 aload 7
-    0062 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
-    0065 astore 8
-    0067 aload 8
-    0069 op_0xBA
+    0031 astore 4
+    0033 aload 4
+    0035 astore 5
+    0037 goto 83
+    0040 aload_0
+    0041 instanceof Class(Failure)
+    0044 istore 6
+    0046 iload 6
+    0048 ifeq 80
+    0051 aload_0
+    0052 checkcast Class(Failure)
+    0055 astore 7
+    0057 aload 7
+    0059 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
+    0062 astore 8
+    0064 aload 8
+    0066 op_0xBA
+    0067 nop
+    0068 dload_3
+    0069 nop
     0070 nop
-    0071 dload_3
-    0072 nop
-    0073 nop
-    0074 astore 9
-    0076 aload 9
-    0078 astore 5
-    0080 goto 89
-    0083 aconst_null
-    0084 astore 5
-    0086 goto 89
-    0089 aload 5
-    0091 areturn
-    sub_attr  StackMapTable (37 bytes)
+    0071 astore 9
+    0073 aload 9
+    0075 astore 5
+    0077 goto 83
+    0080 aconst_null
+    0081 astore 5
+    0083 aload 5
+    0085 areturn
+    sub_attr  StackMapTable (36 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

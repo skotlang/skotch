@@ -3,92 +3,76 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=20
-    0000 ldc "x"
-    0002 astore_0
-    0003 bipush 10
-    0005 istore_1
-    0006 iload_1
-    0007 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0010 astore_2
-    0011 new Class(kotlin/Pair)
-    0014 dup
-    0015 aload_0
-    0016 aload_2
-    0017 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
-    0020 astore_3
-    0021 ldc "y"
-    0023 astore 4
-    0025 bipush 20
-    0027 istore 5
-    0029 iload 5
-    0031 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0034 astore 6
-    0036 new Class(kotlin/Pair)
-    0039 dup
-    0040 aload 4
-    0042 aload 6
-    0044 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
-    0047 astore 7
-    0049 iconst_2
-    0050 istore 8
-    0052 iload 8
-    0054 op_0xBD
-    0055 nop
-    0056 iconst_1
-    0057 astore 9
-    0059 iconst_0
-    0060 istore 10
-    0062 aload 9
-    0064 iload 10
-    0066 aload_3
-    0067 op_0x53
-    0068 iconst_1
-    0069 istore 11
-    0071 aload 9
-    0073 iload 11
-    0075 aload 7
-    0077 op_0x53
-    0078 aload 9
-    0080 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0083 astore 12
-    0085 aload 12
-    0087 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0092 astore 13
-    0094 goto 97
-    0097 aload 13
-    0099 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0104 istore 14
-    0106 iload 14
-    0108 ifeq 166
-    0111 aload 13
-    0113 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0118 astore 15
-    0120 aload 15
-    0122 checkcast Class(kotlin/Pair)
-    0125 astore 16
-    0127 aload 16
-    0129 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
-    0132 astore 17
-    0134 aload 16
-    0136 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
-    0139 astore 18
-    0141 ldc ": "
-    0143 astore 19
-    0145 aload 17
-    0147 aload 19
-    0149 aload 18
-    0151 op_0xBA
-    0152 nop
-    0153 lstore_1
-    0154 nop
-    0155 nop
-    0156 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0159 swap
-    0160 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0163 goto 97
-    0166 return
-    sub_attr  StackMapTable (45 bytes)
+  code        max_stack=4 max_locals=13
+    0000 bipush 10
+    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0005 astore_0
+    0006 new Class(kotlin/Pair)
+    0009 dup
+    0010 ldc "x"
+    0012 aload_0
+    0013 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0016 astore_1
+    0017 bipush 20
+    0019 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0022 astore_2
+    0023 new Class(kotlin/Pair)
+    0026 dup
+    0027 ldc "y"
+    0029 aload_2
+    0030 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0033 astore_3
+    0034 iconst_2
+    0035 istore 4
+    0037 iload 4
+    0039 op_0xBD
+    0040 nop
+    0041 iconst_1
+    0042 astore 5
+    0044 aload 5
+    0046 iconst_0
+    0047 aload_1
+    0048 op_0x53
+    0049 aload 5
+    0051 iconst_1
+    0052 aload_3
+    0053 op_0x53
+    0054 aload 5
+    0056 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0059 astore 6
+    0061 aload 6
+    0063 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0068 astore 7
+    0070 aload 7
+    0072 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0077 istore 8
+    0079 iload 8
+    0081 ifeq 133
+    0084 aload 7
+    0086 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0091 astore 9
+    0093 aload 9
+    0095 checkcast Class(kotlin/Pair)
+    0098 astore 10
+    0100 aload 10
+    0102 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
+    0105 astore 11
+    0107 aload 10
+    0109 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
+    0112 astore 12
+    0114 aload 11
+    0116 aload 12
+    0118 op_0xBA
+    0119 nop
+    0120 istore_3
+    0121 nop
+    0122 nop
+    0123 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0126 swap
+    0127 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0130 goto 70
+    0133 return
+    sub_attr  StackMapTable (35 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

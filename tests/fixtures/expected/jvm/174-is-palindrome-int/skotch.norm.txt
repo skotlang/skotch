@@ -3,88 +3,74 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isPalindrome (I)Z 0x0019
-  code        max_stack=3 max_locals=22
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_2
-    0013 iload_2
-    0014 ifeq 21
-    0017 iconst_0
-    0018 istore_3
-    0019 iload_3
-    0020 ireturn
-    0021 goto 24
-    0024 iload_0
-    0025 istore 4
-    0027 iconst_0
-    0028 istore 5
-    0030 iload 5
-    0032 istore 6
-    0034 goto 37
-    0037 iload 4
-    0039 istore 7
-    0041 iconst_0
-    0042 istore 8
-    0044 iload 7
-    0046 iload 8
-    0048 if_icmple 55
-    0051 iconst_1
-    0052 goto 56
-    0055 iconst_0
+  code        max_stack=2 max_locals=17
+    0000 iload_0
+    0001 ifge 8
+    0004 iconst_1
+    0005 goto 9
+    0008 iconst_0
+    0009 istore_1
+    0010 iload_1
+    0011 ifeq 18
+    0014 iconst_0
+    0015 istore_2
+    0016 iload_2
+    0017 ireturn
+    0018 iload_0
+    0019 istore_3
+    0020 iconst_0
+    0021 istore 4
+    0023 iload 4
+    0025 istore 5
+    0027 iload_3
+    0028 istore 6
+    0030 iload 6
+    0032 ifle 39
+    0035 iconst_1
+    0036 goto 40
+    0039 iconst_0
+    0040 istore 7
+    0042 iload 7
+    0044 ifeq 95
+    0047 iload 5
+    0049 istore 8
+    0051 iload 8
+    0053 bipush 10
+    0055 imul
     0056 istore 9
-    0058 iload 9
-    0060 ifeq 126
-    0063 iload 6
-    0065 istore 10
-    0067 bipush 10
-    0069 istore 11
-    0071 iload 10
-    0073 iload 11
-    0075 imul
-    0076 istore 12
-    0078 iload 4
+    0058 iload_3
+    0059 istore 10
+    0061 iload 10
+    0063 bipush 10
+    0065 irem
+    0066 istore 11
+    0068 iload 9
+    0070 iload 11
+    0072 iadd
+    0073 istore 12
+    0075 iload 12
+    0077 istore 5
+    0079 iload_3
     0080 istore 13
-    0082 bipush 10
-    0084 istore 14
-    0086 iload 13
-    0088 iload 14
-    0090 irem
-    0091 istore 15
-    0093 iload 12
-    0095 iload 15
-    0097 iadd
-    0098 istore 16
-    0100 iload 16
-    0102 istore 6
-    0104 iload 4
-    0106 istore 17
-    0108 bipush 10
-    0110 istore 18
-    0112 iload 17
-    0114 iload 18
-    0116 idiv
-    0117 istore 19
-    0119 iload 19
-    0121 istore 4
-    0123 goto 37
-    0126 iload 6
-    0128 istore 20
-    0130 iload 20
-    0132 iload_0
-    0133 if_icmpne 140
-    0136 iconst_1
-    0137 goto 141
-    0140 iconst_0
-    0141 istore 21
-    0143 iload 21
-    0145 ireturn
-    sub_attr  StackMapTable (68 bytes)
+    0082 iload 13
+    0084 bipush 10
+    0086 idiv
+    0087 istore 14
+    0089 iload 14
+    0091 istore_3
+    0092 goto 27
+    0095 iload 5
+    0097 istore 15
+    0099 iload 15
+    0101 iload_0
+    0102 if_icmpne 109
+    0105 iconst_1
+    0106 goto 110
+    0109 iconst_0
+    0110 istore 16
+    0112 iload 16
+    0114 ireturn
+    sub_attr  StackMapTable (57 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 121

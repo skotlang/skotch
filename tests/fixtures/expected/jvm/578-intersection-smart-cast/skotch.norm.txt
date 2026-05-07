@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=13
+  code        max_stack=2 max_locals=12
     0000 aload_0
     0001 ldc "value"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -13,64 +13,59 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0011 iconst_0
     0012 istore_2
     0013 iload_1
-    0014 ifeq 51
+    0014 ifeq 44
     0017 aload_0
     0018 checkcast Class(java/lang/String)
     0021 astore_3
     0022 aload_3
     0023 invokevirtual Method(java/lang/String.length:()I)
     0026 istore 4
-    0028 iconst_3
-    0029 istore 5
-    0031 iload 4
-    0033 iload 5
-    0035 if_icmple 42
-    0038 iconst_1
-    0039 goto 43
-    0042 iconst_0
-    0043 istore 6
-    0045 iload 6
-    0047 istore_2
-    0048 goto 51
-    0051 iload_2
-    0052 ifeq 73
-    0055 aload_0
-    0056 checkcast Class(java/lang/String)
-    0059 astore 7
-    0061 aload 7
-    0063 op_0xBA
-    0064 nop
-    0065 lload_3
-    0066 nop
-    0067 nop
-    0068 astore 8
-    0070 aload 8
-    0072 areturn
-    0073 goto 76
-    0076 aload_0
-    0077 instanceof Class(java/lang/Integer)
-    0080 istore 9
-    0082 iload 9
-    0084 ifeq 108
-    0087 aload_0
-    0088 checkcast Class(java/lang/Integer)
-    0091 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0094 istore 10
-    0096 iload 10
-    0098 op_0xBA
-    0099 nop
-    0100 aload_1
-    0101 nop
-    0102 nop
-    0103 astore 11
-    0105 aload 11
-    0107 areturn
-    0108 goto 111
-    0111 ldc "other"
-    0113 astore 12
-    0115 aload 12
-    0117 areturn
-    sub_attr  StackMapTable (44 bytes)
+    0028 iload 4
+    0030 iconst_3
+    0031 if_icmple 38
+    0034 iconst_1
+    0035 goto 39
+    0038 iconst_0
+    0039 istore 5
+    0041 iload 5
+    0043 istore_2
+    0044 iload_2
+    0045 ifeq 66
+    0048 aload_0
+    0049 checkcast Class(java/lang/String)
+    0052 astore 6
+    0054 aload 6
+    0056 op_0xBA
+    0057 nop
+    0058 lload_3
+    0059 nop
+    0060 nop
+    0061 astore 7
+    0063 aload 7
+    0065 areturn
+    0066 aload_0
+    0067 instanceof Class(java/lang/Integer)
+    0070 istore 8
+    0072 iload 8
+    0074 ifeq 98
+    0077 aload_0
+    0078 checkcast Class(java/lang/Integer)
+    0081 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0084 istore 9
+    0086 iload 9
+    0088 op_0xBA
+    0089 nop
+    0090 aload_1
+    0091 nop
+    0092 nop
+    0093 astore 10
+    0095 aload 10
+    0097 areturn
+    0098 ldc "other"
+    0100 astore 11
+    0102 aload 11
+    0104 areturn
+    sub_attr  StackMapTable (40 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
