@@ -11,7 +11,11 @@ method        area (LShape;)I 0x0019
     0007 instanceof Class(Circle)
     0010 istore_1
     0011 iload_1
+<<<<<<< Updated upstream
     0012 ifeq 50
+=======
+    0012 ifeq 54
+>>>>>>> Stashed changes
     0015 aload_0
     0016 checkcast Class(Circle)
     0019 astore_2
@@ -25,6 +29,7 @@ method        area (LShape;)I 0x0019
     0032 iload 4
     0034 imul
     0035 istore 5
+<<<<<<< Updated upstream
     0037 iload 5
     0039 iconst_3
     0040 imul
@@ -58,6 +63,43 @@ method        area (LShape;)I 0x0019
     0098 iload 7
     0100 ireturn
     sub_attr  StackMapTable (21 bytes)
+=======
+    0037 iconst_3
+    0038 istore 6
+    0040 iload 5
+    0042 iload 6
+    0044 imul
+    0045 istore 7
+    0047 iload 7
+    0049 istore 8
+    0051 goto 102
+    0054 aload_0
+    0055 instanceof Class(Rect)
+    0058 istore 9
+    0060 iload 9
+    0062 ifeq 99
+    0065 aload_0
+    0066 checkcast Class(Rect)
+    0069 astore 10
+    0071 aload 10
+    0073 invokevirtual Method(Rect.getW:()I)
+    0076 istore 11
+    0078 aload 10
+    0080 invokevirtual Method(Rect.getH:()I)
+    0083 istore 12
+    0085 iload 11
+    0087 iload 12
+    0089 imul
+    0090 istore 13
+    0092 iload 13
+    0094 istore 8
+    0096 goto 102
+    0099 iconst_0
+    0100 istore 8
+    0102 iload 8
+    0104 ireturn
+    sub_attr  StackMapTable (22 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=4 max_locals=1

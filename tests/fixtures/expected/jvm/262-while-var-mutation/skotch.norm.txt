@@ -14,6 +14,7 @@ method        main ()V 0x0019
     0007 istore_3
     0008 iload_3
     0009 istore 4
+<<<<<<< Updated upstream
     0011 iload 4
     0013 bipush 100
     0015 if_icmpgt 22
@@ -49,6 +50,41 @@ method        main ()V 0x0019
     0069 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0072 return
     sub_attr  StackMapTable (23 bytes)
+=======
+    0011 bipush 100
+    0013 istore 5
+    0015 iload 4
+    0017 iload 5
+    0019 if_icmpgt 57
+    0022 iload_1
+    0023 istore 7
+    0025 iload_3
+    0026 istore 8
+    0028 iload 7
+    0030 iload 8
+    0032 iadd
+    0033 istore 9
+    0035 iload 9
+    0037 istore_1
+    0038 iload_3
+    0039 istore 10
+    0041 iconst_1
+    0042 istore 11
+    0044 iload 10
+    0046 iload 11
+    0048 iadd
+    0049 istore 12
+    0051 iload 12
+    0053 istore_3
+    0054 goto 8
+    0057 iload_1
+    0058 istore 13
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 iload 13
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0068 return
+    sub_attr  StackMapTable (18 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

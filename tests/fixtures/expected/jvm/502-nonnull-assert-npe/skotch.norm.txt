@@ -6,6 +6,7 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=5
     0000 ldc "hello"
     0002 astore_0
+<<<<<<< Updated upstream
     0003 aload_0
     0004 aconst_null
     0005 if_acmpne 12
@@ -32,6 +33,30 @@ method        main ()V 0x0019
     0044 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0047 return
     sub_attr  StackMapTable (14 bytes)
+=======
+    0003 aconst_null
+    0004 astore_1
+    0005 aload_0
+    0006 aload_1
+    0007 if_acmpne 20
+    0010 new Class(java/lang/NullPointerException)
+    0013 dup
+    0014 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0017 astore_3
+    0018 aload_3
+    0019 athrow
+    0020 aload_0
+    0021 checkcast Class(java/lang/String)
+    0024 astore 4
+    0026 aload 4
+    0028 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0031 astore 5
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload 5
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 return
+    sub_attr  StackMapTable (11 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

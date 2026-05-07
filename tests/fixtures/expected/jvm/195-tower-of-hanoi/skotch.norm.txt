@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        hanoi (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=11
     0000 iload_0
     0001 ifgt 8
@@ -51,6 +52,59 @@ method        hanoi (I)I 0x0019
     0079 iload 10
     0081 ireturn
     sub_attr  StackMapTable (9 bytes)
+=======
+  code        max_stack=3 max_locals=15
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpgt 11
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_3
+    0010 ireturn
+    0011 iconst_1
+    0012 istore 4
+    0014 iload_0
+    0015 iload 4
+    0017 isub
+    0018 istore 5
+    0020 iload 5
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 astore 6
+    0027 aload 6
+    0029 checkcast Class(java/lang/Integer)
+    0032 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0035 invokestatic Method(InputKt.hanoi:(I)I)
+    0038 istore 7
+    0040 iconst_1
+    0041 istore 8
+    0043 iload 7
+    0045 iload 8
+    0047 iadd
+    0048 istore 9
+    0050 iconst_1
+    0051 istore 10
+    0053 iload_0
+    0054 iload 10
+    0056 isub
+    0057 istore 11
+    0059 iload 11
+    0061 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0064 astore 12
+    0066 aload 12
+    0068 checkcast Class(java/lang/Integer)
+    0071 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0074 invokestatic Method(InputKt.hanoi:(I)I)
+    0077 istore 13
+    0079 iload 9
+    0081 iload 13
+    0083 iadd
+    0084 istore 14
+    0086 iload 14
+    0088 ireturn
+    sub_attr  StackMapTable (6 bytes)
+>>>>>>> Stashed changes
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_1

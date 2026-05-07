@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        countDigits (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=17
     0000 iload_0
     0001 ifne 8
@@ -71,6 +72,75 @@ method        countDigits (I)I 0x0019
     0117 iload 16
     0119 ireturn
     sub_attr  StackMapTable (41 bytes)
+=======
+  code        max_stack=3 max_locals=23
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpne 11
+    0007 iconst_1
+    0008 istore_3
+    0009 iload_3
+    0010 ireturn
+    0011 iconst_0
+    0012 istore 4
+    0014 iload 4
+    0016 istore 5
+    0018 iload_0
+    0019 istore 6
+    0021 iload 6
+    0023 istore 7
+    0025 iconst_0
+    0026 istore 8
+    0028 iload 7
+    0030 iload 8
+    0032 if_icmpge 56
+    0035 iload 6
+    0037 istore 10
+    0039 iconst_0
+    0040 istore 11
+    0042 iload 11
+    0044 iload 10
+    0046 isub
+    0047 istore 12
+    0049 iload 12
+    0051 istore 6
+    0053 goto 56
+    0056 iload 6
+    0058 istore 13
+    0060 iconst_0
+    0061 istore 14
+    0063 iload 13
+    0065 iload 14
+    0067 if_icmple 110
+    0070 iload 6
+    0072 istore 16
+    0074 bipush 10
+    0076 istore 17
+    0078 iload 16
+    0080 iload 17
+    0082 idiv
+    0083 istore 18
+    0085 iload 18
+    0087 istore 6
+    0089 iload 5
+    0091 istore 19
+    0093 iconst_1
+    0094 istore 20
+    0096 iload 19
+    0098 iload 20
+    0100 iadd
+    0101 istore 21
+    0103 iload 21
+    0105 istore 5
+    0107 goto 56
+    0110 iload 5
+    0112 istore 22
+    0114 iload 22
+    0116 ireturn
+    sub_attr  StackMapTable (44 bytes)
+>>>>>>> Stashed changes
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_0

@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isPrime (I)Z 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=16
     0000 iload_0
     0001 iconst_2
@@ -71,6 +72,65 @@ method        isPrime (I)Z 0x0019
     0111 istore 4
     0113 goto 24
     sub_attr  StackMapTable (41 bytes)
+=======
+  code        max_stack=5 max_locals=19
+    0000 iconst_2
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 11
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_3
+    0010 ireturn
+    0011 iconst_2
+    0012 istore 4
+    0014 iload 4
+    0016 istore 5
+    0018 iload 5
+    0020 istore 6
+    0022 iload 5
+    0024 istore 7
+    0026 iload 6
+    0028 iload 7
+    0030 imul
+    0031 istore 8
+    0033 iload 8
+    0035 iload_0
+    0036 if_icmpgt 62
+    0039 iload 5
+    0041 istore 10
+    0043 iload_0
+    0044 iload 10
+    0046 irem
+    0047 istore 11
+    0049 iconst_0
+    0050 istore 12
+    0052 iload 11
+    0054 iload 12
+    0056 if_icmpne 74
+    0059 goto 68
+    0062 iconst_1
+    0063 istore 14
+    0065 iload 14
+    0067 ireturn
+    0068 iconst_0
+    0069 istore 15
+    0071 iload 15
+    0073 ireturn
+    0074 iload 5
+    0076 istore 16
+    0078 iconst_1
+    0079 istore 17
+    0081 iload 16
+    0083 iload 17
+    0085 iadd
+    0086 istore 18
+    0088 iload 18
+    0090 istore 5
+    0092 goto 18
+    sub_attr  StackMapTable (46 bytes)
+>>>>>>> Stashed changes
 method        main ()V 0x0019
   code        max_stack=2 max_locals=10
     0000 iconst_0
@@ -79,6 +139,7 @@ method        main ()V 0x0019
     0003 istore_1
     0004 iconst_2
     0005 istore_2
+<<<<<<< Updated upstream
     0006 iload_2
     0007 istore_3
     0008 iload_3
@@ -118,6 +179,48 @@ method        main ()V 0x0019
     0072 iload 9
     0074 istore_1
     0075 goto 40
+=======
+    0006 bipush 100
+    0008 istore_3
+    0009 iload_2
+    0010 istore 4
+    0012 iload 4
+    0014 iload_3
+    0015 if_icmpgt 50
+    0018 iload 4
+    0020 invokestatic Method(InputKt.isPrime:(I)Z)
+    0023 istore 6
+    0025 iload 6
+    0027 ifeq 81
+    0030 goto 62
+    0033 iconst_1
+    0034 istore 7
+    0036 iload 4
+    0038 iload 7
+    0040 iadd
+    0041 istore 8
+    0043 iload 8
+    0045 istore 4
+    0047 goto 12
+    0050 iload_1
+    0051 istore 9
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 iload 9
+    0058 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0061 return
+    0062 iload_1
+    0063 istore 10
+    0065 iconst_1
+    0066 istore 11
+    0068 iload 10
+    0070 iload 11
+    0072 iadd
+    0073 istore 12
+    0075 iload 12
+    0077 istore_1
+    0078 goto 81
+    0081 goto 33
+>>>>>>> Stashed changes
     sub_attr  StackMapTable (28 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

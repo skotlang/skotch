@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        guard (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=3 max_locals=4
     0000 iload_0
     0001 iflt 8
@@ -25,6 +26,29 @@ method        guard (I)Ljava/lang/String; 0x0019
     0031 aload_3
     0032 athrow
     sub_attr  StackMapTable (9 bytes)
+=======
+  code        max_stack=4 max_locals=6
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmplt 14
+    0007 iload_0
+    0008 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0011 astore_3
+    0012 aload_3
+    0013 areturn
+    0014 ldc "negative"
+    0016 astore 4
+    0018 new Class(java/lang/IllegalArgumentException)
+    0021 dup
+    0022 aload 4
+    0024 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0027 astore 5
+    0029 aload 5
+    0031 athrow
+    sub_attr  StackMapTable (6 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
@@ -45,6 +69,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safe (I)I 0x0019
+<<<<<<< Updated upstream
   code        max_stack=3 max_locals=3
     0000 iload_0
     0001 ifge 8
@@ -64,3 +89,23 @@ method        safe (I)I 0x0019
     0026 iload_0
     0027 ireturn
     sub_attr  StackMapTable (9 bytes)
+=======
+  code        max_stack=3 max_locals=5
+    0000 iconst_0
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 23
+    0007 ldc "neg"
+    0009 astore_3
+    0010 new Class(java/lang/IllegalArgumentException)
+    0013 dup
+    0014 aload_3
+    0015 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0018 astore 4
+    0020 aload 4
+    0022 athrow
+    0023 iload_0
+    0024 ireturn
+    sub_attr  StackMapTable (6 bytes)
+>>>>>>> Stashed changes

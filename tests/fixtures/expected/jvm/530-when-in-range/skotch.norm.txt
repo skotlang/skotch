@@ -3,6 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
+<<<<<<< Updated upstream
   code        max_stack=2 max_locals=11
     0000 iload_0
     0001 iconst_1
@@ -61,6 +62,74 @@ method        classify (I)Ljava/lang/String; 0x0019
     0099 aload 5
     0101 areturn
     sub_attr  StackMapTable (47 bytes)
+=======
+  code        max_stack=2 max_locals=15
+    0000 iconst_1
+    0001 istore_1
+    0002 bipush 10
+    0004 istore_2
+    0005 iload_0
+    0006 iload_1
+    0007 if_icmplt 14
+    0010 iconst_1
+    0011 goto 15
+    0014 iconst_0
+    0015 istore_3
+    0016 iload_0
+    0017 iload_2
+    0018 if_icmpgt 25
+    0021 iconst_1
+    0022 goto 26
+    0025 iconst_0
+    0026 istore 4
+    0028 iload_3
+    0029 iload 4
+    0031 imul
+    0032 istore 5
+    0034 iload 5
+    0036 ifeq 50
+    0039 ldc "small"
+    0041 astore 6
+    0043 aload 6
+    0045 astore 7
+    0047 goto 115
+    0050 bipush 11
+    0052 istore 8
+    0054 bipush 100
+    0056 istore 9
+    0058 iload_0
+    0059 iload 8
+    0061 if_icmplt 68
+    0064 iconst_1
+    0065 goto 69
+    0068 iconst_0
+    0069 istore 10
+    0071 iload_0
+    0072 iload 9
+    0074 if_icmpgt 81
+    0077 iconst_1
+    0078 goto 82
+    0081 iconst_0
+    0082 istore 11
+    0084 iload 10
+    0086 iload 11
+    0088 imul
+    0089 istore 12
+    0091 iload 12
+    0093 ifeq 107
+    0096 ldc "medium"
+    0098 astore 13
+    0100 aload 13
+    0102 astore 7
+    0104 goto 115
+    0107 ldc "big"
+    0109 astore 14
+    0111 aload 14
+    0113 astore 7
+    0115 aload 7
+    0117 areturn
+    sub_attr  StackMapTable (67 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

@@ -98,6 +98,7 @@ method        sum ([I)I 0x0099
     0008 istore 4
     0010 iload_3
     0011 iload 4
+<<<<<<< Updated upstream
     0013 if_icmpge 20
     0016 iconst_1
     0017 goto 21
@@ -129,3 +130,32 @@ method        sum ([I)I 0x0099
     0060 iload 10
     0062 ireturn
     sub_attr  StackMapTable (23 bytes)
+=======
+    0013 if_icmpge 49
+    0016 aload_0
+    0017 iload_3
+    0018 op_0x2E
+    0019 istore 6
+    0021 iload_2
+    0022 istore 7
+    0024 iload 7
+    0026 iload 6
+    0028 iadd
+    0029 istore 8
+    0031 iload 8
+    0033 istore_2
+    0034 iconst_1
+    0035 istore 9
+    0037 iload_3
+    0038 iload 9
+    0040 iadd
+    0041 istore 10
+    0043 iload 10
+    0045 istore_3
+    0046 goto 10
+    0049 iload_2
+    0050 istore 11
+    0052 iload 11
+    0054 ireturn
+    sub_attr  StackMapTable (17 bytes)
+>>>>>>> Stashed changes

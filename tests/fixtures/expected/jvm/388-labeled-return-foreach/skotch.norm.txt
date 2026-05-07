@@ -6,6 +6,7 @@ method        main ()V 0x0019
   code        max_stack=3 max_locals=13
     0000 iconst_5
     0001 istore_0
+<<<<<<< Updated upstream
     0002 iload_0
     0003 op_0xBD
     0004 nop
@@ -76,6 +77,98 @@ method        main ()V 0x0019
     0125 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0128 return
     sub_attr  StackMapTable (41 bytes)
+=======
+    0002 iconst_2
+    0003 istore_1
+    0004 iconst_3
+    0005 istore_2
+    0006 iconst_4
+    0007 istore_3
+    0008 iconst_5
+    0009 istore 4
+    0011 iconst_5
+    0012 istore 5
+    0014 iload 5
+    0016 op_0xBD
+    0017 nop
+    0018 iconst_1
+    0019 astore 6
+    0021 iconst_0
+    0022 istore 7
+    0024 iload_0
+    0025 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0028 astore 8
+    0030 aload 6
+    0032 iload 7
+    0034 aload 8
+    0036 op_0x53
+    0037 iconst_1
+    0038 istore 9
+    0040 iload_1
+    0041 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0044 astore 10
+    0046 aload 6
+    0048 iload 9
+    0050 aload 10
+    0052 op_0x53
+    0053 iconst_2
+    0054 istore 11
+    0056 iload_2
+    0057 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0060 astore 12
+    0062 aload 6
+    0064 iload 11
+    0066 aload 12
+    0068 op_0x53
+    0069 iconst_3
+    0070 istore 13
+    0072 iload_3
+    0073 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0076 astore 14
+    0078 aload 6
+    0080 iload 13
+    0082 aload 14
+    0084 op_0x53
+    0085 iconst_4
+    0086 istore 15
+    0088 iload 4
+    0090 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0093 astore 16
+    0095 aload 6
+    0097 iload 15
+    0099 aload 16
+    0101 op_0x53
+    0102 aload 6
+    0104 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0107 astore 17
+    0109 new Class(InputKt$Lambda$0)
+    0112 dup
+    0113 invokespecial Method(InputKt$Lambda$0.<init>:()V)
+    0116 astore 18
+    0118 aload 17
+    0120 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0125 astore 19
+    0127 aload 19
+    0129 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0134 istore 20
+    0136 iload 20
+    0138 ifeq 161
+    0141 aload 19
+    0143 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0148 astore 21
+    0150 aload 18
+    0152 aload 21
+    0154 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0157 pop
+    0158 goto 127
+    0161 ldc "done"
+    0163 astore 22
+    0165 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0168 aload 22
+    0170 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0173 return
+    sub_attr  StackMapTable (51 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -6,6 +6,7 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=12
     0000 iconst_1
     0001 istore_0
+<<<<<<< Updated upstream
     0002 iload_0
     0003 istore_1
     0004 iload_1
@@ -81,6 +82,95 @@ method        main ()V 0x0019
     0143 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0146 goto 63
     sub_attr  StackMapTable (58 bytes)
+=======
+    0002 bipush 15
+    0004 istore_1
+    0005 iload_0
+    0006 istore_2
+    0007 iload_2
+    0008 iload_1
+    0009 if_icmpgt 90
+    0012 iconst_3
+    0013 istore 4
+    0015 iload_2
+    0016 iload 4
+    0018 irem
+    0019 istore 5
+    0021 iconst_0
+    0022 istore 6
+    0024 iload 5
+    0026 iload 6
+    0028 if_icmpne 35
+    0031 iconst_1
+    0032 goto 36
+    0035 iconst_0
+    0036 istore 7
+    0038 iconst_5
+    0039 istore 8
+    0041 iload_2
+    0042 iload 8
+    0044 irem
+    0045 istore 9
+    0047 iconst_0
+    0048 istore 10
+    0050 iload 9
+    0052 iload 10
+    0054 if_icmpne 61
+    0057 iconst_1
+    0058 goto 62
+    0061 iconst_0
+    0062 istore 11
+    0064 iconst_0
+    0065 istore 12
+    0067 iload 7
+    0069 ifeq 95
+    0072 goto 91
+    0075 iconst_1
+    0076 istore 13
+    0078 iload_2
+    0079 iload 13
+    0081 iadd
+    0082 istore 14
+    0084 iload 14
+    0086 istore_2
+    0087 goto 7
+    0090 return
+    0091 iload 11
+    0093 istore 12
+    0095 iload 12
+    0097 ifeq 115
+    0100 ldc "FizzBuzz"
+    0102 astore 15
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 aload 15
+    0109 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0112 goto 123
+    0115 iload 7
+    0117 ifeq 141
+    0120 goto 126
+    0123 goto 75
+    0126 ldc "Fizz"
+    0128 astore 16
+    0130 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0133 aload 16
+    0135 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0138 goto 149
+    0141 iload 11
+    0143 ifeq 167
+    0146 goto 152
+    0149 goto 123
+    0152 ldc "Buzz"
+    0154 astore 17
+    0156 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0159 aload 17
+    0161 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0164 goto 174
+    0167 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0170 iload_2
+    0171 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0174 goto 149
+    sub_attr  StackMapTable (88 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

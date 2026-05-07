@@ -14,6 +14,7 @@ method        factorial (I)I 0x0019
     0007 istore 4
     0009 iload 4
     0011 iload_0
+<<<<<<< Updated upstream
     0012 if_icmpgt 19
     0015 iconst_1
     0016 goto 20
@@ -173,6 +174,149 @@ method        main ()V 0x0019
     0113 goto 69
     0116 return
     sub_attr  StackMapTable (43 bytes)
+=======
+    0012 if_icmpgt 45
+    0015 iload_2
+    0016 istore 6
+    0018 iload 6
+    0020 iload 4
+    0022 imul
+    0023 istore 7
+    0025 iload 7
+    0027 istore_2
+    0028 iconst_1
+    0029 istore 8
+    0031 iload 4
+    0033 iload 8
+    0035 iadd
+    0036 istore 9
+    0038 iload 9
+    0040 istore 4
+    0042 goto 9
+    0045 iload_2
+    0046 istore 10
+    0048 iload 10
+    0050 ireturn
+    sub_attr  StackMapTable (15 bytes)
+method        isPrime (I)Z 0x0019
+  code        max_stack=5 max_locals=19
+    0000 iconst_2
+    0001 istore_1
+    0002 iload_0
+    0003 iload_1
+    0004 if_icmpge 11
+    0007 iconst_0
+    0008 istore_3
+    0009 iload_3
+    0010 ireturn
+    0011 iconst_2
+    0012 istore 4
+    0014 iload 4
+    0016 istore 5
+    0018 iload 5
+    0020 istore 6
+    0022 iload 5
+    0024 istore 7
+    0026 iload 6
+    0028 iload 7
+    0030 imul
+    0031 istore 8
+    0033 iload 8
+    0035 iload_0
+    0036 if_icmpgt 62
+    0039 iload 5
+    0041 istore 10
+    0043 iload_0
+    0044 iload 10
+    0046 irem
+    0047 istore 11
+    0049 iconst_0
+    0050 istore 12
+    0052 iload 11
+    0054 iload 12
+    0056 if_icmpne 74
+    0059 goto 68
+    0062 iconst_1
+    0063 istore 14
+    0065 iload 14
+    0067 ireturn
+    0068 iconst_0
+    0069 istore 15
+    0071 iload 15
+    0073 ireturn
+    0074 iload 5
+    0076 istore 16
+    0078 iconst_1
+    0079 istore 17
+    0081 iload 16
+    0083 iload 17
+    0085 iadd
+    0086 istore 18
+    0088 iload 18
+    0090 istore 5
+    0092 goto 18
+    sub_attr  StackMapTable (46 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=14
+    0000 iconst_2
+    0001 istore_0
+    0002 bipush 20
+    0004 istore_1
+    0005 iload_0
+    0006 istore_2
+    0007 iload_2
+    0008 iload_1
+    0009 if_icmpgt 41
+    0012 iload_2
+    0013 invokestatic Method(InputKt.isPrime:(I)Z)
+    0016 istore 4
+    0018 iload 4
+    0020 ifeq 71
+    0023 goto 61
+    0026 iconst_1
+    0027 istore 5
+    0029 iload_2
+    0030 iload 5
+    0032 iadd
+    0033 istore 6
+    0035 iload 6
+    0037 istore_2
+    0038 goto 7
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 invokevirtual Method(java/io/PrintStream.println:()V)
+    0047 iconst_1
+    0048 istore 7
+    0050 bipush 7
+    0052 istore 8
+    0054 iload 7
+    0056 istore 9
+    0058 goto 74
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 iload_2
+    0065 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0068 goto 71
+    0071 goto 26
+    0074 iload 9
+    0076 iload 8
+    0078 if_icmpgt 113
+    0081 iload 9
+    0083 invokestatic Method(InputKt.factorial:(I)I)
+    0086 istore 11
+    0088 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0091 iload 11
+    0093 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0096 iconst_1
+    0097 istore 12
+    0099 iload 9
+    0101 iload 12
+    0103 iadd
+    0104 istore 13
+    0106 iload 13
+    0108 istore 9
+    0110 goto 74
+    0113 return
+    sub_attr  StackMapTable (40 bytes)
+>>>>>>> Stashed changes
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

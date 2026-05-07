@@ -13,13 +13,18 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0011 iconst_0
     0012 istore_2
     0013 iload_1
+<<<<<<< Updated upstream
     0014 ifeq 44
+=======
+    0014 ifeq 48
+>>>>>>> Stashed changes
     0017 aload_0
     0018 checkcast Class(java/lang/String)
     0021 astore_3
     0022 aload_3
     0023 invokevirtual Method(java/lang/String.length:()I)
     0026 istore 4
+<<<<<<< Updated upstream
     0028 iload 4
     0030 iconst_3
     0031 if_icmple 38
@@ -51,6 +56,41 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0077 aload 9
     0079 areturn
     sub_attr  StackMapTable (22 bytes)
+=======
+    0028 iconst_3
+    0029 istore 5
+    0031 iload 4
+    0033 iload 5
+    0035 if_icmple 42
+    0038 iconst_1
+    0039 goto 43
+    0042 iconst_0
+    0043 istore 6
+    0045 iload 6
+    0047 istore_2
+    0048 iload_2
+    0049 ifeq 77
+    0052 aload_0
+    0053 checkcast Class(java/lang/String)
+    0056 astore 7
+    0058 aload 7
+    0060 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
+    0063 astore 8
+    0065 aload 8
+    0067 op_0xBA
+    0068 nop
+    0069 fload_3
+    0070 nop
+    0071 nop
+    0072 astore 9
+    0074 aload 9
+    0076 areturn
+    0077 ldc "other"
+    0079 astore 10
+    0081 aload 10
+    0083 areturn
+    sub_attr  StackMapTable (23 bytes)
+>>>>>>> Stashed changes
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

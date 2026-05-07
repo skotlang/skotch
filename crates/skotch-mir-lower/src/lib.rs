@@ -10303,8 +10303,12 @@ fn lower_expr(
 
             // Handle stdlib top-level functions as StaticJava calls.
             // Math functions map to java.lang.Math static methods. A
+<<<<<<< Updated upstream
             // user-defined function with the same name takes precedence —
             // skip the stdlib mapping if the callee is in `name_to_func`.
+=======
+            // user-defined function with the same name takes precedence.
+>>>>>>> Stashed changes
             let stdlib_call: Option<(&str, &str, &str, Ty)> =
                 if name_to_func.contains_key(&callee_name) {
                     None
