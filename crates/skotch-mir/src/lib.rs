@@ -380,6 +380,13 @@ pub struct MirFunction {
     /// inlined at call sites rather than emitted as a separate method.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_inline: bool,
+    /// True when the source declaration had type parameters
+    /// (`fun <T> identity(x: T): T`). Generic type variables erase to
+    /// `Ty::Any` on the JVM but kotlinc skips
+    /// `Intrinsics.checkNotNullParameter` for them — we mirror that
+    /// behavior in the JVM backend.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_type_params: bool,
     /// The Kotlin-source-level declared return type of a
     /// suspend function, captured before the CPS transform rewrites
     /// `return_ty` to `Ty::Any`. Call sites need this to emit the

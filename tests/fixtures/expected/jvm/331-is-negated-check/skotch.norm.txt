@@ -23,18 +23,16 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        notString (Ljava/lang/Object;)Z 0x0019
-  code        max_stack=2 max_locals=2
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "x"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 instanceof Class(java/lang/String)
-    0010 istore_1
-    0011 iload_1
-    0012 ifne 19
-    0015 iconst_1
-    0016 goto 20
-    0019 iconst_0
-    0020 ireturn
+    0010 ifne 17
+    0013 iconst_1
+    0014 goto 18
+    0017 iconst_0
+    0018 ireturn
     sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

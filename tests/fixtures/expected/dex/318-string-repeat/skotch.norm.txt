@@ -1,18 +1,20 @@
 dex_version   035
-strings       17
-types         8
+strings       19
+types         10
 methods       4
 classes       1
 
 --- strings ---
   "-"
   "I"
-  "LI"
   "LInputKt;"
+  "LLI"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/CharSequence;"
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
+  "Lkotlin/text/StringsKt;"
   "V"
   "VL"
   "[Ljava/lang/String;"
@@ -27,9 +29,11 @@ classes       1
   I
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/CharSequence;
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
+  Lkotlin/text/StringsKt;
   V
   [Ljava/lang/String;
 
@@ -37,7 +41,7 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
-  Ljava/lang/String;.repeat(I)Ljava/lang/String;
+  Lkotlin/text/StringsKt;.repeat(Ljava/lang/CharSequence;I)Ljava/lang/String;
 
 --- class[0] ---
   descriptor   LInputKt;

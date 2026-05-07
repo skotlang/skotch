@@ -711,6 +711,7 @@ mod tests {
             exception_handlers: Vec::new(),
             is_suspend: false,
             is_inline: false,
+            has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: vec![MirAnnotation {

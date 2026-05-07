@@ -391,6 +391,13 @@ fn emit_checknotnull_prologue(
         if !is_non_null_reference_param(ty) {
             continue;
         }
+        // Generic type-parameter params (`fun <T>(x: T)`) erase to
+        // Object/Ty::Any. kotlinc skips checkNotNullParameter for them
+        // since `T` can legitimately be a nullable type at the call
+        // site.
+        if matches!(ty, Ty::Any) && func.has_type_params {
+            continue;
+        }
         // Skip the implicit `this` parameter for instance methods (slot 0).
         if matches!(kind, MethodKind::Instance) && idx == 0 {
             continue;
@@ -2085,6 +2092,34 @@ fn emit_method_body(
     let unused = compute_unused_locals(func);
     UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
 
+    // Build a map of named locals whose only assignment is a literal
+    // constant. The comparison-folding path uses this to recognize
+    // patterns like `val x = '\n'; x == '\n'` as compile-time true.
+    let named_const_inits: FxHashMap<u32, MirConst> = {
+        let named_set: FxHashSet<u32> = func.named_locals.iter().map(|l| l.0).collect();
+        let mut counts: FxHashMap<u32, u32> = FxHashMap::default();
+        let mut const_assign: FxHashMap<u32, MirConst> = FxHashMap::default();
+        for blk in &func.blocks {
+            for stmt in &blk.stmts {
+                let Stmt::Assign { dest, value } = stmt;
+                *counts.entry(dest.0).or_insert(0) += 1;
+                if let Rvalue::Const(c) = value {
+                    const_assign.entry(dest.0).or_insert_with(|| c.clone());
+                }
+            }
+        }
+        let mut out = FxHashMap::default();
+        for (&local, &count) in &counts {
+            if count == 1 && named_set.contains(&local) {
+                if let Some(c) = const_assign.get(&local) {
+                    out.insert(local, c.clone());
+                }
+            }
+        }
+        out
+    };
+    NAMED_CONST_INITS.with(|cell| *cell.borrow_mut() = named_const_inits);
+
     // Compute reachable blocks — skip emitting dead blocks that follow
     // throw/return-terminated branches to avoid VerifyError from missing
     // StackMapTable entries on unreachable code.
@@ -2474,6 +2509,12 @@ fn emit_method_body(
         // target, since the JVM verifier won't reach them via any branch.
         let max_branch_off = cmp_targets.iter().map(|t| t.offset).max().unwrap_or(0);
         peephole_elide_tail_store_load(&mut code, max_branch_off);
+        // Also elide adjacent store/load pairs in the *head* of the
+        // function (before any branch source or target). Such elisions
+        // shift the entire bytecode tail uniformly, so relative offsets
+        // stored in branches stay correct — we only have to adjust the
+        // absolute `cmp_targets` positions.
+        peephole_elide_head_store_load(&mut code, &mut cmp_targets);
         // Slot compaction is byte-preserving, so it's safe to run with
         // branches present too. This matches kotlinc's compact slot use.
         let mut named_slots: FxHashSet<u8> = func
@@ -2483,6 +2524,30 @@ fn emit_method_body(
             .collect();
         let new_max = compact_local_slots(&mut code, initial_param_slots, &mut named_slots);
         max_locals = new_max as u16;
+        // Liveness-based slot reuse is byte-preserving (only renumbers
+        // slot indices in store/load instructions), so it's safe with
+        // intra-block branches. Restrict to static methods without
+        // exception handlers to keep parity with the no-branches path.
+        let safe_for_liveness =
+            matches!(kind, MethodKind::Static) && func.exception_handlers.is_empty();
+        if safe_for_liveness {
+            let preserved_slots = compute_repeated_store_slots(&code);
+            let mut effective_named = named_slots.clone();
+            effective_named.extend(preserved_slots.iter().copied());
+            let reused_max = liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
+            if reused_max > 0 && (reused_max as u16) < max_locals {
+                max_locals = reused_max as u16;
+            }
+            // After liveness renumbers slots into 0..=3 range, compress
+            // the now-2-byte `istore N`/`iload N` forms back to their
+            // 1-byte compact opcodes (`istore_N`/`iload_N`). Because
+            // each compaction shrinks one instruction by a byte we have
+            // to patch any cmp_target offsets/cmp_starts and the
+            // relative offsets stored inside intra-block branch
+            // instructions whose source is below the compaction point
+            // and target is above it (or vice versa).
+            compress_to_compact_forms_with_branches(&mut code, &mut cmp_targets);
+        }
     }
 
     // ── StackMapTable ────────────────────────────────────────────────
@@ -2831,6 +2896,7 @@ fn emit_method_body(
     // Clear inlinable-constants table for the next function.
     INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
     UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
+    NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
     EMIT_CP.with(|cell| *cell.borrow_mut() = None);
     EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
     method
@@ -8660,10 +8726,74 @@ fn walk_block(
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::BinOp { op, lhs, rhs } => {
+                // Constant-fold primitive comparisons when both operands
+                // are statically known constants (either single-use
+                // inlinable Const or `val x = literal`). kotlinc folds
+                // these at compile time.
+                if matches!(
+                    op,
+                    MBinOp::CmpEq
+                        | MBinOp::CmpNe
+                        | MBinOp::CmpLt
+                        | MBinOp::CmpGt
+                        | MBinOp::CmpLe
+                        | MBinOp::CmpGe
+                ) {
+                    let lookup = |id: u32| -> Option<MirConst> {
+                        if let Some(c) =
+                            INLINABLE_CONSTS.with(|cell| cell.borrow().get(&id).cloned())
+                        {
+                            return Some(c);
+                        }
+                        NAMED_CONST_INITS.with(|cell| cell.borrow().get(&id).cloned())
+                    };
+                    if let (Some(a), Some(b)) = (lookup(lhs.0), lookup(rhs.0)) {
+                        let folded: Option<bool> = match (&a, &b) {
+                            (MirConst::Int(x), MirConst::Int(y)) => match op {
+                                MBinOp::CmpEq => Some(x == y),
+                                MBinOp::CmpNe => Some(x != y),
+                                MBinOp::CmpLt => Some(x < y),
+                                MBinOp::CmpGt => Some(x > y),
+                                MBinOp::CmpLe => Some(x <= y),
+                                MBinOp::CmpGe => Some(x >= y),
+                                _ => None,
+                            },
+                            (MirConst::Long(x), MirConst::Long(y)) => match op {
+                                MBinOp::CmpEq => Some(x == y),
+                                MBinOp::CmpNe => Some(x != y),
+                                MBinOp::CmpLt => Some(x < y),
+                                MBinOp::CmpGt => Some(x > y),
+                                MBinOp::CmpLe => Some(x <= y),
+                                MBinOp::CmpGe => Some(x >= y),
+                                _ => None,
+                            },
+                            (MirConst::Bool(x), MirConst::Bool(y)) => match op {
+                                MBinOp::CmpEq => Some(x == y),
+                                MBinOp::CmpNe => Some(x != y),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        if let Some(value) = folded {
+                            code.push(if value { 0x04 } else { 0x03 });
+                            bump(stack, max_stack, 1);
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+                    }
+                }
                 if *op == MBinOp::ConcatStr {
-                    // Try to emit `String + literal_string` via
-                    // `makeConcatWithConstants` invokedynamic — kotlinc
-                    // uses this for every `+` on Strings since JDK 9.
+                    // Try to emit `String + literal_string` (or
+                    // `literal + String`) via `makeConcatWithConstants`
+                    // invokedynamic — kotlinc uses this for every `+`
+                    // on Strings since JDK 9.
+                    let lhs_const_string: Option<String> = INLINABLE_CONSTS.with(|cell| match cell
+                        .borrow()
+                        .get(&lhs.0)
+                    {
+                        Some(MirConst::String(sid)) => Some(module.lookup_string(*sid).to_string()),
+                        _ => None,
+                    });
                     let rhs_const_string: Option<String> = INLINABLE_CONSTS.with(|cell| match cell
                         .borrow()
                         .get(&rhs.0)
@@ -8672,16 +8802,29 @@ fn walk_block(
                         _ => None,
                     });
                     let lhs_ty = &func.locals[lhs.0 as usize];
+                    let rhs_ty = &func.locals[rhs.0 as usize];
+                    let recipe_safe = |s: &str| !s.contains('\u{1}') && !s.contains('\u{2}');
                     if matches!(lhs_ty, Ty::String)
-                        && rhs_const_string.as_deref().is_some_and(|s| {
-                            // Recipe encoding can't contain the placeholder
-                            // byte () or the constant-tag byte ().
-                            !s.contains('\u{1}') && !s.contains('\u{2}')
-                        })
+                        && rhs_const_string.as_deref().is_some_and(recipe_safe)
                     {
-                        let recipe_suffix = rhs_const_string.unwrap();
-                        let recipe = format!("\u{1}{recipe_suffix}");
+                        let recipe = format!("\u{1}{}", rhs_const_string.unwrap());
                         load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                        emit_make_concat_with_constants(
+                            code,
+                            cp,
+                            stack,
+                            max_stack,
+                            "(Ljava/lang/String;)Ljava/lang/String;",
+                            &recipe,
+                        );
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        continue;
+                    }
+                    if lhs_const_string.as_deref().is_some_and(recipe_safe)
+                        && matches!(rhs_ty, Ty::String)
+                    {
+                        let recipe = format!("{}\u{1}", lhs_const_string.unwrap());
+                        load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                         emit_make_concat_with_constants(
                             code,
                             cp,
@@ -8880,9 +9023,53 @@ fn walk_block(
                         if matches!(lhs_ty, Ty::String)
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
+                            // Constant-fold `"a" == "b"` when both
+                            // operands are string literals. kotlinc
+                            // emits a single `iconst_0`/`iconst_1`
+                            // for the result.
+                            let folded = INLINABLE_CONSTS.with(|cell| {
+                                let m = cell.borrow();
+                                match (m.get(&lhs.0), m.get(&rhs.0)) {
+                                    (Some(MirConst::String(a)), Some(MirConst::String(b))) => {
+                                        let lhs_s = module.lookup_string(*a);
+                                        let rhs_s = module.lookup_string(*b);
+                                        let eq = lhs_s == rhs_s;
+                                        Some(if *op == MBinOp::CmpEq { eq } else { !eq })
+                                    }
+                                    _ => None,
+                                }
+                            });
+                            if let Some(value) = folded {
+                                // Skip the loads that load_local already
+                                // emitted by removing them from `code`.
+                                // The lhs and rhs are already emitted at
+                                // this point (we reach here after both
+                                // load_locals). Drop them and push the
+                                // constant.
+                                // Easier: the lhs/rhs were inlined as
+                                // `ldc "a"; ldc "b"` (each 2 bytes for
+                                // ldc + index) or `aload_X` (1 byte).
+                                // Rather than try to undo, emit a `pop;
+                                // pop; iconst_0/1` which is byte-compatible
+                                // with kotlinc only when folding is the
+                                // *only* path: revert via explicit load
+                                // truncation is fragile. Skip if the
+                                // emitted bytes aren't recognizable.
+                                // Simple detection: last 2 instructions
+                                // should be `ldc <a>; ldc <b>`.
+                                let len = code.len();
+                                if len >= 4 && code[len - 4] == 0x12 && code[len - 2] == 0x12 {
+                                    // Truncate the two ldc instructions.
+                                    code.truncate(len - 4);
+                                    bump(stack, max_stack, -2);
+                                    code.push(if value { 0x04 } else { 0x03 });
+                                    bump(stack, max_stack, 1);
+                                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                                    continue;
+                                }
+                            }
                             // String equality via Kotlin's null-safe
                             // intrinsic: `Intrinsics.areEqual(Object, Object)`.
-                            // For CmpNe, invert the result.
                             let areeq = cp.methodref(
                                 "kotlin/jvm/internal/Intrinsics",
                                 "areEqual",
@@ -8892,11 +9079,42 @@ fn walk_block(
                             code.write_u16::<BigEndian>(areeq).unwrap();
                             bump(stack, max_stack, -1); // pops 2, pushes 1
                             if *op == MBinOp::CmpNe {
+                                // For `!=`, kotlinc emits a jump-based
+                                // negation rather than `1 - x` arithmetic:
+                                //   ifne L_false; iconst_1; goto L_end;
+                                //   L_false: iconst_0; L_end:
+                                let if_pos = code.len();
+                                code.push(0x9A); // ifne
+                                code.write_u16::<BigEndian>(7).unwrap();
+                                bump(stack, max_stack, -1);
                                 code.push(0x04); // iconst_1
                                 bump(stack, max_stack, 1);
-                                code.push(0x5F); // swap
-                                code.push(0x64); // isub
+                                let goto_pos = code.len();
+                                code.push(0xA7); // goto
+                                code.write_u16::<BigEndian>(4).unwrap();
                                 bump(stack, max_stack, -1);
+                                let l_false_pos = code.len();
+                                code.push(0x03); // iconst_0
+                                bump(stack, max_stack, 1);
+                                let l_end_pos = code.len();
+                                let if_off = (l_false_pos - if_pos) as i16;
+                                code[if_pos + 1] = (if_off >> 8) as u8;
+                                code[if_pos + 2] = if_off as u8;
+                                let goto_off = (l_end_pos - goto_pos) as i16;
+                                code[goto_pos + 1] = (goto_off >> 8) as u8;
+                                code[goto_pos + 2] = goto_off as u8;
+                                cmp_targets.push(CmpBranchTarget {
+                                    offset: l_false_pos,
+                                    stack_count: 0,
+                                    cmp_start: if_pos,
+                                    block_idx,
+                                });
+                                cmp_targets.push(CmpBranchTarget {
+                                    offset: l_end_pos,
+                                    stack_count: 1,
+                                    cmp_start: if_pos,
+                                    block_idx,
+                                });
                             }
                             store_local(code, stack, slots, next_slot, *dest, &func.locals);
                             continue;
@@ -9583,6 +9801,26 @@ fn walk_block(
                                     }
                                     _ => {}
                                 }
+                                // Reference widening: insert checkcast
+                                // when the descriptor expects a different
+                                // class than the arg's static type. e.g.
+                                // `String` → `CharSequence` for
+                                // `StringsKt.repeat`.
+                                if expected.starts_with('L') && expected.ends_with(';') {
+                                    let target = &expected[1..expected.len() - 1];
+                                    let actual_class = match actual {
+                                        Ty::String => Some("java/lang/String"),
+                                        Ty::Class(c) => Some(c.as_str()),
+                                        _ => None,
+                                    };
+                                    if let Some(ac) = actual_class {
+                                        if ac != target && target != "java/lang/Object" {
+                                            let ci = cp.class(target);
+                                            code.push(0xC0); // checkcast
+                                            code.write_u16::<BigEndian>(ci).unwrap();
+                                        }
+                                    }
+                                }
                             }
                         }
                         let mref = cp.methodref(class_name, method_name, descriptor);
@@ -9620,6 +9858,26 @@ fn walk_block(
                     method_name,
                     descriptor,
                 } => {
+                    // Constant-fold `String.equals(String)` when both
+                    // operands are statically known string literals.
+                    if class_name == "java/lang/String"
+                        && method_name == "equals"
+                        && args.len() == 2
+                    {
+                        let a =
+                            INLINABLE_CONSTS.with(|cell| cell.borrow().get(&args[0].0).cloned());
+                        let b =
+                            INLINABLE_CONSTS.with(|cell| cell.borrow().get(&args[1].0).cloned());
+                        if let (Some(MirConst::String(sa)), Some(MirConst::String(sb))) = (&a, &b) {
+                            let lhs = module.lookup_string(*sa);
+                            let rhs = module.lookup_string(*sb);
+                            let value = lhs == rhs;
+                            code.push(if value { 0x04 } else { 0x03 });
+                            bump(stack, max_stack, 1);
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+                    }
                     // Load receiver + arguments.
                     for a in args {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
@@ -10321,6 +10579,14 @@ thread_local! {
     static UNUSED_LOCALS: RefCell<FxHashSet<u32>> =
         RefCell::new(FxHashSet::default());
 
+    /// Named locals (val/var) whose only assignment is a literal
+    /// constant. Used by the comparison-folding path to recognize that
+    /// `val x = 1; x == 1` is statically true. Independent of the
+    /// regular `INLINABLE_CONSTS` table since named locals are
+    /// materialized to slots — the constant value is just metadata.
+    static NAMED_CONST_INITS: RefCell<FxHashMap<u32, MirConst>> =
+        RefCell::new(FxHashMap::default());
+
     /// Raw pointers to the active `ConstantPool` and `MirModule` so
     /// `load_local` can emit CP-backed inline constants (Strings, large
     /// numeric literals) without threading the references through 45+
@@ -10724,6 +10990,50 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
 /// region AFTER `min_offset`. Used when the function has intra-block branches
 /// (cmp_targets) — we can still elide store+load pairs positioned after the
 /// last branch target offset, since their bytes don't affect any jump.
+/// Elide adjacent `Xstore_N; Xload_N` pairs that sit entirely before
+/// the first branch source/target in `cmp_targets`. Such elisions shift
+/// the bytecode tail uniformly so relative offsets in branch
+/// instructions remain correct; only absolute positions tracked in
+/// `cmp_targets` need to be adjusted.
+fn peephole_elide_head_store_load(code: &mut Vec<u8>, cmp_targets: &mut Vec<CmpBranchTarget>) {
+    loop {
+        // The earliest position any branch source/target lives at.
+        let first_branch_pos = cmp_targets
+            .iter()
+            .flat_map(|t| [t.offset, t.cmp_start])
+            .min()
+            .unwrap_or(usize::MAX);
+        let mut removed_any = false;
+        let mut i = 0;
+        while i < first_branch_pos {
+            if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
+                let pair_end = i + store_len + load_len;
+                if pair_end > first_branch_pos {
+                    break;
+                }
+                if !slot_loaded_elsewhere(code, slot, pair_end) {
+                    let removed = store_len + load_len;
+                    code.drain(i..i + removed);
+                    for ct in cmp_targets.iter_mut() {
+                        if ct.offset >= i + removed {
+                            ct.offset -= removed;
+                        }
+                        if ct.cmp_start >= i + removed {
+                            ct.cmp_start -= removed;
+                        }
+                    }
+                    removed_any = true;
+                    continue;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        if !removed_any {
+            break;
+        }
+    }
+}
+
 fn peephole_elide_tail_store_load(code: &mut Vec<u8>, min_offset: usize) {
     loop {
         let mut removals: Vec<(usize, usize)> = Vec::new();
@@ -11582,6 +11892,90 @@ fn rewrite_compact(code: &mut [u8], pos: usize, base: u8, map: &FxHashMap<u8, u8
 /// slot is in 0..=3. This shortens the bytecode and matches kotlinc's output.
 /// Only safe when there are no branches in the method (changing byte lengths
 /// would invalidate jump offsets).
+/// Like `compress_to_compact_forms` but valid in the presence of
+/// intra-block branches: when an instruction shrinks by a byte, any
+/// branch whose source/target straddles the compaction point gets its
+/// stored relative offset adjusted, and `cmp_targets`' absolute
+/// positions are updated.
+fn compress_to_compact_forms_with_branches(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut Vec<CmpBranchTarget>,
+) {
+    let mut i = 0;
+    while i < code.len() {
+        let op = code[i];
+        let len = instruction_len(code, i);
+        if len == 2 && i + 1 < code.len() && code[i + 1] <= 3 {
+            let slot = code[i + 1];
+            let new_op = match op {
+                0x15 => Some(0x1A + slot),
+                0x16 => Some(0x1E + slot),
+                0x17 => Some(0x22 + slot),
+                0x18 => Some(0x26 + slot),
+                0x19 => Some(0x2A + slot),
+                0x36 => Some(0x3B + slot),
+                0x37 => Some(0x3F + slot),
+                0x38 => Some(0x43 + slot),
+                0x39 => Some(0x47 + slot),
+                0x3A => Some(0x4B + slot),
+                _ => None,
+            };
+            if let Some(new) = new_op {
+                code[i] = new;
+                code.remove(i + 1);
+                let removed_pos = i + 1;
+                // Adjust branch-relative offsets stored inside
+                // intra-block if/goto instructions when the compaction
+                // is between source and target.
+                let mut j = 0;
+                while j < code.len() {
+                    let jop = code[j];
+                    if matches!(jop, 0x99..=0xA6 | 0xA7 | 0xA8 | 0xC6 | 0xC7) {
+                        // 2-byte signed branch offset at j+1..j+3.
+                        if j + 2 < code.len() {
+                            let off = i16::from_be_bytes([code[j + 1], code[j + 2]]);
+                            let target = (j as i32) + (off as i32);
+                            let src = j as i32;
+                            // Compaction at removed_pos: bytes at and
+                            // after this position have shifted down by 1.
+                            let removed = removed_pos as i32;
+                            let elide_in_range = |pos: i32| -> i32 {
+                                if pos >= removed {
+                                    1
+                                } else {
+                                    0
+                                }
+                            };
+                            let src_shift = elide_in_range(src);
+                            let tgt_shift = elide_in_range(target);
+                            let new_off = (target - tgt_shift) - (src - src_shift);
+                            if new_off != off as i32 {
+                                let bytes = (new_off as i16).to_be_bytes();
+                                code[j + 1] = bytes[0];
+                                code[j + 2] = bytes[1];
+                            }
+                        }
+                    }
+                    j += instruction_len(code, j);
+                }
+                // Shift cmp_targets that lie at or after the removed
+                // position back by 1.
+                for ct in cmp_targets.iter_mut() {
+                    if ct.offset >= removed_pos {
+                        ct.offset -= 1;
+                    }
+                    if ct.cmp_start >= removed_pos {
+                        ct.cmp_start -= 1;
+                    }
+                }
+                i += 1;
+                continue;
+            }
+        }
+        i += len;
+    }
+}
+
 fn compress_to_compact_forms(code: &mut Vec<u8>) {
     let mut i = 0;
     while i < code.len() {

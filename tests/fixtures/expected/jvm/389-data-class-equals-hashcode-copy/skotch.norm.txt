@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=12
+  code        max_stack=4 max_locals=11
     0000 new Class(Point)
     0003 dup
     0004 iconst_1
@@ -32,49 +32,49 @@ method        main ()V 0x0019
     0043 aload_0
     0044 aload_2
     0045 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
-    0048 istore 4
-    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0053 iload 4
-    0055 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0058 aload_0
-    0059 invokevirtual Method(Point.hashCode:()I)
-    0062 istore 5
-    0064 aload_1
-    0065 invokevirtual Method(Point.hashCode:()I)
-    0068 istore 6
-    0070 iload 5
-    0072 iload 6
-    0074 if_icmpne 81
-    0077 iconst_1
-    0078 goto 82
-    0081 iconst_0
-    0082 istore 7
-    0084 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0087 iload 7
-    0089 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0092 aload_0
-    0093 getfield Field(Point.x:I)
-    0096 istore 8
-    0098 aload_0
-    0099 getfield Field(Point.y:I)
-    0102 istore 9
-    0104 aload_0
-    0105 iload 8
-    0107 iload 9
-    0109 invokevirtual Method(Point.copy:(II)LPoint;)
-    0112 astore 10
-    0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0117 aload 10
-    0119 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0122 aload 10
-    0124 aload_0
-    0125 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
-    0128 istore 11
-    0130 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0133 iload 11
-    0135 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0138 return
-    sub_attr  StackMapTable (24 bytes)
+    0048 istore_3
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 iload_3
+    0053 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0056 aload_0
+    0057 invokevirtual Method(Point.hashCode:()I)
+    0060 istore_3
+    0061 aload_1
+    0062 invokevirtual Method(Point.hashCode:()I)
+    0065 istore 4
+    0067 iload_3
+    0068 iload 4
+    0070 if_icmpne 77
+    0073 iconst_1
+    0074 goto 78
+    0077 iconst_0
+    0078 istore_3
+    0079 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0082 iload_3
+    0083 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0086 aload_0
+    0087 getfield Field(Point.x:I)
+    0090 istore_3
+    0091 aload_0
+    0092 getfield Field(Point.y:I)
+    0095 istore 4
+    0097 aload_0
+    0098 iload_3
+    0099 iload 4
+    0101 invokevirtual Method(Point.copy:(II)LPoint;)
+    0104 astore 10
+    0106 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0109 aload 10
+    0111 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0114 aload 10
+    0116 aload_0
+    0117 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0120 istore_3
+    0121 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0124 iload_3
+    0125 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0128 return
+    sub_attr  StackMapTable (22 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

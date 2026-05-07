@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=14
+  code        max_stack=3 max_locals=16
     0000 bipush 10
     0002 op_0xBD
     0003 nop
@@ -89,42 +89,48 @@ method        main ()V 0x0019
     0119 new Class(InputKt$Lambda$1)
     0122 dup
     0123 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0126 aload 11
-    0128 swap
-    0129 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
-    0132 astore 12
-    0134 new Class(InputKt$Lambda$2)
-    0137 dup
-    0138 invokespecial Method(InputKt$Lambda$2.<init>:()V)
-    0141 pop
-    0142 new Class(InputKt$Lambda$3)
-    0145 dup
-    0146 invokespecial Method(InputKt$Lambda$3.<init>:()V)
-    0149 aload 11
-    0151 swap
-    0152 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
-    0155 astore 13
-    0157 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0160 new Class(java/lang/StringBuilder)
-    0163 dup
-    0164 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0167 ldc "evens: "
-    0169 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0172 aload 12
-    0174 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0177 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0180 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0183 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0186 new Class(java/lang/StringBuilder)
-    0189 dup
-    0190 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0193 ldc "odds: "
-    0195 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0198 aload 13
-    0200 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0203 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0206 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0209 return
+    0126 astore_0
+    0127 aload 11
+    0129 checkcast Class(java/lang/Iterable)
+    0132 aload_0
+    0133 checkcast Class(kotlin/jvm/functions/Function1)
+    0136 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0139 astore 13
+    0141 new Class(InputKt$Lambda$2)
+    0144 dup
+    0145 invokespecial Method(InputKt$Lambda$2.<init>:()V)
+    0148 pop
+    0149 new Class(InputKt$Lambda$3)
+    0152 dup
+    0153 invokespecial Method(InputKt$Lambda$3.<init>:()V)
+    0156 astore_0
+    0157 aload 11
+    0159 checkcast Class(java/lang/Iterable)
+    0162 aload_0
+    0163 checkcast Class(kotlin/jvm/functions/Function1)
+    0166 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0169 astore 15
+    0171 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0174 new Class(java/lang/StringBuilder)
+    0177 dup
+    0178 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0181 ldc "evens: "
+    0183 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0186 aload 13
+    0188 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0191 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0194 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0197 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0200 new Class(java/lang/StringBuilder)
+    0203 dup
+    0204 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0207 ldc "odds: "
+    0209 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0212 aload 15
+    0214 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0217 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0220 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0223 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

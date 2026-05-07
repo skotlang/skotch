@@ -654,7 +654,6 @@ pub fn lower_file(
                 vararg_index,
                 is_suspend: f.is_suspend,
                 is_inline: f.is_inline,
-                has_type_params: !f.type_params.is_empty(),
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: fn_annotations,
@@ -695,7 +694,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -749,7 +747,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Unit),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -785,7 +782,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -825,7 +821,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -863,7 +858,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -901,7 +895,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Any),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -941,7 +934,6 @@ pub fn lower_file(
                 vararg_index: None,
                 is_suspend: true,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: Some(Ty::Nullable(Box::new(Ty::Any))),
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -1136,7 +1128,6 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: false,
                         is_inline: false,
-                        has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
                         annotations: Vec::new(),
@@ -1670,7 +1661,6 @@ fn build_continuation_class(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -1712,7 +1702,6 @@ fn build_continuation_class(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         // The `invokeSuspend` body is a fixed pattern the backend
         // emits directly: there's no MIR-level equivalent for the
@@ -2321,7 +2310,6 @@ impl FnBuilder {
             vararg_index: None,
             is_suspend: false,
             is_inline: false,
-            has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
@@ -3240,7 +3228,6 @@ fn lower_function(
             vararg_index: None,
             is_suspend: false,
             is_inline: false,
-            has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
@@ -4130,7 +4117,6 @@ fn lower_stmt(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -7111,8 +7097,7 @@ fn lower_expr(
                 // `s.repeat(n)` is a Kotlin stdlib extension on
                 // `CharSequence` — kotlinc compiles it to
                 // `StringsKt.repeat(s as CharSequence, n)`.
-                if matches!(&recv_ty, Ty::String) && method_name_str == "repeat" && args.len() == 1
-                {
+                if matches!(&recv_ty, Ty::String) && method_name_str == "repeat" && args.len() == 1 {
                     let dest = fb.new_local(Ty::String);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -7132,9 +7117,7 @@ fn lower_expr(
                 // that compiles to `StringsKt.startsWith$default(s,
                 // prefix, ignoreCase=false, defaultMask=2, handler=null)`.
                 // Match kotlinc's routing here.
-                if matches!(&recv_ty, Ty::String)
-                    && method_name_str == "startsWith"
-                    && args.len() == 1
+                if matches!(&recv_ty, Ty::String) && method_name_str == "startsWith" && args.len() == 1
                 {
                     let zero_local = fb.new_local(Ty::Bool);
                     fb.push_stmt(MStmt::Assign {
@@ -7162,9 +7145,7 @@ fn lower_expr(
                             kind: CallKind::StaticJava {
                                 class_name: "kotlin/text/StringsKt".to_string(),
                                 method_name: "startsWith$default".to_string(),
-                                descriptor:
-                                    "(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z"
-                                        .to_string(),
+                                descriptor: "(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z".to_string(),
                             },
                             args: full_args,
                         },
@@ -13224,7 +13205,6 @@ fn lower_expr(
                     vararg_index: None,
                     is_suspend: false,
                     is_inline: false,
-                    has_type_params: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
@@ -13341,7 +13321,6 @@ fn lower_expr(
                     vararg_index: None,
                     is_suspend: false,
                     is_inline: false,
-                    has_type_params: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
@@ -13710,7 +13689,6 @@ fn lower_expr(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -13810,7 +13788,6 @@ fn lower_expr(
                     vararg_index: None,
                     is_suspend: false,
                     is_inline: false,
-                    has_type_params: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
                     annotations: Vec::new(),
@@ -14063,7 +14040,6 @@ fn lower_expr(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -14644,7 +14620,6 @@ fn lower_enum(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -14710,7 +14685,6 @@ fn lower_enum(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -15133,7 +15107,6 @@ fn lower_object(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -15268,7 +15241,6 @@ fn lower_class(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -15492,7 +15464,6 @@ fn lower_class(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -16729,7 +16700,6 @@ fn lower_class(
             vararg_index: None,
             is_suspend: false,
             is_inline: false,
-            has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
             annotations: Vec::new(),
@@ -17050,7 +17020,6 @@ fn lower_interface(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
@@ -17085,7 +17054,6 @@ fn lower_interface(
         vararg_index: None,
         is_suspend: false,
         is_inline: false,
-        has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
         annotations: Vec::new(),
@@ -17140,7 +17108,6 @@ fn lower_interface(
                 vararg_index: None,
                 is_suspend: false,
                 is_inline: false,
-                has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
