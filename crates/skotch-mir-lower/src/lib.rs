@@ -3213,6 +3213,7 @@ fn lower_function(
         let saved_inline = module.functions[fn_idx].is_inline;
         let saved_annotations = module.functions[fn_idx].annotations.clone();
         let saved_has_type_params = module.functions[fn_idx].has_type_params;
+        let saved_suspend_orig_ret = module.functions[fn_idx].suspend_original_return_ty.clone();
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
@@ -3222,6 +3223,12 @@ fn lower_function(
         module.functions[fn_idx].is_inline = saved_inline;
         module.functions[fn_idx].annotations = saved_annotations;
         module.functions[fn_idx].has_type_params = saved_has_type_params;
+        if module.functions[fn_idx]
+            .suspend_original_return_ty
+            .is_none()
+        {
+            module.functions[fn_idx].suspend_original_return_ty = saved_suspend_orig_ret;
+        }
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),

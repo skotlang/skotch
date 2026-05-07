@@ -65,7 +65,7 @@ method        fetchData (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0
     0139 ldc "call to 'resume' before 'invoke' with coroutine"
     0141 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0144 athrow
-    sub_attr  StackMapTable (125 bytes)
+    sub_attr  StackMapTable (50 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
@@ -152,7 +152,7 @@ method        processData (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0
     0145 ldc "call to 'resume' before 'invoke' with coroutine"
     0147 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
     0150 athrow
-    sub_attr  StackMapTable (120 bytes)
+    sub_attr  StackMapTable (48 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

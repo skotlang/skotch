@@ -2190,6 +2190,44 @@ fn emit_method_body(
     EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
     EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
 
+    // Empty suspend Unit body: just `getstatic Unit.INSTANCE; areturn`.
+    // The MIR has `_t = null; ReturnValue(_t)` for an empty Unit suspend
+    // fn, but kotlinc skips materializing the `null` local entirely and
+    // returns Unit.INSTANCE directly. Detect that exact shape and emit the
+    // 4-byte canonical body.
+    let is_empty_suspend_unit = func.is_suspend
+        && matches!(func.suspend_original_return_ty, Some(Ty::Unit))
+        && func.blocks.len() == 1
+        && {
+            let b = &func.blocks[0];
+            matches!(&b.terminator, Terminator::ReturnValue(_))
+                && b.stmts.len() == 1
+                && matches!(
+                    &b.stmts[0],
+                    Stmt::Assign {
+                        value: Rvalue::Const(MirConst::Null),
+                        ..
+                    }
+                )
+        };
+    if is_empty_suspend_unit {
+        let fr = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
+        code.push(0xB2);
+        code.write_u16::<BigEndian>(fr).unwrap();
+        code.push(0xB0);
+        max_stack = 1;
+        return wrap_method(
+            cp,
+            code_attr_name_idx,
+            access_flags,
+            name_idx,
+            descriptor_idx,
+            &code,
+            max_stack as u16,
+            actual_max_locals(&code).max(func.params.len() as u16),
+        );
+    }
+
     for (bi, block) in func.blocks.iter().enumerate() {
         block_offsets.push(code.len());
 
@@ -2304,14 +2342,45 @@ fn emit_method_body(
                         code.push(0xAF); // dreturn
                     }
                     _ => {
-                        // Reference type: return null.
-                        code.push(0x01); // aconst_null
-                        bump(&mut stack, &mut max_stack, 1);
-                        code.push(0xB0); // areturn
+                        // Reference return. For a suspend function whose
+                        // original Kotlin return type was `Unit`, kotlinc
+                        // returns `Unit.INSTANCE` (not null) so callers
+                        // observe the canonical Unit singleton.
+                        let suspend_returns_unit = func.is_suspend
+                            && matches!(func.suspend_original_return_ty, Some(Ty::Unit));
+                        if suspend_returns_unit {
+                            let fr = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
+                            code.push(0xB2); // getstatic
+                            code.write_u16::<BigEndian>(fr).unwrap();
+                            bump(&mut stack, &mut max_stack, 1);
+                            code.push(0xB0); // areturn
+                        } else {
+                            code.push(0x01); // aconst_null
+                            bump(&mut stack, &mut max_stack, 1);
+                            code.push(0xB0); // areturn
+                        }
                     }
                 }
             }
             Terminator::ReturnValue(local) => {
+                // Suspend fun whose original Kotlin return type was Unit:
+                // post-transform the body returns Object, but kotlinc's
+                // "empty body" canonical form is `getstatic Unit.INSTANCE;
+                // areturn` rather than loading a null local. Recognize the
+                // pattern: ReturnValue of an Any/Object-typed local in a
+                // suspend Unit fn, and emit Unit.INSTANCE directly.
+                let ty = &func.locals[local.0 as usize];
+                let suspend_returns_unit = func.is_suspend
+                    && matches!(func.suspend_original_return_ty, Some(Ty::Unit))
+                    && matches!(ty, Ty::Any | Ty::Nullable(_));
+                if suspend_returns_unit {
+                    let fr = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
+                    code.push(0xB2); // getstatic
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                    bump(&mut stack, &mut max_stack, 1);
+                    code.push(0xB0); // areturn
+                    continue;
+                }
                 load_local(
                     &mut code,
                     &mut stack,
@@ -2320,7 +2389,6 @@ fn emit_method_body(
                     *local,
                     &func.locals,
                 );
-                let ty = &func.locals[local.0 as usize];
                 // Insert checkcast/unbox if the local is Any/Object but
                 // the function return type is more specific.
                 // If the local is Any/Object but the function returns a
@@ -2537,6 +2605,28 @@ fn emit_method_body(
         // stored in branches stay correct — we only have to adjust the
         // absolute `cmp_targets` positions.
         peephole_elide_head_store_load(&mut code, &mut cmp_targets);
+        // Branch-aware "middle" elide: removes adjacent store+load pairs
+        // anywhere in the function, adjusting branch relative offsets and
+        // cmp_targets. Skips slots that user code keeps (named) and only
+        // fires when the slot is dead (next access is a store, return,
+        // or throw) — guards against semantic changes.
+        let mut named_slots_for_middle: FxHashSet<u8> = func
+            .named_locals
+            .iter()
+            .filter_map(|l| slots.get(&l.0).copied())
+            .collect();
+        for recv in destructuring_receivers(func) {
+            if let Some(&s) = slots.get(&recv.0) {
+                named_slots_for_middle.insert(s);
+            }
+        }
+        peephole_elide_middle_store_load(
+            &mut code,
+            &mut cmp_targets,
+            &mut [],
+            &mut [],
+            &named_slots_for_middle,
+        );
         // Slot compaction is byte-preserving, so it's safe to run with
         // branches present too. This matches kotlinc's compact slot use.
         let mut named_slots: FxHashSet<u8> = func
@@ -3253,9 +3343,23 @@ fn emit_stub_method(
             (2, code)
         }
         _ => {
-            code.push(0x01); // aconst_null
-            code.push(0xB0); // areturn
-            (1, code)
+            // Suspend functions whose original Kotlin return type was
+            // `Unit` come back as `Object` post-transform. kotlinc returns
+            // `Unit.INSTANCE` rather than `null` in that case so callers
+            // observe the canonical Unit singleton.
+            let suspend_returns_unit =
+                func.is_suspend && matches!(func.suspend_original_return_ty, Some(Ty::Unit));
+            if suspend_returns_unit {
+                let fr = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
+                code.push(0xB2); // getstatic
+                code.write_u16::<BigEndian>(fr).unwrap();
+                code.push(0xB0); // areturn
+                (1, code)
+            } else {
+                code.push(0x01); // aconst_null
+                code.push(0xB0); // areturn
+                (1, code)
+            }
         }
     };
     // For instance methods, need slots for `this` + all params.
@@ -3713,15 +3817,15 @@ fn emit_single_suspend_state_machine_method(
     // explicitly overridden.
     let total_slots = next_slot as usize;
 
-    // Encode a full locals array as raw bytes for a StackMapTable
-    // full_frame entry. `extra_slots` lists (slot_index, vti_tag,
-    // optional cp_index) tuples for additional non-Top entries.
-    let encode_locals = |extra: &[(u8, u8, Option<u16>)]| -> Vec<u8> {
-        // Start with Top for all slots.
-        let mut slots_tag: Vec<u8> = vec![0; total_slots]; // 0 = Top
+    // Encode a per-local list of VTI byte sequences for a StackMapTable
+    // frame. Each entry is a self-contained VTI (1-byte tag + optional
+    // 2-byte cp_index for Object tag=7). Returning per-local entries
+    // (rather than a serialized blob) lets `emit_compact_frame` diff
+    // against the previous frame and pick same/append/chop forms.
+    // `extra_slots` lists (slot_index, vti_tag, optional cp_index) tuples.
+    let encode_locals = |extra: &[(u8, u8, Option<u16>)]| -> Vec<Vec<u8>> {
+        let mut slots_tag: Vec<u8> = vec![0; total_slots];
         let mut slots_cp: Vec<Option<u16>> = vec![None; total_slots];
-
-        // Fill user params.
         {
             let mut s: usize = 0;
             for &pid in func.params.iter().take(n_params.saturating_sub(1)) {
@@ -3742,55 +3846,43 @@ fn emit_single_suspend_state_machine_method(
                 };
             }
         }
-        // $completion.
         slots_tag[completion_slot as usize] = 7;
         slots_cp[completion_slot as usize] = Some(cls_continuation);
-
-        // Apply extras.
         for &(slot, tag, cp_idx) in extra {
             slots_tag[slot as usize] = tag;
             slots_cp[slot as usize] = cp_idx;
         }
-
-        // Trim trailing Top entries.
         let mut end = total_slots;
         while end > 0 && slots_tag[end - 1] == 0 {
             end -= 1;
         }
-
-        // Encode: count, then each VTI entry. Wide types (Long=4,
-        // Double=3) occupy two JVM slots but one VTI entry — skip
-        // the second slot.
-        let mut out: Vec<u8> = Vec::new();
-        let mut count: u16 = 0;
-        let mut entries: Vec<u8> = Vec::new();
+        let mut entries: Vec<Vec<u8>> = Vec::new();
         let mut i = 0usize;
         while i < end {
             let tag = slots_tag[i];
+            let mut entry = Vec::new();
             match tag {
-                0 => entries.push(0), // Top
-                1 => entries.push(1), // Int
+                0 => entry.push(0),
+                1 => entry.push(1),
                 4 => {
-                    entries.push(4); // Long
-                    i += 1; // skip wide half
+                    entry.push(4);
+                    i += 1;
                 }
                 3 => {
-                    entries.push(3); // Double
-                    i += 1; // skip wide half
+                    entry.push(3);
+                    i += 1;
                 }
                 7 => {
-                    entries.push(7);
+                    entry.push(7);
                     let cp_idx = slots_cp[i].unwrap_or(cls_object);
-                    entries.write_u16::<BigEndian>(cp_idx).unwrap();
+                    entry.write_u16::<BigEndian>(cp_idx).unwrap();
                 }
-                _ => entries.push(0),
+                _ => entry.push(0),
             }
-            count += 1;
+            entries.push(entry);
             i += 1;
         }
-        out.write_u16::<BigEndian>(count).unwrap();
-        out.extend_from_slice(&entries);
-        out
+        entries
     };
 
     // off_create: only params known, nothing else stored yet.
@@ -3807,65 +3899,88 @@ fn emit_single_suspend_state_machine_method(
     // frame_targets in strict ascending order.
     struct SmtFrame {
         offset: usize,
-        locals_bytes: Vec<u8>,
+        locals: Vec<Vec<u8>>,
         has_stack_item: bool,
     }
+    let entry_locals = locals_create.clone();
     let frame_targets: Vec<SmtFrame> = vec![
         SmtFrame {
             offset: off_create,
-            locals_bytes: locals_create,
+            locals: locals_create,
             has_stack_item: false,
         },
         SmtFrame {
             offset: off_setup,
-            locals_bytes: locals_setup,
+            locals: locals_setup,
             has_stack_item: false,
         },
         SmtFrame {
             offset: off_case0,
-            locals_bytes: locals_full.clone(),
+            locals: locals_full.clone(),
             has_stack_item: false,
         },
         SmtFrame {
             offset: off_case1,
-            locals_bytes: locals_full.clone(),
+            locals: locals_full.clone(),
             has_stack_item: false,
         },
         SmtFrame {
             offset: off_resume,
-            locals_bytes: locals_full.clone(),
+            locals: locals_full.clone(),
             has_stack_item: true,
         },
         SmtFrame {
             offset: off_default,
-            locals_bytes: locals_full,
+            locals: locals_full,
             has_stack_item: false,
         },
     ];
 
+    // Dedup frames at identical offsets — multiple branch targets can
+    // converge on the same instruction (e.g. resume == case1) and the
+    // verifier requires monotonically increasing offsets.
+    let mut deduped: Vec<&SmtFrame> = Vec::new();
+    let mut last_off: i64 = -1;
+    for f in &frame_targets {
+        if f.offset as i64 != last_off {
+            deduped.push(f);
+            last_off = f.offset as i64;
+        }
+    }
     let mut smt_entries: Vec<u8> = Vec::new();
     let mut prev_offset: i32 = -1;
-    for f in &frame_targets {
+    // Seed `prev_locals` with the method-entry local layout so the first
+    // explicit frame can be encoded as same/append/chop relative to it.
+    // At entry, only the user params + $completion are live.
+    let mut prev_locals: Vec<Vec<u8>> = entry_locals;
+    let stack_obj_vti: Vec<u8> = {
+        let mut v = Vec::new();
+        v.push(7);
+        v.write_u16::<BigEndian>(cls_object).unwrap();
+        v
+    };
+    for f in &deduped {
         let delta = if prev_offset < 0 {
             f.offset as i32
         } else {
             (f.offset as i32) - prev_offset - 1
         };
         prev_offset = f.offset as i32;
-        smt_entries.push(255); // full_frame
-        smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
-        // Locals (already encoded with count prefix).
-        smt_entries.extend_from_slice(&f.locals_bytes);
-        // Stack.
-        if f.has_stack_item {
-            smt_entries.write_u16::<BigEndian>(1).unwrap();
-            smt_entries.push(7);
-            smt_entries.write_u16::<BigEndian>(cls_object).unwrap();
+        let stack_slice: Option<&[u8]> = if f.has_stack_item {
+            Some(stack_obj_vti.as_slice())
         } else {
-            smt_entries.write_u16::<BigEndian>(0).unwrap();
-        }
+            None
+        };
+        emit_compact_frame(
+            &mut smt_entries,
+            delta as u16,
+            &f.locals,
+            stack_slice,
+            &prev_locals,
+        );
+        prev_locals = f.locals.clone();
     }
-    let smt_count = frame_targets.len() as u16;
+    let smt_count = deduped.len() as u16;
 
     // ── Assemble Code attribute. ──
     let max_stack: u16 = 3; // dispatch: 3 (ref, ref, int); tableswitch: 3
@@ -5262,9 +5377,31 @@ fn emit_multi_suspend_state_machine_method(
     frames.sort_by_key(|f| f.offset);
     frames.dedup_by_key(|f| f.offset);
 
-    // Encode the StackMapTable.
+    // Encode the StackMapTable using compact frame forms where possible.
+    let vti_to_bytes = |v: &VTi| -> Vec<u8> {
+        let mut out = Vec::new();
+        write_vti(&mut out, v);
+        out
+    };
+    // Seed prev_locals with the method-entry layout (just params +
+    // $completion) so the first emitted frame can be encoded compactly
+    // (append/chop) relative to the JVM's implicit entry frame.
+    let entry_vtis: Vec<VTi> = {
+        let mut arr: Vec<VTi> = vec![VTi::Top; suspended_slot as usize + 1];
+        fill_param_vtis(&mut arr);
+        arr
+    };
+    let entry_logical = collapse_vti(&entry_vtis);
+    let mut entry_end = entry_logical.len();
+    while entry_end > 0 && matches!(entry_logical[entry_end - 1], VTi::Top) {
+        entry_end -= 1;
+    }
     let mut smt_entries: Vec<u8> = Vec::new();
     let mut prev_offset: i32 = -1;
+    let mut prev_locals_bytes: Vec<Vec<u8>> = entry_logical[..entry_end]
+        .iter()
+        .map(vti_to_bytes)
+        .collect();
     for f in &frames {
         let delta = if prev_offset < 0 {
             f.offset as i32
@@ -5272,33 +5409,43 @@ fn emit_multi_suspend_state_machine_method(
             (f.offset as i32) - prev_offset - 1
         };
         prev_offset = f.offset as i32;
-        smt_entries.push(255); // full_frame
-        smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
 
-        // Locals: the verification array has ONE entry per slot.
-        // Long/Double widen into a single (tag-4/tag-3) entry per
-        // the JVM spec. We trim trailing Top entries for compactness
-        // (JVM verifier allows any number of trailing Top).
         let logical_locals = collapse_vti(&f.locals);
-        // Further trim trailing Top entries to minimize frame size.
         let mut end = logical_locals.len();
         while end > 0 && matches!(logical_locals[end - 1], VTi::Top) {
             end -= 1;
         }
-        let trimmed = &logical_locals[..end];
-        smt_entries
-            .write_u16::<BigEndian>(trimmed.len() as u16)
-            .unwrap();
-        for v in trimmed {
-            write_vti(&mut smt_entries, v);
+        let cur_locals_bytes: Vec<Vec<u8>> =
+            logical_locals[..end].iter().map(vti_to_bytes).collect();
+
+        // Stack: emit_compact_frame supports 0 or 1 stack item. For
+        // 2+ items we fall back to emitting full_frame manually below.
+        if f.stack.len() <= 1 {
+            let stack_bytes: Option<Vec<u8>> = f.stack.first().map(vti_to_bytes);
+            emit_compact_frame(
+                &mut smt_entries,
+                delta as u16,
+                &cur_locals_bytes,
+                stack_bytes.as_deref(),
+                &prev_locals_bytes,
+            );
+        } else {
+            smt_entries.push(255);
+            smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
+            smt_entries
+                .write_u16::<BigEndian>(cur_locals_bytes.len() as u16)
+                .unwrap();
+            for v in &cur_locals_bytes {
+                smt_entries.extend_from_slice(v);
+            }
+            smt_entries
+                .write_u16::<BigEndian>(f.stack.len() as u16)
+                .unwrap();
+            for v in &f.stack {
+                write_vti(&mut smt_entries, v);
+            }
         }
-        // Stack.
-        smt_entries
-            .write_u16::<BigEndian>(f.stack.len() as u16)
-            .unwrap();
-        for v in &f.stack {
-            write_vti(&mut smt_entries, v);
-        }
+        prev_locals_bytes = cur_locals_bytes;
     }
     let smt_count = frames.len() as u16;
 
@@ -5310,12 +5457,13 @@ fn emit_multi_suspend_state_machine_method(
     // return tail is 1 primitive or 1 ref → at most 1 from the
     // BinOp's iadd + 1 from valueOf transition (net 1 ref). The
     // safest ceiling is 4 (for `aload $cont; aload $cont; iload x;
-    // iload y` temporarily staged when a BinOp consumes two values
-    // and produces one — though we never stage that way). Use 3
-    // unless a Ref spill sits atop the stack, in which case the
-    // putfield-before-value path takes 2.
-    let max_stack: u16 = 16;
-    let max_locals: u16 = (next_slot as u16).max(32);
+    // Compute max_stack from the final bytecode using dataflow. Take
+    // the max of the recomputed value and a safe ceiling, since the
+    // suspend state machine may push deeper than the dataflow walker
+    // can reason about (tableswitch + branch convergence on resume).
+    let computed_max_stack = recompute_max_stack_from_code(&code, cp);
+    let max_stack: u16 = (computed_max_stack as u16).max(16);
+    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code)).max(32);
 
     // ── Assemble the Code attribute. ───────────────────────────────
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
@@ -6748,8 +6896,24 @@ fn emit_lambda_one_suspend_body(
         (off_default, false),
     ];
 
+    let cur_locals_bytes: Vec<Vec<u8>> = locals_main
+        .iter()
+        .map(|(tag, idx)| {
+            let mut v = Vec::with_capacity(3);
+            v.push(*tag);
+            v.write_u16::<BigEndian>(*idx).unwrap();
+            v
+        })
+        .collect();
+    let stack_obj_vti: Vec<u8> = {
+        let mut v = Vec::new();
+        v.push(7);
+        v.write_u16::<BigEndian>(cls_object).unwrap();
+        v
+    };
     let mut smt_entries: Vec<u8> = Vec::new();
     let mut prev_offset: i32 = -1;
+    let mut prev_locals_bytes: Vec<Vec<u8>> = Vec::new();
     for (off, has_stack_item) in frame_targets {
         let delta = if prev_offset < 0 {
             off as i32
@@ -6757,34 +6921,26 @@ fn emit_lambda_one_suspend_body(
             (off as i32) - prev_offset - 1
         };
         prev_offset = off as i32;
-        smt_entries.push(255); // full_frame
-        smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
-        smt_entries
-            .write_u16::<BigEndian>(locals_main.len() as u16)
-            .unwrap();
-        for (tag, idx) in &locals_main {
-            smt_entries.push(*tag);
-            smt_entries.write_u16::<BigEndian>(*idx).unwrap();
-        }
-        if has_stack_item {
-            smt_entries.write_u16::<BigEndian>(1).unwrap();
-            smt_entries.push(7);
-            smt_entries.write_u16::<BigEndian>(cls_object).unwrap();
+        let stack_slice: Option<&[u8]> = if has_stack_item {
+            Some(stack_obj_vti.as_slice())
         } else {
-            smt_entries.write_u16::<BigEndian>(0).unwrap();
-        }
+            None
+        };
+        emit_compact_frame(
+            &mut smt_entries,
+            delta as u16,
+            &cur_locals_bytes,
+            stack_slice,
+            &prev_locals_bytes,
+        );
+        prev_locals_bytes = cur_locals_bytes.clone();
     }
     let smt_count = frame_targets.len() as u16;
 
     // ── Assemble Code attribute. ──
-    // max_stack = 3 (the peak is inside the case-0 body: after the
-    // `aload_0; checkcast Continuation; aload_0; iconst_1` sequence
-    // we hold 4 refs, but putfield immediately drops to 2; a further
-    // `dup` + `aload_2` pushes us to 4 as well. Keep 4 for safety.)
-    let max_stack: u16 = 16;
-    // Conservative: the state machine body may use many locals for
-    // nested calls (async lambda creation, await, etc.).
-    let max_locals: u16 = 32;
+    let computed_max_stack = recompute_max_stack_from_code(&code, cp);
+    let max_stack: u16 = (computed_max_stack as u16).max(16);
+    let max_locals: u16 = actual_max_locals(&code).max(32);
 
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
     code_attr.write_u16::<BigEndian>(max_stack).unwrap();
@@ -8012,8 +8168,22 @@ fn emit_lambda_multi_suspend_body(
     frames.sort_by_key(|f| f.offset);
     frames.dedup_by_key(|f| f.offset);
 
+    let vti_to_bytes = |v: &VTi| -> Vec<u8> {
+        let mut out = Vec::new();
+        write_vti(&mut out, v);
+        out
+    };
+    // Seed prev_locals to the entry layout (slot 0 = this, others Top)
+    // so the first frame can be encoded compactly.
+    let lambda_entry_locals: Vec<Vec<u8>> = vec![{
+        let mut v = Vec::new();
+        v.push(7);
+        v.write_u16::<BigEndian>(cls_this).unwrap();
+        v
+    }];
     let mut smt_entries: Vec<u8> = Vec::new();
     let mut prev_offset: i32 = -1;
+    let mut prev_locals_bytes: Vec<Vec<u8>> = lambda_entry_locals;
     for f in &frames {
         let delta = if prev_offset < 0 {
             f.offset as i32
@@ -8021,39 +8191,48 @@ fn emit_lambda_multi_suspend_body(
             (f.offset as i32) - prev_offset - 1
         };
         prev_offset = f.offset as i32;
-        smt_entries.push(255);
-        smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
+
         let logical_locals = collapse_vti(&f.locals);
         let mut end = logical_locals.len();
         while end > 0 && matches!(logical_locals[end - 1], VTi::Top) {
             end -= 1;
         }
-        let trimmed = &logical_locals[..end];
-        smt_entries
-            .write_u16::<BigEndian>(trimmed.len() as u16)
-            .unwrap();
-        for v in trimmed {
-            write_vti(&mut smt_entries, v);
+        let cur_locals_bytes: Vec<Vec<u8>> =
+            logical_locals[..end].iter().map(vti_to_bytes).collect();
+
+        if f.stack.len() <= 1 {
+            let stack_bytes: Option<Vec<u8>> = f.stack.first().map(vti_to_bytes);
+            emit_compact_frame(
+                &mut smt_entries,
+                delta as u16,
+                &cur_locals_bytes,
+                stack_bytes.as_deref(),
+                &prev_locals_bytes,
+            );
+        } else {
+            smt_entries.push(255);
+            smt_entries.write_u16::<BigEndian>(delta as u16).unwrap();
+            smt_entries
+                .write_u16::<BigEndian>(cur_locals_bytes.len() as u16)
+                .unwrap();
+            for v in &cur_locals_bytes {
+                smt_entries.extend_from_slice(v);
+            }
+            smt_entries
+                .write_u16::<BigEndian>(f.stack.len() as u16)
+                .unwrap();
+            for v in &f.stack {
+                write_vti(&mut smt_entries, v);
+            }
         }
-        smt_entries
-            .write_u16::<BigEndian>(f.stack.len() as u16)
-            .unwrap();
-        for v in &f.stack {
-            write_vti(&mut smt_entries, v);
-        }
+        prev_locals_bytes = cur_locals_bytes;
     }
     let smt_count = frames.len() as u16;
 
     // ── Assemble. ──────────────────────────────────────────────────
-    // Compute max_stack conservatively. The state machine body may
-    // contain arbitrary MIR segments with nested calls (e.g.,
-    // `launch$default(scope, null, null, lambda, mask, null)` pushes
-    // 6+ items). Rather than precisely tracking stack depth through
-    // the segment emitter, we set max_stack high enough to cover
-    // realistic code. The JVM verifier only checks `<=`, so a
-    // conservatively large value is always safe.
-    let max_stack: u16 = 16;
-    let max_locals: u16 = (next_slot as u16).max(32);
+    let computed_max_stack = recompute_max_stack_from_code(&code, cp);
+    let max_stack: u16 = (computed_max_stack as u16).max(16);
+    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code)).max(32);
 
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
     code_attr.write_u16::<BigEndian>(max_stack).unwrap();
@@ -11022,6 +11201,66 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
     }
 }
 
+/// Compute `max_locals` by scanning the bytecode for the highest slot
+/// referenced by any load/store/iinc, plus 1 (or 2 for wide types).
+/// Returns 0 if no slot references appear. Used by suspend state-machine
+/// emission paths that previously hardcoded a generous ceiling.
+fn actual_max_locals(code: &[u8]) -> u16 {
+    let mut max_slot: i32 = -1;
+    let mut i = 0;
+    while i < code.len() {
+        let op = code[i];
+        let len = instruction_len(code, i);
+        let (slot_opt, is_wide): (Option<u8>, bool) = match op {
+            0x1A..=0x1D => (Some(op - 0x1A), false),
+            0x1E..=0x21 => (Some(op - 0x1E), true),
+            0x22..=0x25 => (Some(op - 0x22), false),
+            0x26..=0x29 => (Some(op - 0x26), true),
+            0x2A..=0x2D => (Some(op - 0x2A), false),
+            0x3B..=0x3E => (Some(op - 0x3B), false),
+            0x3F..=0x42 => (Some(op - 0x3F), true),
+            0x43..=0x46 => (Some(op - 0x43), false),
+            0x47..=0x4A => (Some(op - 0x47), true),
+            0x4B..=0x4E => (Some(op - 0x4B), false),
+            0x15 | 0x17 | 0x19 | 0x36 | 0x38 | 0x3A => {
+                if i + 1 < code.len() {
+                    (Some(code[i + 1]), false)
+                } else {
+                    (None, false)
+                }
+            }
+            0x16 | 0x18 | 0x37 | 0x39 => {
+                if i + 1 < code.len() {
+                    (Some(code[i + 1]), true)
+                } else {
+                    (None, false)
+                }
+            }
+            0x84 => {
+                // iinc <slot u8> <const i8>
+                if i + 1 < code.len() {
+                    (Some(code[i + 1]), false)
+                } else {
+                    (None, false)
+                }
+            }
+            _ => (None, false),
+        };
+        if let Some(slot) = slot_opt {
+            let last = slot as i32 + if is_wide { 1 } else { 0 };
+            if last > max_slot {
+                max_slot = last;
+            }
+        }
+        i += len;
+    }
+    if max_slot < 0 {
+        0
+    } else {
+        (max_slot + 1) as u16
+    }
+}
+
 /// Recompute `max_stack` from the final bytecode using forward dataflow.
 /// The emission-time tracker can under-estimate when a peephole eliminates
 /// an `istore_X; iload_X` pair: the value stays on the stack between the
@@ -11404,6 +11643,147 @@ fn peephole_elide_head_store_load(code: &mut Vec<u8>, cmp_targets: &mut [CmpBran
         if !removed_any {
             break;
         }
+    }
+}
+
+/// Peephole: elide adjacent `Xstore_N; Xload_N` pairs anywhere in
+/// branchy code, adjusting any branch instruction's relative offset and
+/// the `cmp_targets` table when the removal shifts subsequent code.
+///
+/// `block_offsets` and `patch_positions` are absolute byte offsets used
+/// by the inter-block branch resolver pass; they shift down with any
+/// elision past their position. `patch_positions` is a flat list of
+/// `(offset_pos, insn_pos)` pairs from the JumpPatch table.
+///
+/// Safe-to-remove conditions:
+/// - The pair is at offset P with length L (= store_len + load_len).
+/// - Slot N is not a named local (preserves user val/var slots).
+/// - Slot N is "dead" at P+L: the next access (linearly) is a store, a
+///   return/throw, or end of code — ensuring the elided value isn't
+///   re-read.
+/// - No branch target lands strictly inside the pair (would break the
+///   branch on removal). A target at exactly P or P+L is fine — those
+///   simply become "before" or "after" the elided region.
+/// - No `cmp_start` falls inside the pair.
+/// - No `patch_positions` insn_pos lies strictly inside the pair (would
+///   leave a partial branch instruction).
+fn peephole_elide_middle_store_load(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    patch_positions: &mut [(usize, usize)],
+    named_slots: &FxHashSet<u8>,
+) {
+    loop {
+        let mut applied: Option<(usize, usize, u8)> = None; // (start, len, slot)
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((slot, store_len, _load_op, load_len)) = decode_store_load_pair(code, i) {
+                let removed = store_len + load_len;
+                let pair_end = i + removed;
+                if !named_slots.contains(&slot) && !slot_alive_at(code, slot, pair_end) {
+                    // Check no cmp_target offset/cmp_start falls strictly inside.
+                    let cmp_conflict = cmp_targets.iter().any(|t| {
+                        (t.offset > i && t.offset < pair_end)
+                            || (t.cmp_start > i && t.cmp_start < pair_end)
+                    });
+                    // Check no inter-block branch / block boundary lands
+                    // inside the pair — those would split a branch
+                    // instruction or move a frame mid-pair.
+                    let block_conflict = block_offsets.iter().any(|&b| b > i && b < pair_end);
+                    let patch_conflict = patch_positions
+                        .iter()
+                        .any(|&(op, ip)| (ip > i && ip < pair_end) || (op > i && op < pair_end));
+                    if !cmp_conflict && !block_conflict && !patch_conflict {
+                        applied = Some((i, removed, slot));
+                        break;
+                    }
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        let Some((start, removed, _slot)) = applied else {
+            break;
+        };
+        // Adjust branch instruction relative offsets that span the removal.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            // 2-byte signed branch opcodes: if*, if_icmp*, if_acmp*, goto, jsr, ifnull, ifnonnull
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < start && (dst as usize) >= start + removed {
+                        rel - removed as i32
+                    } else if (src as usize) >= start + removed && (dst as usize) <= start {
+                        rel + removed as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let bytes = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = bytes[0];
+                        code[j + 2] = bytes[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            // Wide goto_w / jsr_w (4-byte signed offsets)
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < start && (dst as usize) >= start + removed {
+                        rel - removed as i32
+                    } else if (src as usize) >= start + removed && (dst as usize) <= start {
+                        rel + removed as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let bytes = new_rel.to_be_bytes();
+                        code[j + 1] = bytes[0];
+                        code[j + 2] = bytes[1];
+                        code[j + 3] = bytes[2];
+                        code[j + 4] = bytes[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        // Adjust cmp_target offsets/cmp_starts past the removal.
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= start + removed {
+                ct.offset -= removed;
+            }
+            if ct.cmp_start >= start + removed {
+                ct.cmp_start -= removed;
+            }
+        }
+        // Adjust block_offsets and inter-block patch positions past the
+        // removal so the later patch resolution computes correct
+        // relative offsets.
+        for b in block_offsets.iter_mut() {
+            if *b >= start + removed {
+                *b -= removed;
+            }
+        }
+        for (op, ip) in patch_positions.iter_mut() {
+            if *op >= start + removed {
+                *op -= removed;
+            }
+            if *ip >= start + removed {
+                *ip -= removed;
+            }
+        }
+        code.drain(start..start + removed);
     }
 }
 
@@ -11982,6 +12362,108 @@ fn decode_store_load_pair(code: &[u8], pos: usize) -> Option<(u8, usize, u8, usi
         }
         _ => None,
     }
+}
+
+/// Check if `slot` is *live* at `from` — i.e., any reachable path from
+/// `from` may load `slot` before writing to it. Used by the peephole to
+/// verify a store+load removal is safe: if every reachable path
+/// overwrites the slot (or returns/throws) before any load, the elided
+/// value is irrelevant.
+///
+/// Walks the CFG with a worklist + visited set. Returns `true` (safe
+/// upper bound: alive) on tableswitch/lookupswitch (whose targets we
+/// don't decode here) or `ret` (subroutines).
+fn slot_alive_at(code: &[u8], slot: u8, from: usize) -> bool {
+    let mut visited: FxHashSet<usize> = FxHashSet::default();
+    let mut work: Vec<usize> = vec![from];
+    while let Some(start) = work.pop() {
+        let mut i = start;
+        loop {
+            if i >= code.len() {
+                break;
+            }
+            if !visited.insert(i) {
+                break;
+            }
+            let op = code[i];
+            // Compact load forms for slot 0..3.
+            if slot <= 3 {
+                if op == 0x1A + slot
+                    || op == 0x1E + slot
+                    || op == 0x22 + slot
+                    || op == 0x26 + slot
+                    || op == 0x2A + slot
+                {
+                    return true;
+                }
+            }
+            if (0x15..=0x19).contains(&op) && i + 1 < code.len() && code[i + 1] == slot {
+                return true;
+            }
+            if op == 0x84 && i + 1 < code.len() && code[i + 1] == slot {
+                return true;
+            }
+            // Stores to the slot kill the prior value on this path.
+            let kills = if slot <= 3
+                && (op == 0x3B + slot
+                    || op == 0x3F + slot
+                    || op == 0x43 + slot
+                    || op == 0x47 + slot
+                    || op == 0x4B + slot)
+            {
+                true
+            } else {
+                (0x36..=0x3A).contains(&op) && i + 1 < code.len() && code[i + 1] == slot
+            };
+            if kills {
+                break;
+            }
+            // Returns/throws end this path.
+            if matches!(op, 0xAC..=0xB1 | 0xBF) {
+                break;
+            }
+            // Goto: jump only.
+            if op == 0xA7 && i + 2 < code.len() {
+                let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                let tgt = (i as i32) + rel;
+                if tgt < 0 {
+                    return true;
+                }
+                i = tgt as usize;
+                continue;
+            }
+            // goto_w
+            if op == 0xC8 && i + 4 < code.len() {
+                let rel = i32::from_be_bytes([code[i + 1], code[i + 2], code[i + 3], code[i + 4]]);
+                let tgt = (i as i32) + rel;
+                if tgt < 0 {
+                    return true;
+                }
+                i = tgt as usize;
+                continue;
+            }
+            // Conditional branches: enqueue both successors.
+            if (0x99..=0xA6).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if i + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                    let tgt = (i as i32) + rel;
+                    if tgt < 0 {
+                        return true;
+                    }
+                    work.push(tgt as usize);
+                }
+                let len = instruction_len(code, i);
+                i += len;
+                continue;
+            }
+            // jsr / ret / tableswitch / lookupswitch: bail conservatively.
+            if matches!(op, 0xA8 | 0xA9 | 0xAA | 0xAB | 0xC9) {
+                return true;
+            }
+            i += instruction_len(code, i);
+        }
+    }
+    false
 }
 
 /// Check if `slot` is loaded anywhere in `code[from..]`.

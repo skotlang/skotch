@@ -28,17 +28,15 @@ method        main ()V 0x0019
     0040 aload_1
     0041 aload_0
     0042 invokevirtual Method(Box.compareTo:(LBox;)I)
-    0045 istore_2
-    0046 iload_2
-    0047 ifge 54
-    0050 iconst_1
-    0051 goto 55
-    0054 iconst_0
-    0055 istore_2
-    0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0059 iload_2
-    0060 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0063 return
+    0045 ifge 52
+    0048 iconst_1
+    0049 goto 53
+    0052 iconst_0
+    0053 istore_2
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 iload_2
+    0058 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0061 return
     sub_attr  StackMapTable (19 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
