@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LResult;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=10
     0000 aload_0
     0001 ldc "r"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -12,48 +12,50 @@ method        describe (LResult;)Ljava/lang/String; 0x0019
     0010 instanceof Class(Success)
     0013 istore_1
     0014 iload_1
-    0015 ifeq 47
+    0015 ifeq 43
     0018 aload_0
     0019 checkcast Class(Success)
     0022 astore_2
-    0023 ldc "OK: "
-    0025 astore_3
-    0026 aload_2
-    0027 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
-    0030 astore 4
-    0032 aload_3
-    0033 aload 4
-    0035 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0023 aload_2
+    0024 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
+    0027 astore_3
+    0028 aload_3
+    0029 op_0xBA
+    0030 nop
+    0031 lload_3
+    0032 nop
+    0033 nop
+    0034 astore 4
+    0036 aload 4
     0038 astore 5
-    0040 aload 5
-    0042 astore 6
-    0044 goto 97
-    0047 aload_0
-    0048 instanceof Class(Failure)
-    0051 istore 7
-    0053 iload 7
-    0055 ifeq 91
-    0058 aload_0
-    0059 checkcast Class(Failure)
-    0062 astore 8
-    0064 ldc "ERR: "
-    0066 astore 9
-    0068 aload 8
-    0070 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
-    0073 astore 10
-    0075 aload 9
-    0077 aload 10
-    0079 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0082 astore 11
-    0084 aload 11
-    0086 astore 6
-    0088 goto 97
-    0091 aconst_null
-    0092 astore 6
-    0094 goto 97
-    0097 aload 6
-    0099 areturn
-    sub_attr  StackMapTable (39 bytes)
+    0040 goto 89
+    0043 aload_0
+    0044 instanceof Class(Failure)
+    0047 istore 6
+    0049 iload 6
+    0051 ifeq 83
+    0054 aload_0
+    0055 checkcast Class(Failure)
+    0058 astore 7
+    0060 aload 7
+    0062 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
+    0065 astore 8
+    0067 aload 8
+    0069 op_0xBA
+    0070 nop
+    0071 dload_3
+    0072 nop
+    0073 nop
+    0074 astore 9
+    0076 aload 9
+    0078 astore 5
+    0080 goto 89
+    0083 aconst_null
+    0084 astore 5
+    0086 goto 89
+    0089 aload 5
+    0091 areturn
+    sub_attr  StackMapTable (37 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
@@ -81,3 +83,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (14 bytes)

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        joinNumbers (I)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=16
+  code        max_stack=3 max_locals=17
     0000 ldc ""
     0002 astore_1
     0003 aload_1
@@ -61,15 +61,21 @@ method        joinNumbers (I)Ljava/lang/String; 0x0019
     0101 goto 104
     0104 aload_2
     0105 astore 14
-    0107 aload 14
-    0109 iload 4
-    0111 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0114 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0117 astore 15
-    0119 aload 15
-    0121 astore_2
-    0122 goto 56
-    sub_attr  StackMapTable (83 bytes)
+    0107 iload 4
+    0109 op_0xBA
+    0110 nop
+    0111 iload_2
+    0112 nop
+    0113 nop
+    0114 astore 15
+    0116 aload 14
+    0118 aload 15
+    0120 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0123 astore 16
+    0125 aload 16
+    0127 astore_2
+    0128 goto 56
+    sub_attr  StackMapTable (86 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
@@ -88,3 +94,4 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

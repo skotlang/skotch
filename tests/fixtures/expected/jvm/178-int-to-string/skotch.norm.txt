@@ -3,36 +3,42 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=3
     0000 bipush 42
     0002 istore_0
-    0003 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0006 iload_0
-    0007 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0003 iload_0
+    0004 op_0xBA
+    0005 nop
+    0006 ldc_w #0
+    0009 astore_1
     0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0013 new Class(java/lang/StringBuilder)
-    0016 dup
-    0017 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0020 ldc "The answer is "
-    0022 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0025 iload_0
-    0026 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0029 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0035 iload_0
-    0036 iconst_1
-    0037 iadd
-    0038 istore_1
-    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0042 new Class(java/lang/StringBuilder)
-    0045 dup
-    0046 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0049 iload_1
-    0050 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0053 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0059 return
+    0013 aload_1
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 new Class(java/lang/StringBuilder)
+    0023 dup
+    0024 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0027 ldc "The answer is "
+    0029 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0032 iload_0
+    0033 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0036 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0042 iload_0
+    0043 iconst_1
+    0044 iadd
+    0045 istore_2
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 new Class(java/lang/StringBuilder)
+    0052 dup
+    0053 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0056 iload_2
+    0057 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0060 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0066 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

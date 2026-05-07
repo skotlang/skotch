@@ -26,35 +26,28 @@ method        main ([Ljava/lang/String;)V 0x1009
 method        maxOf (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; 0x0019
   code        max_stack=2 max_locals=6
     0000 aload_0
-    0001 ldc "a"
-    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 aload_1
-    0007 ldc "b"
-    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0012 aload_0
-    0013 checkcast Class(java/lang/Integer)
-    0016 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0019 istore_2
-    0020 aload_1
-    0021 checkcast Class(java/lang/Integer)
-    0024 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0027 istore_3
-    0028 iload_2
-    0029 iload_3
-    0030 if_icmple 37
-    0033 iconst_1
-    0034 goto 38
-    0037 iconst_0
-    0038 istore 4
-    0040 iload 4
-    0042 ifeq 51
-    0045 aload_0
-    0046 astore 5
-    0048 goto 57
-    0051 aload_1
-    0052 astore 5
-    0054 goto 57
-    0057 aload 5
-    0059 areturn
-    sub_attr  StackMapTable (17 bytes)
-  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 istore_2
+    0008 aload_1
+    0009 checkcast Class(java/lang/Integer)
+    0012 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0015 istore_3
+    0016 iload_2
+    0017 iload_3
+    0018 if_icmple 25
+    0021 iconst_1
+    0022 goto 26
+    0025 iconst_0
+    0026 istore 4
+    0028 iload 4
+    0030 ifeq 39
+    0033 aload_0
+    0034 astore 5
+    0036 goto 45
+    0039 aload_1
+    0040 astore 5
+    0042 goto 45
+    0045 aload 5
+    0047 areturn
+    sub_attr  StackMapTable (19 bytes)

@@ -61,6 +61,7 @@ const ACC_PROTECTED: u16 = 0x0004;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
+const ACC_VARARGS: u16 = 0x0080;
 const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
 const ACC_SYNTHETIC: u16 = 0x1000;
@@ -278,6 +279,13 @@ fn compute_param_notnull_mask(func: &MirFunction) -> Vec<bool> {
         .map(|i| {
             let id = func.params[offset + i];
             let ty = &func.locals[id.0 as usize];
+            // Generic type-parameter params (`fun <T>(x: T)`) erase to
+            // Object/Ty::Any. kotlinc skips the `@NotNull` parameter
+            // annotation for them since `T` may be nullable at the call
+            // site.
+            if matches!(ty, Ty::Any) && func.has_type_params {
+                return false;
+            }
             is_non_null_reference_param(ty)
         })
         .collect()
@@ -456,8 +464,13 @@ fn is_non_null_reference_param(ty: &Ty) -> bool {
 }
 
 /// Check if the method returns a non-null reference type (String, Class, etc.)
-/// that should get a `@NotNull` invisible annotation.
+/// that should get a `@NotNull` invisible annotation. Private functions
+/// (e.g., locally-captured nested functions like `main$greet`) are not
+/// visible to Java callers, so kotlinc skips the annotation for them.
 fn method_returns_non_null_ref(func: &MirFunction) -> bool {
+    if func.is_private {
+        return false;
+    }
     matches!(&func.return_ty, Ty::String | Ty::Class(_))
 }
 
@@ -2503,6 +2516,15 @@ fn emit_method_body(
             }
         }
         compress_to_compact_forms(&mut code);
+        // After all peephole passes, recompute max_stack from the final
+        // bytecode. Eliding `istore_X; iload_X` pairs can leave a value
+        // sitting on the stack at points the emission tracker never
+        // observed, raising the true max stack depth above what was
+        // recorded.
+        let recomputed = recompute_max_stack_from_code(&code, cp);
+        if recomputed > max_stack {
+            max_stack = recomputed;
+        }
     } else if patches.is_empty() {
         // Only intra-block (cmp_targets) branches: we can still elide
         // store+load pairs that are positioned AFTER the highest branch
@@ -2547,6 +2569,12 @@ fn emit_method_body(
             // instructions whose source is below the compaction point
             // and target is above it (or vice versa).
             compress_to_compact_forms_with_branches(&mut code, &mut cmp_targets);
+        }
+        // Recompute max_stack after intra-block peepholes (mirrors the
+        // no_branches path).
+        let recomputed = recompute_max_stack_from_code(&code, cp);
+        if recomputed > max_stack {
+            max_stack = recomputed;
         }
     }
 
@@ -3305,7 +3333,12 @@ fn emit_method(
     } else {
         ACC_PUBLIC
     };
-    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL;
+    let varargs_flag = if func.vararg_index.is_some() {
+        ACC_VARARGS
+    } else {
+        0
+    };
+    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -3445,7 +3478,7 @@ fn emit_single_suspend_state_machine_method(
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
     let descriptor = jvm_descriptor(func);
-    let access_flags = ACC_PUBLIC | ACC_STATIC;
+    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -3534,7 +3567,7 @@ fn emit_single_suspend_state_machine_method(
     let patch_ifeq_second = code.len();
     code.write_i16::<BigEndian>(0).unwrap();
     emit_load_ref_slot(&mut code, cont_slot); // aload $continuation
-    emit_load_ref_slot(&mut code, cont_slot); // aload $continuation (substitute for kotlinc's `dup`)
+    code.push(0x59); // dup — kotlinc duplicates the receiver to share between getfield+putfield
     code.push(0xB4); // getfield label
     code.write_u16::<BigEndian>(fr_label).unwrap();
     emit_ldc(&mut code, int_min);
@@ -3916,7 +3949,7 @@ fn emit_multi_suspend_state_machine_method(
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
     let descriptor = jvm_descriptor(func);
-    let access_flags = ACC_PUBLIC | ACC_STATIC;
+    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -8820,21 +8853,31 @@ fn walk_block(
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                         continue;
                     }
-                    if lhs_const_string.as_deref().is_some_and(recipe_safe)
-                        && matches!(rhs_ty, Ty::String)
-                    {
-                        let recipe = format!("{}\u{1}", lhs_const_string.unwrap());
-                        load_local(code, stack, max_stack, slots, *rhs, &func.locals);
-                        emit_make_concat_with_constants(
-                            code,
-                            cp,
-                            stack,
-                            max_stack,
-                            "(Ljava/lang/String;)Ljava/lang/String;",
-                            &recipe,
-                        );
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
-                        continue;
+                    if lhs_const_string.as_deref().is_some_and(recipe_safe) {
+                        let arg_desc: Option<&str> = match rhs_ty {
+                            Ty::String => Some("Ljava/lang/String;"),
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char => Some("I"),
+                            Ty::Long => Some("J"),
+                            Ty::Float => Some("F"),
+                            Ty::Double => Some("D"),
+                            Ty::Bool => Some("Z"),
+                            _ => None,
+                        };
+                        if let Some(desc) = arg_desc {
+                            let recipe = format!("{}\u{1}", lhs_const_string.unwrap());
+                            let descriptor = format!("({desc})Ljava/lang/String;");
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            emit_make_concat_with_constants(
+                                code,
+                                cp,
+                                stack,
+                                max_stack,
+                                &descriptor,
+                                &recipe,
+                            );
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
                     }
                     // String concatenation: lhs.concat(rhs)
                     // If rhs is Int/Bool, convert via String.valueOf first.
@@ -10979,6 +11022,336 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
     }
 }
 
+/// Recompute `max_stack` from the final bytecode using forward dataflow.
+/// The emission-time tracker can under-estimate when a peephole eliminates
+/// an `istore_X; iload_X` pair: the value stays on the stack between the
+/// two operations, but the tracker saw it pushed off and pushed back.
+///
+/// For invokes / field ops we parse the descriptor from the constant pool
+/// to compute the precise stack delta. Long/Double values count as 2
+/// stack slots per JVMS.
+///
+/// We propagate stack depth via worklist: at each instruction, compute
+/// out-depth from in-depth + delta, then push successors (fall-through
+/// and/or branch target). This correctly handles if-then-else where two
+/// paths converge with the same depth on entry.
+fn recompute_max_stack_from_code(code: &[u8], cp: &ConstantPool) -> i32 {
+    if code.is_empty() {
+        return 0;
+    }
+    let mut depth_in: Vec<Option<i32>> = vec![None; code.len()];
+    depth_in[0] = Some(0);
+    let mut max_stack: i32 = 0;
+    let mut work: Vec<usize> = vec![0];
+    while let Some(off) = work.pop() {
+        if off >= code.len() {
+            continue;
+        }
+        let stack_in = match depth_in[off] {
+            Some(d) => d,
+            None => continue,
+        };
+        if stack_in > max_stack {
+            max_stack = stack_in;
+        }
+        let op = code[off];
+        let len = instruction_len(code, off);
+        let delta = stack_effect_of_op(code, cp, off);
+        let stack_out = (stack_in + delta).max(0);
+        if stack_out > max_stack {
+            max_stack = stack_out;
+        }
+        // Determine successors based on opcode.
+        let mut successors: Vec<usize> = Vec::new();
+        match op {
+            // goto, goto_w
+            0xA7 => {
+                if off + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[off + 1], code[off + 2]]) as i32;
+                    let tgt = off as i32 + rel;
+                    if tgt >= 0 {
+                        successors.push(tgt as usize);
+                    }
+                }
+            }
+            0xC8 => {
+                if off + 4 < code.len() {
+                    let rel = i32::from_be_bytes([
+                        code[off + 1],
+                        code[off + 2],
+                        code[off + 3],
+                        code[off + 4],
+                    ]);
+                    let tgt = off as i32 + rel;
+                    if tgt >= 0 {
+                        successors.push(tgt as usize);
+                    }
+                }
+            }
+            // conditional branches: branch + fall-through
+            0x99..=0xA6 | 0xC6 | 0xC7 => {
+                if off + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[off + 1], code[off + 2]]) as i32;
+                    let tgt = off as i32 + rel;
+                    if tgt >= 0 {
+                        successors.push(tgt as usize);
+                    }
+                }
+                successors.push(off + len);
+            }
+            // return / throw — no successor
+            0xAC..=0xB1 | 0xBF => {}
+            // tableswitch / lookupswitch — skip target enumeration; the
+            // dataflow may under-walk these but max_stack will still be
+            // correct via fall-through paths from the rest of the code.
+            0xAA | 0xAB => {}
+            _ => {
+                successors.push(off + len);
+            }
+        }
+        for succ in successors {
+            if succ >= code.len() {
+                continue;
+            }
+            match depth_in[succ] {
+                None => {
+                    depth_in[succ] = Some(stack_out);
+                    work.push(succ);
+                }
+                Some(d) => {
+                    if stack_out > d {
+                        depth_in[succ] = Some(stack_out);
+                        work.push(succ);
+                    }
+                }
+            }
+        }
+    }
+    max_stack
+}
+
+/// Compute the stack-effect (delta) of a single instruction at `off`.
+fn stack_effect_of_op(code: &[u8], cp: &ConstantPool, off: usize) -> i32 {
+    let op = code[off];
+    if op == 0xC4 && off + 1 < code.len() {
+        // wide prefix
+        return match code[off + 1] {
+            0x15 | 0x17 | 0x19 => 1,
+            0x16 | 0x18 => 2,
+            0x36 | 0x38 | 0x3A => -1,
+            0x37 | 0x39 => -2,
+            0x84 => 0,
+            _ => 0,
+        };
+    }
+    match op {
+            // nop
+            0x00 => 0,
+            // pushes (cat-1)
+            0x01 // aconst_null
+            | 0x02..=0x08 // iconst_*
+            | 0x0B..=0x0D // fconst_*
+            | 0x10 | 0x11 // bipush, sipush
+            | 0x12 | 0x13 // ldc, ldc_w
+            | 0x15 | 0x17 | 0x19 // iload, fload, aload
+            | 0x1A..=0x1D // iload_*
+            | 0x22..=0x25 // fload_*
+            | 0x2A..=0x2D // aload_*
+            | 0xBB // new
+            => 1,
+            // pushes (cat-2)
+            0x09 | 0x0A // lconst_*
+            | 0x0E | 0x0F // dconst_*
+            | 0x14 // ldc2_w
+            | 0x16 | 0x18 // lload, dload
+            | 0x1E..=0x21 // lload_*
+            | 0x26..=0x29 // dload_*
+            => 2,
+            // array loads — pop arrayref + index, push value
+            0x2E | 0x30 | 0x32 | 0x33 | 0x34 | 0x35 => -1, // [iaload, faload, aaload, baload, caload, saload]
+            0x2F | 0x31 => 0,                              // laload, daload (push 2 - pop 2)
+            // stores
+            0x36 | 0x38 | 0x3A // istore, fstore, astore
+            | 0x3B..=0x3E // istore_*
+            | 0x43..=0x46 // fstore_*
+            | 0x4B..=0x4E // astore_*
+            => -1,
+            0x37 | 0x39 // lstore, dstore
+            | 0x3F..=0x42 // lstore_*
+            | 0x47..=0x4A // dstore_*
+            => -2,
+            // array stores
+            0x4F | 0x51 | 0x53 | 0x54 | 0x55 | 0x56 => -3, // iastore,fastore,aastore,bastore,castore,sastore
+            0x50 | 0x52 => -4,                              // lastore, dastore
+            // stack manipulation
+            0x57 => -1, // pop
+            0x58 => -2, // pop2
+            0x59 => 1,  // dup
+            0x5A => 1,  // dup_x1
+            0x5B => 1,  // dup_x2
+            0x5C => 2,  // dup2
+            0x5D => 2,  // dup2_x1
+            0x5E => 2,  // dup2_x2
+            0x5F => 0,  // swap
+            // arithmetic / logic
+            0x60 | 0x64 | 0x68 | 0x6C | 0x70 // iadd, isub, imul, idiv, irem
+            | 0x62 | 0x66 | 0x6A | 0x6E | 0x72 // fadd..frem
+            | 0x78 | 0x7A | 0x7C | 0x7E | 0x80 | 0x82 // ishl,ishr,iushr,iand,ior,ixor
+            => -1,
+            0x61 | 0x65 | 0x69 | 0x6D | 0x71 // ladd..lrem
+            | 0x63 | 0x67 | 0x6B | 0x6F | 0x73 // dadd..drem
+            | 0x7F | 0x81 | 0x83 // land, lor, lxor
+            => -2,
+            // long/int shifts — int shift amount on top of long value
+            0x79 | 0x7B | 0x7D => -1, // lshl, lshr, lushr
+            // negations
+            0x74..=0x77 => 0, // ineg, lneg, fneg, dneg
+            // iinc
+            0x84 => 0,
+            // type conversions
+            0x85 => 1,  // i2l
+            0x86 => 0,  // i2f
+            0x87 => 1,  // i2d
+            0x88 => -1, // l2i
+            0x89 => -1, // l2f
+            0x8A => 0,  // l2d
+            0x8B => 0,  // f2i
+            0x8C => 1,  // f2l
+            0x8D => 1,  // f2d
+            0x8E => -1, // d2i
+            0x8F => 0,  // d2l
+            0x90 => -1, // d2f
+            0x91..=0x93 => 0, // i2b, i2c, i2s
+            // comparisons
+            0x94 => -3, // lcmp
+            0x95 | 0x96 => -1, // fcmpl, fcmpg
+            0x97 | 0x98 => -3, // dcmpl, dcmpg
+            // ifs
+            0x99..=0x9E => -1, // ifeq..ifle
+            0x9F..=0xA4 => -2, // if_icmpeq..if_icmple
+            0xA5 | 0xA6 => -2, // if_acmpeq, if_acmpne
+            0xA7 => 0,         // goto
+            0xA8 => 1,         // jsr
+            0xA9 => 0,         // ret
+            0xAA | 0xAB => -1, // tableswitch, lookupswitch
+            // returns
+            0xAC | 0xAE | 0xB0 => -1, // ireturn, freturn, areturn
+            0xAD | 0xAF => -2,         // lreturn, dreturn
+            0xB1 => 0,                  // return
+            // field/method ops — descriptor-driven
+            0xB2 => {
+                // getstatic: push field
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                field_size_from_cp(cp, idx)
+            }
+            0xB3 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                -field_size_from_cp(cp, idx)
+            }
+            0xB4 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                field_size_from_cp(cp, idx) - 1
+            }
+            0xB5 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                -field_size_from_cp(cp, idx) - 1
+            }
+            0xB6 | 0xB7 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                method_stack_delta_from_cp(cp, idx) - 1
+            }
+            0xB8 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                method_stack_delta_from_cp(cp, idx)
+            }
+            0xB9 => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                method_stack_delta_from_cp(cp, idx) - 1
+            }
+            0xBA => {
+                let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                method_stack_delta_from_cp(cp, idx)
+            }
+            0xBC | 0xBD => 0,
+            0xBE => 0,
+            0xBF => -1,
+            0xC0 | 0xC1 => 0,
+            0xC2 | 0xC3 => -1,
+            0xC4 => 0, // wide — handled at function head
+            0xC5 => {
+                let dims = code[off + 3] as i32;
+                -dims + 1
+            }
+            0xC6 | 0xC7 => -1,
+            _ => 0,
+        }
+}
+
+/// Field descriptor → stack-slot count (1 for cat-1, 2 for cat-2).
+fn field_size_from_cp(cp: &ConstantPool, idx: u16) -> i32 {
+    match cp.descriptor_at(idx) {
+        Some(desc) => match desc.chars().next() {
+            Some('J') | Some('D') => 2,
+            _ => 1,
+        },
+        None => 1,
+    }
+}
+
+/// Method descriptor → net stack delta from "args popped, return pushed"
+/// (excluding any receiver pop, which the caller adds for virtual/special/
+/// interface invocations).
+fn method_stack_delta_from_cp(cp: &ConstantPool, idx: u16) -> i32 {
+    let desc = match cp.descriptor_at(idx) {
+        Some(d) => d,
+        None => return 0,
+    };
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut arg_pop = 0;
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'F' | 'I' | 'S' | 'Z' => arg_pop += 1,
+            'J' | 'D' => arg_pop += 2,
+            'L' => {
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                arg_pop += 1;
+            }
+            '[' => {
+                while let Some(&n) = chars.peek() {
+                    if n == '[' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(n) = chars.next() {
+                    if n == 'L' {
+                        for sc in chars.by_ref() {
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    }
+                }
+                arg_pop += 1;
+            }
+            _ => {}
+        }
+    }
+    let ret = desc.split(')').nth(1).unwrap_or("");
+    let ret_push = match ret.chars().next() {
+        Some('V') | None => 0,
+        Some('J') | Some('D') => 2,
+        _ => 1,
+    };
+    ret_push - arg_pop
+}
+
 /// Peephole optimization: remove adjacent `Xstore_N; Xload_N` pairs from
 /// bytecode. The net effect of storing a value and immediately loading it
 /// back is a no-op (value remains on stack). This matches kotlinc's code
@@ -10995,7 +11368,7 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
 /// the bytecode tail uniformly so relative offsets in branch
 /// instructions remain correct; only absolute positions tracked in
 /// `cmp_targets` need to be adjusted.
-fn peephole_elide_head_store_load(code: &mut Vec<u8>, cmp_targets: &mut Vec<CmpBranchTarget>) {
+fn peephole_elide_head_store_load(code: &mut Vec<u8>, cmp_targets: &mut [CmpBranchTarget]) {
     loop {
         // The earliest position any branch source/target lives at.
         let first_branch_pos = cmp_targets
@@ -11106,8 +11479,123 @@ fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
     // (e.g., `println(literal)` where receiver is pushed after the arg).
     peephole_swap_pattern(code, named_slots);
 
-    // Third pass: cancel adjacent `swap; swap` pairs (each is a no-op).
+    // Third pass: elide `istore_N ; <RHS> ; iload_N ; swap ; <op>` when slot
+    // N is dead afterward, not named, and <RHS> doesn't touch N. The LHS
+    // value (already on stack before istore_N) stays on the stack; <RHS>
+    // pushes its value; <op> consumes the pair. Same final state as kotlinc's
+    // emission `<lhs> ; <rhs> ; <op>`.
+    peephole_elide_lhs_save_swap(code, named_slots);
+
+    // Fourth pass: cancel adjacent `swap; swap` pairs (each is a no-op).
     peephole_cancel_double_swap(code);
+}
+
+/// Peephole: elide `istore_N ; <RHS> ; iload_N ; swap ; <op>` →  `<RHS> ; <op>`
+/// when slot N is dead afterward, not named, and the <RHS> bytecode is a "tame"
+/// sequence (no stack manipulation, no slot-N references, no branches).
+///
+/// This pattern arises from BinOp lowering when both LHS and RHS are
+/// invoke-results: `<lhs invoke> istore_N <rhs invoke> iload_N swap <op>`.
+/// The simple swap_pattern peephole handles only single-instruction RHS;
+/// this one handles the multi-instruction case (e.g., `aload_0;
+/// invokevirtual getSecond`).
+fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
+    loop {
+        let mut applied: Option<(usize, usize, usize, usize)> = None;
+        // (istore_pos, store_len, iload_pos, load_len)
+        let mut i = 0;
+        while i < code.len() {
+            let (slot, store_len, is_int) = match decode_astore_slot(code, i) {
+                Some(s) => s,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            // Only int stores (the swap pattern uses int values; reference
+            // BinOps don't use this pattern). Only non-named slots.
+            if !is_int || named_slots.contains(&slot) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Walk forward, tracking that the RHS bytes are tame, until we
+            // find iload_N or hit an instruction that bars elision.
+            let rhs_start = i + store_len;
+            let mut j = rhs_start;
+            let mut iload_at: Option<(usize, usize)> = None;
+            while j < code.len() {
+                let op = code[j];
+                // Reject branches, returns, throws, switches, jsr/ret.
+                if (0x99..=0xA8).contains(&op)
+                    || matches!(op, 0xC6 | 0xC7 | 0xAA | 0xAB | 0xA9)
+                    || matches!(op, 0xAC..=0xB1 | 0xBF)
+                {
+                    break;
+                }
+                // Reject stack-manipulation ops (would invalidate our
+                // assumption that <RHS>'s effect is independent of the
+                // [lhs] value sitting deeper on the stack).
+                if matches!(op, 0x57..=0x5E) {
+                    // pop, pop2, dup, dup_x1, dup_x2, dup2, dup2_x1, dup2_x2
+                    break;
+                }
+                // Reject explicit swap inside <RHS>: ambiguous.
+                if op == 0x5F {
+                    break;
+                }
+                // Slot-N references in <RHS>: bar elision.
+                if let Some((s, _, _)) = decode_astore_slot(code, j) {
+                    if s == slot {
+                        break;
+                    }
+                }
+                if decode_aload_of_slot(code, j, slot, true).is_some() {
+                    // Found iload_N: candidate for end-of-RHS.
+                    let load_len = decode_aload_of_slot(code, j, slot, true).unwrap();
+                    iload_at = Some((j, load_len));
+                    break;
+                }
+                if decode_aload_of_slot(code, j, slot, false).is_some() {
+                    // aload of same slot index but reference type — would
+                    // alias slot reuse; bar elision.
+                    break;
+                }
+                // iinc on slot N is also a touch.
+                if op == 0x84 && j + 1 < code.len() && code[j + 1] == slot {
+                    break;
+                }
+                j += instruction_len(code, j);
+            }
+            if let Some((iload_pos, load_len)) = iload_at {
+                let after_load = iload_pos + load_len;
+                if after_load < code.len() && code[after_load] == 0x5F {
+                    let after_swap = after_load + 1;
+                    if after_swap < code.len() {
+                        let consume_op = code[after_swap];
+                        // Allow arithmetic (0x60..=0x83) and invokestatic.
+                        let allowed = (0x60..=0x83).contains(&consume_op) || consume_op == 0xB8;
+                        // Verify slot is dead after the swap.
+                        let dead_after = !slot_loaded_elsewhere(code, slot, after_swap);
+                        if allowed && dead_after {
+                            applied = Some((i, store_len, iload_pos, load_len));
+                            break;
+                        }
+                    }
+                }
+            }
+            i += instruction_len(code, i);
+        }
+
+        if let Some((istore_pos, store_len, iload_pos, load_len)) = applied {
+            // Remove iload_N and swap (1 byte) first to keep istore offset
+            // valid. iload at iload_pos for load_len bytes; swap immediately
+            // after (1 byte).
+            code.drain(iload_pos..iload_pos + load_len + 1);
+            code.drain(istore_pos..istore_pos + store_len);
+        } else {
+            break;
+        }
+    }
 }
 
 /// Remove pairs of consecutive `swap` opcodes (0x5F). Two swaps in a row
@@ -11899,7 +12387,7 @@ fn rewrite_compact(code: &mut [u8], pos: usize, base: u8, map: &FxHashMap<u8, u8
 /// positions are updated.
 fn compress_to_compact_forms_with_branches(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
 ) {
     let mut i = 0;
     while i < code.len() {

@@ -20,28 +20,32 @@ method        main ()V 0x0019
     0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0020 swap
     0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0024 ldc "Count: "
-    0026 iload_1
-    0027 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0030 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 swap
-    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0040 ldc "Result: "
-    0042 iload_1
-    0043 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0046 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0049 op_0xBA
-    0050 nop
-    0051 op_0x34
-    0052 nop
-    0053 nop
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 swap
-    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0061 return
+    0024 iload_1
+    0025 op_0xBA
+    0026 nop
+    0027 dload_3
+    0028 nop
+    0029 nop
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 iload_1
+    0038 op_0xBA
+    0039 nop
+    0040 aload_2
+    0041 nop
+    0042 nop
+    0043 op_0xBA
+    0044 nop
+    0045 op_0x2F
+    0046 nop
+    0047 nop
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 swap
+    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0055 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (20 bytes)
+class_attr    BootstrapMethods (32 bytes)

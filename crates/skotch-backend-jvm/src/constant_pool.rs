@@ -194,6 +194,35 @@ impl ConstantPool {
         (self.entries.len() + 1) as u16
     }
 
+    /// Look up the JVM method/field descriptor string at constant-pool index
+    /// `idx`. Resolves Fieldref / Methodref / InterfaceMethodref /
+    /// InvokeDynamic by following the NameAndType pointer to the descriptor
+    /// Utf8 entry. Returns `None` if the index doesn't resolve to a member
+    /// reference or the chain is malformed.
+    pub fn descriptor_at(&self, idx: u16) -> Option<&str> {
+        if idx == 0 {
+            return None;
+        }
+        let entry = self.entries.get((idx - 1) as usize)?;
+        let nt_idx = match entry {
+            Entry::Fieldref(_, nt)
+            | Entry::Methodref(_, nt)
+            | Entry::InterfaceMethodref(_, nt)
+            | Entry::InvokeDynamic(_, nt) => *nt,
+            _ => return None,
+        };
+        let nt = self.entries.get((nt_idx - 1) as usize)?;
+        let desc_idx = match nt {
+            Entry::NameAndType(_, d) => *d,
+            _ => return None,
+        };
+        let desc = self.entries.get((desc_idx - 1) as usize)?;
+        match desc {
+            Entry::Utf8(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
     pub fn write_to(&self, out: &mut Vec<u8>) {
         for entry in &self.entries {
             match entry {

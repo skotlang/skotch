@@ -3212,6 +3212,7 @@ fn lower_function(
         let saved_suspend = module.functions[fn_idx].is_suspend;
         let saved_inline = module.functions[fn_idx].is_inline;
         let saved_annotations = module.functions[fn_idx].annotations.clone();
+        let saved_has_type_params = module.functions[fn_idx].has_type_params;
         module.functions[fn_idx] = fb.finish();
         module.functions[fn_idx].param_defaults = saved_defaults;
         module.functions[fn_idx].required_params = saved_required;
@@ -3220,6 +3221,7 @@ fn lower_function(
         module.functions[fn_idx].is_suspend = saved_suspend;
         module.functions[fn_idx].is_inline = saved_inline;
         module.functions[fn_idx].annotations = saved_annotations;
+        module.functions[fn_idx].has_type_params = saved_has_type_params;
     } else {
         module.functions[fn_idx] = MirFunction {
             id: FuncId(fn_idx as u32),
@@ -11164,11 +11166,73 @@ fn lower_expr(
                 return Some(dest);
             }
 
-            // Lower string template to a chain of ConcatStr operations
-            // (kept for the LLVM/native backend, which doesn't yet
-            // implement makeConcatWithConstants). The JVM-specific
-            // `println(template)` shortcut higher up uses the JDK-9
-            // invokedynamic intrinsic directly when applicable.
+            // Try makeConcatWithConstants for the entire template
+            // first. kotlinc collapses every Kotlin string-template
+            // into a single `invokedynamic makeConcatWithConstants`
+            // (JDK 9+). Build a recipe with `\u{1}` placeholders for
+            // dynamic parts and gather the runtime args. Falls back to
+            // a chain of ConcatStr ops when the recipe contains the
+            // reserved bytes the JVM uses internally.
+            {
+                let mut recipe = String::new();
+                let mut dyn_args: Vec<LocalId> = Vec::new();
+                let mut recipe_safe = true;
+                for part in parts {
+                    match part {
+                        skotch_syntax::TemplatePart::Text(s, _) => {
+                            if s.contains('\u{1}') || s.contains('\u{2}') {
+                                recipe_safe = false;
+                                break;
+                            }
+                            recipe.push_str(s);
+                        }
+                        skotch_syntax::TemplatePart::Expr(e) => {
+                            let id = lower_expr(
+                                e,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            recipe.push('\u{1}');
+                            dyn_args.push(id);
+                        }
+                        skotch_syntax::TemplatePart::IdentRef(sym, _) => {
+                            let Some(local) =
+                                scope.iter().rev().find(|(s, _)| s == sym).map(|(_, l)| *l)
+                            else {
+                                recipe_safe = false;
+                                break;
+                            };
+                            recipe.push('\u{1}');
+                            dyn_args.push(local);
+                        }
+                    }
+                }
+                if recipe_safe && !dyn_args.is_empty() {
+                    let mut descriptor = String::from("(");
+                    for a in &dyn_args {
+                        let ty = &fb.mf.locals[a.0 as usize];
+                        descriptor.push_str(&jvm_type_string_for_ty(ty));
+                    }
+                    descriptor.push_str(")Ljava/lang/String;");
+                    let dest = fb.new_local(Ty::String);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::MakeConcatWithConstants { recipe, descriptor },
+                            args: dyn_args,
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
+
+            // Fallback: chain of ConcatStr operations.
             let mut result: Option<LocalId> = None;
             for part in parts {
                 let part_local = lower_template_part(

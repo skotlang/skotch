@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=5
     0000 ldc "World"
     0002 astore_0
     0003 aload_0
@@ -11,41 +11,30 @@ method        main ()V 0x0019
     0005 nop
     0006 iload 0
     0008 nop
-    0009 op_0xBA
-    0010 nop
-    0011 dload 0
-    0013 nop
-    0014 astore_1
-    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 aload_1
-    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0022 bipush 7
-    0024 istore_2
-    0025 ldc "x="
-    0027 iload_2
-    0028 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0031 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0034 op_0xBA
-    0035 nop
-    0036 op_0x32
-    0037 nop
-    0038 nop
-    0039 astore_3
-    0040 iload_2
-    0041 iload_2
-    0042 imul
-    0043 istore 4
-    0045 aload_3
-    0046 iload 4
-    0048 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0051 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0054 astore 5
-    0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0059 aload 5
-    0061 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0064 return
+    0009 astore_1
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 aload_1
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 bipush 7
+    0019 istore_2
+    0020 iload_2
+    0021 iload_2
+    0022 imul
+    0023 istore_3
+    0024 iload_2
+    0025 iload_3
+    0026 op_0xBA
+    0027 nop
+    0028 dload_0
+    0029 nop
+    0030 nop
+    0031 astore 4
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 aload 4
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (20 bytes)
+class_attr    BootstrapMethods (14 bytes)

@@ -22,29 +22,28 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safeDivide (II)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=7
     0000 goto 3
     0003 iload_0
     0004 iload_1
     0005 idiv
     0006 istore_2
-    0007 ldc "Result: "
-    0009 astore_3
-    0010 aload_3
-    0011 iload_2
-    0012 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0015 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0018 astore 4
-    0020 aload 4
-    0022 astore 5
-    0024 goto 40
-    0027 astore 6
-    0029 ldc "Error"
-    0031 astore 7
-    0033 aload 7
-    0035 astore 5
-    0037 goto 40
-    0040 aload 5
-    0042 areturn
-    sub_attr  StackMapTable (30 bytes)
+    0007 iload_2
+    0008 op_0xBA
+    0009 nop
+    0010 ldc_w #0
+    0013 astore_3
+    0014 aload_3
+    0015 astore 4
+    0017 goto 33
+    0020 astore 5
+    0022 ldc "Error"
+    0024 astore 6
+    0026 aload 6
+    0028 astore 4
+    0030 goto 33
+    0033 aload 4
+    0035 areturn
+    sub_attr  StackMapTable (23 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)
