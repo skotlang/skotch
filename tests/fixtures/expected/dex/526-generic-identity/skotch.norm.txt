@@ -1,7 +1,7 @@
 dex_version   035
-strings       18
+strings       19
 types         8
-methods       5
+methods       6
 classes       1
 
 --- strings ---
@@ -14,6 +14,7 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "V"
+  "VI"
   "VL"
   "[Ljava/lang/String;"
   "hello"
@@ -38,6 +39,7 @@ classes       1
   LInputKt;.identity(Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
   Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
   Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
 

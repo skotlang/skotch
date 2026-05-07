@@ -408,6 +408,7 @@ mod tests {
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            default_call_masks: Vec::new(),
         }
     }
 

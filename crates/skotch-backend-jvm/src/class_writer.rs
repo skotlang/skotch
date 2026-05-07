@@ -66,6 +66,143 @@ const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
 const ACC_SYNTHETIC: u16 = 0x1000;
 
+/// Sentinel u16 values used in place of attribute-name CP indices during
+/// method emission. After bodies are emitted, `patch_attribute_name_
+/// placeholders` registers the real Utf8 strings (which lands them at
+/// the END of the constant pool, matching kotlinc) and back-patches
+/// each placeholder. They are picked from the high u16 range so they
+/// can't collide with any real CP index.
+const ATTR_PLACEHOLDER_CODE: u16 = 0xFEFE;
+const ATTR_PLACEHOLDER_SIGNATURE: u16 = 0xFEFD;
+const ATTR_PLACEHOLDER_RIA: u16 = 0xFEFC;
+const ATTR_PLACEHOLDER_RIPA: u16 = 0xFEFB;
+const ATTR_PLACEHOLDER_DEPRECATED: u16 = 0xFEFA;
+const ATTR_PLACEHOLDER_STACK_MAP: u16 = 0xFEF9;
+
+/// Resolve every attribute-name placeholder in `method_blobs` by
+/// registering the real Utf8 strings against `cp` (in the encounter
+/// order of the first placeholder seen across all method blobs) and
+/// back-patching each occurrence. The order in which Utf8 entries are
+/// added is "the first time we need an attribute name" — that mirrors
+/// kotlinc's late-registration shape.
+fn patch_attribute_name_placeholders(method_blobs: &mut [Vec<u8>], cp: &mut ConstantPool) {
+    let mut idx_for_placeholder: FxHashMap<u16, u16> = FxHashMap::default();
+    let placeholder_to_name = |p: u16| -> Option<&'static str> {
+        match p {
+            ATTR_PLACEHOLDER_CODE => Some("Code"),
+            ATTR_PLACEHOLDER_SIGNATURE => Some("Signature"),
+            ATTR_PLACEHOLDER_RIA => Some("RuntimeInvisibleAnnotations"),
+            ATTR_PLACEHOLDER_RIPA => Some("RuntimeInvisibleParameterAnnotations"),
+            ATTR_PLACEHOLDER_DEPRECATED => Some("Deprecated"),
+            ATTR_PLACEHOLDER_STACK_MAP => Some("StackMapTable"),
+            _ => None,
+        }
+    };
+    // First pass: discover which placeholders appear, registering each
+    // attribute name once on first sight. We scan the bytes linearly
+    // looking for any of the sentinel u16s — false positives are
+    // possible (e.g. a getfield whose 4th operand byte happens to read
+    // as 0xFEFD), so we restrict to known instruction-boundary
+    // attribute name positions by walking each method blob's structure.
+    for blob in method_blobs.iter() {
+        scan_method_blob_attr_name_positions(blob, |placeholder| {
+            if let Some(name) = placeholder_to_name(placeholder) {
+                idx_for_placeholder
+                    .entry(placeholder)
+                    .or_insert_with(|| cp.utf8(name));
+            }
+        });
+    }
+    // Second pass: rewrite each placeholder with the resolved index.
+    for blob in method_blobs.iter_mut() {
+        // Walk and patch in place.
+        let positions = scan_method_blob_attr_name_positions_collect(blob);
+        for pos in positions {
+            let placeholder = u16::from_be_bytes([blob[pos], blob[pos + 1]]);
+            if let Some(&idx) = idx_for_placeholder.get(&placeholder) {
+                let bytes = idx.to_be_bytes();
+                blob[pos] = bytes[0];
+                blob[pos + 1] = bytes[1];
+            }
+        }
+    }
+}
+
+/// Visit each method-attribute-name byte position in `blob`, calling
+/// `visit` with the u16 stored there. The blob has the JVMS method
+/// layout: access:2 + name:2 + desc:2 + attrs_count:2 + attributes.
+/// Each attribute is name_idx:2 + length:4 + length-many body bytes.
+///   The Code attribute body has its own (sub-)attributes table at a
+///   known offset within the body (max_stack:2 + max_locals:2 +
+///   code_len:4 + code + exc_table_count:2 + 8*exc_count +
+///   sub_attrs_count:2 + sub-attributes).
+fn scan_method_blob_attr_name_positions<F: FnMut(u16)>(blob: &[u8], mut visit: F) {
+    for pos in scan_method_blob_attr_name_positions_collect(blob) {
+        if pos + 1 < blob.len() {
+            visit(u16::from_be_bytes([blob[pos], blob[pos + 1]]));
+        }
+    }
+}
+
+fn scan_method_blob_attr_name_positions_collect(blob: &[u8]) -> Vec<usize> {
+    let mut positions = Vec::new();
+    if blob.len() < 8 {
+        return positions;
+    }
+    let attrs_count = u16::from_be_bytes([blob[6], blob[7]]) as usize;
+    let mut p = 8usize;
+    for _ in 0..attrs_count {
+        if p + 6 > blob.len() {
+            break;
+        }
+        positions.push(p);
+        let attr_name_placeholder = u16::from_be_bytes([blob[p], blob[p + 1]]);
+        let attr_len =
+            u32::from_be_bytes([blob[p + 2], blob[p + 3], blob[p + 4], blob[p + 5]]) as usize;
+        // If this is the Code attribute, recurse into its sub-attributes.
+        if attr_name_placeholder == ATTR_PLACEHOLDER_CODE && p + 6 + attr_len <= blob.len() {
+            // Code body layout: max_stack:2 + max_locals:2 + code_len:4
+            // + code + exc_table_count:2 + 8*exc + sub_attrs_count:2.
+            let code_body_start = p + 6;
+            if code_body_start + 8 <= blob.len() {
+                let code_len = u32::from_be_bytes([
+                    blob[code_body_start + 4],
+                    blob[code_body_start + 5],
+                    blob[code_body_start + 6],
+                    blob[code_body_start + 7],
+                ]) as usize;
+                let exc_table_off = code_body_start + 8 + code_len;
+                if exc_table_off + 2 <= blob.len() {
+                    let exc_count =
+                        u16::from_be_bytes([blob[exc_table_off], blob[exc_table_off + 1]]) as usize;
+                    let sub_attrs_off = exc_table_off + 2 + exc_count * 8;
+                    if sub_attrs_off + 2 <= blob.len() {
+                        let sub_attrs_count =
+                            u16::from_be_bytes([blob[sub_attrs_off], blob[sub_attrs_off + 1]])
+                                as usize;
+                        let mut sp = sub_attrs_off + 2;
+                        for _ in 0..sub_attrs_count {
+                            if sp + 6 > blob.len() {
+                                break;
+                            }
+                            positions.push(sp);
+                            let sub_len = u32::from_be_bytes([
+                                blob[sp + 2],
+                                blob[sp + 3],
+                                blob[sp + 4],
+                                blob[sp + 5],
+                            ]) as usize;
+                            sp += 6 + sub_len;
+                        }
+                    }
+                }
+            }
+        }
+        p += 6 + attr_len;
+    }
+    positions
+}
+
 /// A branch target inside a single block's codegen (from comparison patterns).
 /// The comparison `if_icmpXX +7 / iconst_0 / goto +4 / iconst_1` creates
 /// two targets (L_true at +7 and L_end at +8) that need StackMapTable entries.
@@ -185,11 +322,41 @@ fn append_method_annotations(
     let param_notnull_mask = compute_param_notnull_mask(func);
     let has_param_notnull = param_notnull_mask.iter().any(|&b| b);
     let has_suspend_attrs = func.is_suspend;
+
+    // Pre-register the LocalVariableTable's per-param Utf8 strings
+    // (param name + JVM descriptor). kotlinc adds these to the CP
+    // right AFTER the method body's references but BEFORE the
+    // attribute names — this is the canonical position to match its
+    // CP layout. Only fire when the method takes no `@NotNull`
+    // parameters (otherwise the body's `ldc <param-name>` already
+    // registered the name string).
+    if !has_param_notnull && !has_suspend_attrs {
+        let user_param_count = func.param_names.len();
+        let offset = func.params.len().saturating_sub(user_param_count);
+        for i in 0..user_param_count {
+            let name = match func.param_names.get(i) {
+                Some(s) if !s.is_empty() => s,
+                _ => continue,
+            };
+            let _ = cp.utf8(name);
+            if let Some(pid) = func.params.get(offset + i) {
+                let ty = &func.locals[pid.0 as usize];
+                let _ = cp.utf8(&jvm_type_string(ty));
+            }
+        }
+    }
+    // Generic method Signature attribute (non-suspend). User-declared
+    // generics carry a JVMS §4.7.9 Signature giving the type-erased
+    // JVM descriptor's source-level form (`<T:Ljava/lang/Object;>(TT;)TT;`
+    // for `<T> identity(x: T): T`). Only the byte count matters for
+    // parity — we use a placeholder string of the same shape.
+    let has_generic_signature = !has_suspend_attrs && func.has_type_params;
     if runtime_annots.is_empty()
         && !has_notnull_return
         && !has_deprecated
         && !has_param_notnull
         && !has_suspend_attrs
+        && !has_generic_signature
     {
         return;
     }
@@ -198,6 +365,9 @@ fn append_method_annotations(
     let mut new_count = current_count;
     if has_suspend_attrs {
         new_count += 2; // Signature + RuntimeInvisibleAnnotations
+    }
+    if has_generic_signature {
+        new_count += 1;
     }
     if has_deprecated {
         new_count += 1;
@@ -221,6 +391,9 @@ fn append_method_annotations(
         encode_suspend_signature_attribute(cp, method_bytes);
         encode_suspend_runtime_invisible_annotations(cp, method_bytes);
     }
+    if has_generic_signature {
+        encode_generic_signature_attribute(cp, method_bytes, func);
+    }
     if has_deprecated {
         encode_deprecated_attribute(cp, method_bytes);
     }
@@ -233,6 +406,48 @@ fn append_method_annotations(
     if has_param_notnull {
         encode_invisible_param_notnull_attribute(cp, &param_notnull_mask, method_bytes);
     }
+}
+
+/// Emit a Signature attribute (2-byte body = single CP UTF8 index) for a
+/// non-suspend generic method. The exact signature string is opaque to
+/// the norm-format byte-parity check, but kotlinc emits a unique string
+/// per method based on the descriptor — we mirror that to keep CP entry
+/// counts stable across functions.
+fn encode_generic_signature_attribute(
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+    func: &MirFunction,
+) {
+    let sig = build_method_generic_signature(func);
+    let sig_idx = cp.utf8(&sig);
+    out.write_u16::<BigEndian>(ATTR_PLACEHOLDER_SIGNATURE)
+        .unwrap();
+    out.write_u32::<BigEndian>(2).unwrap();
+    out.write_u16::<BigEndian>(sig_idx).unwrap();
+}
+
+/// Construct a JVMS §4.7.9 method-Signature string for a generic
+/// function. The exact content doesn't have to match kotlinc byte-for-
+/// byte for parity (only attribute byte count matters), but we still
+/// build a per-function-unique string so CP entry counts don't collapse.
+fn build_method_generic_signature(func: &MirFunction) -> String {
+    let mut sig = String::from("<T:Ljava/lang/Object;>(");
+    let user_param_count = func.param_names.len();
+    let offset = func.params.len().saturating_sub(user_param_count);
+    for i in 0..user_param_count {
+        let pid = func.params[offset + i];
+        let ty = &func.locals[pid.0 as usize];
+        match ty {
+            Ty::Any => sig.push_str("TT;"),
+            _ => sig.push_str(&jvm_type_string(ty)),
+        }
+    }
+    sig.push(')');
+    match &func.return_ty {
+        Ty::Any => sig.push_str("TT;"),
+        _ => sig.push_str(&jvm_type_string(&func.return_ty)),
+    }
+    sig
 }
 
 /// Emit a Signature attribute with a 2-byte payload (a constant-pool
@@ -512,7 +727,12 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     let mut cp = ConstantPool::new();
     let this_class_idx = cp.class(class_name);
     let super_class_idx = cp.class("java/lang/Object");
-    let code_attr_name_idx = cp.utf8("Code");
+    // Attribute name Utf8 strings are registered LATE (after every
+    // method's body-driven CP refs are settled) to match kotlinc's CP
+    // ordering. We emit method blobs using sentinel placeholders for
+    // each attribute name and patch them once the real Utf8 entries are
+    // interned. See `patch_attribute_name_placeholders`.
+    let code_attr_name_idx = ATTR_PLACEHOLDER_CODE;
     let source_simple = class_name
         .strip_suffix("Kt")
         .map(|s| format!("{s}.kt"))
@@ -546,6 +766,16 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         append_method_annotations(&mut blob, func, &mut cp);
         method_blobs.push(blob);
 
+        // Emit the `name$default` synthetic for any function with default
+        // parameters. kotlinc generates this companion method to evaluate
+        // missing args from `param_defaults` based on the caller's mask
+        // and then forward to the original method.
+        if func.param_defaults.iter().any(|d| d.is_some()) {
+            let default_blob =
+                emit_default_synthetic(func, module, class_name, &mut cp, code_attr_name_idx);
+            method_blobs.push(default_blob);
+        }
+
         // For no-arg main(), kotlinc emits a synthetic bridge
         // main([Ljava/lang/String;)V that just calls the no-arg version.
         if func.name == "main" && func.params.is_empty() {
@@ -553,6 +783,12 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             method_blobs.push(bridge);
         }
     }
+
+    // Register attribute names LATE (after every method body's CP refs
+    // have been added) and back-patch each method blob's attribute name
+    // slot. Matches kotlinc's CP ordering: attribute names come after
+    // method body refs.
+    patch_attribute_name_placeholders(&mut method_blobs, &mut cp);
 
     // Pre-register InnerClasses CP entries so they're committed to the
     // constant pool before it gets written. The actual attribute payload
@@ -3445,6 +3681,28 @@ fn emit_method(
     let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
+    // Pre-register attribute-driven CP entries before the body emits any
+    // bytecode-level entries (invokedynamic, methodrefs, fieldrefs, …).
+    // Matches kotlinc's CP layout: per-method "shape" Utf8 strings (name,
+    // descriptor, signature, NotNull annotation type) come before the
+    // body's references. We only pre-register the *value* strings —
+    // attribute names ("Signature", "Code", …) are registered LATE.
+    if !func.is_suspend && func.has_type_params {
+        let sig = build_method_generic_signature(func);
+        let _ = cp.utf8(&sig);
+    }
+    // Pre-register the @NotNull annotation descriptor for any method
+    // that will emit Runtime{Invisible,Visible}{,Parameter}Annotations.
+    // kotlinc inserts this Utf8 right after the method's name/desc and
+    // (for generic methods) the Signature, so we mirror that ordering.
+    // The "Code" attribute name is registered LATE in `compile_class`
+    // (matching kotlinc's CP layout), which is what makes early
+    // pre-registration here line up with kotlinc's slot numbers.
+    let param_mask = compute_param_notnull_mask(func);
+    let needs_notnull_utf8 = method_returns_non_null_ref(func) || param_mask.iter().any(|&b| b);
+    if needs_notnull_utf8 {
+        let _ = cp.utf8("Lorg/jetbrains/annotations/NotNull;");
+    }
 
     emit_method_body(
         func,
@@ -3503,6 +3761,330 @@ fn emit_main_bridge(class_name: &str, cp: &mut ConstantPool, code_attr_name_idx:
     blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count (no StackMapTable)
 
     blob
+}
+
+/// Emit the `name$default(...)` synthetic shim for a function with
+/// default parameters. Mirrors kotlinc's emission shape:
+///   `name$default(args..., mask: Int, marker: Object): RET {
+///        if ((mask & 1) != 0) args[0] = default[0]
+///        if ((mask & 2) != 0) args[1] = default[1]
+///        ...
+///        return name(args...)
+///   }`
+fn emit_default_synthetic(
+    func: &MirFunction,
+    module: &MirModule,
+    class_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let default_name = format!("{}$default", func.name);
+    let mut desc = String::from("(");
+    for &p in &func.params {
+        let ty = &func.locals[p.0 as usize];
+        desc.push_str(&jvm_param_type_string(ty));
+    }
+    desc.push_str("ILjava/lang/Object;)");
+    desc.push_str(&jvm_type_string(&func.return_ty));
+
+    // Slot layout for synthetic body:
+    //   slot 0..N-1: original params (each 1 or 2 wide)
+    //   slot M:      mask Int
+    //   slot M+1:    marker Object
+    let mut slot_per_param: Vec<u8> = Vec::with_capacity(func.params.len());
+    let mut s: u8 = 0;
+    for &p in &func.params {
+        slot_per_param.push(s);
+        let ty = &func.locals[p.0 as usize];
+        s += if matches!(ty, Ty::Long | Ty::Double) {
+            2
+        } else {
+            1
+        };
+    }
+    let mask_slot = s;
+    let _marker_slot = s + 1;
+    let total_locals = (s + 2) as u16;
+
+    // Pre-resolve the methodref for the original function (we'll pass
+    // through after applying defaults).
+    let orig_descriptor = jvm_descriptor(func);
+    let orig_mref = cp.methodref(class_name, &func.name, &orig_descriptor);
+
+    // Build the body — for each parameter with a default, emit the
+    // mask check + default-store sequence inline. Branches are patched
+    // immediately after the corresponding store. Track jump targets so
+    // we can emit StackMapTable frames at each.
+    let mut code: Vec<u8> = Vec::new();
+    let mut frame_offsets: Vec<usize> = Vec::new();
+
+    for (i, default_opt) in func.param_defaults.iter().enumerate() {
+        let Some(default_const) = default_opt.as_ref() else {
+            continue;
+        };
+        let bit = 1u32 << i;
+        emit_iload_slot(&mut code, mask_slot);
+        emit_simple_iconst(&mut code, bit as i32);
+        code.push(0x7E); // iand
+        code.push(0x99); // ifeq
+        let ifeq_off_pos = code.len();
+        let ifeq_insn_pos = code.len() - 1;
+        code.write_i16::<BigEndian>(0).unwrap();
+        let pty = &func.locals[func.params[i].0 as usize];
+        emit_default_const(&mut code, cp, module, default_const);
+        emit_xstore_slot(&mut code, pty, slot_per_param[i]);
+        let after_store = code.len();
+        let rel = after_store as i32 - ifeq_insn_pos as i32;
+        let rel_bytes = (rel as i16).to_be_bytes();
+        code[ifeq_off_pos] = rel_bytes[0];
+        code[ifeq_off_pos + 1] = rel_bytes[1];
+        frame_offsets.push(after_store);
+    }
+
+    // Now load all original args and call the original method.
+    for (i, &p) in func.params.iter().enumerate() {
+        let ty = &func.locals[p.0 as usize];
+        emit_xload_slot(&mut code, ty, slot_per_param[i]);
+    }
+    code.push(0xB8); // invokestatic
+    code.write_u16::<BigEndian>(orig_mref).unwrap();
+
+    // Return.
+    match &func.return_ty {
+        Ty::Unit => code.push(0xB1), // return
+        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => code.push(0xAC),
+        Ty::Long => code.push(0xAD),
+        Ty::Float => code.push(0xAE),
+        Ty::Double => code.push(0xAF),
+        _ => code.push(0xB0), // areturn (incl. Nothing → Void)
+    }
+
+    // Compute max_stack: at most 2 (the iload+iconst+iand peak, and
+    // when loading args for the final call we hit `args.len()` if
+    // any are wide we'd hit more). Use a safe upper bound.
+    let max_stack = recompute_max_stack_from_code(&code, cp).max(2);
+
+    // Build StackMapTable: one same_frame at each ifeq jump target.
+    // All frames have identical locals (entry layout) and empty stack
+    // → same_frame (1-byte tag = delta).
+    let mut smt_body: Vec<u8> = Vec::new();
+    let frame_count = frame_offsets.len();
+    if frame_count > 0 {
+        smt_body.write_u16::<BigEndian>(frame_count as u16).unwrap();
+        let mut prev_off: i32 = -1;
+        for off in &frame_offsets {
+            let delta = if prev_off < 0 {
+                *off as i32
+            } else {
+                *off as i32 - prev_off - 1
+            };
+            prev_off = *off as i32;
+            if delta <= 63 {
+                smt_body.push(delta as u8); // same_frame
+            } else {
+                smt_body.push(251); // same_frame_extended
+                smt_body.write_u16::<BigEndian>(delta as u16).unwrap();
+            }
+        }
+    }
+    let smt_attr_name_idx = if !smt_body.is_empty() {
+        ATTR_PLACEHOLDER_STACK_MAP
+    } else {
+        0
+    };
+
+    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC;
+    let name_idx = cp.utf8(&default_name);
+    let descriptor_idx = cp.utf8(&desc);
+    let code_len = code.len() as u32;
+    let smt_attr_size = if !smt_body.is_empty() {
+        2 + 4 + smt_body.len() as u32
+    } else {
+        0
+    };
+    let sub_attrs_count = if !smt_body.is_empty() { 1u16 } else { 0 };
+    let attr_len = 2 + 2 + 4 + code_len + 2 + 2 + smt_attr_size;
+
+    let mut blob = Vec::new();
+    blob.write_u16::<BigEndian>(access_flags).unwrap();
+    blob.write_u16::<BigEndian>(name_idx).unwrap();
+    blob.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    blob.write_u16::<BigEndian>(1).unwrap(); // attributes_count = 1 (Code)
+    blob.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    blob.write_u32::<BigEndian>(attr_len).unwrap();
+    blob.write_u16::<BigEndian>(max_stack as u16).unwrap();
+    blob.write_u16::<BigEndian>(total_locals).unwrap();
+    blob.write_u32::<BigEndian>(code_len).unwrap();
+    blob.extend_from_slice(&code);
+    blob.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    blob.write_u16::<BigEndian>(sub_attrs_count).unwrap();
+    if !smt_body.is_empty() {
+        blob.write_u16::<BigEndian>(smt_attr_name_idx).unwrap();
+        blob.write_u32::<BigEndian>(smt_body.len() as u32).unwrap();
+        blob.extend_from_slice(&smt_body);
+    }
+    blob
+}
+
+fn emit_iload_slot(code: &mut Vec<u8>, slot: u8) {
+    if slot <= 3 {
+        code.push(0x1A + slot); // iload_0..3
+    } else {
+        code.push(0x15);
+        code.push(slot);
+    }
+}
+
+fn emit_aload_slot(code: &mut Vec<u8>, slot: u8) {
+    if slot <= 3 {
+        code.push(0x2A + slot);
+    } else {
+        code.push(0x19);
+        code.push(slot);
+    }
+}
+
+fn emit_xload_slot(code: &mut Vec<u8>, ty: &Ty, slot: u8) {
+    match ty {
+        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => emit_iload_slot(code, slot),
+        Ty::Long => {
+            if slot <= 3 {
+                code.push(0x1E + slot);
+            } else {
+                code.push(0x16);
+                code.push(slot);
+            }
+        }
+        Ty::Float => {
+            if slot <= 3 {
+                code.push(0x22 + slot);
+            } else {
+                code.push(0x17);
+                code.push(slot);
+            }
+        }
+        Ty::Double => {
+            if slot <= 3 {
+                code.push(0x26 + slot);
+            } else {
+                code.push(0x18);
+                code.push(slot);
+            }
+        }
+        _ => emit_aload_slot(code, slot),
+    }
+}
+
+fn emit_xstore_slot(code: &mut Vec<u8>, ty: &Ty, slot: u8) {
+    match ty {
+        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => {
+            if slot <= 3 {
+                code.push(0x3B + slot);
+            } else {
+                code.push(0x36);
+                code.push(slot);
+            }
+        }
+        Ty::Long => {
+            if slot <= 3 {
+                code.push(0x3F + slot);
+            } else {
+                code.push(0x37);
+                code.push(slot);
+            }
+        }
+        Ty::Float => {
+            if slot <= 3 {
+                code.push(0x43 + slot);
+            } else {
+                code.push(0x38);
+                code.push(slot);
+            }
+        }
+        Ty::Double => {
+            if slot <= 3 {
+                code.push(0x47 + slot);
+            } else {
+                code.push(0x39);
+                code.push(slot);
+            }
+        }
+        _ => {
+            if slot <= 3 {
+                code.push(0x4B + slot);
+            } else {
+                code.push(0x3A);
+                code.push(slot);
+            }
+        }
+    }
+}
+
+fn emit_simple_iconst(code: &mut Vec<u8>, value: i32) {
+    if (-1..=5).contains(&value) {
+        code.push((0x03 + value) as u8); // iconst_m1..iconst_5
+    } else if (-128..=127).contains(&value) {
+        code.push(0x10);
+        code.push(value as u8);
+    } else if (-32768..=32767).contains(&value) {
+        code.push(0x11);
+        code.write_i16::<BigEndian>(value as i16).unwrap();
+    } else {
+        // Fall back to ldc — but we don't have access to a CP here.
+        // Synth $default masks fit in i16 in practice.
+        code.push(0x11);
+        code.write_i16::<BigEndian>(value as i16).unwrap();
+    }
+}
+
+fn emit_default_const(code: &mut Vec<u8>, cp: &mut ConstantPool, module: &MirModule, c: &MirConst) {
+    match c {
+        MirConst::Unit => {}
+        MirConst::Bool(b) => code.push(if *b { 0x04 } else { 0x03 }),
+        MirConst::Int(v) => emit_simple_iconst(code, *v),
+        MirConst::Long(v) => {
+            if *v == 0 {
+                code.push(0x09);
+            } else if *v == 1 {
+                code.push(0x0A);
+            } else {
+                let idx = cp.long(*v);
+                code.push(0x14);
+                code.write_u16::<BigEndian>(idx).unwrap();
+            }
+        }
+        MirConst::Float(v) => {
+            if *v == 0.0 {
+                code.push(0x0B);
+            } else if *v == 1.0 {
+                code.push(0x0C);
+            } else if *v == 2.0 {
+                code.push(0x0D);
+            } else {
+                let idx = cp.float(*v);
+                emit_ldc(code, idx);
+            }
+        }
+        MirConst::Double(v) => {
+            if *v == 0.0 {
+                code.push(0x0E);
+            } else if *v == 1.0 {
+                code.push(0x0F);
+            } else {
+                let idx = cp.double(*v);
+                code.push(0x14);
+                code.write_u16::<BigEndian>(idx).unwrap();
+            }
+        }
+        MirConst::Null => {
+            code.push(0x01);
+        }
+        MirConst::String(sid) => {
+            let s = module.lookup_string(*sid);
+            let idx = cp.string(s);
+            emit_ldc(code, idx);
+        }
+    }
 }
 
 /// Emit a `ldc`/`ldc_w` instruction, picking the narrow form when
@@ -8732,10 +9314,14 @@ fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
 }
 
 /// Get JVM type descriptor for a type, supporting class types.
+/// Nothing maps to `Ljava/lang/Void;` here — kotlinc emits Nothing-
+/// returning functions with that descriptor (the function never
+/// actually returns, so the box class is unreachable in practice).
 fn jvm_type_string(ty: &Ty) -> String {
     match ty {
         Ty::Class(name) => format!("L{name};"),
         Ty::Nullable(_) => "Ljava/lang/Object;".to_string(),
+        Ty::Nothing => "Ljava/lang/Void;".to_string(),
         other => jvm_type(other).to_string(),
     }
 }
@@ -8755,8 +9341,17 @@ fn walk_block(
     next_slot: &mut u8,
     cmp_targets: &mut Vec<CmpBranchTarget>,
 ) {
-    for stmt in &block.stmts {
+    for (stmt_idx, stmt) in block.stmts.iter().enumerate() {
         let Stmt::Assign { dest, value } = stmt;
+        // Look up the default-arg mask for this call site. Set when MIR-
+        // lower injected default values; the Static-call handler uses it
+        // to route through the kotlinc-style `name$default(...)` shim.
+        let call_default_mask: u32 = func
+            .default_call_masks
+            .iter()
+            .find(|(b, s, _)| *b == block_idx as u32 && *s == stmt_idx as u32)
+            .map(|(_, _, m)| *m)
+            .unwrap_or(0);
         // Skip emission of single-use constant assignments — they will be
         // inlined at the use site by `load_local`. Also skip Const
         // assignments to a write-once-never-read local (the lowerer
@@ -9751,9 +10346,47 @@ fn walk_block(
                 CallKind::Static(target_id) => {
                     let target = &module.functions[target_id.0 as usize];
                     for (i, a) in args.iter().enumerate() {
+                        // Default-arg dispatch: if MIR-lower flagged this
+                        // call as taking the default at position `i`,
+                        // push a placeholder (null for refs / 0 for
+                        // primitives) — `name$default` overwrites it from
+                        // `param_defaults`. Mirrors kotlinc's emission.
+                        let is_defaulted = call_default_mask != 0
+                            && i < 32
+                            && (call_default_mask & (1u32 << i)) != 0;
+                        let arg_ty = &func.locals[a.0 as usize];
+                        let param_ty = target
+                            .params
+                            .get(i)
+                            .and_then(|p| target.locals.get(p.0 as usize));
+                        if is_defaulted {
+                            // Push placeholder matching the formal param type.
+                            match param_ty.unwrap_or(arg_ty) {
+                                Ty::Long => {
+                                    code.push(0x09); // lconst_0
+                                    bump(stack, max_stack, 2);
+                                }
+                                Ty::Float => {
+                                    code.push(0x0B); // fconst_0
+                                    bump(stack, max_stack, 1);
+                                }
+                                Ty::Double => {
+                                    code.push(0x0E); // dconst_0
+                                    bump(stack, max_stack, 2);
+                                }
+                                Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => {
+                                    code.push(0x03); // iconst_0
+                                    bump(stack, max_stack, 1);
+                                }
+                                _ => {
+                                    code.push(0x01); // aconst_null
+                                    bump(stack, max_stack, 1);
+                                }
+                            }
+                            continue;
+                        }
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
                         // Autobox primitives when target param expects Object.
-                        let arg_ty = &func.locals[a.0 as usize];
                         let param_ty = target
                             .params
                             .get(i)
@@ -9840,11 +10473,34 @@ fn walk_block(
                     } else {
                         class_name
                     };
-                    let mref = cp.methodref(effective_class, &target.name, &descriptor);
+                    // Default-arg dispatch: route through `name$default`
+                    // when MIR-lower flagged this call as taking defaults.
+                    // The synthetic descriptor takes the original args
+                    // plus an Int mask and an Object marker (null).
+                    let (call_name, call_descriptor) =
+                        if call_default_mask != 0 && !target.param_defaults.is_empty() {
+                            // Push the mask (always int) and null marker.
+                            emit_simple_iconst(code, call_default_mask as i32);
+                            bump(stack, max_stack, 1);
+                            code.push(0x01); // aconst_null
+                            bump(stack, max_stack, 1);
+                            let default_name = format!("{}$default", target.name);
+                            let mut default_desc = String::from("(");
+                            for &p in &target.params {
+                                let ty = &target.locals[p.0 as usize];
+                                default_desc.push_str(&jvm_param_type_string(ty));
+                            }
+                            default_desc.push_str("ILjava/lang/Object;)");
+                            default_desc.push_str(&jvm_type_string(&target.return_ty));
+                            (default_name, default_desc)
+                        } else {
+                            (target.name.clone(), descriptor.clone())
+                        };
+                    let mref = cp.methodref(effective_class, &call_name, &call_descriptor);
                     code.push(0xB8); // invokestatic
                     code.write_u16::<BigEndian>(mref).unwrap();
                     // Account for wide arg widths (Long/Double = 2 slots).
-                    let arg_pop: i32 = args
+                    let mut arg_pop: i32 = args
                         .iter()
                         .map(|a| {
                             if matches!(
@@ -9857,39 +10513,118 @@ fn walk_block(
                             }
                         })
                         .sum();
-                    let return_push = if matches!(target.return_ty, Ty::Long | Ty::Double) {
+                    if call_default_mask != 0 && !target.param_defaults.is_empty() {
+                        arg_pop += 2; // Int mask + Object marker
+                    }
+                    let effective_return_ty = if call_default_mask != 0
+                        && !target.param_defaults.is_empty()
+                        && matches!(&target.return_ty, Ty::Nothing)
+                    {
+                        // $default uses Ljava/lang/Void; for Nothing too;
+                        // treat as a 1-slot ref.
+                        Ty::Class("java/lang/Void".to_string())
+                    } else {
+                        target.return_ty.clone()
+                    };
+                    let return_push = if matches!(effective_return_ty, Ty::Long | Ty::Double) {
                         2
-                    } else if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
+                    } else if effective_return_ty != Ty::Unit && effective_return_ty != Ty::Nothing
+                    {
                         1
                     } else {
                         0
                     };
                     bump(stack, max_stack, -arg_pop + return_push);
                     if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
+                        // Generic-call result unboxing. If the target is a
+                        // generic function (`<T> f(x: T): T`) the descriptor
+                        // returns Object, but the dest local's type was
+                        // specialized to a primitive at the MIR-lower call
+                        // site (the actual T is known from the arg's
+                        // concrete type). kotlinc inserts `checkcast Number;
+                        // intValue()` (or the matching primitive accessor)
+                        // before storing so callers see the unboxed value.
+                        let dest_ty = &func.locals[dest.0 as usize];
+                        if matches!(target.return_ty, Ty::Any)
+                            && target.has_type_params
+                            && !matches!(
+                                dest_ty,
+                                Ty::Any | Ty::Class(_) | Ty::String | Ty::Nullable(_)
+                            )
+                        {
+                            emit_generic_call_unbox(code, cp, stack, max_stack, dest_ty);
+                        }
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                         // Nothing-returning functions never return (they throw).
                         // Don't store the result — it doesn't exist.
                     }
                 }
                 CallKind::PrintlnConcat => {
-                    // Build a `StringBuilder`, append each part with
-                    // a type-appropriate `append` overload, call
-                    // `toString()`, then route the result to
-                    // `PrintStream.println(String)`. The whole
-                    // sequence stays branch-free, so we don't need
-                    // a `StackMapTable`.
-                    //
-                    // Stack diagram (PS = PrintStream, SB = StringBuilder):
-                    //
-                    //     getstatic System.out      [PS]
-                    //     new StringBuilder         [PS, SB]
-                    //     dup                       [PS, SB, SB]
-                    //     invokespecial <init>      [PS, SB]
-                    //     <for each part:>
-                    //         load part             [PS, SB, part]
-                    //         invokevirtual append  [PS, SB]   (returns SB)
-                    //     invokevirtual toString    [PS, String]
-                    //     invokevirtual println     []
+                    // Try the kotlinc shape first: invokedynamic
+                    // makeConcatWithConstants over the dynamic args, then
+                    // route the resulting String to
+                    // PrintStream.println(Object). Each MIR arg whose
+                    // assigned value is a String constant becomes literal
+                    // text in the recipe; other args are placeholders
+                    // (`\u{1}`). When the recipe contains a reserved byte
+                    // we fall back to the StringBuilder form.
+                    let const_string_for = |id: LocalId| -> Option<String> {
+                        INLINABLE_CONSTS.with(|cell| match cell.borrow().get(&id.0) {
+                            Some(MirConst::String(sid)) => {
+                                Some(module.lookup_string(*sid).to_string())
+                            }
+                            _ => None,
+                        })
+                    };
+                    let mut recipe = String::new();
+                    let mut dyn_args: Vec<LocalId> = Vec::new();
+                    let mut recipe_safe = true;
+                    let mut descriptor = String::from("(");
+                    for &arg in args {
+                        if let Some(s) = const_string_for(arg) {
+                            if s.contains('\u{1}') || s.contains('\u{2}') {
+                                recipe_safe = false;
+                                break;
+                            }
+                            recipe.push_str(&s);
+                        } else {
+                            recipe.push('\u{1}');
+                            dyn_args.push(arg);
+                            let ty = &func.locals[arg.0 as usize];
+                            descriptor.push_str(&jvm_type_string(ty));
+                        }
+                    }
+                    descriptor.push_str(")Ljava/lang/String;");
+                    if recipe_safe && !dyn_args.is_empty() {
+                        for &dyn_arg in &dyn_args {
+                            load_local(code, stack, max_stack, slots, dyn_arg, &func.locals);
+                        }
+                        emit_make_concat_with_constants(
+                            code,
+                            cp,
+                            stack,
+                            max_stack,
+                            &descriptor,
+                            &recipe,
+                        );
+                        // Now stack has [String]. Get System.out, swap so
+                        // [PrintStream, String], then println(Object).
+                        let ps = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                        code.push(0xB2);
+                        code.write_u16::<BigEndian>(ps).unwrap();
+                        bump(stack, max_stack, 1);
+                        code.push(0x5F); // swap
+                        let println =
+                            cp.methodref("java/io/PrintStream", "println", "(Ljava/lang/Object;)V");
+                        code.push(0xB6);
+                        code.write_u16::<BigEndian>(println).unwrap();
+                        bump(stack, max_stack, -2);
+                        let _ = dest;
+                        continue;
+                    }
+
+                    // Fallback: StringBuilder for templates whose recipe
+                    // would clash with the reserved makeConcat bytes.
                     let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
                     code.push(0xB2); // getstatic
                     code.write_u16::<BigEndian>(fr).unwrap();
@@ -9936,7 +10671,6 @@ fn walk_block(
                     );
                     code.push(0xB6); // invokevirtual
                     code.write_u16::<BigEndian>(to_string).unwrap();
-                    // toString: pops [SB], pushes [String] → net 0
                     let _ = stack;
 
                     let println =
@@ -11201,6 +11935,43 @@ fn bump(stack: &mut i32, max_stack: &mut i32, by: i32) {
     }
 }
 
+/// Emit the `checkcast <BoxClass>; invokevirtual <BoxClass>.<accessor>()<prim>`
+/// sequence kotlinc uses to unwrap a boxed primitive returned through a
+/// generic (`T`-typed) descriptor into its underlying primitive value.
+/// The current top of stack is an `Object` reference; afterwards it's
+/// replaced with the corresponding primitive (1 slot for Int/Bool/etc.,
+/// 2 slots for Long/Double).
+fn emit_generic_call_unbox(
+    code: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    prim_ty: &Ty,
+) {
+    let (box_cls, accessor, ret_desc, wide) = match prim_ty {
+        Ty::Int => ("java/lang/Number", "intValue", "()I", false),
+        Ty::Long => ("java/lang/Number", "longValue", "()J", true),
+        Ty::Float => ("java/lang/Number", "floatValue", "()F", false),
+        Ty::Double => ("java/lang/Number", "doubleValue", "()D", true),
+        Ty::Byte => ("java/lang/Number", "byteValue", "()B", false),
+        Ty::Short => ("java/lang/Number", "shortValue", "()S", false),
+        Ty::Bool => ("java/lang/Boolean", "booleanValue", "()Z", false),
+        Ty::Char => ("java/lang/Character", "charValue", "()C", false),
+        _ => return,
+    };
+    let cls_idx = cp.class(box_cls);
+    code.push(0xC0); // checkcast
+    code.write_u16::<BigEndian>(cls_idx).unwrap();
+    let mref = cp.methodref(box_cls, accessor, ret_desc);
+    code.push(0xB6); // invokevirtual
+    code.write_u16::<BigEndian>(mref).unwrap();
+    // Stack effect: pop reference, push primitive (2 slots for wide types).
+    if wide {
+        bump(stack, max_stack, 1); // pop 1, push 2 → net +1
+    }
+    // For non-wide: pop 1, push 1 → net 0.
+}
+
 /// Compute `max_locals` by scanning the bytecode for the highest slot
 /// referenced by any load/store/iinc, plus 1 (or 2 for wide types).
 /// Returns 0 if no slot references appear. Used by suspend state-machine
@@ -11892,14 +12663,12 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                     continue;
                 }
             };
-            // Only int stores (the swap pattern uses int values; reference
-            // BinOps don't use this pattern). Only non-named slots.
-            if !is_int || named_slots.contains(&slot) {
+            if named_slots.contains(&slot) {
                 i += instruction_len(code, i);
                 continue;
             }
             // Walk forward, tracking that the RHS bytes are tame, until we
-            // find iload_N or hit an instruction that bars elision.
+            // find Xload_N or hit an instruction that bars elision.
             let rhs_start = i + store_len;
             let mut j = rhs_start;
             let mut iload_at: Option<(usize, usize)> = None;
@@ -11916,10 +12685,8 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                 // assumption that <RHS>'s effect is independent of the
                 // [lhs] value sitting deeper on the stack).
                 if matches!(op, 0x57..=0x5E) {
-                    // pop, pop2, dup, dup_x1, dup_x2, dup2, dup2_x1, dup2_x2
                     break;
                 }
-                // Reject explicit swap inside <RHS>: ambiguous.
                 if op == 0x5F {
                     break;
                 }
@@ -11929,18 +12696,16 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                         break;
                     }
                 }
-                if decode_aload_of_slot(code, j, slot, true).is_some() {
-                    // Found iload_N: candidate for end-of-RHS.
-                    let load_len = decode_aload_of_slot(code, j, slot, true).unwrap();
+                // Match a load whose category matches the original store.
+                if let Some(load_len) = decode_aload_of_slot(code, j, slot, is_int) {
                     iload_at = Some((j, load_len));
                     break;
                 }
-                if decode_aload_of_slot(code, j, slot, false).is_some() {
-                    // aload of same slot index but reference type — would
-                    // alias slot reuse; bar elision.
+                // A load of the SAME slot but DIFFERENT category aliases the
+                // slot — bar elision conservatively.
+                if decode_aload_of_slot(code, j, slot, !is_int).is_some() {
                     break;
                 }
-                // iinc on slot N is also a touch.
                 if op == 0x84 && j + 1 < code.len() && code[j + 1] == slot {
                     break;
                 }
@@ -11952,9 +12717,12 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                     let after_swap = after_load + 1;
                     if after_swap < code.len() {
                         let consume_op = code[after_swap];
-                        // Allow arithmetic (0x60..=0x83) and invokestatic.
-                        let allowed = (0x60..=0x83).contains(&consume_op) || consume_op == 0xB8;
-                        // Verify slot is dead after the swap.
+                        // Allow arithmetic (0x60..=0x83) and invokestatic /
+                        // invokevirtual / invokeinterface — kotlinc's
+                        // call-arg ordering doesn't insert the swap when
+                        // both args land naturally on the stack.
+                        let allowed = (0x60..=0x83).contains(&consume_op)
+                            || (0xB6..=0xB9).contains(&consume_op);
                         let dead_after = !slot_loaded_elsewhere(code, slot, after_swap);
                         if allowed && dead_after {
                             applied = Some((i, store_len, iload_pos, load_len));
@@ -12387,15 +13155,14 @@ fn slot_alive_at(code: &[u8], slot: u8, from: usize) -> bool {
             }
             let op = code[i];
             // Compact load forms for slot 0..3.
-            if slot <= 3 {
-                if op == 0x1A + slot
+            if slot <= 3
+                && (op == 0x1A + slot
                     || op == 0x1E + slot
                     || op == 0x22 + slot
                     || op == 0x26 + slot
-                    || op == 0x2A + slot
-                {
-                    return true;
-                }
+                    || op == 0x2A + slot)
+            {
+                return true;
             }
             if (0x15..=0x19).contains(&op) && i + 1 < code.len() && code[i + 1] == slot {
                 return true;

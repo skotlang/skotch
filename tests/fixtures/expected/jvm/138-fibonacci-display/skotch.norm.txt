@@ -70,7 +70,7 @@ method        fib (I)I 0x0019
     0115 ireturn
     sub_attr  StackMapTable (70 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=9
+  code        max_stack=4 max_locals=9
     0000 iconst_0
     0001 istore_0
     0002 bipush 10
@@ -86,7 +86,7 @@ method        main ()V 0x0019
     0019 iconst_0
     0020 istore_3
     0021 iload_3
-    0022 ifeq 92
+    0022 ifeq 76
     0025 ldc "fib("
     0027 astore 4
     0029 ldc ") = "
@@ -94,33 +94,32 @@ method        main ()V 0x0019
     0033 iload_2
     0034 invokestatic Method(InputKt.fib:(I)I)
     0037 istore 6
-    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0042 new Class(java/lang/StringBuilder)
-    0045 dup
-    0046 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0049 aload 4
-    0051 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0054 iload_2
-    0055 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0058 aload 5
-    0060 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0063 iload 6
-    0065 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0068 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0074 goto 77
-    0077 iconst_1
-    0078 istore 7
-    0080 iload_2
-    0081 iload 7
-    0083 iadd
-    0084 istore 8
-    0086 iload 8
-    0088 istore_2
-    0089 goto 10
-    0092 return
+    0039 aload 4
+    0041 iload_2
+    0042 aload 5
+    0044 iload 6
+    0046 op_0xBA
+    0047 nop
+    0048 iload_3
+    0049 nop
+    0050 nop
+    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0054 swap
+    0055 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0058 goto 61
+    0061 iconst_1
+    0062 istore 7
+    0064 iload_2
+    0065 iload 7
+    0067 iadd
+    0068 istore 8
+    0070 iload 8
+    0072 istore_2
+    0073 goto 10
+    0076 return
     sub_attr  StackMapTable (32 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

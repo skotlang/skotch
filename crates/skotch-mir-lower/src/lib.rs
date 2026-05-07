@@ -660,6 +660,7 @@ pub fn lower_file(
                 annotations: fn_annotations,
                 named_locals: Vec::new(),
                 is_private: matches!(f.visibility, skotch_syntax::Visibility::Private),
+                default_call_masks: Vec::new(),
             });
             fn_pass1_idx += 1;
         }
@@ -701,6 +702,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -755,6 +757,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
             stub.params.push(p_cont);
@@ -791,6 +794,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
             stub.params.push(p_ctx);
@@ -831,6 +835,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -869,6 +874,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -907,6 +913,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -947,6 +954,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1142,6 +1150,7 @@ pub fn lower_file(
                         annotations: Vec::new(),
                         named_locals: Vec::new(),
                         is_private: false,
+                        default_call_masks: Vec::new(),
                     }
                 };
                 let methods: Vec<MirFunction> = ext_class
@@ -1676,6 +1685,7 @@ fn build_continuation_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
     let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
@@ -1723,6 +1733,7 @@ fn build_continuation_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
     let result_param = invoke.new_local(Ty::Any);
@@ -2327,6 +2338,7 @@ impl FnBuilder {
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            default_call_masks: Vec::new(),
         };
         FnBuilder {
             mf,
@@ -3255,6 +3267,7 @@ fn lower_function(
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            default_call_masks: Vec::new(),
         };
     }
 }
@@ -4145,6 +4158,7 @@ fn lower_stmt(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: true,
+                default_call_masks: Vec::new(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -8585,7 +8599,10 @@ fn lower_expr(
                 named_pairs.iter().map(|(_, id)| *id).collect()
             };
 
-            // If fewer args provided than params, inject default values.
+            // If fewer args provided than params, inject default values
+            // and track which positions came from defaults so the JVM
+            // backend can route the call through `name$default(...)`.
+            let mut default_mask: u32 = 0;
             if let Some(fid) = name_to_func.get(&callee_name) {
                 let defaults = module.functions[fid.0 as usize].param_defaults.clone();
                 let total_params = defaults.len();
@@ -8599,6 +8616,9 @@ fn lower_expr(
                                 value: Rvalue::Const(default_const.clone()),
                             });
                             arg_locals.push(id);
+                            if i < 32 {
+                                default_mask |= 1u32 << i;
+                            }
                         }
                     }
                 }
@@ -11037,7 +11057,51 @@ fn lower_expr(
 
             // Determine return type from the call kind.
             let dest_ty = match &kind {
-                CallKind::Static(fid) => module.functions[fid.0 as usize].return_ty.clone(),
+                CallKind::Static(fid) => {
+                    let target = &module.functions[fid.0 as usize];
+                    let raw_ret = target.return_ty.clone();
+                    // Generic call specialization: when calling
+                    // `<T> f(x: T): T` (or any generic fn returning T) with
+                    // a primitive arg, the call-site return type is that
+                    // primitive. The JVM descriptor still uses Object;
+                    // the JVM emitter inserts checkcast+unbox after the
+                    // invokestatic so the value lands in a typed slot.
+                    // Mirrors kotlinc's behavior.
+                    if matches!(raw_ret, Ty::Any) && target.has_type_params {
+                        if let Some(first_arg_id) = arg_locals.first() {
+                            let first_arg_ty = fb.mf.locals[first_arg_id.0 as usize].clone();
+                            // Only specialize when the first formal param
+                            // is also Any (T-typed). Some generics take
+                            // primitives directly with a separate T return.
+                            let first_param_is_t = target
+                                .params
+                                .first()
+                                .and_then(|pid| target.locals.get(pid.0 as usize))
+                                .is_some_and(|t| matches!(t, Ty::Any));
+                            if first_param_is_t
+                                && matches!(
+                                    first_arg_ty,
+                                    Ty::Int
+                                        | Ty::Long
+                                        | Ty::Double
+                                        | Ty::Float
+                                        | Ty::Bool
+                                        | Ty::Char
+                                        | Ty::Byte
+                                        | Ty::Short
+                                )
+                            {
+                                first_arg_ty
+                            } else {
+                                raw_ret
+                            }
+                        } else {
+                            raw_ret
+                        }
+                    } else {
+                        raw_ret
+                    }
+                }
                 CallKind::Virtual {
                     class_name,
                     method_name,
@@ -11150,6 +11214,7 @@ fn lower_expr(
             }
 
             let dest = fb.new_local(dest_ty);
+            let stmt_idx = fb.mf.blocks[fb.cur_block as usize].stmts.len() as u32;
             fb.push_stmt(MStmt::Assign {
                 dest,
                 value: Rvalue::Call {
@@ -11157,6 +11222,12 @@ fn lower_expr(
                     args: arg_locals,
                 },
             });
+            if default_mask != 0 {
+                let block_idx = fb.cur_block;
+                fb.mf
+                    .default_call_masks
+                    .push((block_idx, stmt_idx, default_mask));
+            }
             Some(dest)
         }
         Expr::StringTemplate(parts, _) => {
@@ -13301,6 +13372,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    default_call_masks: Vec::new(),
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -13418,6 +13490,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    default_call_masks: Vec::new(),
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
@@ -13787,6 +13860,7 @@ fn lower_expr(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -13887,6 +13961,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    default_call_masks: Vec::new(),
                 };
                 let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
                 susp_init.params.push(susp_this);
@@ -14140,6 +14215,7 @@ fn lower_expr(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -14721,6 +14797,7 @@ fn lower_enum(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -14787,6 +14864,7 @@ fn lower_enum(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -15210,6 +15288,7 @@ fn lower_object(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -15345,6 +15424,7 @@ fn lower_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -15569,6 +15649,7 @@ fn lower_class(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             }
         })
         .collect();
@@ -16806,6 +16887,7 @@ fn lower_class(
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            default_call_masks: Vec::new(),
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -17127,6 +17209,7 @@ fn lower_interface(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -17162,6 +17245,7 @@ fn lower_interface(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        default_call_masks: Vec::new(),
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -17217,6 +17301,7 @@ fn lower_interface(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                default_call_masks: Vec::new(),
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);

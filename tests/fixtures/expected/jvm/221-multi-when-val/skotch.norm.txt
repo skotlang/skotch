@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=23
+  code        max_stack=5 max_locals=23
     0000 iconst_1
     0001 istore_0
     0002 iconst_5
@@ -100,25 +100,23 @@ method        main ()V 0x0019
     0176 astore 21
     0178 ldc ", "
     0180 astore 22
-    0182 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0185 new Class(java/lang/StringBuilder)
-    0188 dup
-    0189 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0192 iload_2
-    0193 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0196 aload 21
-    0198 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0201 aload 9
-    0203 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0206 aload 22
-    0208 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0211 aload 19
-    0213 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0216 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0219 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0222 goto 27
+    0182 iload_2
+    0183 aload 21
+    0185 aload 9
+    0187 aload 22
+    0189 aload 19
+    0191 op_0xBA
+    0192 nop
+    0193 lload_2
+    0194 nop
+    0195 nop
+    0196 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0199 swap
+    0200 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0203 goto 27
     sub_attr  StackMapTable (144 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

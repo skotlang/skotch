@@ -60,21 +60,20 @@ method        main ()V 0x0019
     0093 goto 96
     0096 ldc " is "
     0098 astore 13
-    0100 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0103 new Class(java/lang/StringBuilder)
-    0106 dup
-    0107 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0110 iload_2
-    0111 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0114 aload 13
-    0116 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0119 aload 11
-    0121 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0124 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0127 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0130 goto 27
+    0100 iload_2
+    0101 aload 13
+    0103 aload 11
+    0105 op_0xBA
+    0106 nop
+    0107 dload 0
+    0109 nop
+    0110 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0113 swap
+    0114 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0117 goto 27
     sub_attr  StackMapTable (77 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

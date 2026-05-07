@@ -48,7 +48,8 @@ method        main ()V 0x0019
     0077 iload 12
     0079 op_0xBD
     0080 nop
-    0081 sipush 14861
+    0081 bipush 58
+    0083 fconst_2
     0084 iconst_0
     0085 istore 14
     0087 aload 13
@@ -81,7 +82,7 @@ method        main ()V 0x0019
     0143 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
     0148 istore 20
     0150 iload 20
-    0152 ifeq 227
+    0152 ifeq 214
     0155 aload 19
     0157 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0162 astore 21
@@ -96,22 +97,22 @@ method        main ()V 0x0019
     0187 astore 24
     0189 ldc "="
     0191 astore 25
-    0193 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0196 new Class(java/lang/StringBuilder)
-    0199 dup
-    0200 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0203 aload 23
-    0205 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0208 aload 25
-    0210 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0213 aload 24
-    0215 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0218 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0221 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0224 goto 141
-    0227 return
+    0193 aload 23
+    0195 aload 25
+    0197 aload 24
+    0199 op_0xBA
+    0200 nop
+    0201 dstore_3
+    0202 nop
+    0203 nop
+    0204 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0207 swap
+    0208 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0211 goto 141
+    0214 return
     sub_attr  StackMapTable (57 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

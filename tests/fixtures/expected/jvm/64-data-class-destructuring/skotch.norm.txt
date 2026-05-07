@@ -16,22 +16,19 @@ method        main ()V 0x0019
     0017 aload_0
     0018 invokevirtual Method(Point.component2:()I)
     0021 istore_2
-    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0025 new Class(java/lang/StringBuilder)
-    0028 dup
-    0029 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0032 ldc "x="
-    0034 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0037 iload_1
-    0038 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0041 ldc ", y="
-    0043 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0046 iload_2
-    0047 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
-    0050 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0056 return
+    0022 iload_1
+    0023 iload_2
+    0024 op_0xBA
+    0025 nop
+    0026 lload_1
+    0027 nop
+    0028 nop
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

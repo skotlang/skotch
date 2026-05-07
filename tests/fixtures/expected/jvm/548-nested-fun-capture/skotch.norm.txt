@@ -37,7 +37,7 @@ method        main$greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String
     0001 aload_1
     0002 op_0xBA
     0003 nop
-    0004 op_0x30
+    0004 op_0x2F
     0005 nop
     0006 nop
     0007 areturn

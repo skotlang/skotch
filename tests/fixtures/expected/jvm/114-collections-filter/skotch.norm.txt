@@ -110,29 +110,28 @@ method        main ()V 0x0019
     0163 checkcast Class(kotlin/jvm/functions/Function1)
     0166 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
     0169 astore 15
-    0171 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0174 new Class(java/lang/StringBuilder)
-    0177 dup
-    0178 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0181 ldc "evens: "
-    0183 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0186 aload 13
-    0188 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0191 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0194 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0197 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0200 new Class(java/lang/StringBuilder)
-    0203 dup
-    0204 invokespecial Method(java/lang/StringBuilder.<init>:()V)
-    0207 ldc "odds: "
-    0209 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
-    0212 aload 15
-    0214 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
-    0217 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
-    0220 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0223 return
+    0171 aload 13
+    0173 op_0xBA
+    0174 nop
+    0175 op_0x34
+    0176 nop
+    0177 nop
+    0178 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0181 swap
+    0182 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0185 aload 15
+    0187 op_0xBA
+    0188 nop
+    0189 fstore_0
+    0190 nop
+    0191 nop
+    0192 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0195 swap
+    0196 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0199 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 class_attr    InnerClasses (34 bytes)
+class_attr    BootstrapMethods (14 bytes)

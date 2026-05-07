@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=8
     0000 ldc "hello"
     0002 astore_0
     0003 new Class(InputKt$Lambda$0)
@@ -20,54 +20,48 @@ method        main ()V 0x0019
     0025 new Class(InputKt$Lambda$1)
     0028 dup
     0029 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0032 astore_0
-    0033 iload_2
-    0034 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0037 aload_0
-    0038 swap
-    0039 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0042 pop
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 iload_2
-    0047 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0050 ldc "world"
-    0052 astore_0
-    0053 new Class(InputKt$Lambda$2)
-    0056 dup
-    0057 invokespecial Method(InputKt$Lambda$2.<init>:()V)
-    0060 aload_0
-    0061 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0064 astore 5
-    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0069 aload 5
-    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0074 bipush 10
-    0076 istore 6
-    0078 new Class(InputKt$Lambda$3)
-    0081 dup
-    0082 invokespecial Method(InputKt$Lambda$3.<init>:()V)
-    0085 astore_0
-    0086 iload 6
-    0088 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0091 aload_0
-    0092 swap
-    0093 invokevirtual Method(InputKt$Lambda$3.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0096 pop
-    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0100 iload 6
-    0102 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0105 ldc "kotlin"
-    0107 astore_0
-    0108 new Class(InputKt$Lambda$4)
-    0111 dup
-    0112 invokespecial Method(InputKt$Lambda$4.<init>:()V)
-    0115 aload_0
-    0116 invokevirtual Method(InputKt$Lambda$4.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0119 astore 9
-    0121 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0124 aload 9
-    0126 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0129 return
+    0032 iload_2
+    0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0036 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0039 pop
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 iload_2
+    0044 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0047 ldc "world"
+    0049 astore_0
+    0050 new Class(InputKt$Lambda$2)
+    0053 dup
+    0054 invokespecial Method(InputKt$Lambda$2.<init>:()V)
+    0057 aload_0
+    0058 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0061 astore 4
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 aload 4
+    0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0071 bipush 10
+    0073 istore 5
+    0075 new Class(InputKt$Lambda$3)
+    0078 dup
+    0079 invokespecial Method(InputKt$Lambda$3.<init>:()V)
+    0082 iload 5
+    0084 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0087 invokevirtual Method(InputKt$Lambda$3.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0090 pop
+    0091 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0094 iload 5
+    0096 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0099 ldc "kotlin"
+    0101 astore_0
+    0102 new Class(InputKt$Lambda$4)
+    0105 dup
+    0106 invokespecial Method(InputKt$Lambda$4.<init>:()V)
+    0109 aload_0
+    0110 invokevirtual Method(InputKt$Lambda$4.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0113 astore 7
+    0115 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0118 aload 7
+    0120 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0123 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

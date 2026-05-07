@@ -422,6 +422,13 @@ pub struct MirFunction {
     /// these with `ACC_PRIVATE` instead of `ACC_PUBLIC`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_private: bool,
+    /// Default-arg call sites: maps `(block_idx, stmt_idx)` → bit mask
+    /// of which positional args came from `param_defaults`. The JVM
+    /// backend uses this to route the call through the corresponding
+    /// `name$default(args, mask, marker)` synthetic instead of the
+    /// original method, matching kotlinc's emission.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub default_call_masks: Vec<(u32, u32, u32)>,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either
