@@ -3031,6 +3031,7 @@ fn function_body_needs_leading_nop(body: &skotch_syntax::Block) -> bool {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_function(
     f: &FunDecl,
     fn_idx: usize,
@@ -3737,7 +3738,7 @@ fn lower_stmt(
             // end, kotlinc folds `i <= K` to `i < K+1`. We mirror that here.
             let inclusive_const_end_plus_one: Option<i32> = if !*exclusive && !*descending {
                 if let Expr::IntLit(v, _) = range_end {
-                    let plus_one = (*v as i64) + 1;
+                    let plus_one = *v + 1;
                     if plus_one >= i32::MIN as i64 && plus_one <= i32::MAX as i64 {
                         Some(plus_one as i32)
                     } else {
@@ -3757,7 +3758,7 @@ fn lower_stmt(
             let descending_const_end_minus_one: Option<i32> = if *descending && step_expr.is_none()
             {
                 if let Expr::IntLit(v, _) = range_end {
-                    let minus_one = (*v as i64) - 1;
+                    let minus_one = *v - 1;
                     if minus_one >= i32::MIN as i64 && minus_one <= i32::MAX as i64 {
                         Some(minus_one as i32)
                     } else {

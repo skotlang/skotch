@@ -3588,13 +3588,11 @@ fn emit_method_body(
                         let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
                         buf.write_u16::<BigEndian>(ci).unwrap();
                         Some(buf)
-                    } else if (off as usize) < code.len()
-                        && matches!(code[off as usize], 0xAC..=0xB0)
-                    {
+                    } else if off < code.len() && matches!(code[off], 0xAC..=0xB0) {
                         // peephole_stack_merge_returns leaves the if-result on
                         // the stack at the merged xreturn target; describe it.
                         let mut buf = Vec::new();
-                        match code[off as usize] {
+                        match code[off] {
                             0xAC => buf.push(1), // ireturn — Integer
                             0xAD => buf.push(4), // lreturn — Long
                             0xAE => buf.push(2), // freturn — Float
@@ -13306,10 +13304,7 @@ fn match_cmp_branch_pattern(
         return None;
     }
     // i+8: istore_M (compact 0x3B..=0x3E or generic 0x36 + slot byte)
-    let (slot, sl) = match decode_istore_at(code, i + 8) {
-        Some(v) => v,
-        None => return None,
-    };
+    let (slot, sl) = decode_istore_at(code, i + 8)?;
     if named_slots.contains(&slot) {
         return None;
     }
@@ -13377,7 +13372,7 @@ fn flip_cmp_branch_op(op: u8) -> u8 {
 /// `block_offsets` like the other branch-aware peepholes.
 fn peephole_fold_iinc(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
 ) {
     loop {
@@ -13598,7 +13593,7 @@ fn decode_int_const(code: &[u8], pos: usize) -> Option<(i32, usize)> {
 /// - Slot M has no further reads after the use.
 fn peephole_copy_prop(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
     named_slots: &FxHashSet<u8>,
 ) {
@@ -13839,11 +13834,9 @@ fn peephole_copy_prop(
                         let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
                         let src = j as i32;
                         let dst = src + rel;
-                        let new_rel = if (src as usize) < extra_pos
-                            && (dst as usize) >= extra_pos + 1
-                        {
+                        let new_rel = if (src as usize) < extra_pos && (dst as usize) > extra_pos {
                             rel - 1
-                        } else if (src as usize) >= extra_pos + 1 && (dst as usize) <= extra_pos {
+                        } else if (src as usize) > extra_pos && (dst as usize) <= extra_pos {
                             rel + 1
                         } else {
                             rel
@@ -13867,11 +13860,9 @@ fn peephole_copy_prop(
                         ]);
                         let src = j as i32;
                         let dst = src + rel;
-                        let new_rel = if (src as usize) < extra_pos
-                            && (dst as usize) >= extra_pos + 1
-                        {
+                        let new_rel = if (src as usize) < extra_pos && (dst as usize) > extra_pos {
                             rel - 1
-                        } else if (src as usize) >= extra_pos + 1 && (dst as usize) <= extra_pos {
+                        } else if (src as usize) > extra_pos && (dst as usize) <= extra_pos {
                             rel + 1
                         } else {
                             rel
@@ -13890,15 +13881,15 @@ fn peephole_copy_prop(
                 j += instruction_len(code, j);
             }
             for ct in cmp_targets.iter_mut() {
-                if ct.offset >= extra_pos + 1 {
+                if ct.offset > extra_pos {
                     ct.offset -= 1;
                 }
-                if ct.cmp_start >= extra_pos + 1 {
+                if ct.cmp_start > extra_pos {
                     ct.cmp_start -= 1;
                 }
             }
             for b in block_offsets.iter_mut() {
-                if *b >= extra_pos + 1 {
+                if *b > extra_pos {
                     *b -= 1;
                 }
             }
@@ -13980,7 +13971,7 @@ fn writes_slot_at(code: &[u8], pos: usize, slot: u8) -> bool {
 /// for the 9-byte drain.
 fn peephole_drop_box_unbox(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
     cp: &ConstantPool,
 ) {
@@ -14466,13 +14457,14 @@ fn peephole_eliminate_swap_after_call(code: &mut Vec<u8>) {
 ///   - `<op>` consumes exactly two stack items and produces one
 ///     (arithmetic ops, invokestatic with 2 int args, invokevirtual with
 ///     receiver + 1 int arg),
+///
 /// we hoist `xload N` to the start of `<value computation>`, dropping
 /// `xstore T`, `xload N`, `xload T`. The final stack at `<op>` is identical:
 /// `[..., N, computed_value]`. Forward stack analysis locates the start of
 /// the value computation.
 fn peephole_hoist_op_general(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
     cp: &ConstantPool,
 ) {
@@ -14555,7 +14547,7 @@ fn peephole_hoist_op_general(
                     break;
                 }
                 let op = code[k];
-                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7 | 0xC8 | 0xC9) {
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
                     has_branch = true;
                     break;
                 }
@@ -14572,14 +14564,13 @@ fn peephole_hoist_op_general(
             let mut external_target = false;
             while k < code.len() {
                 let op = code[k];
-                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
-                    if k + 2 < code.len() {
-                        let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
-                        let tgt = (k as i32 + rel) as usize;
-                        if tgt >= hoist_point && tgt < i && (k < hoist_point || k > i) {
-                            external_target = true;
-                            break;
-                        }
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                    let tgt = (k as i32 + rel) as usize;
+                    if tgt >= hoist_point && tgt < i && (k < hoist_point || k > i) {
+                        external_target = true;
+                        break;
                     }
                 }
                 k += instruction_len(code, k);
@@ -14829,7 +14820,7 @@ fn compute_stack_at_entry(code: &[u8], cp: &ConstantPool) -> Vec<i32> {
 ///   original.
 fn peephole_hoist_op_before_call(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
 ) {
     loop {
@@ -15172,7 +15163,7 @@ fn peephole_hoist_op_before_call(
 /// bytes). Adjusts branch offsets, `cmp_targets`, and `block_offsets`.
 fn peephole_stack_merge_returns(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
     named_slots: &FxHashSet<u8>,
 ) {
@@ -15448,7 +15439,7 @@ fn peephole_thread_gotos(code: &mut [u8]) {
 /// branch instruction's relative offset, plus `cmp_targets` and `block_offsets`.
 fn peephole_drop_redundant_gotos(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
 ) {
     loop {
@@ -15855,7 +15846,7 @@ fn peephole_swap_pattern(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
 /// `(store_len + load_len) - 1` bytes per match).
 fn peephole_swap_pattern_with_branches(
     code: &mut Vec<u8>,
-    cmp_targets: &mut Vec<CmpBranchTarget>,
+    cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
     named_slots: &FxHashSet<u8>,
 ) {
@@ -16843,27 +16834,26 @@ fn compress_to_compact_forms_with_blocks(
                 let mut j = 0;
                 while j < code.len() {
                     let jop = code[j];
-                    if matches!(jop, 0x99..=0xA6 | 0xA7 | 0xA8 | 0xC6 | 0xC7) {
-                        if j + 2 < code.len() {
-                            let off = i16::from_be_bytes([code[j + 1], code[j + 2]]);
-                            let target = (j as i32) + (off as i32);
-                            let src = j as i32;
-                            let removed = removed_pos as i32;
-                            let elide_in_range = |pos: i32| -> i32 {
-                                if pos >= removed {
-                                    1
-                                } else {
-                                    0
-                                }
-                            };
-                            let src_shift = elide_in_range(src);
-                            let tgt_shift = elide_in_range(target);
-                            let new_off = (target - tgt_shift) - (src - src_shift);
-                            if new_off != off as i32 {
-                                let bytes = (new_off as i16).to_be_bytes();
-                                code[j + 1] = bytes[0];
-                                code[j + 2] = bytes[1];
+                    if matches!(jop, 0x99..=0xA6 | 0xA7 | 0xA8 | 0xC6 | 0xC7) && j + 2 < code.len()
+                    {
+                        let off = i16::from_be_bytes([code[j + 1], code[j + 2]]);
+                        let target = (j as i32) + (off as i32);
+                        let src = j as i32;
+                        let removed = removed_pos as i32;
+                        let elide_in_range = |pos: i32| -> i32 {
+                            if pos >= removed {
+                                1
+                            } else {
+                                0
                             }
+                        };
+                        let src_shift = elide_in_range(src);
+                        let tgt_shift = elide_in_range(target);
+                        let new_off = (target - tgt_shift) - (src - src_shift);
+                        if new_off != off as i32 {
+                            let bytes = (new_off as i16).to_be_bytes();
+                            code[j + 1] = bytes[0];
+                            code[j + 2] = bytes[1];
                         }
                     }
                     j += instruction_len(code, j);
