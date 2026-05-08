@@ -661,6 +661,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: matches!(f.visibility, skotch_syntax::Visibility::Private),
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             });
             fn_pass1_idx += 1;
         }
@@ -703,6 +704,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -758,6 +760,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
             stub.params.push(p_cont);
@@ -795,6 +798,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
             stub.params.push(p_ctx);
@@ -836,6 +840,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -875,6 +880,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -914,6 +920,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -955,6 +962,7 @@ pub fn lower_file(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1151,6 +1159,7 @@ pub fn lower_file(
                         named_locals: Vec::new(),
                         is_private: false,
                         default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
                     }
                 };
                 let methods: Vec<MirFunction> = ext_class
@@ -1686,6 +1695,7 @@ fn build_continuation_class(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
     let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
@@ -1734,6 +1744,7 @@ fn build_continuation_class(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
     let result_param = invoke.new_local(Ty::Any);
@@ -2339,6 +2350,7 @@ impl FnBuilder {
             named_locals: Vec::new(),
             is_private: false,
             default_call_masks: Vec::new(),
+            needs_leading_nop: false,
         };
         FnBuilder {
             mf,
@@ -2970,6 +2982,55 @@ fn extract_trailing_string(mf: &MirFunction, module: &MirModule) -> Option<Strin
 }
 
 #[allow(clippy::too_many_arguments)]
+/// True if `body` is a single statement of one of the shapes for which
+/// kotlinc emits a leading `nop` at offset 0 (so the function-declaration
+/// line gets its own `LineNumberTable` entry distinct from the body's
+/// first instruction line). The recognized shapes are:
+///
+/// - `when { ... }` (no subject — lowers to an if-else chain)
+/// - `if (cond) ... else if (...) ... else ...` (chain of else-ifs)
+/// - `try { ... } catch (...) { ... }` (with or without finally)
+/// - any of the above wrapped in a `return`
+fn function_body_needs_leading_nop(body: &skotch_syntax::Block) -> bool {
+    use skotch_syntax::{Expr, Stmt};
+    if body.stmts.len() != 1 {
+        return false;
+    }
+    // Try-as-statement is its own variant; match it directly first.
+    if matches!(body.stmts[0], Stmt::TryStmt { .. }) {
+        return true;
+    }
+    let expr = match &body.stmts[0] {
+        Stmt::Expr(e) => e,
+        Stmt::Return { value: Some(e), .. } => e,
+        _ => return false,
+    };
+    fn is_else_if_chain(e: &Expr) -> bool {
+        match e {
+            Expr::If {
+                else_block: Some(eb),
+                ..
+            } => {
+                if eb.stmts.len() != 1 {
+                    return false;
+                }
+                if let Stmt::Expr(inner) = &eb.stmts[0] {
+                    matches!(inner, Expr::If { .. })
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+    match expr {
+        Expr::When { subject, .. } => matches!(subject.as_ref(), Expr::BoolLit(true, _)),
+        Expr::Try { .. } => true,
+        Expr::If { .. } => is_else_if_chain(expr),
+        _ => false,
+    }
+}
+
 fn lower_function(
     f: &FunDecl,
     fn_idx: usize,
@@ -3110,6 +3171,12 @@ fn lower_function(
         let cont_sym = interner.intern("$completion");
         scope.push((cont_sym, cont_id));
     }
+
+    // Set the leading-nop flag for bodies whose only stmt is a when-without-
+    // subject, an explicit if-else-if chain, or a try-catch (or `return` of
+    // such expressions). kotlinc emits a `nop` at offset 0 for these so the
+    // LineNumberTable has a slot for the function-declaration line.
+    fb.mf.needs_leading_nop = function_body_needs_leading_nop(&f.body);
 
     let mut ok = true;
     for s in &f.body.stmts {
@@ -3268,6 +3335,7 @@ fn lower_function(
             named_locals: Vec::new(),
             is_private: false,
             default_call_masks: Vec::new(),
+            needs_leading_nop: false,
         };
     }
 }
@@ -4271,6 +4339,7 @@ fn lower_stmt(
                 named_locals: Vec::new(),
                 is_private: true,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -4525,11 +4594,20 @@ fn lower_stmt(
                         }
                     }
                 }
-            } else {
-                // No catch — just try + finally (original simplified path).
-                // Lower all statements unconditionally. Don't break on
-                // lower_stmt returning true — it indicates success, not
-                // control-flow termination.
+            } else if let Some(fb_block) = finally_body {
+                // try-finally (no catch). kotlinc emits:
+                //   try_block: <body>
+                //   after_block: <normal-path finally> ; goto exit
+                //   handler_block (catch any Throwable):
+                //     astore exc; <exception-path finally>; aload exc; athrow
+                //   exit_block: <continue>
+                // We allocate after_block BEFORE handler_block so MIR-iteration
+                // order matches kotlinc's bytecode layout.
+                let try_block = fb.new_block();
+                let after_block = fb.new_block();
+                let handler_block = fb.new_block();
+                let exit_block = fb.new_block();
+                fb.terminate_and_switch(Terminator::Goto(try_block), try_block);
                 for s in &body.stmts {
                     lower_stmt(
                         s,
@@ -4543,20 +4621,71 @@ fn lower_stmt(
                         loop_ctx,
                     );
                 }
-                if let Some(fb_block) = finally_body {
-                    for s in &fb_block.stmts {
-                        lower_stmt(
-                            s,
-                            fb,
-                            scope,
-                            module,
-                            name_to_func,
-                            name_to_global,
-                            interner,
-                            diags,
-                            loop_ctx,
-                        );
+                {
+                    let cur = fb.cur_block as usize;
+                    let cur_term = &fb.mf.blocks[cur].terminator;
+                    if matches!(cur_term, Terminator::ReturnValue(_) | Terminator::Throw(_)) {
+                        fb.cur_block = after_block;
+                    } else {
+                        fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
                     }
+                }
+                // Normal-path finally first (kotlinc bytecode order).
+                for s in &fb_block.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
+                }
+                fb.terminate_and_switch(Terminator::Goto(exit_block), handler_block);
+                // Exception-path handler: receives Throwable on stack.
+                let exc_local = fb.new_local(Ty::Class("java/lang/Throwable".to_string()));
+                fb.push_stmt(MStmt::Assign {
+                    dest: exc_local,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                for s in &fb_block.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
+                }
+                fb.set_terminator(Terminator::Throw(exc_local));
+                fb.mf.exception_handlers.push(ExceptionHandler {
+                    try_start_block: try_block,
+                    try_end_block: after_block,
+                    handler_block,
+                    catch_type: None, // null = catch any (Throwable)
+                });
+                fb.cur_block = exit_block;
+            } else {
+                // try without catch and without finally — just lower the body.
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    );
                 }
             }
             true
@@ -13518,6 +13647,7 @@ fn lower_expr(
                     named_locals: Vec::new(),
                     is_private: false,
                     default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -13636,6 +13766,7 @@ fn lower_expr(
                     named_locals: Vec::new(),
                     is_private: false,
                     default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
@@ -14006,6 +14137,7 @@ fn lower_expr(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -14107,6 +14239,7 @@ fn lower_expr(
                     named_locals: Vec::new(),
                     is_private: false,
                     default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
                 };
                 let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
                 susp_init.params.push(susp_this);
@@ -14361,6 +14494,7 @@ fn lower_expr(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -14943,6 +15077,7 @@ fn lower_enum(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -15010,6 +15145,7 @@ fn lower_enum(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -15434,6 +15570,7 @@ fn lower_object(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(LocalId(0));
@@ -15570,6 +15707,7 @@ fn lower_class(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -15795,6 +15933,7 @@ fn lower_class(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             }
         })
         .collect();
@@ -17033,6 +17172,7 @@ fn lower_class(
             named_locals: Vec::new(),
             is_private: false,
             default_call_masks: Vec::new(),
+            needs_leading_nop: false,
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -17355,6 +17495,7 @@ fn lower_interface(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -17391,6 +17532,7 @@ fn lower_interface(
         named_locals: Vec::new(),
         is_private: false,
         default_call_masks: Vec::new(),
+        needs_leading_nop: false,
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -17447,6 +17589,7 @@ fn lower_interface(
                 named_locals: Vec::new(),
                 is_private: false,
                 default_call_masks: Vec::new(),
+                needs_leading_nop: false,
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);

@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=1
+  code        max_stack=2 max_locals=2
     0000 ldc "before"
     0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0005 swap
@@ -21,11 +21,20 @@ method        main ()V 0x0019
     0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0033 swap
     0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0037 ldc "after"
-    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0042 swap
-    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0046 return
+    0037 goto 52
+    0040 astore_1
+    0041 ldc "in finally"
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 swap
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0050 aload_1
+    0051 athrow
+    0052 ldc "after"
+    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0057 swap
+    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0061 return
+    sub_attr  StackMapTable (10 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

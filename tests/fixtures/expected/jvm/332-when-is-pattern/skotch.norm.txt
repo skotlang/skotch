@@ -7,34 +7,35 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0000 aload_0
     0001 ldc "obj"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 aload_0
-    0007 instanceof Class(java/lang/String)
-    0010 ifeq 23
-    0013 aload_0
-    0014 checkcast Class(java/lang/String)
-    0017 astore_1
-    0018 ldc "string"
-    0020 goto 65
-    0023 aload_0
-    0024 instanceof Class(java/lang/Integer)
-    0027 ifeq 43
-    0030 aload_0
-    0031 checkcast Class(java/lang/Integer)
-    0034 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0037 istore_2
-    0038 ldc "int"
-    0040 goto 65
-    0043 aload_0
-    0044 instanceof Class(java/lang/Boolean)
-    0047 ifeq 63
-    0050 aload_0
-    0051 checkcast Class(java/lang/Boolean)
-    0054 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
-    0057 istore_3
-    0058 ldc "bool"
-    0060 goto 65
-    0063 ldc "other"
-    0065 areturn
+    0006 nop
+    0007 aload_0
+    0008 instanceof Class(java/lang/String)
+    0011 ifeq 24
+    0014 aload_0
+    0015 checkcast Class(java/lang/String)
+    0018 astore_1
+    0019 ldc "string"
+    0021 goto 66
+    0024 aload_0
+    0025 instanceof Class(java/lang/Integer)
+    0028 ifeq 44
+    0031 aload_0
+    0032 checkcast Class(java/lang/Integer)
+    0035 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0038 istore_2
+    0039 ldc "int"
+    0041 goto 66
+    0044 aload_0
+    0045 instanceof Class(java/lang/Boolean)
+    0048 ifeq 64
+    0051 aload_0
+    0052 checkcast Class(java/lang/Boolean)
+    0055 invokevirtual Method(java/lang/Boolean.booleanValue:()Z)
+    0058 istore_3
+    0059 ldc "bool"
+    0061 goto 66
+    0064 ldc "other"
+    0066 areturn
     sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

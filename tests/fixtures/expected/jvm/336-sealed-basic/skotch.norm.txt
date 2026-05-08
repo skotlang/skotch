@@ -7,24 +7,25 @@ method        describe (LResult;)Ljava/lang/String; 0x0019
     0000 aload_0
     0001 ldc "r"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 aload_0
-    0007 instanceof Class(Ok)
-    0010 ifeq 23
-    0013 aload_0
-    0014 checkcast Class(Ok)
-    0017 astore_1
-    0018 ldc "ok"
-    0020 goto 42
-    0023 aload_0
-    0024 instanceof Class(Err)
-    0027 ifeq 40
-    0030 aload_0
-    0031 checkcast Class(Err)
-    0034 astore_2
-    0035 ldc "err"
-    0037 goto 42
-    0040 ldc "unknown"
-    0042 areturn
+    0006 nop
+    0007 aload_0
+    0008 instanceof Class(Ok)
+    0011 ifeq 24
+    0014 aload_0
+    0015 checkcast Class(Ok)
+    0018 astore_1
+    0019 ldc "ok"
+    0021 goto 43
+    0024 aload_0
+    0025 instanceof Class(Err)
+    0028 ifeq 41
+    0031 aload_0
+    0032 checkcast Class(Err)
+    0035 astore_2
+    0036 ldc "err"
+    0038 goto 43
+    0041 ldc "unknown"
+    0043 areturn
     sub_attr  StackMapTable (8 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

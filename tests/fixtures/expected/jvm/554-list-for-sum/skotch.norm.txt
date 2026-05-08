@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=13
+  code        max_stack=3 max_locals=12
     0000 iconst_5
     0001 op_0xBD
     0002 nop
@@ -54,7 +54,7 @@ method        main ()V 0x0019
     0070 astore 8
     0072 aload 8
     0074 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0079 ifeq 115
+    0079 ifeq 112
     0082 aload 8
     0084 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0089 astore 9
@@ -63,18 +63,17 @@ method        main ()V 0x0019
     0095 aload 9
     0097 checkcast Class(java/lang/Integer)
     0100 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0103 istore 11
-    0105 iload 10
-    0107 iload 11
-    0109 iadd
-    0110 istore 7
-    0112 goto 72
-    0115 iload 7
-    0117 istore 12
-    0119 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0122 iload 12
-    0124 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0127 return
+    0103 iload 10
+    0105 swap
+    0106 iadd
+    0107 istore 7
+    0109 goto 72
+    0112 iload 7
+    0114 istore 11
+    0116 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0119 iload 11
+    0121 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0124 return
     sub_attr  StackMapTable (35 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

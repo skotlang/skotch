@@ -2452,6 +2452,15 @@ fn emit_method_body(
     // bytecode parity.
     emit_checknotnull_prologue(func, &kind, &slots, cp, &mut code, &mut max_stack);
 
+    // Leading-nop for functions whose body is a single when-without-subject,
+    // if-else-if chain, or try-catch (or a return of one). kotlinc emits
+    // this so the LineNumberTable has a slot pointing at the function-
+    // declaration line distinct from the body's first instruction line.
+    // The MIR lowerer sets `needs_leading_nop` based on the AST shape.
+    if func.needs_leading_nop {
+        code.push(0x00); // nop
+    }
+
     // Stash CP / module pointers so `load_local` can emit CP-backed
     // inline constants without threading them through every callsite.
     EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
@@ -3144,7 +3153,21 @@ fn emit_method_body(
                     &named_slots_for_middle,
                 );
             }
+            // Swap pattern: `astore N; getstatic; aload N; print` →
+            // `getstatic; swap; print`. Mirrors kotlinc's stack-based
+            // argument shuffling for invokevirtual calls.
             if !is_data_class_helper {
+                peephole_swap_pattern_with_branches(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                );
+            }
+            // kotlinc keeps the slot-based merge in try-catch / try-finally
+            // expression contexts; only apply stack-merge when there are no
+            // exception handlers in this function.
+            if !is_data_class_helper && func.exception_handlers.is_empty() {
                 peephole_stack_merge_returns(
                     &mut code,
                     &mut cmp_targets,
@@ -9591,6 +9614,26 @@ fn compute_inlinable_constants(func: &MirFunction) -> FxHashMap<u32, MirConst> {
     // Track locals used in non-BinOp contexts (Call args, etc.) — these
     // must NOT be inlined, even if they're single-use.
     let mut non_binop_use: FxHashSet<u32> = FxHashSet::default();
+    // Locals stored at handler-block entry are placeholders for the JVM-
+    // pushed exception value, NOT real constant assignments. Exclude them
+    // from inlining or `load_local` emits `aconst_null` instead of
+    // `aload <handler-slot>`, dereferencing null in the catch body.
+    let mut handler_placeholders: FxHashSet<u32> = FxHashSet::default();
+    let handler_blocks: FxHashSet<u32> = func
+        .exception_handlers
+        .iter()
+        .map(|eh| eh.handler_block)
+        .collect();
+
+    for (bi, block) in func.blocks.iter().enumerate() {
+        let is_handler_block = handler_blocks.contains(&(bi as u32));
+        for (stmt_idx, stmt) in block.stmts.iter().enumerate() {
+            let Stmt::Assign { dest, value } = stmt;
+            if is_handler_block && stmt_idx == 0 && matches!(value, Rvalue::Const(MirConst::Null)) {
+                handler_placeholders.insert(dest.0);
+            }
+        }
+    }
 
     for block in &func.blocks {
         for stmt in &block.stmts {
@@ -9628,6 +9671,9 @@ fn compute_inlinable_constants(func: &MirFunction) -> FxHashMap<u32, MirConst> {
             continue;
         }
         if param_set.contains(&local) || named.contains(&local) {
+            continue;
+        }
+        if handler_placeholders.contains(&local) {
             continue;
         }
         let Some(c) = const_assign.get(&local) else {
@@ -15799,6 +15845,166 @@ fn peephole_swap_pattern(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
             code.splice(start..start + old_len, replacement);
         } else {
             break;
+        }
+    }
+}
+
+/// Inter-block-aware version of `peephole_swap_pattern`. Adjusts inter-block
+/// branch offsets, `cmp_targets`, and `block_offsets` to account for the
+/// `store + load` bytes that get replaced by a 1-byte `swap` (net shrink of
+/// `(store_len + load_len) - 1` bytes per match).
+fn peephole_swap_pattern_with_branches(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut Vec<CmpBranchTarget>,
+    block_offsets: &mut [usize],
+    named_slots: &FxHashSet<u8>,
+) {
+    loop {
+        let mut applied: Option<(usize, usize, Vec<u8>)> = None;
+        let mut i = 0;
+        while i < code.len() {
+            let (store_slot, store_len, is_int) = match decode_astore_slot(code, i) {
+                Some(s) => s,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            if named_slots.contains(&store_slot) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            if is_int && !previous_is_invoke(code, i) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let push_start = i + store_len;
+            let push_len = match pure_push_len(code, push_start) {
+                Some(n) => n,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            let load_start = push_start + push_len;
+            let load_len = match decode_aload_of_slot(code, load_start, store_slot, is_int) {
+                Some(n) => n,
+                None => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            if is_int {
+                let consume_pos = load_start + load_len;
+                if consume_pos >= code.len() {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                let consume_op = code[consume_pos];
+                let allowed = consume_op == 0xB8 || (0x60..=0x83).contains(&consume_op);
+                if !allowed {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            }
+            let pattern_end = load_start + load_len;
+            if slot_loaded_elsewhere(code, store_slot, pattern_end) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No cmp_target offset/cmp_start may sit strictly inside the
+            // replaced range (would slice through the push instruction).
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > i && t.offset < pattern_end)
+                    || (t.cmp_start > i && t.cmp_start < pattern_end)
+            });
+            if cmp_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No inter-block branch target may land strictly inside the
+            // replaced range either.
+            let block_conflict = block_offsets.iter().any(|&b| b > i && b < pattern_end);
+            if block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let mut replacement = Vec::with_capacity(push_len + 1);
+            replacement.extend_from_slice(&code[push_start..push_start + push_len]);
+            replacement.push(0x5F); // swap
+            let old_len = store_len + push_len + load_len;
+            applied = Some((i, old_len, replacement));
+            break;
+        }
+        let Some((start, old_len, replacement)) = applied else {
+            break;
+        };
+        let new_len = replacement.len();
+        let shrink = old_len - new_len;
+        // Splice in the replacement.
+        code.splice(start..start + old_len, replacement);
+        // Adjust branch instructions: any 2-byte branch whose source/target
+        // straddles the splice region needs its relative offset shifted.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < start && (dst as usize) >= start + new_len {
+                        rel - shrink as i32
+                    } else if (src as usize) >= start + new_len && (dst as usize) <= start {
+                        rel + shrink as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < start && (dst as usize) >= start + new_len {
+                        rel - shrink as i32
+                    } else if (src as usize) >= start + new_len && (dst as usize) <= start {
+                        rel + shrink as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1..j + 5].copy_from_slice(&nb);
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        // Adjust cmp_targets and block_offsets.
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= start + new_len {
+                ct.offset -= shrink;
+            }
+            if ct.cmp_start >= start + new_len {
+                ct.cmp_start -= shrink;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= start + new_len {
+                *b -= shrink;
+            }
         }
     }
 }

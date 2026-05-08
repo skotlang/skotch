@@ -3,16 +3,26 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=0
-    0000 ldc "body"
-    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0005 swap
-    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0009 ldc "finally"
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 swap
-    0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0018 return
+  code        max_stack=2 max_locals=1
+    0000 nop
+    0001 ldc "body"
+    0003 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0006 swap
+    0007 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0010 ldc "finally"
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 goto 34
+    0022 astore_0
+    0023 ldc "finally"
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 swap
+    0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0032 aload_0
+    0033 athrow
+    0034 return
+    sub_attr  StackMapTable (7 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

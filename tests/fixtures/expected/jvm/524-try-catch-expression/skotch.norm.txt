@@ -22,19 +22,23 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safeDivide (II)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=4
-    0000 iload_0
-    0001 iload_1
-    0002 idiv
-    0003 istore_2
-    0004 iload_2
-    0005 op_0xBA
-    0006 nop
-    0007 ldc_w #0
-    0010 goto 16
-    0013 astore_3
-    0014 ldc "Error"
-    0016 areturn
-    sub_attr  StackMapTable (18 bytes)
+  code        max_stack=2 max_locals=5
+    0000 nop
+    0001 iload_0
+    0002 iload_1
+    0003 idiv
+    0004 istore_2
+    0005 iload_2
+    0006 op_0xBA
+    0007 nop
+    0008 ldc_w #0
+    0011 astore_3
+    0012 goto 20
+    0015 astore 4
+    0017 ldc "Error"
+    0019 astore_3
+    0020 aload_3
+    0021 areturn
+    sub_attr  StackMapTable (21 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 class_attr    BootstrapMethods (8 bytes)

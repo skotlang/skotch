@@ -116,60 +116,56 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        move (LDir;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "d"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 invokestatic Method(InputKt.NORTH:()LDir;)
-    0009 astore_1
-    0010 aload_0
-    0011 aload_1
-    0012 swap
-    0013 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0016 swap
-    0017 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0020 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0023 ifeq 31
-    0026 ldc "up"
-    0028 goto 110
-    0031 invokestatic Method(InputKt.SOUTH:()LDir;)
-    0034 astore_2
-    0035 aload_0
-    0036 aload_2
-    0037 swap
-    0038 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0041 swap
-    0042 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0045 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0048 ifeq 56
-    0051 ldc "down"
-    0053 goto 110
-    0056 invokestatic Method(InputKt.EAST:()LDir;)
-    0059 astore_3
-    0060 aload_0
-    0061 aload_3
-    0062 swap
-    0063 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0066 swap
-    0067 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0070 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0073 ifeq 81
-    0076 ldc "right"
-    0078 goto 110
-    0081 invokestatic Method(InputKt.WEST:()LDir;)
-    0084 astore 4
-    0086 aload_0
-    0087 aload 4
-    0089 swap
-    0090 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0093 swap
-    0094 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0097 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0100 ifeq 108
-    0103 ldc "left"
-    0105 goto 110
-    0108 ldc "?"
-    0110 areturn
-    sub_attr  StackMapTable (42 bytes)
+    0009 aload_0
+    0010 swap
+    0011 swap
+    0012 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0015 swap
+    0016 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0019 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0022 ifeq 30
+    0025 ldc "up"
+    0027 goto 104
+    0030 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0033 aload_0
+    0034 swap
+    0035 swap
+    0036 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0039 swap
+    0040 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0043 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0046 ifeq 54
+    0049 ldc "down"
+    0051 goto 104
+    0054 invokestatic Method(InputKt.EAST:()LDir;)
+    0057 aload_0
+    0058 swap
+    0059 swap
+    0060 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0063 swap
+    0064 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0067 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0070 ifeq 78
+    0073 ldc "right"
+    0075 goto 104
+    0078 invokestatic Method(InputKt.WEST:()LDir;)
+    0081 aload_0
+    0082 swap
+    0083 swap
+    0084 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0087 swap
+    0088 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0091 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0094 ifeq 102
+    0097 ldc "left"
+    0099 goto 104
+    0102 ldc "?"
+    0104 areturn
+    sub_attr  StackMapTable (10 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

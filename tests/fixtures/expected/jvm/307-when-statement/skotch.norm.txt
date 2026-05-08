@@ -3,60 +3,53 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=1
     0000 iconst_3
     0001 istore_0
     0002 iconst_0
-    0003 ifeq 19
+    0003 ifeq 18
     0006 ldc "one"
-    0008 astore_1
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 aload_1
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0016 goto 65
-    0019 iconst_0
-    0020 ifeq 36
-    0023 ldc "two"
-    0025 astore_2
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 aload_2
-    0030 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0033 goto 65
-    0036 iconst_1
-    0037 ifeq 53
-    0040 ldc "three"
-    0042 astore_3
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 aload_3
-    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0050 goto 65
-    0053 ldc "other"
-    0055 astore 4
-    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 aload 4
-    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0065 iconst_0
-    0066 ifeq 84
-    0069 ldc "negative"
-    0071 astore 5
-    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0076 aload 5
-    0078 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0081 goto 115
-    0084 iconst_0
-    0085 ifeq 103
-    0088 ldc "zero"
-    0090 astore 6
-    0092 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0095 aload 6
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 swap
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 goto 59
+    0018 iconst_0
+    0019 ifeq 34
+    0022 ldc "two"
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 swap
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 goto 59
+    0034 iconst_1
+    0035 ifeq 50
+    0038 ldc "three"
+    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0043 swap
+    0044 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0047 goto 59
+    0050 ldc "other"
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 swap
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 iconst_0
+    0060 ifeq 75
+    0063 ldc "negative"
+    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0068 swap
+    0069 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0072 goto 100
+    0075 iconst_0
+    0076 ifeq 91
+    0079 ldc "zero"
+    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0084 swap
+    0085 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0088 goto 100
+    0091 ldc "positive"
+    0093 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0096 swap
     0097 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0100 goto 115
-    0103 ldc "positive"
-    0105 astore 7
-    0107 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0110 aload 7
-    0112 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0115 return
+    0100 return
     sub_attr  StackMapTable (12 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

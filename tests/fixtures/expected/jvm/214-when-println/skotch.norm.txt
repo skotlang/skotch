@@ -18,65 +18,58 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        printMonth (I)V 0x0019
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=1
     0000 iload_0
     0001 iconst_1
-    0002 if_icmpne 18
+    0002 if_icmpne 17
     0005 ldc "January"
-    0007 astore_1
-    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0011 aload_1
-    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0015 goto 127
-    0018 iload_0
-    0019 iconst_2
-    0020 if_icmpne 36
-    0023 ldc "February"
-    0025 astore_2
-    0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0029 aload_2
-    0030 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0033 goto 127
-    0036 iload_0
-    0037 iconst_3
-    0038 if_icmpne 54
-    0041 ldc "March"
-    0043 astore_3
-    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0047 aload_3
-    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0051 goto 127
-    0054 iload_0
-    0055 iconst_4
-    0056 if_icmpne 74
-    0059 ldc "April"
-    0061 astore 4
-    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0066 aload 4
-    0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0071 goto 127
-    0074 iload_0
-    0075 iconst_5
-    0076 if_icmpne 94
-    0079 ldc "May"
-    0081 astore 5
-    0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0086 aload 5
-    0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0091 goto 127
-    0094 iload_0
-    0095 bipush 6
-    0097 if_icmpne 115
-    0100 ldc "June"
-    0102 astore 6
-    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0107 aload 6
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 swap
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0014 goto 112
+    0017 iload_0
+    0018 iconst_2
+    0019 if_icmpne 34
+    0022 ldc "February"
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 swap
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 goto 112
+    0034 iload_0
+    0035 iconst_3
+    0036 if_icmpne 51
+    0039 ldc "March"
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 swap
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 goto 112
+    0051 iload_0
+    0052 iconst_4
+    0053 if_icmpne 68
+    0056 ldc "April"
+    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0061 swap
+    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0065 goto 112
+    0068 iload_0
+    0069 iconst_5
+    0070 if_icmpne 85
+    0073 ldc "May"
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 swap
+    0079 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0082 goto 112
+    0085 iload_0
+    0086 bipush 6
+    0088 if_icmpne 103
+    0091 ldc "June"
+    0093 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0096 swap
+    0097 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0100 goto 112
+    0103 ldc "Other"
+    0105 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0108 swap
     0109 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0112 goto 127
-    0115 ldc "Other"
-    0117 astore 7
-    0119 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0122 aload 7
-    0124 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0127 return
+    0112 return
     sub_attr  StackMapTable (9 bytes)

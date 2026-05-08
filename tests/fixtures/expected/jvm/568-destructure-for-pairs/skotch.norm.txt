@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=10
+  code        max_stack=4 max_locals=9
     0000 bipush 10
     0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0005 astore_0
@@ -43,7 +43,7 @@ method        main ()V 0x0019
     0064 astore 6
     0066 aload 6
     0068 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0073 ifeq 121
+    0073 ifeq 118
     0076 aload 6
     0078 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0083 checkcast Class(kotlin/Pair)
@@ -53,19 +53,18 @@ method        main ()V 0x0019
     0093 astore 8
     0095 aload 7
     0097 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
-    0100 astore 9
-    0102 aload 8
-    0104 aload 9
-    0106 op_0xBA
+    0100 aload 8
+    0102 swap
+    0103 op_0xBA
+    0104 nop
+    0105 istore_3
+    0106 nop
     0107 nop
-    0108 istore_3
-    0109 nop
-    0110 nop
-    0111 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0114 swap
-    0115 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0118 goto 66
-    0121 return
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 swap
+    0112 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0115 goto 66
+    0118 return
     sub_attr  StackMapTable (31 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

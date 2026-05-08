@@ -429,6 +429,14 @@ pub struct MirFunction {
     /// original method, matching kotlinc's emission.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub default_call_masks: Vec<(u32, u32, u32)>,
+    /// kotlinc emits a leading `nop` (offset 0) for functions whose body
+    /// is a single expression/statement of these shapes: a `when` without
+    /// a subject, an `if`/`else if`/`else` chain, or a try-catch. The nop
+    /// gives the function's `LineNumberTable` a slot that points at the
+    /// function-declaration line distinct from the body's first
+    /// instruction line. Set during MIR lowering by inspecting the AST.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_leading_nop: bool,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either

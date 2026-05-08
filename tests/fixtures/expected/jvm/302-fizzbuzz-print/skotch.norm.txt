@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=2 max_locals=2
     0000 iconst_1
     0001 istore_0
     0002 iload_0
@@ -46,13 +46,12 @@ method        main ()V 0x0019
     0070 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
     0073 iload_0
     0074 bipush 20
-    0076 if_icmpge 89
+    0076 if_icmpge 88
     0079 ldc ", "
-    0081 astore_2
-    0082 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0085 aload_2
-    0086 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
-    0089 goto 11
+    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0084 swap
+    0085 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0088 goto 11
     sub_attr  StackMapTable (26 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

@@ -4,18 +4,19 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=1
-    0000 iload_0
-    0001 bipush 10
-    0003 if_icmple 11
-    0006 ldc "big"
-    0008 goto 23
-    0011 iload_0
-    0012 iconst_3
-    0013 if_icmple 21
-    0016 ldc "medium"
-    0018 goto 23
-    0021 ldc "small"
-    0023 areturn
+    0000 nop
+    0001 iload_0
+    0002 bipush 10
+    0004 if_icmple 12
+    0007 ldc "big"
+    0009 goto 24
+    0012 iload_0
+    0013 iconst_3
+    0014 if_icmple 22
+    0017 ldc "medium"
+    0019 goto 24
+    0022 ldc "small"
+    0024 areturn
     sub_attr  StackMapTable (8 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

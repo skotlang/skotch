@@ -35,47 +35,48 @@ method        main ([Ljava/lang/String;)V 0x1009
     0003 return
 method        tax (I)I 0x0019
   code        max_stack=2 max_locals=3
-    0000 iload_0
-    0001 sipush 10000
-    0004 if_icmpgt 11
-    0007 iconst_0
-    0008 goto 72
-    0011 iload_0
-    0012 ldc int(40000)
-    0014 if_icmpgt 31
-    0017 iload_0
-    0018 sipush 10000
-    0021 isub
-    0022 bipush 10
-    0024 imul
-    0025 bipush 100
-    0027 idiv
-    0028 goto 72
-    0031 iload_0
-    0032 ldc int(80000)
-    0034 if_icmpgt 56
-    0037 iload_0
-    0038 ldc int(40000)
-    0040 isub
-    0041 bipush 20
-    0043 imul
-    0044 bipush 100
-    0046 idiv
-    0047 istore_1
-    0048 sipush 3000
-    0051 iload_1
-    0052 iadd
-    0053 goto 72
-    0056 iload_0
-    0057 ldc int(80000)
-    0059 isub
-    0060 bipush 30
-    0062 imul
-    0063 bipush 100
-    0065 idiv
-    0066 istore_2
-    0067 sipush 11000
-    0070 iload_2
-    0071 iadd
-    0072 ireturn
+    0000 nop
+    0001 iload_0
+    0002 sipush 10000
+    0005 if_icmpgt 12
+    0008 iconst_0
+    0009 goto 73
+    0012 iload_0
+    0013 ldc int(40000)
+    0015 if_icmpgt 32
+    0018 iload_0
+    0019 sipush 10000
+    0022 isub
+    0023 bipush 10
+    0025 imul
+    0026 bipush 100
+    0028 idiv
+    0029 goto 73
+    0032 iload_0
+    0033 ldc int(80000)
+    0035 if_icmpgt 57
+    0038 iload_0
+    0039 ldc int(40000)
+    0041 isub
+    0042 bipush 20
+    0044 imul
+    0045 bipush 100
+    0047 idiv
+    0048 istore_1
+    0049 sipush 3000
+    0052 iload_1
+    0053 iadd
+    0054 goto 73
+    0057 iload_0
+    0058 ldc int(80000)
+    0060 isub
+    0061 bipush 30
+    0063 imul
+    0064 bipush 100
+    0066 idiv
+    0067 istore_2
+    0068 sipush 11000
+    0071 iload_2
+    0072 iadd
+    0073 ireturn
     sub_attr  StackMapTable (7 bytes)

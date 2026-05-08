@@ -4,21 +4,22 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
   code        max_stack=1 max_locals=2
-    0000 iload_0
-    0001 ifge 9
-    0004 ldc "negative"
-    0006 goto 16
-    0009 iload_0
-    0010 ifne 23
-    0013 goto 17
-    0016 areturn
-    0017 ldc "zero"
-    0019 astore_1
-    0020 goto 26
-    0023 ldc "positive"
-    0025 astore_1
-    0026 aload_1
-    0027 goto 16
+    0000 nop
+    0001 iload_0
+    0002 ifge 10
+    0005 ldc "negative"
+    0007 goto 17
+    0010 iload_0
+    0011 ifne 24
+    0014 goto 18
+    0017 areturn
+    0018 ldc "zero"
+    0020 astore_1
+    0021 goto 27
+    0024 ldc "positive"
+    0026 astore_1
+    0027 aload_1
+    0028 goto 17
     sub_attr  StackMapTable (15 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019

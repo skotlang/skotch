@@ -3,38 +3,34 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=1
     0000 iconst_5
     0001 istore_0
     0002 iconst_0
-    0003 ifeq 19
+    0003 ifeq 18
     0006 ldc "big"
-    0008 astore_1
-    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0012 aload_1
-    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0016 goto 26
-    0019 iconst_1
-    0020 ifeq 50
-    0023 goto 37
-    0026 ldc "done"
-    0028 astore_2
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 aload_2
-    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0036 return
-    0037 ldc "medium"
-    0039 astore_3
-    0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0043 aload_3
-    0044 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0047 goto 62
-    0050 ldc "small"
-    0052 astore 4
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 aload 4
-    0059 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0062 goto 26
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 swap
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 goto 25
+    0018 iconst_1
+    0019 ifeq 47
+    0022 goto 35
+    0025 ldc "done"
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 swap
+    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0034 return
+    0035 ldc "medium"
+    0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0040 swap
+    0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0044 goto 56
+    0047 ldc "small"
+    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0052 swap
+    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0056 goto 25
     sub_attr  StackMapTable (10 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

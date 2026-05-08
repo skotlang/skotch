@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        eval (LExpr;)I 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=3
     0000 aload_0
     0001 ldc "e"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -13,10 +13,10 @@ method        eval (LExpr;)I 0x0019
     0013 aload_0
     0014 checkcast Class(Num)
     0017 invokevirtual Method(Num.getValue:()I)
-    0020 goto 58
+    0020 goto 57
     0023 aload_0
     0024 instanceof Class(Sum)
-    0027 ifeq 57
+    0027 ifeq 56
     0030 aload_0
     0031 checkcast Class(Sum)
     0034 astore_1
@@ -27,13 +27,12 @@ method        eval (LExpr;)I 0x0019
     0043 aload_1
     0044 invokevirtual Method(Sum.getRight:()LExpr;)
     0047 invokestatic Method(InputKt.eval:(LExpr;)I)
-    0050 istore_3
-    0051 iload_2
-    0052 iload_3
-    0053 iadd
-    0054 goto 58
-    0057 iconst_0
-    0058 ireturn
+    0050 iload_2
+    0051 swap
+    0052 iadd
+    0053 goto 57
+    0056 iconst_0
+    0057 ireturn
     sub_attr  StackMapTable (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
