@@ -3,94 +3,23 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=1
     0000 iload_0
-    0001 ifge 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 22
-    0014 ldc "negative"
-    0016 astore_2
-    0017 aload_2
-    0018 astore_3
-    0019 goto 83
-    0022 iload_0
-    0023 ifne 30
-    0026 iconst_1
-    0027 goto 31
-    0030 iconst_0
-    0031 istore 4
-    0033 iload 4
-    0035 ifeq 48
-    0038 ldc "zero"
-    0040 astore 5
-    0042 aload 5
-    0044 astore_3
-    0045 goto 83
-    0048 iload_0
-    0049 bipush 100
-    0051 if_icmpge 58
-    0054 iconst_1
-    0055 goto 59
-    0058 iconst_0
-    0059 istore 6
-    0061 iload 6
-    0063 ifeq 76
-    0066 ldc "small"
-    0068 astore 7
-    0070 aload 7
-    0072 astore_3
-    0073 goto 83
-    0076 ldc "big"
-    0078 astore 8
-    0080 aload 8
-    0082 astore_3
-    0083 aload_3
-    0084 areturn
-=======
-  code        max_stack=2 max_locals=12
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 16
-    0007 ldc "negative"
-    0009 astore_3
-    0010 aload_3
-    0011 astore 4
-    0013 goto 65
-    0016 iconst_0
-    0017 istore 5
-    0019 iload_0
-    0020 iload 5
-    0022 if_icmpne 36
-    0025 ldc "zero"
-    0027 astore 7
-    0029 aload 7
-    0031 astore 4
-    0033 goto 65
-    0036 bipush 100
-    0038 istore 8
-    0040 iload_0
-    0041 iload 8
-    0043 if_icmpge 57
-    0046 ldc "small"
-    0048 astore 10
-    0050 aload 10
-    0052 astore 4
-    0054 goto 65
-    0057 ldc "big"
-    0059 astore 11
-    0061 aload 11
-    0063 astore 4
-    0065 aload 4
-    0067 areturn
->>>>>>> Stashed changes
-    sub_attr  StackMapTable (39 bytes)
+    0001 ifge 9
+    0004 ldc "negative"
+    0006 goto 31
+    0009 iload_0
+    0010 ifne 18
+    0013 ldc "zero"
+    0015 goto 31
+    0018 iload_0
+    0019 bipush 100
+    0021 if_icmpge 29
+    0024 ldc "small"
+    0026 goto 31
+    0029 ldc "big"
+    0031 areturn
+    sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

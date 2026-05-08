@@ -3,52 +3,18 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        guard (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=3 max_locals=4
+  code        max_stack=3 max_locals=1
     0000 iload_0
-    0001 iflt 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 21
-    0014 iload_0
-    0015 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0018 astore_2
-    0019 aload_2
-    0020 areturn
-    0021 new Class(java/lang/IllegalArgumentException)
-    0024 dup
-    0025 ldc "negative"
-    0027 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0030 astore_3
-    0031 aload_3
-    0032 athrow
-    sub_attr  StackMapTable (9 bytes)
-=======
-  code        max_stack=4 max_locals=6
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmplt 14
-    0007 iload_0
-    0008 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
-    0011 astore_3
-    0012 aload_3
-    0013 areturn
-    0014 ldc "negative"
-    0016 astore 4
-    0018 new Class(java/lang/IllegalArgumentException)
-    0021 dup
-    0022 aload 4
-    0024 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0027 astore 5
-    0029 aload 5
-    0031 athrow
-    sub_attr  StackMapTable (6 bytes)
->>>>>>> Stashed changes
+    0001 iflt 9
+    0004 iload_0
+    0005 invokestatic Method(java/lang/String.valueOf:(I)Ljava/lang/String;)
+    0008 areturn
+    0009 new Class(java/lang/IllegalArgumentException)
+    0012 dup
+    0013 ldc "negative"
+    0015 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0018 athrow
+    sub_attr  StackMapTable (3 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
@@ -69,43 +35,14 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        safe (I)I 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=3 max_locals=3
+  code        max_stack=3 max_locals=1
     0000 iload_0
-    0001 ifge 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 26
-    0014 new Class(java/lang/IllegalArgumentException)
-    0017 dup
-    0018 ldc "neg"
-    0020 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0023 astore_2
-    0024 aload_2
-    0025 athrow
-    0026 iload_0
-    0027 ireturn
-    sub_attr  StackMapTable (9 bytes)
-=======
-  code        max_stack=3 max_locals=5
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 23
-    0007 ldc "neg"
-    0009 astore_3
-    0010 new Class(java/lang/IllegalArgumentException)
-    0013 dup
-    0014 aload_3
-    0015 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
-    0018 astore 4
-    0020 aload 4
-    0022 athrow
-    0023 iload_0
-    0024 ireturn
-    sub_attr  StackMapTable (6 bytes)
->>>>>>> Stashed changes
+    0001 ifge 14
+    0004 new Class(java/lang/IllegalArgumentException)
+    0007 dup
+    0008 ldc "neg"
+    0010 invokespecial Method(java/lang/IllegalArgumentException.<init>:(Ljava/lang/String;)V)
+    0013 athrow
+    0014 iload_0
+    0015 ireturn
+    sub_attr  StackMapTable (3 bytes)

@@ -3,78 +3,27 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=2
     0000 iconst_0
     0001 istore_0
-    0002 iload_0
-    0003 istore_1
-    0004 bipush 10
-    0006 istore_2
-    0007 iload_2
-    0008 istore_3
-<<<<<<< Updated upstream
-    0009 iload_3
-    0010 iconst_1
-    0011 if_icmplt 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore 4
-    0021 iload 4
-    0023 ifeq 49
-    0026 iload_1
-    0027 istore 5
-    0029 iload 5
-    0031 iload_3
-    0032 iadd
-    0033 istore 6
-    0035 iload 6
-    0037 istore_1
-    0038 iload_3
-    0039 iconst_1
-    0040 isub
-    0041 istore 7
-    0043 iload 7
-    0045 istore_3
-    0046 goto 9
-    0049 iload_1
-    0050 istore 8
-    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0055 iload 8
-    0057 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0060 return
-    sub_attr  StackMapTable (20 bytes)
-=======
-    0009 iload_2
-    0010 istore 4
-    0012 iload 4
-    0014 iload_3
-    0015 if_icmplt 48
-    0018 iload_1
-    0019 istore 6
-    0021 iload 6
-    0023 iload 4
-    0025 iadd
-    0026 istore 7
-    0028 iload 7
-    0030 istore_1
-    0031 iconst_1
-    0032 istore 8
-    0034 iload 4
-    0036 iload 8
-    0038 isub
-    0039 istore 9
-    0041 iload 9
-    0043 istore 4
-    0045 goto 12
-    0048 iload_1
-    0049 istore 10
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0054 iload 10
-    0056 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0059 return
-    sub_attr  StackMapTable (15 bytes)
->>>>>>> Stashed changes
+    0002 bipush 10
+    0004 istore_1
+    0005 iconst_0
+    0006 iload_1
+    0007 if_icmpge 20
+    0010 iload_0
+    0011 iload_1
+    0012 iadd
+    0013 istore_0
+    0014 op_0x84
+    0015 aconst_null
+    0016 op_0xFF
+    0017 goto 5
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload_0
+    0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0027 return
+    sub_attr  StackMapTable (8 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -11,70 +11,50 @@ method        MINUS ()LOp; 0x0019
     0009 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Op$apply (LOp;II)I 0x0019
-  code        max_stack=2 max_locals=9
+  code        max_stack=2 max_locals=4
     0000 aload_0
     0001 getfield Field(Op.name:Ljava/lang/String;)
     0004 astore_3
     0005 aload_3
     0006 ldc "PLUS"
     0008 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0011 istore 4
-    0013 iload 4
-    0015 ifeq 26
-    0018 iload_1
-    0019 iload_2
-    0020 iadd
-    0021 istore 5
-    0023 iload 5
-    0025 ireturn
-    0026 aload_3
-    0027 ldc "MINUS"
-    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0032 istore 6
-    0034 iload 6
-    0036 ifeq 47
-    0039 iload_1
-    0040 iload_2
-    0041 isub
-    0042 istore 7
-    0044 iload 7
-    0046 ireturn
-    0047 iconst_0
-    0048 istore 8
-    0050 iload 8
-    0052 ireturn
-    sub_attr  StackMapTable (14 bytes)
+    0011 ifeq 18
+    0014 iload_1
+    0015 iload_2
+    0016 iadd
+    0017 ireturn
+    0018 aload_3
+    0019 ldc "MINUS"
+    0021 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0024 ifeq 31
+    0027 iload_1
+    0028 iload_2
+    0029 isub
+    0030 ireturn
+    0031 iconst_0
+    0032 ireturn
+    sub_attr  StackMapTable (9 bytes)
 method        Op$valueOf (Ljava/lang/String;)LOp; 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 ldc "PLUS"
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0012 istore_1
-    0013 iload_1
-    0014 ifeq 26
-    0017 goto 45
-    0020 invokestatic Method(InputKt.PLUS:()LOp;)
-    0023 astore_2
-    0024 aload_2
-    0025 areturn
-    0026 aload_0
-    0027 ldc "MINUS"
-    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0032 istore_3
-    0033 iload_3
-    0034 ifeq 20
-    0037 invokestatic Method(InputKt.MINUS:()LOp;)
-    0040 astore 4
-    0042 aload 4
-    0044 areturn
-    0045 invokestatic Method(InputKt.PLUS:()LOp;)
-    0048 astore 5
-    0050 aload 5
-    0052 areturn
-    sub_attr  StackMapTable (12 bytes)
+    0012 ifeq 22
+    0015 goto 35
+    0018 invokestatic Method(InputKt.PLUS:()LOp;)
+    0021 areturn
+    0022 aload_0
+    0023 ldc "MINUS"
+    0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0028 ifeq 18
+    0031 invokestatic Method(InputKt.MINUS:()LOp;)
+    0034 areturn
+    0035 invokestatic Method(InputKt.PLUS:()LOp;)
+    0038 areturn
+    sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Op$values ()Ljava/util/ArrayList; 0x0019

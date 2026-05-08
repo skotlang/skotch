@@ -3,69 +3,25 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        gcd (II)I 0x0019
-  code        max_stack=2 max_locals=11
+  code        max_stack=2 max_locals=5
     0000 iload_0
     0001 istore_2
     0002 iload_1
     0003 istore_3
     0004 iload_3
-    0005 istore 4
-<<<<<<< Updated upstream
-    0007 iload 4
-    0009 ifeq 16
-    0012 iconst_1
-    0013 goto 17
-    0016 iconst_0
-    0017 istore 5
-    0019 iload 5
-    0021 ifeq 49
-    0024 iload_3
-    0025 istore 6
-    0027 iload_2
-    0028 istore 7
-    0030 iload_3
-    0031 istore 8
-    0033 iload 7
-    0035 iload 8
-    0037 irem
-    0038 istore 9
-    0040 iload 9
-    0042 istore_3
-    0043 iload 6
-    0045 istore_2
-    0046 goto 4
-    0049 iload_2
-    0050 istore 10
-    0052 iload 10
-    0054 ireturn
-    sub_attr  StackMapTable (17 bytes)
-=======
-    0007 iconst_0
-    0008 istore 5
-    0010 iload 4
-    0012 iload 5
-    0014 if_icmpeq 42
-    0017 iload_3
-    0018 istore 7
-    0020 iload_2
-    0021 istore 8
-    0023 iload_3
-    0024 istore 9
-    0026 iload 8
-    0028 iload 9
-    0030 irem
-    0031 istore 10
-    0033 iload 10
-    0035 istore_3
-    0036 iload 7
-    0038 istore_2
-    0039 goto 4
-    0042 iload_2
-    0043 istore 11
-    0045 iload 11
-    0047 ireturn
-    sub_attr  StackMapTable (12 bytes)
->>>>>>> Stashed changes
+    0005 ifeq 21
+    0008 iload_3
+    0009 istore 4
+    0011 iload_2
+    0012 iload_3
+    0013 irem
+    0014 istore_3
+    0015 iload 4
+    0017 istore_2
+    0018 goto 4
+    0021 iload_2
+    0022 ireturn
+    sub_attr  StackMapTable (8 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 12

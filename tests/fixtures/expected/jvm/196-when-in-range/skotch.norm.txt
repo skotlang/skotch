@@ -3,8 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        ageGroup (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=19
+  code        max_stack=2 max_locals=9
     0000 iload_0
     0001 iflt 8
     0004 iconst_1
@@ -21,222 +20,72 @@ method        ageGroup (I)Ljava/lang/String; 0x0019
     0022 iload_1
     0023 iload_2
     0024 imul
-    0025 istore_3
-    0026 iload_3
-    0027 ifeq 41
-    0030 ldc "child"
-    0032 astore 4
-    0034 aload 4
-    0036 astore 5
-    0038 goto 196
-    0041 iload_0
-    0042 bipush 13
-    0044 if_icmplt 51
-    0047 iconst_1
-    0048 goto 52
-    0051 iconst_0
-    0052 istore 6
-    0054 iload_0
-    0055 bipush 17
-    0057 if_icmpgt 64
-    0060 iconst_1
-    0061 goto 65
-    0064 iconst_0
-    0065 istore 7
-    0067 iload 6
-    0069 iload 7
-    0071 imul
-    0072 istore 8
-    0074 iload 8
-    0076 ifeq 90
-    0079 ldc "teenager"
-    0081 astore 9
-    0083 aload 9
-    0085 astore 5
-    0087 goto 196
-    0090 iload_0
-    0091 bipush 18
-    0093 if_icmplt 100
-    0096 iconst_1
-    0097 goto 101
-    0100 iconst_0
-    0101 istore 10
-    0103 iload_0
-    0104 bipush 64
-    0106 if_icmpgt 113
-    0109 iconst_1
-    0110 goto 114
-    0113 iconst_0
-    0114 istore 11
-    0116 iload 10
-    0118 iload 11
-    0120 imul
-    0121 istore 12
-    0123 iload 12
-    0125 ifeq 139
-    0128 ldc "adult"
-    0130 astore 13
-    0132 aload 13
-    0134 astore 5
-    0136 goto 196
-    0139 iload_0
-    0140 bipush 65
-    0142 if_icmplt 149
-    0145 iconst_1
-    0146 goto 150
-    0149 iconst_0
-    0150 istore 14
-    0152 iload_0
-    0153 bipush 120
-    0155 if_icmpgt 162
-    0158 iconst_1
-    0159 goto 163
-    0162 iconst_0
-    0163 istore 15
-    0165 iload 14
-    0167 iload 15
-    0169 imul
-    0170 istore 16
-    0172 iload 16
-    0174 ifeq 188
-    0177 ldc "senior"
-    0179 astore 17
-    0181 aload 17
-    0183 astore 5
-    0185 goto 196
-    0188 ldc "invalid"
-    0190 astore 18
-    0192 aload 18
-    0194 astore 5
-    0196 aload 5
-    0198 areturn
-    sub_attr  StackMapTable (77 bytes)
-=======
-  code        max_stack=2 max_locals=27
-    0000 iconst_0
-    0001 istore_1
-    0002 bipush 12
-    0004 istore_2
-    0005 iload_0
-    0006 iload_1
-    0007 if_icmplt 14
-    0010 iconst_1
-    0011 goto 15
-    0014 iconst_0
-    0015 istore_3
-    0016 iload_0
-    0017 iload_2
-    0018 if_icmpgt 25
-    0021 iconst_1
-    0022 goto 26
-    0025 iconst_0
-    0026 istore 4
-    0028 iload_3
-    0029 iload 4
-    0031 imul
-    0032 istore 5
-    0034 iload 5
-    0036 ifeq 50
-    0039 ldc "child"
-    0041 astore 6
-    0043 aload 6
-    0045 astore 7
-    0047 goto 229
-    0050 bipush 13
-    0052 istore 8
-    0054 bipush 17
-    0056 istore 9
-    0058 iload_0
-    0059 iload 8
-    0061 if_icmplt 68
-    0064 iconst_1
-    0065 goto 69
-    0068 iconst_0
-    0069 istore 10
-    0071 iload_0
-    0072 iload 9
-    0074 if_icmpgt 81
-    0077 iconst_1
-    0078 goto 82
-    0081 iconst_0
-    0082 istore 11
-    0084 iload 10
-    0086 iload 11
-    0088 imul
-    0089 istore 12
-    0091 iload 12
-    0093 ifeq 107
-    0096 ldc "teenager"
-    0098 astore 13
-    0100 aload 13
-    0102 astore 7
-    0104 goto 229
-    0107 bipush 18
-    0109 istore 14
-    0111 bipush 64
-    0113 istore 15
-    0115 iload_0
-    0116 iload 14
-    0118 if_icmplt 125
-    0121 iconst_1
-    0122 goto 126
-    0125 iconst_0
-    0126 istore 16
-    0128 iload_0
-    0129 iload 15
-    0131 if_icmpgt 138
-    0134 iconst_1
-    0135 goto 139
-    0138 iconst_0
-    0139 istore 17
-    0141 iload 16
-    0143 iload 17
-    0145 imul
-    0146 istore 18
-    0148 iload 18
-    0150 ifeq 164
-    0153 ldc "adult"
-    0155 astore 19
-    0157 aload 19
-    0159 astore 7
-    0161 goto 229
-    0164 bipush 65
-    0166 istore 20
-    0168 bipush 120
-    0170 istore 21
-    0172 iload_0
-    0173 iload 20
-    0175 if_icmplt 182
-    0178 iconst_1
-    0179 goto 183
-    0182 iconst_0
-    0183 istore 22
-    0185 iload_0
-    0186 iload 21
-    0188 if_icmpgt 195
-    0191 iconst_1
-    0192 goto 196
-    0195 iconst_0
-    0196 istore 23
-    0198 iload 22
-    0200 iload 23
-    0202 imul
-    0203 istore 24
-    0205 iload 24
-    0207 ifeq 221
-    0210 ldc "senior"
-    0212 astore 25
-    0214 aload 25
-    0216 astore 7
-    0218 goto 229
-    0221 ldc "invalid"
-    0223 astore 26
-    0225 aload 26
-    0227 astore 7
-    0229 aload 7
-    0231 areturn
-    sub_attr  StackMapTable (105 bytes)
->>>>>>> Stashed changes
+    0025 ifeq 33
+    0028 ldc "child"
+    0030 goto 150
+    0033 iload_0
+    0034 bipush 13
+    0036 if_icmplt 43
+    0039 iconst_1
+    0040 goto 44
+    0043 iconst_0
+    0044 istore_3
+    0045 iload_0
+    0046 bipush 17
+    0048 if_icmpgt 55
+    0051 iconst_1
+    0052 goto 56
+    0055 iconst_0
+    0056 istore 4
+    0058 iload_3
+    0059 iload 4
+    0061 imul
+    0062 ifeq 70
+    0065 ldc "teenager"
+    0067 goto 150
+    0070 iload_0
+    0071 bipush 18
+    0073 if_icmplt 80
+    0076 iconst_1
+    0077 goto 81
+    0080 iconst_0
+    0081 istore 5
+    0083 iload_0
+    0084 bipush 64
+    0086 if_icmpgt 93
+    0089 iconst_1
+    0090 goto 94
+    0093 iconst_0
+    0094 istore 6
+    0096 iload 5
+    0098 iload 6
+    0100 imul
+    0101 ifeq 109
+    0104 ldc "adult"
+    0106 goto 150
+    0109 iload_0
+    0110 bipush 65
+    0112 if_icmplt 119
+    0115 iconst_1
+    0116 goto 120
+    0119 iconst_0
+    0120 istore 7
+    0122 iload_0
+    0123 bipush 120
+    0125 if_icmpgt 132
+    0128 iconst_1
+    0129 goto 133
+    0132 iconst_0
+    0133 istore 8
+    0135 iload 7
+    0137 iload 8
+    0139 imul
+    0140 ifeq 148
+    0143 ldc "senior"
+    0145 goto 150
+    0148 ldc "invalid"
+    0150 areturn
+    sub_attr  StackMapTable (67 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

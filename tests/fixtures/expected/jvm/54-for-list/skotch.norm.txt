@@ -3,101 +3,42 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=3 max_locals=6
+  code        max_stack=3 max_locals=4
     0000 iconst_3
-    0001 istore_0
-    0002 iload_0
-    0003 op_0xBD
-    0004 nop
-    0005 iconst_1
-    0006 astore_1
-    0007 aload_1
-    0008 iconst_0
-    0009 ldc "apple"
-    0011 op_0x53
-    0012 aload_1
-    0013 iconst_1
-    0014 ldc "banana"
-    0016 op_0x53
-    0017 aload_1
-    0018 iconst_2
-    0019 ldc "cherry"
-    0021 op_0x53
-    0022 aload_1
-    0023 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0026 astore_2
-    0027 aload_2
-    0028 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0033 astore_3
-    0034 aload_3
-    0035 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0040 istore 4
-    0042 iload 4
-    0044 ifeq 66
-    0047 aload_3
-    0048 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0053 astore 5
-    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0058 aload 5
-    0060 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0063 goto 34
-    0066 return
-    sub_attr  StackMapTable (23 bytes)
-=======
-  code        max_stack=3 max_locals=12
-    0000 ldc "apple"
-    0002 astore_0
-    0003 ldc "banana"
-    0005 astore_1
-    0006 ldc "cherry"
-    0008 astore_2
-    0009 iconst_3
-    0010 istore_3
-    0011 iload_3
-    0012 op_0xBD
-    0013 nop
-    0014 iconst_1
-    0015 astore 4
-    0017 iconst_0
-    0018 istore 5
-    0020 aload 4
-    0022 iload 5
-    0024 aload_0
-    0025 op_0x53
-    0026 iconst_1
-    0027 istore 6
-    0029 aload 4
-    0031 iload 6
-    0033 aload_1
-    0034 op_0x53
-    0035 iconst_2
-    0036 istore 7
-    0038 aload 4
-    0040 iload 7
-    0042 aload_2
-    0043 op_0x53
-    0044 aload 4
-    0046 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0049 astore 8
-    0051 aload 8
-    0053 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0058 astore 9
-    0060 aload 9
-    0062 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0067 istore 10
-    0069 iload 10
-    0071 ifeq 94
-    0074 aload 9
-    0076 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0081 astore 11
-    0083 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0086 aload 11
-    0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0091 goto 60
-    0094 return
-    sub_attr  StackMapTable (35 bytes)
->>>>>>> Stashed changes
+    0001 op_0xBD
+    0002 nop
+    0003 iconst_1
+    0004 astore_0
+    0005 aload_0
+    0006 iconst_0
+    0007 ldc "apple"
+    0009 op_0x53
+    0010 aload_0
+    0011 iconst_1
+    0012 ldc "banana"
+    0014 op_0x53
+    0015 aload_0
+    0016 iconst_2
+    0017 ldc "cherry"
+    0019 op_0x53
+    0020 aload_0
+    0021 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0024 astore_1
+    0025 aload_1
+    0026 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0031 astore_2
+    0032 aload_2
+    0033 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0038 ifeq 58
+    0041 aload_2
+    0042 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0047 astore_3
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 aload_3
+    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0055 goto 32
+    0058 return
+    sub_attr  StackMapTable (15 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

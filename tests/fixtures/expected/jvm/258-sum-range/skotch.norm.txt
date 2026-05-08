@@ -24,65 +24,25 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        sumRange (II)I 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=4
     0000 iconst_0
     0001 istore_2
-    0002 iload_2
+    0002 iload_0
     0003 istore_3
-    0004 iload_0
-    0005 istore 4
-    0007 iload 4
-    0009 iload_1
-<<<<<<< Updated upstream
-    0010 if_icmpgt 17
-    0013 iconst_1
-    0014 goto 18
-    0017 iconst_0
-    0018 istore 5
-    0020 iload 5
-    0022 ifeq 51
-    0025 iload_3
-    0026 istore 6
-    0028 iload 6
-    0030 iload 4
-    0032 iadd
-    0033 istore 7
-    0035 iload 7
-    0037 istore_3
-    0038 iload 4
-    0040 iconst_1
-    0041 iadd
-    0042 istore 8
-    0044 iload 8
-    0046 istore 4
-    0048 goto 7
-    0051 iload_3
-    0052 istore 9
-    0054 iload 9
-    0056 ireturn
-    sub_attr  StackMapTable (15 bytes)
-=======
-    0010 if_icmpgt 43
+    0004 iload_3
+    0005 iload_1
+    0006 if_icmpgt 24
+    0009 iload_2
+    0010 iload_3
+    0011 iadd
+    0012 istore_2
     0013 iload_3
-    0014 istore 6
-    0016 iload 6
-    0018 iload 4
-    0020 iadd
-    0021 istore 7
-    0023 iload 7
-    0025 istore_3
-    0026 iconst_1
-    0027 istore 8
-    0029 iload 4
-    0031 iload 8
-    0033 iadd
-    0034 istore 9
-    0036 iload 9
-    0038 istore 4
-    0040 goto 7
-    0043 iload_3
-    0044 istore 10
-    0046 iload 10
-    0048 ireturn
-    sub_attr  StackMapTable (9 bytes)
->>>>>>> Stashed changes
+    0014 iload_1
+    0015 if_icmpeq 24
+    0018 op_0x84
+    0019 iconst_0
+    0020 aconst_null
+    0021 goto 9
+    0024 iload_2
+    0025 ireturn
+    sub_attr  StackMapTable (8 bytes)

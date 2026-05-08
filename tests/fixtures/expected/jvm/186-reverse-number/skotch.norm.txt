@@ -28,98 +28,30 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        reverse (I)I 0x0019
-  code        max_stack=2 max_locals=14
+  code        max_stack=2 max_locals=5
     0000 iload_0
     0001 istore_1
     0002 iconst_0
     0003 istore_2
-    0004 iload_2
-    0005 istore_3
-    0006 iload_1
-    0007 istore 4
-<<<<<<< Updated upstream
-    0009 iload 4
-    0011 ifle 18
-    0014 iconst_1
-    0015 goto 19
-    0018 iconst_0
-    0019 istore 5
-    0021 iload 5
-    0023 ifeq 72
-    0026 iload_3
-    0027 istore 6
-    0029 iload 6
-    0031 bipush 10
-    0033 imul
-    0034 istore 7
-    0036 iload_1
-    0037 istore 8
-    0039 iload 8
-    0041 bipush 10
-    0043 irem
-    0044 istore 9
-    0046 iload 7
-    0048 iload 9
-    0050 iadd
-    0051 istore 10
-    0053 iload 10
-    0055 istore_3
-    0056 iload_1
-    0057 istore 11
-    0059 iload 11
-    0061 bipush 10
-    0063 idiv
-    0064 istore 12
-    0066 iload 12
-    0068 istore_1
-    0069 goto 6
-    0072 iload_3
-    0073 istore 13
-    0075 iload 13
-    0077 ireturn
-    sub_attr  StackMapTable (18 bytes)
-=======
-    0009 iconst_0
-    0010 istore 5
-    0012 iload 4
-    0014 iload 5
-    0016 if_icmple 77
+    0004 iload_1
+    0005 ifle 32
+    0008 iload_2
+    0009 bipush 10
+    0011 imul
+    0012 istore_3
+    0013 iload_1
+    0014 bipush 10
+    0016 irem
+    0017 istore 4
     0019 iload_3
-    0020 istore 7
-    0022 bipush 10
-    0024 istore 8
-    0026 iload 7
-    0028 iload 8
-    0030 imul
-    0031 istore 9
-    0033 iload_1
-    0034 istore 10
-    0036 bipush 10
-    0038 istore 11
-    0040 iload 10
-    0042 iload 11
-    0044 irem
-    0045 istore 12
-    0047 iload 9
-    0049 iload 12
-    0051 iadd
-    0052 istore 13
-    0054 iload 13
-    0056 istore_3
-    0057 iload_1
-    0058 istore 14
-    0060 bipush 10
-    0062 istore 15
-    0064 iload 14
-    0066 iload 15
-    0068 idiv
-    0069 istore 16
-    0071 iload 16
-    0073 istore_1
-    0074 goto 6
-    0077 iload_3
-    0078 istore 17
-    0080 iload 17
-    0082 ireturn
-    sub_attr  StackMapTable (13 bytes)
->>>>>>> Stashed changes
+    0020 iload 4
+    0022 iadd
+    0023 istore_2
+    0024 iload_1
+    0025 bipush 10
+    0027 idiv
+    0028 istore_1
+    0029 goto 4
+    0032 iload_2
+    0033 ireturn
+    sub_attr  StackMapTable (8 bytes)

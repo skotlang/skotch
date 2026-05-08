@@ -3,70 +3,27 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        first (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=4
     0000 aload_0
     0001 aconst_null
-    0002 if_acmpeq 9
-    0005 iconst_1
-    0006 goto 10
-    0009 iconst_0
-    0010 istore_2
-    0011 iload_2
-    0012 ifeq 20
-    0015 aload_0
-    0016 astore_3
-    0017 goto 22
-    0020 aload_1
-    0021 astore_3
-    0022 aload_3
-    0023 aconst_null
-    0024 if_acmpeq 31
-    0027 iconst_1
-    0028 goto 32
-    0031 iconst_0
-    0032 istore 4
-    0034 iload 4
-    0036 ifeq 45
-    0039 aload_3
-    0040 astore 5
-    0042 goto 53
-    0045 ldc "none"
-    0047 astore 6
-    0049 aload 6
-    0051 astore 5
-    0053 aload 5
-    0055 checkcast Class(java/lang/String)
-    0058 areturn
-=======
-  code        max_stack=2 max_locals=9
-    0000 aconst_null
-    0001 astore_2
-    0002 aload_0
-    0003 aload_2
-    0004 if_acmpeq 13
-    0007 aload_0
-    0008 astore 4
-    0010 goto 16
-    0013 aload_1
-    0014 astore 4
-    0016 aconst_null
-    0017 astore 5
-    0019 aload 4
-    0021 aload 5
-    0023 if_acmpeq 33
-    0026 aload 4
-    0028 astore 7
-    0030 goto 41
-    0033 ldc "none"
-    0035 astore 8
-    0037 aload 8
-    0039 astore 7
-    0041 aload 7
-    0043 checkcast Class(java/lang/String)
-    0046 areturn
->>>>>>> Stashed changes
-    sub_attr  StackMapTable (28 bytes)
+    0002 if_acmpeq 10
+    0005 aload_0
+    0006 astore_2
+    0007 goto 12
+    0010 aload_1
+    0011 astore_2
+    0012 aload_2
+    0013 aconst_null
+    0014 if_acmpeq 22
+    0017 aload_2
+    0018 astore_3
+    0019 goto 25
+    0022 ldc "none"
+    0024 astore_3
+    0025 aload_3
+    0026 checkcast Class(java/lang/String)
+    0029 areturn
+    sub_attr  StackMapTable (16 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

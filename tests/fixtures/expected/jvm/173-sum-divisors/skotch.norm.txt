@@ -28,93 +28,31 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        sumDivisors (I)I 0x0019
-  code        max_stack=2 max_locals=12
+  code        max_stack=2 max_locals=3
     0000 iconst_0
     0001 istore_1
-    0002 iload_1
+    0002 iconst_1
     0003 istore_2
-    0004 iconst_1
-    0005 istore_3
-    0006 iload_3
-    0007 istore 4
-    0009 iload 4
-    0011 iload_0
-<<<<<<< Updated upstream
-    0012 if_icmpgt 19
-    0015 iconst_1
-    0016 goto 20
-    0019 iconst_0
-    0020 istore 5
-    0022 iload 5
-    0024 ifeq 66
-    0027 iload_0
-    0028 iload 4
-    0030 irem
-    0031 istore 6
-    0033 iload 6
-    0035 ifne 42
-    0038 iconst_1
-    0039 goto 43
-    0042 iconst_0
-    0043 istore 7
-    0045 iload 7
-    0047 ifeq 53
-    0050 goto 72
-    0053 iload 4
-    0055 iconst_1
-    0056 iadd
-    0057 istore 8
-    0059 iload 8
-    0061 istore 4
-    0063 goto 9
-    0066 iload_2
-    0067 istore 9
-    0069 iload 9
-    0071 ireturn
-    0072 iload_2
-    0073 istore 10
-    0075 iload 10
-    0077 iload 4
-    0079 iadd
-    0080 istore 11
-    0082 iload 11
-    0084 istore_2
-    0085 goto 53
-    sub_attr  StackMapTable (36 bytes)
-=======
-    0012 if_icmpgt 51
-    0015 iload_0
-    0016 iload 4
-    0018 irem
-    0019 istore 6
-    0021 iconst_0
-    0022 istore 7
-    0024 iload 6
-    0026 iload 7
-    0028 if_icmpne 73
-    0031 goto 57
-    0034 iconst_1
-    0035 istore 9
-    0037 iload 4
-    0039 iload 9
-    0041 iadd
-    0042 istore 10
-    0044 iload 10
-    0046 istore 4
-    0048 goto 9
-    0051 iload_2
-    0052 istore 11
-    0054 iload 11
-    0056 ireturn
-    0057 iload_2
-    0058 istore 12
-    0060 iload 12
-    0062 iload 4
-    0064 iadd
-    0065 istore 13
-    0067 iload 13
-    0069 istore_2
-    0070 goto 73
-    0073 goto 34
-    sub_attr  StackMapTable (30 bytes)
->>>>>>> Stashed changes
+    0004 iload_2
+    0005 iload_0
+    0006 if_icmpgt 29
+    0009 iload_0
+    0010 iload_2
+    0011 irem
+    0012 ifne 35
+    0015 goto 31
+    0018 iload_2
+    0019 iload_0
+    0020 if_icmpeq 29
+    0023 op_0x84
+    0024 iconst_m1
+    0025 aconst_null
+    0026 goto 9
+    0029 iload_1
+    0030 ireturn
+    0031 iload_1
+    0032 iload_2
+    0033 iadd
+    0034 istore_1
+    0035 goto 18
+    sub_attr  StackMapTable (11 bytes)

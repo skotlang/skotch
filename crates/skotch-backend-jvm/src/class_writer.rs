@@ -697,15 +697,10 @@ fn method_returns_non_null_ref(func: &MirFunction) -> bool {
     matches!(&func.return_ty, Ty::String | Ty::Class(_))
 }
 
-<<<<<<< Updated upstream
 /// True if the method's return type is a Nullable reference — kotlinc
 /// emits `@org.jetbrains.annotations.Nullable` on those. Primitives wrapped
 /// in nullable (`Int?` etc.) box to a wrapper class, which IS a reference,
 /// so they get @Nullable too.
-=======
-/// True if the method's return type is a Nullable reference. kotlinc emits
-/// `@org.jetbrains.annotations.Nullable` for those.
->>>>>>> Stashed changes
 fn method_returns_nullable_ref(func: &MirFunction) -> bool {
     if func.is_private {
         return false;
@@ -2721,7 +2716,6 @@ fn emit_method_body(
                 then_block,
                 else_block,
             } => {
-                // Load cond, branch to else if false, fall through to then.
                 load_local(
                     code.as_mut(),
                     &mut stack,
@@ -2736,27 +2730,52 @@ fn emit_method_body(
                     cond_ty,
                     Ty::Any | Ty::Class(_) | Ty::Nullable(_) | Ty::String | Ty::Error
                 );
-                code.push(if is_ref { 0xC6 } else { 0x99 });
-                let offset_pos = code.len();
-                code.write_i16::<BigEndian>(0).unwrap();
-                bump(&mut stack, &mut max_stack, -1);
-                patches.push(JumpPatch {
-                    offset_pos,
-                    insn_pos,
-                    target_block: *else_block,
-                });
-                is_target[*else_block as usize] = true;
-                if *then_block as usize != bi + 1 {
-                    let insn2 = code.len();
-                    code.push(0xA7);
-                    let off2 = code.len();
+                // Pick the branch shape based on which successor falls through:
+                //   - else=bi+1 (fall-through to ELSE, common for do-while back-
+                //     edges): emit `if<NE> then` and let else follow.
+                //   - then=bi+1 (fall-through to THEN, common for if/else and
+                //     for/while loop heads): emit `if<EQ> else` and let then
+                //     follow. Adds an extra `goto then` only when neither side
+                //     is the next reachable block.
+                let else_is_next = *else_block as usize == bi + 1;
+                let then_is_next = *then_block as usize == bi + 1;
+                if else_is_next && !then_is_next {
+                    // Inverted branch: jump to then on TRUE, fall through to else.
+                    code.push(if is_ref { 0xC7 } else { 0x9A });
+                    let offset_pos = code.len();
                     code.write_i16::<BigEndian>(0).unwrap();
+                    bump(&mut stack, &mut max_stack, -1);
                     patches.push(JumpPatch {
-                        offset_pos: off2,
-                        insn_pos: insn2,
+                        offset_pos,
+                        insn_pos,
                         target_block: *then_block,
                     });
                     is_target[*then_block as usize] = true;
+                } else {
+                    // Direct branch: jump to else on FALSE, fall through to then
+                    // (or follow with `goto then` when then isn't bi+1).
+                    code.push(if is_ref { 0xC6 } else { 0x99 });
+                    let offset_pos = code.len();
+                    code.write_i16::<BigEndian>(0).unwrap();
+                    bump(&mut stack, &mut max_stack, -1);
+                    patches.push(JumpPatch {
+                        offset_pos,
+                        insn_pos,
+                        target_block: *else_block,
+                    });
+                    is_target[*else_block as usize] = true;
+                    if !then_is_next {
+                        let insn2 = code.len();
+                        code.push(0xA7);
+                        let off2 = code.len();
+                        code.write_i16::<BigEndian>(0).unwrap();
+                        patches.push(JumpPatch {
+                            offset_pos: off2,
+                            insn_pos: insn2,
+                            target_block: *then_block,
+                        });
+                        is_target[*then_block as usize] = true;
+                    }
                 }
             }
             Terminator::Goto(target) => {
@@ -2800,17 +2819,11 @@ fn emit_method_body(
 
     // Pass 2.5: Fuse `cmp; iconst materialization; istore_M; iload_M; ifeq Z`
     // into a direct `if_icmp<COND> Z`. kotlinc emits the fused form for any
-<<<<<<< Updated upstream
     // boolean used only for an `if`/`while` test; we emit the materialized
     // form because MIR splits the cmp and branch over a temp local. This
     // peephole runs after Pass 2 because it reads the resolved relative
     // offsets of the inter-block ifeq.
-    if false && !cmp_targets.is_empty() {
-=======
-    // boolean used only for an `if`/`while` test. Runs after Pass 2 because
-    // it reads the resolved relative offsets of the inter-block ifeq.
     if !cmp_targets.is_empty() {
->>>>>>> Stashed changes
         let mut fuse_named_slots: FxHashSet<u8> = func
             .named_locals
             .iter()
@@ -2829,11 +2842,11 @@ fn emit_method_body(
         );
     }
 
-<<<<<<< Updated upstream
     // Pass 2.8: Thread `goto X → goto Y` chains so each branch jumps
-    // directly to its final target. After threading, an inner goto block
-    // typically becomes unreachable; dead-code elimination drops them.
-    peephole_thread_gotos(&mut code);
+    // directly to its final target. Currently DISABLED — threading can
+    // break the live_at_end fixed-point's view of slot reachability when
+    // a slot's only initialization sits along the rewired path.
+    let _ = peephole_thread_gotos;
 
     // Pass 2.9: Drop unreachable bytes (commonly trampoline gotos that
     // threading detached). Skipped when there are exception handlers,
@@ -2851,8 +2864,6 @@ fn emit_method_body(
         peephole_drop_redundant_gotos(&mut code, &mut cmp_targets, &mut block_offsets);
     }
 
-=======
->>>>>>> Stashed changes
     // Pass 3: Peephole optimization — elide adjacent store+load of same slot.
     // Safe when:
     //   - No inter-block branches (`patches`), OR
@@ -3052,8 +3063,20 @@ fn emit_method_body(
                     named_slots_for_middle.insert(s);
                 }
             }
-            // First middle-elide DISABLED to maintain SMT correctness.
-            let _ = peephole_elide_middle_store_load;
+            // Middle-elide for inter-block functions: collapses adjacent
+            // `xstore N; xload N; xreturn` (the post-MIR shape we emit for
+            // `return <expr>`) into `xreturn` when slot N is dead afterward.
+            // Adjusts inter-block branch offsets, cmp_targets, and
+            // block_offsets so SMT/jump tables stay consistent.
+            if !is_data_class_helper {
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+            }
             // The "advanced" peepholes below (copy-prop, iinc-fold, box-unbox,
             // stack-merge-returns, operand hoist) are skipped for the auto-
             // generated data-class members (equals/hashCode/toString/copy/
@@ -3066,36 +3089,18 @@ fn emit_method_body(
                 func.name.as_str(),
                 "equals" | "hashCode" | "toString" | "copy"
             ) || func.name.starts_with("component");
-            if false && !is_data_class_helper {
-                // Copy propagation: `xload N; xstore M; ...; xload M` → `...; xload N`.
-                peephole_copy_prop(
-                    &mut code,
-                    &mut cmp_targets,
-                    &mut block_offsets,
-                    &named_slots_for_middle,
-                );
-                // Fold `iload M; <const>; iadd|isub; istore M` → `iinc M, <const>`.
-                peephole_fold_iinc(&mut code, &mut cmp_targets, &mut block_offsets);
-                // Drop redundant box/unbox round-trips.
+            // The "advanced" peepholes below — disabled for data-class helpers
+            // because slot 2 (the `as`-cast result) sometimes shares storage
+            // with an earlier Bool/Object temp, which our peephole infra
+            // can't reconstruct cleanly.
+            #[allow(clippy::overly_complex_bool_expr)]
+            if !is_data_class_helper {
+                // Drop redundant box/unbox round-trips. Saves Integer.valueOf
+                // → checkcast → intValue noise when MIR materializes a boxed
+                // intermediate but the call site wants a primitive.
                 peephole_drop_box_unbox(&mut code, &mut cmp_targets, &mut block_offsets, &*cp);
-                // Convert slot-based if-result merge into stack-based — kotlinc
-                // leaves the if-expression's result on the stack across branches
-                // and uses a single shared `xreturn`.
-                peephole_stack_merge_returns(
-                    &mut code,
-                    &mut cmp_targets,
-                    &mut block_offsets,
-                    &named_slots_for_middle,
-                );
-                // Hoist a simple consumer load (`iload N`) ahead of a single-arg
-                // recursive arithmetic call, matching kotlinc's habit of pre-
-                // pushing the LHS so the call result stays on the operand stack.
-                peephole_hoist_op_before_call(&mut code, &mut cmp_targets, &mut block_offsets);
-                // General hoist (forward-stack-analysis variant). Disabled — see
-                // peephole_hoist_op_general comments.
-                let _ = peephole_hoist_op_general;
-                // The hoist can expose new `xstore N; xload N` adjacencies that
-                // middle_elide didn't see on its first run.
+                // Re-run middle-elide: dropping a box/unbox can expose new
+                // adjacent xstore/xload pairs.
                 peephole_elide_middle_store_load(
                     &mut code,
                     &mut cmp_targets,
@@ -3104,9 +3109,60 @@ fn emit_method_body(
                     &named_slots_for_middle,
                 );
             }
+            // Copy propagation: `xload N; xstore M; ...; xload M` → `...; xload N`.
+            // Lets MIR-introduced rename-temps drop out so kotlinc's tighter
+            // emission shape is matched. Skipped for data-class helpers.
+            if !is_data_class_helper {
+                peephole_copy_prop(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                );
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+            }
+            // Fold `iload M; <const>; iadd|isub; istore M` → `iinc M, <const>`.
+            if !is_data_class_helper {
+                peephole_fold_iinc(&mut code, &mut cmp_targets, &mut block_offsets);
+            }
+            // Hoist a simple consumer load (`iload N`) ahead of a single-arg
+            // recursive arithmetic call, matching kotlinc's habit of pre-
+            // pushing the LHS so the call result stays on the operand stack.
+            if !is_data_class_helper {
+                peephole_hoist_op_before_call(&mut code, &mut cmp_targets, &mut block_offsets);
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+            }
+            if !is_data_class_helper {
+                peephole_stack_merge_returns(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                );
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+            }
+            let _ = peephole_hoist_op_general;
             // Slot compaction is byte-preserving, so it's safe with inter-block
             // branches. Mirrors the patches.is_empty() path.
-            let mut named_slots: FxHashSet<u8> = func
+            let _named_slots: FxHashSet<u8> = func
                 .named_locals
                 .iter()
                 .filter_map(|l| slots.get(&l.0).copied())
@@ -3167,18 +3223,37 @@ fn emit_method_body(
                     by_slot.insert(jvm_slot, ty);
                 }
             }
-            // Compaction is currently DISABLED in the inter-block path: even
-            // with the type-aliasing detection above, multi-block functions
-            // sometimes hit a SMT-vs-verifier slot-type mismatch that would
-            // require per-frame type tracking to emit correctly. We ship the
-            // un-compacted slots for safety — kotlinc parity for these methods
-            // would need a more sophisticated SMT emitter.
-            let _ = has_type_aliasing;
-            let _ = compact_local_slots_with_map;
-            let _ = compress_to_compact_forms_with_blocks;
             let _ = by_slot;
             let _ = is_primitive;
             let _ = is_reference;
+            if !has_type_aliasing {
+                let mut named_slots: FxHashSet<u8> = func
+                    .named_locals
+                    .iter()
+                    .filter_map(|l| slots.get(&l.0).copied())
+                    .collect();
+                for recv in destructuring_receivers(func) {
+                    if let Some(&s) = slots.get(&recv.0) {
+                        named_slots.insert(s);
+                    }
+                }
+                let new_max = compact_local_slots_with_map(
+                    &mut code,
+                    initial_param_slots,
+                    &mut named_slots,
+                    Some(&mut slots),
+                );
+                max_locals = new_max as u16;
+                // After compaction, slot indices may now fit in 0..=3 — convert
+                // generic 2-byte forms (`istore N`) back to compact 1-byte
+                // forms (`istore_N`). Updates `block_offsets` and
+                // `cmp_targets` to reflect the byte deletions.
+                compress_to_compact_forms_with_blocks(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                );
+            }
             // Authoritative recomputation. The emission tracker walks the MIR
             // linearly and can over-count when a comparison's iconst_1/iconst_0
             // materialization is later fused, leaving a tighter stack. The
@@ -3267,9 +3342,35 @@ fn emit_method_body(
         .map(|v| v as usize + 1)
         .unwrap_or(0);
     let slot_count = std::cmp::max(max_slots, actual_max);
+    // Compute which slots actually appear in the (post-peephole) bytecode.
+    // MIR locals whose slot is unused — typically peephole-eliminated cmp
+    // result temps fused into `if_icmp` — are dropped so the StackMapTable
+    // doesn't describe a dead slot with a stale type. Initial param slots
+    // are always considered used.
+    let mut slot_used = vec![false; slot_count.max(256)];
+    for s in 0..(initial_param_slots as usize).min(slot_used.len()) {
+        slot_used[s] = true;
+    }
+    {
+        let code_slice: &[u8] = &code;
+        let mut i = 0;
+        while i < code_slice.len() {
+            if let Some((s, is_wide)) = decode_slot_reference(code_slice, i) {
+                if (s as usize) < slot_used.len() {
+                    slot_used[s as usize] = true;
+                    if is_wide && (s as usize + 1) < slot_used.len() {
+                        slot_used[s as usize + 1] = true;
+                    }
+                }
+            }
+            i += instruction_len(code_slice, i);
+        }
+    }
     let mut slot_to_local: Vec<Option<u32>> = vec![None; slot_count];
     for (&mir_id, &jvm_slot) in slots.iter() {
-        slot_to_local[jvm_slot as usize] = Some(mir_id);
+        if (jvm_slot as usize) < slot_used.len() && slot_used[jvm_slot as usize] {
+            slot_to_local[jvm_slot as usize] = Some(mir_id);
+        }
     }
 
     // ── Per-block slot sets (fixed-point iteration for loops) ─────
@@ -3282,7 +3383,10 @@ fn emit_method_body(
     // The fixed-point iteration narrows this to the correct set.
     let mut live_at_end: Vec<Vec<bool>> = vec![vec![true; max_slots]; func.blocks.len()];
     let mut inherited_per_block: Vec<Vec<bool>> = vec![vec![false; max_slots]; func.blocks.len()];
-    for _iteration in 0..4 {
+    // Iterate until convergence — bumped from 4 to 16 because deeply nested
+    // loops + when-as-val + cmp-fusion can take longer to propagate dead slot
+    // information from peephole-emptied stores back through back-edges.
+    for _iteration in 0..16 {
         let mut changed = false;
         for (bi, _) in func.blocks.iter().enumerate() {
             let mut inherited = vec![true; max_slots];
@@ -3460,6 +3564,37 @@ fn emit_method_body(
                         buf.push(7);
                         let ci = cp.class(hc.unwrap_or("java/lang/Throwable"));
                         buf.write_u16::<BigEndian>(ci).unwrap();
+                        Some(buf)
+                    } else if (off as usize) < code.len()
+                        && matches!(code[off as usize], 0xAC..=0xB0)
+                    {
+                        // peephole_stack_merge_returns leaves the if-result on
+                        // the stack at the merged xreturn target; describe it.
+                        let mut buf = Vec::new();
+                        match code[off as usize] {
+                            0xAC => buf.push(1), // ireturn — Integer
+                            0xAD => buf.push(4), // lreturn — Long
+                            0xAE => buf.push(2), // freturn — Float
+                            0xAF => buf.push(3), // dreturn — Double
+                            0xB0 => {
+                                // areturn — Object of return type. Pick the
+                                // tightest possible class for the descriptor.
+                                buf.push(7);
+                                let cn = match &func.return_ty {
+                                    Ty::String => "java/lang/String".to_string(),
+                                    Ty::Class(name) => name.clone(),
+                                    Ty::Nullable(inner) => match inner.as_ref() {
+                                        Ty::Class(name) => name.clone(),
+                                        Ty::String => "java/lang/String".to_string(),
+                                        _ => "java/lang/Object".to_string(),
+                                    },
+                                    _ => "java/lang/Object".to_string(),
+                                };
+                                let ci = cp.class(&cn);
+                                buf.write_u16::<BigEndian>(ci).unwrap();
+                            }
+                            _ => unreachable!(),
+                        }
                         Some(buf)
                     } else {
                         None
@@ -9658,14 +9793,9 @@ fn jvm_type_string(ty: &Ty) -> String {
     match ty {
         Ty::Class(name) => format!("L{name};"),
         // Nullable reference types use the inner reference's descriptor —
-<<<<<<< Updated upstream
         // kotlinc emits `String?` as `Ljava/lang/String;`, `Foo?` as `LFoo;`
         // — the JVM allows `null` for any reference type. Nullable primitives
         // box to their wrapper class.
-=======
-        // kotlinc emits `String?` as `Ljava/lang/String;`, `Foo?` as `LFoo;`.
-        // Nullable primitives box to their wrapper class.
->>>>>>> Stashed changes
         Ty::Nullable(inner) => match inner.as_ref() {
             Ty::Class(name) => format!("L{name};"),
             Ty::String => "Ljava/lang/String;".to_string(),
@@ -12917,7 +13047,6 @@ fn peephole_elide_middle_store_load(
     }
 }
 
-<<<<<<< Updated upstream
 /// Fuse the kotlinc-compatible `if_icmp<INV>+7; iconst_1; goto+4; iconst_0;
 /// istore_M; iload_M; ifeq Z` (or `ifne Z`) sequence into a direct
 /// comparison branch `if_icmp<COND> Z'`.
@@ -12942,22 +13071,6 @@ fn peephole_elide_middle_store_load(
 ///
 /// We drain bytes `[i+3, i+8+sl+ll+3)` and adjust all branch instructions,
 /// `cmp_targets`, and `block_offsets` like `peephole_elide_middle_store_load`.
-=======
-/// Fuse the kotlinc-compatible boolean materialization + branch into a
-/// direct comparison branch.
-///
-/// Pattern (positions relative to `i` where the cmp pattern starts):
-///   i+0:        if_icmp<INV>  +7     (3 bytes)
-///   i+3:        iconst_1             (1 byte)
-///   i+4:        goto +4              (3 bytes)
-///   i+7:        iconst_0             (1 byte)
-///   i+8:        istore_M             (sl bytes)
-///   i+8+sl:     iload_M              (ll bytes)
-///   i+8+sl+ll:  ifeq/ifne Z          (3 bytes)
-///
-/// Replacement: `if_icmp<COND> Z'` where the condition is flipped for ifne.
-/// Drains `8+sl+ll` bytes between `i+3` and `i+11+sl+ll`.
->>>>>>> Stashed changes
 fn peephole_fuse_cmp_branch(
     code: &mut Vec<u8>,
     cmp_targets: &mut Vec<CmpBranchTarget>,
@@ -12966,7 +13079,6 @@ fn peephole_fuse_cmp_branch(
 ) {
     loop {
         let mut applied: Option<(usize, usize, usize, u8, usize, u8, i32)> = None;
-<<<<<<< Updated upstream
         // (cmp_start, sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel)
         let mut i = 0;
         while i < code.len() {
@@ -12977,44 +13089,24 @@ fn peephole_fuse_cmp_branch(
                 let z_orig = ifeq_pos as i32 + ifeq_rel;
                 // Z must lie outside the drain range and outside [i, i+3) (the
                 // remaining if_icmp bytes).
-=======
-        let mut i = 0;
-        while i < code.len() {
-            if let Some((sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel)) =
-                match_cmp_branch_pattern(code, i, named_slots)
-            {
-                let drain_start = i + 3;
-                let drain_end = ifeq_pos + 3;
-                let z_orig = ifeq_pos as i32 + ifeq_rel;
-                // Z must lie outside the drain range and outside [i, i+3).
->>>>>>> Stashed changes
                 if z_orig >= i as i32 && z_orig < drain_end as i32 {
                     i += instruction_len(code, i);
                     continue;
                 }
-<<<<<<< Updated upstream
                 // Slot must be dead after the ifeq — both fall-through and
                 // taken branch should never read it.
-=======
->>>>>>> Stashed changes
                 let after_ifeq = ifeq_pos + 3;
                 if slot_alive_at(code, slot, after_ifeq) {
                     i += instruction_len(code, i);
                     continue;
                 }
-<<<<<<< Updated upstream
                 // No taken-branch reads of the slot at z_orig either.
-=======
->>>>>>> Stashed changes
                 if (z_orig as usize) < code.len() && slot_alive_at(code, slot, z_orig as usize) {
                     i += instruction_len(code, i);
                     continue;
                 }
-<<<<<<< Updated upstream
                 // No other cmp_target's offset/cmp_start may sit strictly
                 // inside the drain range (would belong to a foreign pattern).
-=======
->>>>>>> Stashed changes
                 let foreign_conflict = cmp_targets.iter().any(|t| {
                     t.cmp_start != i
                         && ((t.offset > drain_start && t.offset < drain_end)
@@ -13024,11 +13116,8 @@ fn peephole_fuse_cmp_branch(
                     i += instruction_len(code, i);
                     continue;
                 }
-<<<<<<< Updated upstream
                 // No block_offset may land strictly inside the drain range
                 // (would leave a frame at a now-dead position).
-=======
->>>>>>> Stashed changes
                 let block_conflict = block_offsets
                     .iter()
                     .any(|&b| b > drain_start && b < drain_end);
@@ -13053,24 +13142,16 @@ fn peephole_fuse_cmp_branch(
         if ifeq_op == 0x9A {
             code[cmp_start] = flip_cmp_branch_op(code[cmp_start]);
         }
-<<<<<<< Updated upstream
         // Set if_icmp's pre-drain offset to (i+8+sl+ll - i) + ifeq_rel = the
         // distance from cmp_start to z_orig in PRE-drain coords. The standard
         // adjust loop below collapses this to the correct post-drain offset.
-=======
-        // Set if_icmp's pre-drain offset.
->>>>>>> Stashed changes
         let new_rel_pre = (8 + sl + ll) as i32 + ifeq_rel;
         let bytes = (new_rel_pre as i16).to_be_bytes();
         code[cmp_start + 1] = bytes[0];
         code[cmp_start + 2] = bytes[1];
-<<<<<<< Updated upstream
         // Adjust all branch instructions. Branches inside the drain range get
         // adjusted then dropped; branches spanning the range have their
         // relative offsets shrunk/grown. (Mirrors peephole_elide_middle_store_load.)
-=======
-        // Adjust all branch instructions; mirror peephole_elide_middle_store_load.
->>>>>>> Stashed changes
         let mut j = 0;
         while j < code.len() {
             let op = code[j];
@@ -13131,10 +13212,7 @@ fn peephole_fuse_cmp_branch(
                 ct.cmp_start -= drain_size;
             }
         }
-<<<<<<< Updated upstream
         // Shift block_offsets past the drain.
-=======
->>>>>>> Stashed changes
         for b in block_offsets.iter_mut() {
             if *b >= drain_end {
                 *b -= drain_size;
@@ -13154,34 +13232,22 @@ fn match_cmp_branch_pattern(
     if i + 8 >= code.len() {
         return None;
     }
-<<<<<<< Updated upstream
     // i+0: if_icmp<INV> (0x9F..=0xA4) | if_acmp<INV> (0xA5/0xA6) | single-operand if<INV> (0x99..=0x9E)
-=======
->>>>>>> Stashed changes
     let op = code[i];
     let is_branch = matches!(op, 0x99..=0xA6);
     if !is_branch {
         return None;
     }
-<<<<<<< Updated upstream
     // The branch must point to i+7 (offset = +7).
-=======
->>>>>>> Stashed changes
     let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
     if rel != 7 {
         return None;
     }
-<<<<<<< Updated upstream
     // i+3: iconst_1 (0x04)
     if code[i + 3] != 0x04 {
         return None;
     }
     // i+4: goto (0xA7) with offset +4
-=======
-    if code[i + 3] != 0x04 {
-        return None;
-    }
->>>>>>> Stashed changes
     if code[i + 4] != 0xA7 {
         return None;
     }
@@ -13189,7 +13255,6 @@ fn match_cmp_branch_pattern(
     if goto_rel != 4 {
         return None;
     }
-<<<<<<< Updated upstream
     // i+7: iconst_0 (0x03)
     if code[i + 7] != 0x03 {
         return None;
@@ -13205,16 +13270,6 @@ fn match_cmp_branch_pattern(
     // i+8+sl: iload_M matching the same slot
     let ll = decode_aload_of_slot(code, i + 8 + sl, slot, true)?;
     // i+8+sl+ll: ifeq (0x99) or ifne (0x9A)
-=======
-    if code[i + 7] != 0x03 {
-        return None;
-    }
-    let (slot, sl) = decode_istore_at_int(code, i + 8)?;
-    if named_slots.contains(&slot) {
-        return None;
-    }
-    let ll = decode_aload_of_slot(code, i + 8 + sl, slot, true)?;
->>>>>>> Stashed changes
     let ifeq_pos = i + 8 + sl + ll;
     if ifeq_pos + 2 >= code.len() {
         return None;
@@ -13227,14 +13282,9 @@ fn match_cmp_branch_pattern(
     Some((sl, ll, slot, ifeq_pos, ifeq_op, ifeq_rel))
 }
 
-<<<<<<< Updated upstream
 /// Decode an istore at `pos` returning `(slot, instr_len)`. Only handles
 /// integer stores (no astore/lstore/etc.).
 fn decode_istore_at(code: &[u8], pos: usize) -> Option<(u8, usize)> {
-=======
-/// Decode an istore at `pos` (int kind only). Returns `(slot, instr_len)`.
-fn decode_istore_at_int(code: &[u8], pos: usize) -> Option<(u8, usize)> {
->>>>>>> Stashed changes
     if pos >= code.len() {
         return None;
     }
@@ -13245,13 +13295,9 @@ fn decode_istore_at_int(code: &[u8], pos: usize) -> Option<(u8, usize)> {
     }
 }
 
-<<<<<<< Updated upstream
 /// Flip the comparison opcode of a JVM branch instruction so the fused
 /// branch fires under the inverted condition. Used when fusing with `ifne`
 /// (branch on TRUE) where the original `if_icmp<INV>` branched on FALSE.
-=======
-/// Flip the comparison opcode to its inverse (ifeq ↔ ifne, if_icmpeq ↔ if_icmpne, etc.).
->>>>>>> Stashed changes
 fn flip_cmp_branch_op(op: u8) -> u8 {
     match op {
         0x99 => 0x9A, // ifeq → ifne
@@ -13261,7 +13307,6 @@ fn flip_cmp_branch_op(op: u8) -> u8 {
         0x9D => 0x9E, // ifgt → ifle
         0x9E => 0x9D, // ifle → ifgt
         0x9F => 0xA0, // if_icmpeq → if_icmpne
-<<<<<<< Updated upstream
         0xA0 => 0x9F, // if_icmpne → if_icmpeq
         0xA1 => 0xA2, // if_icmplt → if_icmpge
         0xA2 => 0xA1, // if_icmpge → if_icmplt
@@ -13271,22 +13316,10 @@ fn flip_cmp_branch_op(op: u8) -> u8 {
         0xA6 => 0xA5, // if_acmpne → if_acmpeq
         0xC6 => 0xC7, // ifnull → ifnonnull
         0xC7 => 0xC6, // ifnonnull → ifnull
-=======
-        0xA0 => 0x9F,
-        0xA1 => 0xA2, // if_icmplt → if_icmpge
-        0xA2 => 0xA1,
-        0xA3 => 0xA4, // if_icmpgt → if_icmple
-        0xA4 => 0xA3,
-        0xA5 => 0xA6, // if_acmpeq → if_acmpne
-        0xA6 => 0xA5,
-        0xC6 => 0xC7,
-        0xC7 => 0xC6,
->>>>>>> Stashed changes
         other => other,
     }
 }
 
-<<<<<<< Updated upstream
 /// Replace `iload_M; <int constant>; iadd|isub; istore_M` with the
 /// equivalent `iinc M, <const>`. kotlinc compiles `i++`, `i--`, `i += k`,
 /// and `i -= k` into a single `iinc` whenever the constant fits in a signed
@@ -15473,8 +15506,6 @@ fn peephole_drop_redundant_gotos(
     }
 }
 
-=======
->>>>>>> Stashed changes
 fn peephole_elide_tail_store_load(code: &mut Vec<u8>, min_offset: usize) {
     loop {
         let mut removals: Vec<(usize, usize)> = Vec::new();
@@ -16270,8 +16301,12 @@ fn compact_local_slots_with_map(
     *named_slots = updated;
 
     // Update the MIR-local → JVM-slot map so the StackMapTable emission's
-    // slot_to_local lookup sees the post-compaction slots.
+    // slot_to_local lookup sees the post-compaction slots. Drop entries
+    // whose old slot was unused — those MIR locals were peephole-eliminated
+    // (e.g. cmp-result temps fused into `if_icmp`) and shouldn't shadow a
+    // live param's slot in `slot_to_local`.
     if let Some(map) = slots_map {
+        map.retain(|_, v| used[*v as usize]);
         for v in map.values_mut() {
             *v = remap[*v as usize];
         }
@@ -17045,66 +17080,44 @@ fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned
     let mut i = start;
     while i < end {
         let op = code[i];
+        // Identify store opcodes and record the assigned slot.
+        let mut record_store = |slot: usize| {
+            if slot < max_slots {
+                assigned[slot] = true;
+            }
+        };
         // Generic 2-byte store forms: istore/lstore/fstore/dstore/astore
         if (op == 0x36 || op == 0x37 || op == 0x38 || op == 0x39 || op == 0x3A) && i + 1 < end {
-            let slot = code[i + 1] as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 2;
-        }
-        // Compact store forms (1 byte, slot encoded in opcode)
-        else if (0x3B..=0x3E).contains(&op) {
+            record_store(code[i + 1] as usize);
+        } else if (0x3B..=0x3E).contains(&op) {
             // istore_0..istore_3
-            let slot = (op - 0x3B) as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 1;
+            record_store((op - 0x3B) as usize);
         } else if (0x3F..=0x42).contains(&op) {
             // lstore_0..lstore_3
-            let slot = (op - 0x3F) as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 1;
+            record_store((op - 0x3F) as usize);
         } else if (0x43..=0x46).contains(&op) {
             // fstore_0..fstore_3
-            let slot = (op - 0x43) as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 1;
+            record_store((op - 0x43) as usize);
         } else if (0x47..=0x4A).contains(&op) {
             // dstore_0..dstore_3
-            let slot = (op - 0x47) as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 1;
+            record_store((op - 0x47) as usize);
         } else if (0x4B..=0x4E).contains(&op) {
             // astore_0..astore_3
-            let slot = (op - 0x4B) as usize;
-            if slot < max_slots {
-                assigned[slot] = true;
-            }
-            i += 1;
-        } else {
-            i += 1;
-            #[allow(clippy::match_overlapping_arm)]
-            match op {
-                // Generic 2-byte load forms + other 1-operand ops
-                0x10 | 0x12 | 0x15 | 0x16 | 0x17 | 0x18 | 0x19 | 0xBC => i += 1,
-                0x11 | 0x13 | 0x14 | 0x99 | 0x9A | 0xA7 | 0xB2 | 0xB6 | 0xB7 | 0xB8 | 0xBB => {
-                    i += 2
-                }
-                // invokeinterface: 4 operand bytes (index_hi, index_lo, count, 0)
-                0xB9 => i += 4,
-                0x9F..=0xA4 => i += 2,
-                0x59 => {} // dup - 0 operand bytes
-                _ => {}
+            record_store((op - 0x4B) as usize);
+        } else if op == 0xC4 && i + 1 < end {
+            // wide prefix: wide xstore <slot:u16>
+            let inner = code[i + 1];
+            if matches!(inner, 0x36..=0x3A) && i + 3 < end {
+                let slot = u16::from_be_bytes([code[i + 2], code[i + 3]]) as usize;
+                record_store(slot);
             }
         }
+        // Advance past this instruction using the canonical length table —
+        // critical for multi-byte opcodes like invokedynamic (5 bytes) whose
+        // operand bytes might otherwise be mis-decoded as `fstore_3` and
+        // mark a dead slot live.
+        let len = instruction_len(code, i);
+        i += if len > 0 { len } else { 1 };
     }
 }
 
@@ -17153,7 +17166,11 @@ fn write_slot_verif(
                 _ => out.push(1), // fallback to Integer
             }
         } else {
-            out.push(1); // Integer fallback for unknown slot
+            // No MIR-local mapping for this slot — the slot was peephole-
+            // eliminated (e.g. cmp-result temp fused into `if_icmp`) or
+            // otherwise dead. Write `top` rather than guessing Integer:
+            // the verifier accepts `top` for any uninitialized slot.
+            out.push(0); // Top_variable_info
         }
     } else {
         out.push(0); // Top_variable_info

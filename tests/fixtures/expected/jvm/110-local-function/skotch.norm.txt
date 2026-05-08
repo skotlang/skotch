@@ -22,76 +22,17 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        main$factorial (I)I 0x001A
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=8
+  code        max_stack=3 max_locals=1
     0000 iload_0
     0001 iconst_1
     0002 if_icmpgt 9
     0005 iconst_1
-    0006 goto 10
-    0009 iconst_0
-    0010 istore_1
-    0011 iload_1
-    0012 ifeq 22
-    0015 iconst_1
-    0016 istore_2
-    0017 iload_2
-    0018 istore_3
-    0019 goto 56
-    0022 iload_0
-    0023 iconst_1
-    0024 isub
-    0025 istore 4
-    0027 iload 4
-    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0032 astore 5
-    0034 aload 5
-    0036 checkcast Class(java/lang/Integer)
-    0039 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0042 invokestatic Method(InputKt.main$factorial:(I)I)
-    0045 istore 6
-    0047 iload_0
-    0048 iload 6
-    0050 imul
-    0051 istore 7
-    0053 iload 7
-    0055 istore_3
-    0056 iload_3
-    0057 ireturn
-    sub_attr  StackMapTable (14 bytes)
-=======
-  code        max_stack=2 max_locals=10
-    0000 iconst_1
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpgt 15
-    0007 iconst_1
-    0008 istore_3
-    0009 iload_3
-    0010 istore 4
-    0012 goto 54
-    0015 iconst_1
-    0016 istore 5
-    0018 iload_0
-    0019 iload 5
-    0021 isub
-    0022 istore 6
-    0024 iload 6
-    0026 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0029 astore 7
-    0031 aload 7
-    0033 checkcast Class(java/lang/Integer)
-    0036 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0039 invokestatic Method(InputKt.main$factorial:(I)I)
-    0042 istore 8
-    0044 iload_0
-    0045 iload 8
-    0047 imul
-    0048 istore 9
-    0050 iload 9
-    0052 istore 4
-    0054 iload 4
-    0056 ireturn
-    sub_attr  StackMapTable (12 bytes)
->>>>>>> Stashed changes
+    0006 goto 17
+    0009 iload_0
+    0010 iload_0
+    0011 iconst_1
+    0012 isub
+    0013 invokestatic Method(InputKt.main$factorial:(I)I)
+    0016 imul
+    0017 ireturn
+    sub_attr  StackMapTable (5 bytes)

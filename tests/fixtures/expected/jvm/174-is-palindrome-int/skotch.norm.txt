@@ -3,145 +3,42 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isPalindrome (I)Z 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=17
+  code        max_stack=2 max_locals=5
     0000 iload_0
-    0001 ifge 8
-    0004 iconst_1
-    0005 goto 9
+    0001 ifge 6
+    0004 iconst_0
+    0005 ireturn
+    0006 iload_0
+    0007 istore_1
     0008 iconst_0
-    0009 istore_1
+    0009 istore_2
     0010 iload_1
-    0011 ifeq 18
-    0014 iconst_0
-    0015 istore_2
-    0016 iload_2
-    0017 ireturn
-    0018 iload_0
-    0019 istore_3
-    0020 iconst_0
-    0021 istore 4
-    0023 iload 4
-    0025 istore 5
-    0027 iload_3
-    0028 istore 6
-    0030 iload 6
-    0032 ifle 39
-    0035 iconst_1
-    0036 goto 40
-    0039 iconst_0
-    0040 istore 7
-    0042 iload 7
-    0044 ifeq 95
-    0047 iload 5
-    0049 istore 8
-    0051 iload 8
-    0053 bipush 10
-    0055 imul
-    0056 istore 9
-    0058 iload_3
-    0059 istore 10
-    0061 iload 10
-    0063 bipush 10
-    0065 irem
-    0066 istore 11
-    0068 iload 9
-    0070 iload 11
-    0072 iadd
-    0073 istore 12
-    0075 iload 12
-    0077 istore 5
-    0079 iload_3
-    0080 istore 13
-    0082 iload 13
-    0084 bipush 10
-    0086 idiv
-    0087 istore 14
-    0089 iload 14
-    0091 istore_3
-    0092 goto 27
-    0095 iload 5
-    0097 istore 15
-    0099 iload 15
-    0101 iload_0
-    0102 if_icmpne 109
-    0105 iconst_1
-    0106 goto 110
-    0109 iconst_0
-    0110 istore 16
-    0112 iload 16
-    0114 ireturn
-    sub_attr  StackMapTable (57 bytes)
-=======
-  code        max_stack=3 max_locals=22
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 11
-    0007 iconst_0
-    0008 istore_3
-    0009 iload_3
-    0010 ireturn
-    0011 iload_0
-    0012 istore 4
-    0014 iconst_0
-    0015 istore 5
-    0017 iload 5
-    0019 istore 6
-    0021 iload 4
-    0023 istore 7
-    0025 iconst_0
-    0026 istore 8
-    0028 iload 7
-    0030 iload 8
-    0032 if_icmple 98
-    0035 iload 6
-    0037 istore 10
-    0039 bipush 10
-    0041 istore 11
-    0043 iload 10
-    0045 iload 11
-    0047 imul
-    0048 istore 12
-    0050 iload 4
-    0052 istore 13
-    0054 bipush 10
-    0056 istore 14
-    0058 iload 13
-    0060 iload 14
-    0062 irem
-    0063 istore 15
-    0065 iload 12
-    0067 iload 15
-    0069 iadd
-    0070 istore 16
-    0072 iload 16
-    0074 istore 6
-    0076 iload 4
-    0078 istore 17
-    0080 bipush 10
-    0082 istore 18
-    0084 iload 17
-    0086 iload 18
-    0088 idiv
-    0089 istore 19
-    0091 iload 19
-    0093 istore 4
-    0095 goto 21
-    0098 iload 6
-    0100 istore 20
-    0102 iload 20
-    0104 iload_0
-    0105 if_icmpne 112
-    0108 iconst_1
-    0109 goto 113
-    0112 iconst_0
-    0113 istore 21
-    0115 iload 21
-    0117 ireturn
-    sub_attr  StackMapTable (55 bytes)
->>>>>>> Stashed changes
+    0011 ifle 38
+    0014 iload_2
+    0015 bipush 10
+    0017 imul
+    0018 istore_3
+    0019 iload_1
+    0020 bipush 10
+    0022 irem
+    0023 istore 4
+    0025 iload_3
+    0026 iload 4
+    0028 iadd
+    0029 istore_2
+    0030 iload_1
+    0031 bipush 10
+    0033 idiv
+    0034 istore_1
+    0035 goto 10
+    0038 iload_2
+    0039 iload_0
+    0040 if_icmpne 47
+    0043 iconst_1
+    0044 goto 48
+    0047 iconst_0
+    0048 ireturn
+    sub_attr  StackMapTable (12 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 121

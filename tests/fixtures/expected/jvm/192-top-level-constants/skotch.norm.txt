@@ -3,60 +3,19 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        clamp (I)I 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=1
     0000 iload_0
     0001 bipush 100
-    0003 if_icmple 10
-    0006 iconst_1
-    0007 goto 11
-    0010 iconst_0
-    0011 istore_1
-    0012 iload_1
-    0013 ifeq 21
-    0016 bipush 100
-    0018 istore_2
-    0019 iload_2
-    0020 ireturn
-    0021 iload_0
-    0022 ifge 29
-    0025 iconst_1
-    0026 goto 30
-    0029 iconst_0
-    0030 istore_3
-    0031 iload_3
-    0032 ifeq 41
-    0035 iconst_0
-    0036 istore 4
-    0038 iload 4
-    0040 ireturn
-    0041 iload_0
-    0042 ireturn
-    sub_attr  StackMapTable (17 bytes)
-=======
-  code        max_stack=3 max_locals=7
-    0000 bipush 100
-    0002 istore_1
-    0003 iload_0
-    0004 iload_1
-    0005 if_icmple 13
-    0008 bipush 100
-    0010 istore_3
-    0011 iload_3
-    0012 ireturn
+    0003 if_icmple 9
+    0006 bipush 100
+    0008 ireturn
+    0009 iload_0
+    0010 ifge 15
     0013 iconst_0
-    0014 istore 4
-    0016 iload_0
-    0017 iload 4
-    0019 if_icmpge 28
-    0022 iconst_0
-    0023 istore 6
-    0025 iload 6
-    0027 ireturn
-    0028 iload_0
-    0029 ireturn
-    sub_attr  StackMapTable (12 bytes)
->>>>>>> Stashed changes
+    0014 ireturn
+    0015 iload_0
+    0016 ireturn
+    sub_attr  StackMapTable (4 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 ldc "Hello"

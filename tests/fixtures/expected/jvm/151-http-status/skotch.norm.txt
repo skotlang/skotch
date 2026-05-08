@@ -3,145 +3,35 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        httpStatus (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=13
+  code        max_stack=2 max_locals=1
     0000 iload_0
     0001 sipush 200
-    0004 if_icmpne 11
-    0007 iconst_1
-    0008 goto 12
-    0011 iconst_0
-    0012 istore_1
-    0013 iload_1
-    0014 ifeq 25
-    0017 ldc "OK"
-    0019 astore_2
-    0020 aload_2
-    0021 astore_3
-    0022 goto 148
-    0025 iload_0
-    0026 sipush 201
-    0029 if_icmpne 36
-    0032 iconst_1
-    0033 goto 37
-    0036 iconst_0
-    0037 istore 4
-    0039 iload 4
-    0041 ifeq 54
-    0044 ldc "Created"
-    0046 astore 5
-    0048 aload 5
-    0050 astore_3
-    0051 goto 148
-    0054 iload_0
-    0055 sipush 400
-    0058 if_icmpne 65
-    0061 iconst_1
-    0062 goto 66
-    0065 iconst_0
-    0066 istore 6
-    0068 iload 6
-    0070 ifeq 83
-    0073 ldc "Bad Request"
-    0075 astore 7
-    0077 aload 7
-    0079 astore_3
-    0080 goto 148
-    0083 iload_0
-    0084 sipush 404
-    0087 if_icmpne 94
-    0090 iconst_1
-    0091 goto 95
-    0094 iconst_0
-    0095 istore 8
-    0097 iload 8
-    0099 ifeq 112
-    0102 ldc "Not Found"
-    0104 astore 9
-    0106 aload 9
-    0108 astore_3
-    0109 goto 148
-    0112 iload_0
-    0113 sipush 500
-    0116 if_icmpne 123
-    0119 iconst_1
-    0120 goto 124
-    0123 iconst_0
-    0124 istore 10
-    0126 iload 10
-    0128 ifeq 141
-    0131 ldc "Internal Server Error"
-    0133 astore 11
-    0135 aload 11
-    0137 astore_3
-    0138 goto 148
-    0141 ldc "Unknown"
-    0143 astore 12
-    0145 aload 12
-    0147 astore_3
-    0148 aload_3
-    0149 areturn
-    sub_attr  StackMapTable (55 bytes)
-=======
-  code        max_stack=2 max_locals=18
-    0000 sipush 200
-    0003 istore_1
-    0004 iload_0
-    0005 iload_1
-    0006 if_icmpne 18
-    0009 ldc "OK"
-    0011 astore_3
-    0012 aload_3
-    0013 astore 4
-    0015 goto 114
-    0018 sipush 201
-    0021 istore 5
-    0023 iload_0
-    0024 iload 5
-    0026 if_icmpne 40
-    0029 ldc "Created"
-    0031 astore 7
-    0033 aload 7
-    0035 astore 4
-    0037 goto 114
-    0040 sipush 400
-    0043 istore 8
-    0045 iload_0
-    0046 iload 8
-    0048 if_icmpne 62
-    0051 ldc "Bad Request"
-    0053 astore 10
-    0055 aload 10
-    0057 astore 4
-    0059 goto 114
-    0062 sipush 404
-    0065 istore 11
-    0067 iload_0
-    0068 iload 11
-    0070 if_icmpne 84
-    0073 ldc "Not Found"
-    0075 astore 13
-    0077 aload 13
-    0079 astore 4
-    0081 goto 114
-    0084 sipush 500
-    0087 istore 14
-    0089 iload_0
-    0090 iload 14
-    0092 if_icmpne 106
-    0095 ldc "Internal Server Error"
-    0097 astore 16
-    0099 aload 16
-    0101 astore 4
-    0103 goto 114
-    0106 ldc "Unknown"
-    0108 astore 17
-    0110 aload 17
-    0112 astore 4
-    0114 aload 4
-    0116 areturn
-    sub_attr  StackMapTable (51 bytes)
->>>>>>> Stashed changes
+    0004 if_icmpne 12
+    0007 ldc "OK"
+    0009 goto 62
+    0012 iload_0
+    0013 sipush 201
+    0016 if_icmpne 24
+    0019 ldc "Created"
+    0021 goto 62
+    0024 iload_0
+    0025 sipush 400
+    0028 if_icmpne 36
+    0031 ldc "Bad Request"
+    0033 goto 62
+    0036 iload_0
+    0037 sipush 404
+    0040 if_icmpne 48
+    0043 ldc "Not Found"
+    0045 goto 62
+    0048 iload_0
+    0049 sipush 500
+    0052 if_icmpne 60
+    0055 ldc "Internal Server Error"
+    0057 goto 62
+    0060 ldc "Unknown"
+    0062 areturn
+    sub_attr  StackMapTable (11 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

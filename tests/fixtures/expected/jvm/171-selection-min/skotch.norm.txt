@@ -34,7 +34,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        min3 (III)I 0x0019
-  code        max_stack=2 max_locals=7
+  code        max_stack=2 max_locals=5
     0000 iload_0
     0001 iload_1
     0002 if_icmpgt 9
@@ -45,40 +45,23 @@ method        min3 (III)I 0x0019
     0011 iconst_0
     0012 istore 4
     0014 iload_3
-    0015 ifeq 34
+    0015 ifeq 30
     0018 iload_0
     0019 iload_2
     0020 if_icmpgt 27
     0023 iconst_1
     0024 goto 28
     0027 iconst_0
-    0028 istore 5
-    0030 iload 5
-    0032 istore 4
-    0034 iload 4
-    0036 ifeq 41
-    0039 iload_0
-    0040 ireturn
-    0041 iload_1
-    0042 iload_2
-<<<<<<< Updated upstream
-    0043 if_icmpgt 50
-    0046 iconst_1
-    0047 goto 51
-    0050 iconst_0
-    0051 istore 6
-    0053 iload 6
-    0055 ifeq 60
-    0058 iload_1
-    0059 ireturn
-    0060 iload_2
-    0061 ireturn
-    sub_attr  StackMapTable (22 bytes)
-=======
-    0043 if_icmpgt 48
-    0046 iload_1
-    0047 ireturn
-    0048 iload_2
-    0049 ireturn
+    0028 istore 4
+    0030 iload 4
+    0032 ifeq 37
+    0035 iload_0
+    0036 ireturn
+    0037 iload_1
+    0038 iload_2
+    0039 if_icmpgt 44
+    0042 iload_1
+    0043 ireturn
+    0044 iload_2
+    0045 ireturn
     sub_attr  StackMapTable (15 bytes)
->>>>>>> Stashed changes

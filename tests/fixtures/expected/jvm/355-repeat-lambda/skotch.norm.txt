@@ -3,8 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=3
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
@@ -13,57 +12,20 @@ method        main ()V 0x0019
     0009 istore_1
     0010 iload_1
     0011 iconst_3
-    0012 if_icmpge 19
-    0015 iconst_1
-    0016 goto 20
-    0019 iconst_0
-    0020 istore_2
-    0021 iload_2
-    0022 ifeq 43
-    0025 iload_1
-    0026 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0029 astore_3
-    0030 aload_0
-    0031 aload_3
-    0032 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0035 pop
-    0036 iload_1
-    0037 iconst_1
-    0038 iadd
-    0039 istore_1
-    0040 goto 10
-    0043 return
-    sub_attr  StackMapTable (16 bytes)
-=======
-  code        max_stack=2 max_locals=6
-    0000 iconst_3
-    0001 istore_0
-    0002 new Class(InputKt$Lambda$0)
-    0005 dup
-    0006 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0009 astore_1
-    0010 iconst_0
-    0011 istore_2
-    0012 iload_2
-    0013 iload_0
-    0014 if_icmpge 41
-    0017 iload_2
-    0018 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0021 astore 4
-    0023 aload_1
-    0024 aload 4
-    0026 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0029 pop
-    0030 iconst_1
-    0031 istore 5
-    0033 iload_2
-    0034 iload 5
-    0036 iadd
-    0037 istore_2
-    0038 goto 12
-    0041 return
-    sub_attr  StackMapTable (11 bytes)
->>>>>>> Stashed changes
+    0012 if_icmpge 32
+    0015 iload_1
+    0016 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0019 astore_2
+    0020 aload_0
+    0021 aload_2
+    0022 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0025 pop
+    0026 op_0x84
+    0027 aconst_null
+    0028 aconst_null
+    0029 goto 10
+    0032 return
+    sub_attr  StackMapTable (10 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

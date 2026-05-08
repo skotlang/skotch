@@ -3,98 +3,33 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        countMultiples (II)I 0x0019
-  code        max_stack=2 max_locals=13
+  code        max_stack=2 max_locals=4
     0000 iconst_0
     0001 istore_2
-    0002 iload_2
+    0002 iconst_1
     0003 istore_3
-    0004 iconst_1
-    0005 istore 4
-    0007 iload 4
-    0009 istore 5
-    0011 iload 5
-    0013 iload_0
-<<<<<<< Updated upstream
-    0014 if_icmpgt 21
-    0017 iconst_1
-    0018 goto 22
-    0021 iconst_0
-    0022 istore 6
-    0024 iload 6
-    0026 ifeq 68
-    0029 iload 5
-    0031 iload_1
-    0032 irem
-    0033 istore 7
-    0035 iload 7
-    0037 ifne 44
-    0040 iconst_1
-    0041 goto 45
-    0044 iconst_0
-    0045 istore 8
-    0047 iload 8
-    0049 ifeq 55
-    0052 goto 74
-    0055 iload 5
-    0057 iconst_1
-    0058 iadd
-    0059 istore 9
-    0061 iload 9
-    0063 istore 5
-    0065 goto 11
-    0068 iload_3
-    0069 istore 10
-    0071 iload 10
-    0073 ireturn
-    0074 iload_3
-    0075 istore 11
-    0077 iload 11
-    0079 iconst_1
-    0080 iadd
-    0081 istore 12
-    0083 iload 12
-    0085 istore_3
-    0086 goto 55
-    sub_attr  StackMapTable (37 bytes)
-=======
-    0014 if_icmpgt 53
-    0017 iload 5
-    0019 iload_1
-    0020 irem
-    0021 istore 7
-    0023 iconst_0
-    0024 istore 8
-    0026 iload 7
-    0028 iload 8
-    0030 if_icmpne 78
-    0033 goto 59
-    0036 iconst_1
-    0037 istore 10
-    0039 iload 5
-    0041 iload 10
-    0043 iadd
-    0044 istore 11
-    0046 iload 11
-    0048 istore 5
-    0050 goto 11
-    0053 iload_3
-    0054 istore 12
-    0056 iload 12
-    0058 ireturn
-    0059 iload_3
-    0060 istore 13
-    0062 iconst_1
-    0063 istore 14
-    0065 iload 13
-    0067 iload 14
-    0069 iadd
-    0070 istore 15
-    0072 iload 15
-    0074 istore_3
-    0075 goto 78
-    0078 goto 36
-    sub_attr  StackMapTable (31 bytes)
->>>>>>> Stashed changes
+    0004 iload_3
+    0005 iload_0
+    0006 if_icmpgt 29
+    0009 iload_3
+    0010 iload_1
+    0011 irem
+    0012 ifne 34
+    0015 goto 31
+    0018 iload_3
+    0019 iload_0
+    0020 if_icmpeq 29
+    0023 op_0x84
+    0024 iconst_0
+    0025 aconst_null
+    0026 goto 9
+    0029 iload_2
+    0030 ireturn
+    0031 op_0x84
+    0032 iconst_m1
+    0033 aconst_null
+    0034 goto 18
+    sub_attr  StackMapTable (11 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 bipush 100

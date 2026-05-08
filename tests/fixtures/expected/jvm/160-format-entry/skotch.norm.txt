@@ -3,33 +3,27 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        formatEntry (Ljava/lang/String;IZ)Ljava/lang/String; 0x0019
-  code        max_stack=3 max_locals=7
+  code        max_stack=3 max_locals=4
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 iload_2
-    0007 ifeq 19
+    0007 ifeq 16
     0010 ldc "active"
     0012 astore_3
-    0013 aload_3
-    0014 astore 4
-    0016 goto 27
-    0019 ldc "inactive"
-    0021 astore 5
-    0023 aload 5
-    0025 astore 4
-    0027 aload_0
-    0028 iload_1
-    0029 aload 4
-    0031 op_0xBA
-    0032 nop
-    0033 lload_1
-    0034 nop
-    0035 nop
-    0036 astore 6
-    0038 aload 6
-    0040 areturn
-    sub_attr  StackMapTable (10 bytes)
+    0013 goto 19
+    0016 ldc "inactive"
+    0018 astore_3
+    0019 aload_0
+    0020 iload_1
+    0021 aload_3
+    0022 op_0xBA
+    0023 nop
+    0024 lload_1
+    0025 nop
+    0026 nop
+    0027 areturn
+    sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (11 bytes)
 method        main ()V 0x0019

@@ -3,56 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        Dir$valueOf (Ljava/lang/String;)LDir; 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 ldc "NORTH"
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0012 istore_1
-    0013 iload_1
-    0014 ifeq 66
-    0017 goto 87
-    0020 invokestatic Method(InputKt.NORTH:()LDir;)
-    0023 astore_2
-    0024 aload_2
-    0025 areturn
-    0026 aload_0
-    0027 ldc "WEST"
-    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0032 istore_3
-    0033 iload_3
-    0034 ifeq 20
-    0037 invokestatic Method(InputKt.WEST:()LDir;)
-    0040 astore 4
-    0042 aload 4
-    0044 areturn
-    0045 aload_0
-    0046 ldc "EAST"
-    0048 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0051 istore 5
-    0053 iload 5
-    0055 ifeq 26
-    0058 invokestatic Method(InputKt.EAST:()LDir;)
-    0061 astore 6
-    0063 aload 6
-    0065 areturn
-    0066 aload_0
-    0067 ldc "SOUTH"
-    0069 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0072 istore 7
-    0074 iload 7
-    0076 ifeq 45
-    0079 invokestatic Method(InputKt.SOUTH:()LDir;)
-    0082 astore 8
-    0084 aload 8
-    0086 areturn
-    0087 invokestatic Method(InputKt.NORTH:()LDir;)
-    0090 astore 9
-    0092 aload 9
-    0094 areturn
-    sub_attr  StackMapTable (65 bytes)
+    0012 ifeq 48
+    0015 goto 61
+    0018 invokestatic Method(InputKt.NORTH:()LDir;)
+    0021 areturn
+    0022 aload_0
+    0023 ldc "WEST"
+    0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0028 ifeq 18
+    0031 invokestatic Method(InputKt.WEST:()LDir;)
+    0034 areturn
+    0035 aload_0
+    0036 ldc "EAST"
+    0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0041 ifeq 22
+    0044 invokestatic Method(InputKt.EAST:()LDir;)
+    0047 areturn
+    0048 aload_0
+    0049 ldc "SOUTH"
+    0051 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0054 ifeq 35
+    0057 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0060 areturn
+    0061 invokestatic Method(InputKt.NORTH:()LDir;)
+    0064 areturn
+    sub_attr  StackMapTable (7 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Dir$values ()Ljava/util/ArrayList; 0x0019
@@ -134,7 +116,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        move (LDir;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=15
+  code        max_stack=2 max_locals=5
     0000 aload_0
     0001 ldc "d"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -147,71 +129,47 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0016 swap
     0017 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
     0020 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0023 istore_2
-    0024 iload_2
-    0025 ifeq 37
-    0028 ldc "up"
-    0030 astore_3
-    0031 aload_3
-    0032 astore 4
-    0034 goto 156
-    0037 invokestatic Method(InputKt.SOUTH:()LDir;)
-    0040 astore 5
-    0042 aload_0
-    0043 aload 5
-    0045 swap
-    0046 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0049 swap
-    0050 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0053 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0056 istore 6
-    0058 iload 6
-    0060 ifeq 74
-    0063 ldc "down"
-    0065 astore 7
-    0067 aload 7
-    0069 astore 4
-    0071 goto 156
-    0074 invokestatic Method(InputKt.EAST:()LDir;)
-    0077 astore 8
-    0079 aload_0
-    0080 aload 8
-    0082 swap
-    0083 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0086 swap
-    0087 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0090 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0093 istore 9
-    0095 iload 9
-    0097 ifeq 111
-    0100 ldc "right"
-    0102 astore 10
-    0104 aload 10
-    0106 astore 4
-    0108 goto 156
-    0111 invokestatic Method(InputKt.WEST:()LDir;)
-    0114 astore 11
-    0116 aload_0
-    0117 aload 11
-    0119 swap
-    0120 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0123 swap
-    0124 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0127 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0130 istore 12
-    0132 iload 12
-    0134 ifeq 148
-    0137 ldc "left"
-    0139 astore 13
-    0141 aload 13
-    0143 astore 4
-    0145 goto 156
-    0148 ldc "?"
-    0150 astore 14
-    0152 aload 14
-    0154 astore 4
-    0156 aload 4
-    0158 areturn
-    sub_attr  StackMapTable (63 bytes)
+    0023 ifeq 31
+    0026 ldc "up"
+    0028 goto 110
+    0031 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0034 astore_2
+    0035 aload_0
+    0036 aload_2
+    0037 swap
+    0038 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0041 swap
+    0042 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0045 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0048 ifeq 56
+    0051 ldc "down"
+    0053 goto 110
+    0056 invokestatic Method(InputKt.EAST:()LDir;)
+    0059 astore_3
+    0060 aload_0
+    0061 aload_3
+    0062 swap
+    0063 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0066 swap
+    0067 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0070 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0073 ifeq 81
+    0076 ldc "right"
+    0078 goto 110
+    0081 invokestatic Method(InputKt.WEST:()LDir;)
+    0084 astore 4
+    0086 aload_0
+    0087 aload 4
+    0089 swap
+    0090 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0093 swap
+    0094 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0097 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0100 ifeq 108
+    0103 ldc "left"
+    0105 goto 110
+    0108 ldc "?"
+    0110 areturn
+    sub_attr  StackMapTable (42 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

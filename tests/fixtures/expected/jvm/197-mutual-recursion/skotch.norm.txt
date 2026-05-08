@@ -3,111 +3,29 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        isEven (I)Z 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=1
     0000 iload_0
-    0001 ifne 8
+    0001 ifne 6
     0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 18
-    0014 iconst_1
-    0015 istore_2
-    0016 iload_2
-    0017 ireturn
-    0018 iload_0
-    0019 iconst_1
-    0020 isub
-    0021 istore_3
-    0022 iload_3
-    0023 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0026 astore 4
-    0028 aload 4
-    0030 checkcast Class(java/lang/Integer)
-    0033 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0036 invokestatic Method(InputKt.isOdd:(I)Z)
-    0039 istore 5
-    0041 iload 5
-    0043 ireturn
-    sub_attr  StackMapTable (9 bytes)
-method        isOdd (I)Z 0x0019
-  code        max_stack=2 max_locals=5
-    0000 iload_0
-    0001 ifne 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 18
-    0014 iconst_0
-    0015 istore_2
-    0016 iload_2
-    0017 ireturn
-    0018 iload_0
-    0019 iconst_1
-    0020 isub
-    0021 istore_3
-    0022 iload_3
-    0023 invokestatic Method(InputKt.isEven:(I)Z)
-    0026 istore 4
-    0028 iload 4
-    0030 ireturn
-    sub_attr  StackMapTable (9 bytes)
-=======
-  code        max_stack=3 max_locals=8
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpne 11
+    0005 ireturn
+    0006 iload_0
     0007 iconst_1
-    0008 istore_3
-    0009 iload_3
-    0010 ireturn
-    0011 iconst_1
-    0012 istore 4
-    0014 iload_0
-    0015 iload 4
-    0017 isub
-    0018 istore 5
-    0020 iload 5
-    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0025 astore 6
-    0027 aload 6
-    0029 checkcast Class(java/lang/Integer)
-    0032 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0035 invokestatic Method(InputKt.isOdd:(I)Z)
-    0038 istore 7
-    0040 iload 7
-    0042 ireturn
-    sub_attr  StackMapTable (6 bytes)
+    0008 isub
+    0009 invokestatic Method(InputKt.isOdd:(I)Z)
+    0012 ireturn
+    sub_attr  StackMapTable (3 bytes)
 method        isOdd (I)Z 0x0019
-  code        max_stack=3 max_locals=7
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpne 11
-    0007 iconst_0
-    0008 istore_3
-    0009 iload_3
-    0010 ireturn
-    0011 iconst_1
-    0012 istore 4
-    0014 iload_0
-    0015 iload 4
-    0017 isub
-    0018 istore 5
-    0020 iload 5
-    0022 invokestatic Method(InputKt.isEven:(I)Z)
-    0025 istore 6
-    0027 iload 6
-    0029 ireturn
-    sub_attr  StackMapTable (6 bytes)
->>>>>>> Stashed changes
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 ifne 6
+    0004 iconst_0
+    0005 ireturn
+    0006 iload_0
+    0007 iconst_1
+    0008 isub
+    0009 invokestatic Method(InputKt.isEven:(I)Z)
+    0012 ireturn
+    sub_attr  StackMapTable (3 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1
     0000 iconst_4

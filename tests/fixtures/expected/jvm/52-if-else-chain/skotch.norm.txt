@@ -3,79 +3,23 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        classify (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=1 max_locals=8
+  code        max_stack=1 max_locals=2
     0000 iload_0
-    0001 ifge 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 22
-    0014 ldc "negative"
-    0016 astore_2
-    0017 aload_2
-    0018 astore_3
-    0019 goto 41
-    0022 iload_0
-    0023 ifne 30
-    0026 iconst_1
-    0027 goto 31
-    0030 iconst_0
-    0031 istore 4
-    0033 iload 4
-    0035 ifeq 54
-    0038 goto 43
-    0041 aload_3
-    0042 areturn
-    0043 ldc "zero"
-    0045 astore 5
-    0047 aload 5
-    0049 astore 6
-    0051 goto 62
-    0054 ldc "positive"
-    0056 astore 7
-    0058 aload 7
-    0060 astore 6
-    0062 aload 6
-    0064 astore_3
-    0065 goto 41
-    sub_attr  StackMapTable (39 bytes)
-=======
-  code        max_stack=2 max_locals=10
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 16
-    0007 ldc "negative"
-    0009 astore_3
-    0010 aload_3
-    0011 astore 4
-    0013 goto 28
-    0016 iconst_0
-    0017 istore 5
-    0019 iload_0
-    0020 iload 5
-    0022 if_icmpne 42
-    0025 goto 31
-    0028 aload 4
-    0030 areturn
-    0031 ldc "zero"
-    0033 astore 7
-    0035 aload 7
-    0037 astore 8
-    0039 goto 50
-    0042 ldc "positive"
-    0044 astore 9
-    0046 aload 9
-    0048 astore 8
-    0050 aload 8
-    0052 astore 4
-    0054 goto 28
-    sub_attr  StackMapTable (36 bytes)
->>>>>>> Stashed changes
+    0001 ifge 9
+    0004 ldc "negative"
+    0006 goto 16
+    0009 iload_0
+    0010 ifne 23
+    0013 goto 17
+    0016 areturn
+    0017 ldc "zero"
+    0019 astore_1
+    0020 goto 26
+    0023 ldc "positive"
+    0025 astore_1
+    0026 aload_1
+    0027 goto 16
+    sub_attr  StackMapTable (15 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

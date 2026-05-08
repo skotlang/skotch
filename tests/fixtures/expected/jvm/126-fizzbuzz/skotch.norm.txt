@@ -3,114 +3,28 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fizzbuzz (I)Ljava/lang/String; 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=11
+  code        max_stack=2 max_locals=1
     0000 iload_0
     0001 bipush 15
     0003 irem
-    0004 istore_1
-    0005 iload_1
-    0006 ifne 13
-    0009 iconst_1
-    0010 goto 14
-    0013 iconst_0
-    0014 istore_2
-    0015 iload_2
-    0016 ifeq 24
-    0019 ldc "FizzBuzz"
-    0021 astore_3
-    0022 aload_3
-    0023 areturn
-    0024 iload_0
-    0025 iconst_3
-    0026 irem
-    0027 istore 4
-    0029 iload 4
-    0031 ifne 38
-    0034 iconst_1
-    0035 goto 39
-    0038 iconst_0
-    0039 istore 5
-    0041 iload 5
-    0043 ifeq 53
-    0046 ldc "Fizz"
-    0048 astore 6
-    0050 aload 6
-    0052 areturn
-    0053 iload_0
-    0054 iconst_5
-    0055 irem
-    0056 istore 7
-    0058 iload 7
-    0060 ifne 67
-    0063 iconst_1
-    0064 goto 68
-    0067 iconst_0
-    0068 istore 8
-    0070 iload 8
-    0072 ifeq 82
-    0075 ldc "Buzz"
-    0077 astore 9
-    0079 aload 9
-    0081 areturn
-    0082 ldc "other"
-    0084 astore 10
-    0086 aload 10
-    0088 areturn
-    sub_attr  StackMapTable (34 bytes)
-=======
-  code        max_stack=4 max_locals=17
-    0000 bipush 15
-    0002 istore_1
-    0003 iload_0
-    0004 iload_1
-    0005 irem
-    0006 istore_2
-    0007 iconst_0
-    0008 istore_3
-    0009 iload_2
-    0010 iload_3
-    0011 if_icmpne 21
-    0014 ldc "FizzBuzz"
-    0016 astore 5
-    0018 aload 5
-    0020 areturn
-    0021 iconst_3
-    0022 istore 6
-    0024 iload_0
-    0025 iload 6
-    0027 irem
-    0028 istore 7
-    0030 iconst_0
-    0031 istore 8
-    0033 iload 7
-    0035 iload 8
-    0037 if_icmpne 47
-    0040 ldc "Fizz"
-    0042 astore 10
-    0044 aload 10
-    0046 areturn
-    0047 iconst_5
-    0048 istore 11
-    0050 iload_0
-    0051 iload 11
-    0053 irem
-    0054 istore 12
-    0056 iconst_0
-    0057 istore 13
-    0059 iload 12
-    0061 iload 13
-    0063 if_icmpne 73
-    0066 ldc "Buzz"
-    0068 astore 15
-    0070 aload 15
-    0072 areturn
-    0073 ldc "other"
-    0075 astore 16
-    0077 aload 16
-    0079 areturn
-    sub_attr  StackMapTable (45 bytes)
->>>>>>> Stashed changes
+    0004 ifne 10
+    0007 ldc "FizzBuzz"
+    0009 areturn
+    0010 iload_0
+    0011 iconst_3
+    0012 irem
+    0013 ifne 19
+    0016 ldc "Fizz"
+    0018 areturn
+    0019 iload_0
+    0020 iconst_5
+    0021 irem
+    0022 ifne 28
+    0025 ldc "Buzz"
+    0027 areturn
+    0028 ldc "other"
+    0030 areturn
+    sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0

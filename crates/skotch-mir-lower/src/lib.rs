@@ -3756,7 +3756,22 @@ fn lower_stmt(
             // while (loop_var <= end_val)
             let cond_block = fb.new_block();
             let body_block = fb.new_block();
-            let incr_block = fb.new_block(); // increment step (continue target)
+            let variable_end_termination = !*exclusive
+                && !*descending
+                && step_expr.is_none()
+                && inclusive_const_end_plus_one.is_none()
+                && descending_const_end_minus_one.is_none();
+            // Allocate term_check_block between body and incr, so its bytecode
+            // lands right after body (enabling fall-through for the no-sub-
+            // block body case). For bodies with internal sub-blocks (if/else,
+            // when), those sub-blocks come after term_check in MIR order
+            // anyway; the goto chain from body→tcb is unavoidable.
+            let term_check_block = if variable_end_termination {
+                Some(fb.new_block())
+            } else {
+                None
+            };
+            let incr_block = fb.new_block(); // increment step
             let exit_block = fb.new_block();
 
             fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
@@ -3801,19 +3816,10 @@ fn lower_stmt(
                 body_block,
             );
 
-            // For variable-end inclusive ranges (no constant fold), we add
-            // a termination check `i == end` AFTER the body to mirror
-            // kotlinc's shape. DISABLED — produces SMT slot-type
-            // inconsistencies in some when/if branches inside the body.
-            let variable_end_termination = false
-                && !*exclusive
-                && !*descending
-                && step_expr.is_none()
-                && inclusive_const_end_plus_one.is_none()
-                && descending_const_end_minus_one.is_none();
-
-            // Body — continue goes to incr_block, break goes to exit_block
-            let lctx = Some((incr_block, exit_block));
+            // Body — break goes to exit_block. Continue goes to term_check
+            // block when variable-end termination is active.
+            let continue_target = term_check_block.unwrap_or(incr_block);
+            let lctx = Some((continue_target, exit_block));
             for s in &body.stmts {
                 lower_stmt(
                     s,
@@ -3828,8 +3834,9 @@ fn lower_stmt(
                 );
             }
 
-            if variable_end_termination {
-                // Termination check: `i != end` continues (otherwise exit).
+            if let Some(tcb) = term_check_block {
+                // After body's last block: goto term-check block.
+                fb.terminate_and_switch(Terminator::Goto(tcb), tcb);
                 let term_cmp = fb.new_local(Ty::Bool);
                 fb.push_stmt(MStmt::Assign {
                     dest: term_cmp,
@@ -10303,12 +10310,8 @@ fn lower_expr(
 
             // Handle stdlib top-level functions as StaticJava calls.
             // Math functions map to java.lang.Math static methods. A
-<<<<<<< Updated upstream
             // user-defined function with the same name takes precedence —
             // skip the stdlib mapping if the callee is in `name_to_func`.
-=======
-            // user-defined function with the same name takes precedence.
->>>>>>> Stashed changes
             let stdlib_call: Option<(&str, &str, &str, Ty)> =
                 if name_to_func.contains_key(&callee_name) {
                     None

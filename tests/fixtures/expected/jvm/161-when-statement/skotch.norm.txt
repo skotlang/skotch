@@ -18,98 +18,36 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        printCategory (I)V 0x0019
-<<<<<<< Updated upstream
-  code        max_stack=2 max_locals=8
+  code        max_stack=2 max_locals=5
     0000 iload_0
-    0001 ifge 8
-    0004 iconst_1
-    0005 goto 9
-    0008 iconst_0
-    0009 istore_1
-    0010 iload_1
-    0011 ifeq 27
-    0014 ldc "negative"
-    0016 astore_2
-    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 aload_2
-    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0024 goto 101
-    0027 iload_0
-    0028 ifne 35
-    0031 iconst_1
-    0032 goto 36
-    0035 iconst_0
-    0036 istore_3
-    0037 iload_3
-    0038 ifeq 56
-    0041 ldc "zero"
-    0043 astore 4
-    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 aload 4
-    0050 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0053 goto 101
-    0056 iload_0
-    0057 bipush 10
-    0059 if_icmpge 66
-    0062 iconst_1
-    0063 goto 67
-    0066 iconst_0
-    0067 istore 5
-    0069 iload 5
-    0071 ifeq 89
-    0074 ldc "small"
-    0076 astore 6
-    0078 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0081 aload 6
-    0083 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0086 goto 101
-    0089 ldc "large"
-    0091 astore 7
-    0093 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0096 aload 7
-    0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0101 return
-    sub_attr  StackMapTable (34 bytes)
-=======
-  code        max_stack=2 max_locals=11
-    0000 iconst_0
-    0001 istore_1
-    0002 iload_0
-    0003 iload_1
-    0004 if_icmpge 20
-    0007 ldc "negative"
-    0009 astore_3
-    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0013 aload_3
-    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0017 goto 81
-    0020 iconst_0
-    0021 istore 4
-    0023 iload_0
-    0024 iload 4
-    0026 if_icmpne 44
-    0029 ldc "zero"
-    0031 astore 6
-    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0036 aload 6
-    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0041 goto 81
-    0044 bipush 10
-    0046 istore 7
-    0048 iload_0
-    0049 iload 7
-    0051 if_icmpge 69
-    0054 ldc "small"
-    0056 astore 9
-    0058 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0061 aload 9
-    0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0066 goto 81
-    0069 ldc "large"
-    0071 astore 10
-    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0076 aload 10
-    0078 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0081 return
-    sub_attr  StackMapTable (27 bytes)
->>>>>>> Stashed changes
+    0001 ifge 17
+    0004 ldc "negative"
+    0006 astore_1
+    0007 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0010 aload_1
+    0011 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0014 goto 65
+    0017 iload_0
+    0018 ifne 34
+    0021 ldc "zero"
+    0023 astore_2
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 aload_2
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 goto 65
+    0034 iload_0
+    0035 bipush 10
+    0037 if_icmpge 53
+    0040 ldc "small"
+    0042 astore_3
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 aload_3
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0050 goto 65
+    0053 ldc "large"
+    0055 astore 4
+    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0060 aload 4
+    0062 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0065 return
+    sub_attr  StackMapTable (6 bytes)

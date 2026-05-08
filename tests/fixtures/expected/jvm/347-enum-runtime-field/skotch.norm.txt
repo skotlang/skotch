@@ -3,56 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        Coin$valueOf (Ljava/lang/String;)LCoin; 0x0019
-  code        max_stack=2 max_locals=10
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "name"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 ldc "PENNY"
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0012 istore_1
-    0013 iload_1
-    0014 ifeq 66
-    0017 goto 87
-    0020 invokestatic Method(InputKt.PENNY:()LCoin;)
-    0023 astore_2
-    0024 aload_2
-    0025 areturn
-    0026 aload_0
-    0027 ldc "QUARTER"
-    0029 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0032 istore_3
-    0033 iload_3
-    0034 ifeq 20
-    0037 invokestatic Method(InputKt.QUARTER:()LCoin;)
-    0040 astore 4
-    0042 aload 4
-    0044 areturn
-    0045 aload_0
-    0046 ldc "DIME"
-    0048 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0051 istore 5
-    0053 iload 5
-    0055 ifeq 26
-    0058 invokestatic Method(InputKt.DIME:()LCoin;)
-    0061 astore 6
-    0063 aload 6
-    0065 areturn
-    0066 aload_0
-    0067 ldc "NICKEL"
-    0069 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
-    0072 istore 7
-    0074 iload 7
-    0076 ifeq 45
-    0079 invokestatic Method(InputKt.NICKEL:()LCoin;)
-    0082 astore 8
-    0084 aload 8
-    0086 areturn
-    0087 invokestatic Method(InputKt.PENNY:()LCoin;)
-    0090 astore 9
-    0092 aload 9
-    0094 areturn
-    sub_attr  StackMapTable (65 bytes)
+    0012 ifeq 48
+    0015 goto 61
+    0018 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0021 areturn
+    0022 aload_0
+    0023 ldc "QUARTER"
+    0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0028 ifeq 18
+    0031 invokestatic Method(InputKt.QUARTER:()LCoin;)
+    0034 areturn
+    0035 aload_0
+    0036 ldc "DIME"
+    0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0041 ifeq 22
+    0044 invokestatic Method(InputKt.DIME:()LCoin;)
+    0047 areturn
+    0048 aload_0
+    0049 ldc "NICKEL"
+    0051 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
+    0054 ifeq 35
+    0057 invokestatic Method(InputKt.NICKEL:()LCoin;)
+    0060 areturn
+    0061 invokestatic Method(InputKt.PENNY:()LCoin;)
+    0064 areturn
+    sub_attr  StackMapTable (7 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        Coin$values ()Ljava/util/ArrayList; 0x0019

@@ -3,41 +3,24 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "x"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 instanceof Class(java/lang/String)
-    0010 istore_1
-    0011 iload_1
-    0012 ifeq 36
-    0015 aload_0
-    0016 checkcast Class(java/lang/String)
-    0019 astore_2
-    0020 aload_2
-    0021 invokevirtual Method(java/lang/String.length:()I)
-    0024 istore_3
-    0025 iload_3
-    0026 op_0xBA
-    0027 nop
-    0028 lload_3
-    0029 nop
-    0030 nop
-    0031 astore 4
-    0033 aload 4
-    0035 areturn
-    0036 ldc "not string"
-    0038 astore 5
-    0040 aload 5
-    0042 areturn
-<<<<<<< Updated upstream
-=======
-    0043 ldc "not string"
-    0045 astore 6
-    0047 aload 6
-    0049 areturn
->>>>>>> Stashed changes
+    0010 ifeq 26
+    0013 aload_0
+    0014 checkcast Class(java/lang/String)
+    0017 invokevirtual Method(java/lang/String.length:()I)
+    0020 op_0xBA
+    0021 nop
+    0022 lload_3
+    0023 nop
+    0024 nop
+    0025 areturn
+    0026 ldc "not string"
+    0028 areturn
     sub_attr  StackMapTable (3 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
