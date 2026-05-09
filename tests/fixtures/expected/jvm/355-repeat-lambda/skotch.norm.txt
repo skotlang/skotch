@@ -12,18 +12,17 @@ method        main ()V 0x0019
     0009 istore_1
     0010 iload_1
     0011 iconst_3
-    0012 if_icmpge 31
-    0015 iload_1
-    0016 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0019 aload_0
-    0020 swap
-    0021 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0024 pop
-    0025 op_0x84
+    0012 if_icmpge 30
+    0015 aload_0
+    0016 iload_1
+    0017 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0020 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0023 pop
+    0024 op_0x84
+    0025 aconst_null
     0026 aconst_null
-    0027 aconst_null
-    0028 goto 10
-    0031 return
+    0027 goto 10
+    0030 return
     sub_attr  StackMapTable (10 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

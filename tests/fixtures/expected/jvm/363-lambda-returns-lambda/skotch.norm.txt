@@ -8,29 +8,28 @@ method        main ()V 0x0019
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0007 astore_0
-    0008 iconst_5
-    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0012 aload_0
-    0013 swap
-    0014 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0017 astore_1
-    0018 iconst_3
-    0019 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0022 aload_1
-    0023 swap
-    0024 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0032 swap
-    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0036 bipush 10
-    0038 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0041 aload_1
-    0042 swap
-    0043 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 swap
-    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0055 return
+    0008 aload_0
+    0009 iconst_5
+    0010 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0013 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0016 astore_1
+    0017 iconst_3
+    0018 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0021 aload_1
+    0022 swap
+    0023 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 swap
+    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0035 bipush 10
+    0037 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0040 aload_1
+    0041 swap
+    0042 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 swap
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0054 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

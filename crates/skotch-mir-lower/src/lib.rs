@@ -3026,7 +3026,57 @@ fn function_body_needs_leading_nop(body: &skotch_syntax::Block) -> bool {
     match expr {
         Expr::When { subject, .. } => matches!(subject.as_ref(), Expr::BoolLit(true, _)),
         Expr::Try { .. } => true,
-        Expr::If { .. } => is_else_if_chain(expr),
+        Expr::If { .. } => is_else_if_chain(expr) && !is_simple_string_chain(expr),
+        _ => false,
+    }
+}
+
+/// True if every leaf branch of the if-else-if chain is a simple expression
+/// like a string literal — kotlinc doesn't add a LineNumberTable nop for
+/// those (the values themselves carry the line info via the call site).
+fn is_simple_string_chain(e: &Expr) -> bool {
+    match e {
+        Expr::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            let then_simple = block_is_simple_value(then_block);
+            let else_simple = match else_block {
+                Some(eb) => {
+                    if eb.stmts.len() == 1 {
+                        match &eb.stmts[0] {
+                            skotch_syntax::Stmt::Expr(inner) => match inner {
+                                Expr::If { .. } => is_simple_string_chain(inner),
+                                Expr::StringLit(..)
+                                | Expr::IntLit(..)
+                                | Expr::BoolLit(..)
+                                | Expr::Ident(..) => true,
+                                _ => false,
+                            },
+                            _ => false,
+                        }
+                    } else {
+                        block_is_simple_value(eb)
+                    }
+                }
+                None => true,
+            };
+            then_simple && else_simple
+        }
+        _ => false,
+    }
+}
+
+fn block_is_simple_value(b: &skotch_syntax::Block) -> bool {
+    if b.stmts.len() != 1 {
+        return false;
+    }
+    match &b.stmts[0] {
+        skotch_syntax::Stmt::Expr(e) => matches!(
+            e,
+            Expr::StringLit(..) | Expr::IntLit(..) | Expr::BoolLit(..) | Expr::Ident(..)
+        ),
         _ => false,
     }
 }

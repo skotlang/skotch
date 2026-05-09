@@ -26,7 +26,7 @@ method        factorial (I)I 0x0019
     0025 ireturn
     sub_attr  StackMapTable (8 bytes)
 method        isPrime (I)Z 0x0019
-  code        max_stack=2 max_locals=5
+  code        max_stack=2 max_locals=4
     0000 iload_0
     0001 iconst_2
     0002 if_icmpge 7
@@ -42,23 +42,21 @@ method        isPrime (I)Z 0x0019
     0014 iload_3
     0015 imul
     0016 iload_0
-    0017 if_icmpgt 33
-    0020 iload_1
-    0021 istore 4
-    0023 iload_0
-    0024 iload 4
-    0026 irem
-    0027 ifne 37
-    0030 goto 35
-    0033 iconst_1
-    0034 ireturn
-    0035 iconst_0
-    0036 ireturn
-    0037 op_0x84
-    0038 aconst_null
-    0039 aconst_null
-    0040 goto 9
-    sub_attr  StackMapTable (17 bytes)
+    0017 if_icmpgt 29
+    0020 iload_0
+    0021 iload_1
+    0022 irem
+    0023 ifne 33
+    0026 goto 31
+    0029 iconst_1
+    0030 ireturn
+    0031 iconst_0
+    0032 ireturn
+    0033 op_0x84
+    0034 aconst_null
+    0035 aconst_null
+    0036 goto 9
+    sub_attr  StackMapTable (14 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=3
     0000 iconst_2

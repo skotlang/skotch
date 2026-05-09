@@ -8,17 +8,15 @@ method        main ()V 0x0019
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
     0007 astore_0
-    0008 ldc "hello"
-    0010 aload_0
-    0011 swap
-    0012 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0015 pop
+    0008 aload_0
+    0009 ldc "hello"
+    0011 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0014 pop
+    0015 aload_0
     0016 ldc "world"
-    0018 aload_0
-    0019 swap
-    0020 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0023 pop
-    0024 return
+    0018 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0021 pop
+    0022 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

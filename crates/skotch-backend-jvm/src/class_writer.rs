@@ -2926,6 +2926,21 @@ fn emit_method_body(
             }
         }
         peephole_elide_store_load(&mut code, &named_slots);
+        // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
+        // when the intermediate is straight-line, has zero net stack effect,
+        // and never touches slot N. Matches kotlinc's stack-resident temp
+        // shape for expressions like `dx*dx + dy*dy`.
+        peephole_collapse_temp_via_balanced(&mut code, &mut [], &mut [], &named_slots, &*cp);
+        // General operand-hoist: `<expr>; xstore T; xload N; xload T; <op>`
+        // → `xload N; <expr>; <op>`. Pulls the receiver/lhs ahead so the
+        // computed RHS doesn't materialize through a temp slot.
+        peephole_hoist_op_general(&mut code, &mut [], &mut [], &named_slots, &*cp);
+        // Hoist `xload N; swap` after a value computation, eliminating
+        // the swap. Matches kotlinc's preference for receiver-first
+        // operand order on isub / non-commutative ops.
+        peephole_hoist_swap_pattern(&mut code, &mut [], &mut [], &*cp);
+        // Fold `aconst_null; if_acmpeq/ne L` to `ifnull/ifnonnull L`.
+        peephole_fold_null_compare(&mut code, &mut [], &mut []);
         // Eliminate `<call A>; xload N; swap` patterns left over from
         // swap_pattern by hoisting `xload N` ahead of A's args. Mirrors
         // kotlinc's left-to-right argument evaluation.
@@ -2989,6 +3004,17 @@ fn emit_method_body(
             &mut [],
             &mut [],
             &named_slots_for_middle,
+        );
+        // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
+        // when the intermediate is straight-line, has zero net stack effect,
+        // and never touches slot N. Matches kotlinc's stack-resident temp
+        // shape for expressions like `dx*dx + dy*dy`.
+        peephole_collapse_temp_via_balanced(
+            &mut code,
+            &mut cmp_targets,
+            &mut block_offsets,
+            &named_slots_for_middle,
+            &*cp,
         );
         // Copy propagation: `xload N; xstore M; ...; xload M` → `...; xload N`.
         peephole_copy_prop(
@@ -3182,7 +3208,22 @@ fn emit_method_body(
                     &named_slots_for_middle,
                 );
             }
-            let _ = peephole_hoist_op_general;
+            // General operand-hoist: detect `<expr>; xstore T; xload N;
+            // xload T; <op>` and rewrite to `xload N; <expr>; <op>`,
+            // keeping the expression result on the stack instead of
+            // round-tripping through a slot. Matches kotlinc's preferred
+            // shape for receiver-then-computed-arg calls.
+            if !is_data_class_helper {
+                peephole_hoist_op_general(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                    &*cp,
+                );
+                peephole_hoist_swap_pattern(&mut code, &mut cmp_targets, &mut block_offsets, &*cp);
+                peephole_fold_null_compare(&mut code, &mut cmp_targets, &mut block_offsets);
+            }
             // Slot compaction is byte-preserving, so it's safe with inter-block
             // branches. Mirrors the patches.is_empty() path.
             let _named_slots: FxHashSet<u8> = func
@@ -12830,6 +12871,159 @@ fn stack_effect_of_op(code: &[u8], cp: &ConstantPool, off: usize) -> i32 {
         }
 }
 
+/// Number of stack items the instruction at `off` pops before pushing
+/// (the depth dip during the instruction). Used by elision peepholes to
+/// verify the intermediate region of a transformation never reaches
+/// below the elided value's stack position.
+fn pops_count(code: &[u8], cp: &ConstantPool, off: usize) -> i32 {
+    let op = code[off];
+    match op {
+        0x00 | 0x84 => 0,
+        // pure pushes
+        0x01..=0x14 | 0x15..=0x19 | 0x1A..=0x2D | 0xBB => 0,
+        // array loads (pop array+index)
+        0x2E..=0x35 => 2,
+        // stores cat-1 (pop 1)
+        0x36 | 0x38 | 0x3A | 0x3B..=0x3E | 0x43..=0x46 | 0x4B..=0x4E => 1,
+        // stores cat-2 (pop 2)
+        0x37 | 0x39 | 0x3F..=0x42 | 0x47..=0x4A => 2,
+        // array stores cat-1 (pop 3) and cat-2 (pop 4)
+        0x4F | 0x51 | 0x53 | 0x54 | 0x55 | 0x56 => 3,
+        0x50 | 0x52 => 4,
+        // pop, pop2
+        0x57 => 1,
+        0x58 => 2,
+        // dup, dup_x*, dup2, dup2_x*, swap
+        0x59 => 1,
+        0x5A => 2,
+        0x5B => 3,
+        0x5C => 2,
+        0x5D => 3,
+        0x5E => 4,
+        0x5F => 2,
+        // arithmetic cat-1 (pop 2)
+        0x60 | 0x62 | 0x64 | 0x66 | 0x68 | 0x6A | 0x6C | 0x6E | 0x70 | 0x72 | 0x78 | 0x7A
+        | 0x7C | 0x7E | 0x80 | 0x82 => 2,
+        // arithmetic cat-2 (pop 4)
+        0x61 | 0x63 | 0x65 | 0x67 | 0x69 | 0x6B | 0x6D | 0x6F | 0x71 | 0x73 | 0x7F | 0x81
+        | 0x83 => 4,
+        // long shifts (cat-2 + cat-1 = 3)
+        0x79 | 0x7B | 0x7D => 3,
+        // negations
+        0x74 | 0x76 => 1,
+        0x75 | 0x77 => 2,
+        // conversions: cat-1 → anything = 1, cat-2 → anything = 2
+        0x86 | 0x8B | 0x91..=0x93 | 0x85 | 0x87 | 0x8C | 0x8D => 1,
+        0x88 | 0x89 | 0x8E | 0x90 | 0x8A | 0x8F => 2,
+        // lcmp, dcmp* pop 4; fcmp* pop 2
+        0x94 | 0x97 | 0x98 => 4,
+        0x95 | 0x96 => 2,
+        // ifs cat-1
+        0x99..=0x9E | 0xC6 | 0xC7 => 1,
+        // if_icmp*, if_acmp*
+        0x9F..=0xA6 => 2,
+        // goto, jsr, ret, goto_w, jsr_w
+        0xA7..=0xA9 | 0xC8 | 0xC9 => 0,
+        // tableswitch, lookupswitch
+        0xAA | 0xAB => 1,
+        // ireturn..areturn (cat-1)
+        0xAC | 0xAE | 0xB0 => 1,
+        // lreturn, dreturn (cat-2)
+        0xAD | 0xAF => 2,
+        // return
+        0xB1 => 0,
+        // getstatic (no pops)
+        0xB2 => 0,
+        // putstatic
+        0xB3 => {
+            let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+            field_size_from_cp(cp, idx)
+        }
+        // getfield (pop receiver)
+        0xB4 => 1,
+        // putfield (pop receiver + value)
+        0xB5 => {
+            let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+            field_size_from_cp(cp, idx) + 1
+        }
+        // invokevirtual, invokespecial, invokeinterface (pop receiver + args)
+        0xB6 | 0xB7 | 0xB9 => {
+            let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+            args_pop_from_cp(cp, idx) + 1
+        }
+        // invokestatic, invokedynamic (pop args only)
+        0xB8 | 0xBA => {
+            let idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+            args_pop_from_cp(cp, idx)
+        }
+        // newarray, anewarray (pop count)
+        0xBC | 0xBD => 1,
+        // arraylength (pop arrayref)
+        0xBE => 1,
+        // athrow
+        0xBF => 1,
+        // checkcast, instanceof
+        0xC0 | 0xC1 => 1,
+        // monitorenter/exit
+        0xC2 | 0xC3 => 1,
+        // multianewarray
+        0xC5 => {
+            if off + 3 < code.len() {
+                code[off + 3] as i32
+            } else {
+                1
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// Number of stack items popped by the args of a method/dynamic call.
+fn args_pop_from_cp(cp: &ConstantPool, idx: u16) -> i32 {
+    let desc = match cp.descriptor_at(idx) {
+        Some(d) => d,
+        None => return 0,
+    };
+    let inner = desc.split(')').next().unwrap_or("").trim_start_matches('(');
+    let mut arg_pop = 0;
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'F' | 'I' | 'S' | 'Z' => arg_pop += 1,
+            'J' | 'D' => arg_pop += 2,
+            'L' => {
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                arg_pop += 1;
+            }
+            '[' => {
+                while let Some(&n) = chars.peek() {
+                    if n == '[' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(n) = chars.next() {
+                    if n == 'L' {
+                        for sc in chars.by_ref() {
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    }
+                }
+                arg_pop += 1;
+            }
+            _ => {}
+        }
+    }
+    arg_pop
+}
+
 /// Field descriptor → stack-slot count (1 for cat-1, 2 for cat-2).
 fn field_size_from_cp(cp: &ConstantPool, idx: u16) -> i32 {
     match cp.descriptor_at(idx) {
@@ -13088,6 +13282,224 @@ fn peephole_elide_middle_store_load(
             }
         }
         code.drain(start..start + removed);
+    }
+}
+
+/// Drain `removed` bytes starting at `start`, updating every branch
+/// relative-offset, `cmp_targets` entry, and `block_offsets` entry that
+/// spans or sits past the drained region. Mirrors the in-loop adjustment
+/// logic of `peephole_elide_middle_store_load` and is re-used by the
+/// "non-adjacent" elision pass below.
+fn drain_and_adjust(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    start: usize,
+    removed: usize,
+) {
+    let mut j = 0;
+    while j < code.len() {
+        let op = code[j];
+        if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+            if j + 2 < code.len() {
+                let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                let src = j as i32;
+                let dst = src + rel;
+                let new_rel = if (src as usize) < start && (dst as usize) >= start + removed {
+                    rel - removed as i32
+                } else if (src as usize) >= start + removed && (dst as usize) <= start {
+                    rel + removed as i32
+                } else {
+                    rel
+                };
+                if new_rel != rel {
+                    let bytes = (new_rel as i16).to_be_bytes();
+                    code[j + 1] = bytes[0];
+                    code[j + 2] = bytes[1];
+                }
+            }
+            j += 3;
+            continue;
+        }
+        if matches!(op, 0xC8 | 0xC9) {
+            if j + 4 < code.len() {
+                let rel = i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                let src = j as i32;
+                let dst = src + rel;
+                let new_rel = if (src as usize) < start && (dst as usize) >= start + removed {
+                    rel - removed as i32
+                } else if (src as usize) >= start + removed && (dst as usize) <= start {
+                    rel + removed as i32
+                } else {
+                    rel
+                };
+                if new_rel != rel {
+                    let bytes = new_rel.to_be_bytes();
+                    code[j + 1] = bytes[0];
+                    code[j + 2] = bytes[1];
+                    code[j + 3] = bytes[2];
+                    code[j + 4] = bytes[3];
+                }
+            }
+            j += 5;
+            continue;
+        }
+        j += instruction_len(code, j);
+    }
+    for ct in cmp_targets.iter_mut() {
+        if ct.offset >= start + removed {
+            ct.offset -= removed;
+        }
+        if ct.cmp_start >= start + removed {
+            ct.cmp_start -= removed;
+        }
+    }
+    for b in block_offsets.iter_mut() {
+        if *b >= start + removed {
+            *b -= removed;
+        }
+    }
+    code.drain(start..start + removed);
+}
+
+/// Decode any load instruction (int/long/float/double/ref). Returns
+/// `(slot, instr_len, kind)` where kind is 'I', 'J', 'F', 'D', or 'A'.
+fn decode_any_load(code: &[u8], pos: usize) -> Option<(u8, usize, u8)> {
+    if pos >= code.len() {
+        return None;
+    }
+    match code[pos] {
+        0x1A..=0x1D => Some((code[pos] - 0x1A, 1, b'I')),
+        0x15 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'I')),
+        0x1E..=0x21 => Some((code[pos] - 0x1E, 1, b'J')),
+        0x16 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'J')),
+        0x22..=0x25 => Some((code[pos] - 0x22, 1, b'F')),
+        0x17 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'F')),
+        0x26..=0x29 => Some((code[pos] - 0x26, 1, b'D')),
+        0x18 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'D')),
+        0x2A..=0x2D => Some((code[pos] - 0x2A, 1, b'A')),
+        0x19 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'A')),
+        _ => None,
+    }
+}
+
+/// Decode any store instruction. See `decode_any_load`.
+fn decode_any_store(code: &[u8], pos: usize) -> Option<(u8, usize, u8)> {
+    if pos >= code.len() {
+        return None;
+    }
+    match code[pos] {
+        0x3B..=0x3E => Some((code[pos] - 0x3B, 1, b'I')),
+        0x36 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'I')),
+        0x3F..=0x42 => Some((code[pos] - 0x3F, 1, b'J')),
+        0x37 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'J')),
+        0x43..=0x46 => Some((code[pos] - 0x43, 1, b'F')),
+        0x38 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'F')),
+        0x47..=0x4A => Some((code[pos] - 0x47, 1, b'D')),
+        0x39 if pos + 1 < code.len() => Some((code[pos + 1], 2, b'D')),
+        0x4B..=0x4E => Some((code[pos] - 0x4B, 1, b'A')),
+        0x3A if pos + 1 < code.len() => Some((code[pos + 1], 2, b'A')),
+        _ => None,
+    }
+}
+
+/// Elide a non-adjacent `xstore N; <balanced intermediate>; xload N` where
+/// the intermediate has zero net stack effect, never dips below its starting
+/// depth, never accesses slot N, and contains no control-transfer
+/// instructions. The eliminated value stays on the operand stack across the
+/// intermediate code, matching kotlinc's preference for stack-resident
+/// temporaries over locals.
+///
+/// Slot N must be:
+/// - Not a named local (preserves user val/var slots).
+/// - Dead after the matching `xload N` (no subsequent reads).
+fn peephole_collapse_temp_via_balanced(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    named_slots: &FxHashSet<u8>,
+    cp: &ConstantPool,
+) {
+    loop {
+        let mut applied: Option<(usize, usize, usize, usize)> = None;
+        let mut i = 0;
+        while i < code.len() {
+            let Some((slot, store_len, store_kind)) = decode_any_store(code, i) else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            if named_slots.contains(&slot) {
+                i += store_len;
+                continue;
+            }
+            // Walk forward looking for matching xload N.
+            let mut j = i + store_len;
+            let mut net_stack: i32 = 0;
+            let mut min_stack: i32 = 0;
+            let mut bail = false;
+            let mut found: Option<(usize, usize)> = None;
+            while j < code.len() {
+                let op = code[j];
+                // Any control transfer disqualifies the elision: branches,
+                // returns, throws, switches, athrow.
+                if (0x99..=0xA8).contains(&op)
+                    || matches!(op, 0xC6..=0xC9)
+                    || matches!(op, 0xAA | 0xAB)
+                    || matches!(op, 0xAC..=0xB1)
+                    || op == 0xBF
+                {
+                    bail = true;
+                    break;
+                }
+                if writes_slot_at(code, j, slot) {
+                    bail = true;
+                    break;
+                }
+                if let Some((load_slot, load_len, load_kind)) = decode_any_load(code, j) {
+                    if load_slot == slot {
+                        if load_kind != store_kind {
+                            bail = true;
+                            break;
+                        }
+                        if net_stack == 0
+                            && min_stack >= 0
+                            && !slot_alive_at(code, slot, j + load_len)
+                        {
+                            found = Some((j, load_len));
+                        }
+                        break;
+                    }
+                }
+                // Safety: instruction must not pop more items than the
+                // intermediate has pushed since the elided value sits at
+                // relative depth 0; popping below 0 would consume it.
+                let pops = pops_count(code, cp, j);
+                if pops > net_stack {
+                    bail = true;
+                    break;
+                }
+                let eff = stack_effect_of_op(code, cp, j);
+                net_stack += eff;
+                if net_stack < min_stack {
+                    min_stack = net_stack;
+                }
+                j += instruction_len(code, j);
+            }
+            if !bail {
+                if let Some((q, qlen)) = found {
+                    applied = Some((i, store_len, q, qlen));
+                    break;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        let Some((p, store_len, q, load_len)) = applied else {
+            break;
+        };
+        // Drain xload at q FIRST (higher offset stays valid until then),
+        // then xstore at p.
+        drain_and_adjust(code, cmp_targets, block_offsets, q, load_len);
+        drain_and_adjust(code, cmp_targets, block_offsets, p, store_len);
     }
 }
 
@@ -14466,6 +14878,7 @@ fn peephole_hoist_op_general(
     code: &mut Vec<u8>,
     cmp_targets: &mut [CmpBranchTarget],
     block_offsets: &mut [usize],
+    named_slots: &FxHashSet<u8>,
     cp: &ConstantPool,
 ) {
     // Pre-compute stack-at-entry for every instruction position via a
@@ -14473,8 +14886,8 @@ fn peephole_hoist_op_general(
     // accurate for the regions we care about; branches reset the walk.
     loop {
         let stack_in = compute_stack_at_entry(code, cp);
-        let mut applied: Option<(usize, usize, u8, bool)> = None;
-        // (insert_pos, drains_start, slot_n, is_int)
+        let mut applied: Option<(usize, usize, u8, bool, usize)> = None;
+        // (insert_pos, drains_start, slot_n, is_int, load_n_count)
         let mut i = 0;
         while i < code.len() {
             // Look for `xstore T` at i.
@@ -14482,19 +14895,46 @@ fn peephole_hoist_op_general(
                 i += instruction_len(code, i);
                 continue;
             };
-            // `xload N` at i + store_len.
+            // Skip named locals — kotlinc keeps user-declared val/var
+            // slots even when they're transparent to the operand stack.
+            if named_slots.contains(&slot_t) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // `xload N` at i + store_len. Allow CONSECUTIVE xload N
+            // instructions (same slot, same kind) — the entire chain
+            // gets hoisted together. Matches kotlinc's shape for
+            // multi-arg invokedynamic calls like `"$x * $x = ${x*x}"`
+            // where the `x` for the first two args is loaded twice.
             let load_n_pos = i + store_len;
-            let Some((slot_n, load_n_len, ld_is_int)) = decode_load_with_kind(code, load_n_pos)
+            let Some((slot_n, load_n_len, n_is_int)) = decode_load_with_kind(code, load_n_pos)
             else {
                 i += instruction_len(code, i);
                 continue;
             };
-            if is_int != ld_is_int || slot_t == slot_n {
+            // The hoisted load and the stored slot can be different types
+            // — we just need slot_t to round-trip and slot_n to be a clean
+            // pre-hoist load (e.g. ref receiver + int index).
+            if slot_t == slot_n {
                 i += instruction_len(code, i);
                 continue;
             }
-            // `xload T` at load_n_pos + load_n_len.
-            let load_t_pos = load_n_pos + load_n_len;
+            // Walk forward extending the xload N chain.
+            let mut load_n_count: usize = 1;
+            let mut load_n_total_len: usize = load_n_len;
+            loop {
+                let next_pos = load_n_pos + load_n_total_len;
+                let Some((s, l, k)) = decode_load_with_kind(code, next_pos) else {
+                    break;
+                };
+                if s != slot_n || k != n_is_int {
+                    break;
+                }
+                load_n_count += 1;
+                load_n_total_len += l;
+            }
+            // `xload T` at load_n_pos + load_n_total_len.
+            let load_t_pos = load_n_pos + load_n_total_len;
             let Some(load_t_len) = decode_aload_of_slot(code, load_t_pos, slot_t, is_int) else {
                 i += instruction_len(code, i);
                 continue;
@@ -14507,7 +14947,12 @@ fn peephole_hoist_op_general(
                 continue;
             }
             let op_code = code[op_pos];
-            let is_supported_op = matches!(op_code, 0x60..=0x83 | 0xB6 | 0xB8);
+            // Arithmetic/logic ops (0x60..=0x83), invokevirtual (0xB6),
+            // invokestatic (0xB8), and invokedynamic (0xBA) all consume
+            // the top two stack items the hoisted load + value
+            // computation produced. Other ops change stack shape in ways
+            // the simple hoist doesn't handle.
+            let is_supported_op = matches!(op_code, 0x60..=0x83 | 0xB6 | 0xB8 | 0xBA);
             if !is_supported_op {
                 i += instruction_len(code, i);
                 continue;
@@ -14615,23 +15060,34 @@ fn peephole_hoist_op_general(
                 i += instruction_len(code, i);
                 continue;
             }
-            applied = Some((hoist_point, i, slot_n, is_int));
+            applied = Some((hoist_point, i, slot_n, n_is_int, load_n_count));
             break;
         }
-        let Some((insert_pos, drain_pos, slot_n, is_int)) = applied else {
+        let Some((insert_pos, drain_pos, slot_n, n_is_int, load_n_count)) = applied else {
             break;
         };
+        let is_int = decode_store_with_kind(code, drain_pos)
+            .map(|(_, _, ii)| ii)
+            .unwrap_or(true);
         // Re-decode lengths.
         let store_len = decode_store_with_kind(code, drain_pos).unwrap().1;
         let load_n_pos = drain_pos + store_len;
-        let load_n_len = decode_load_with_kind(code, load_n_pos).unwrap().1;
-        let load_t_pos = load_n_pos + load_n_len;
+        // Walk forward `load_n_count` xload-N instructions to find the
+        // total chain length.
+        let mut load_n_total_len = 0;
+        for _ in 0..load_n_count {
+            let l = decode_load_with_kind(code, load_n_pos + load_n_total_len)
+                .unwrap()
+                .1;
+            load_n_total_len += l;
+        }
+        let load_t_pos = load_n_pos + load_n_total_len;
         let slot_t = decode_store_with_kind(code, drain_pos).unwrap().0;
         let load_t_len = decode_aload_of_slot(code, load_t_pos, slot_t, is_int).unwrap();
-        // Drain in REVERSE: load_t, load_n, store_t.
+        // Drain in REVERSE: load_t, load_n_chain, store_t.
         let drains = [
             (load_t_pos, load_t_len),
-            (load_n_pos, load_n_len),
+            (load_n_pos, load_n_total_len),
             (drain_pos, store_len),
         ];
         for &(start, drain_size) in drains.iter() {
@@ -14678,8 +15134,373 @@ fn peephole_hoist_op_general(
             }
             code.drain(start..start + drain_size);
         }
-        // Insert xload N at insert_pos.
-        let new_op = if is_int { 0x1A + slot_n } else { 0x2A + slot_n };
+        // Insert xload N at insert_pos. Slot N's type can differ from
+        // slot T (e.g., ref receiver + int index) — use the load-kind we
+        // captured at decode time to pick the right opcode family.
+        let new_op = if n_is_int {
+            0x1A + slot_n
+        } else {
+            0x2A + slot_n
+        };
+        let inserted = load_n_count;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) > insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset > insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start > insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b > insert_pos {
+                *b += inserted;
+            }
+        }
+        for _ in 0..inserted {
+            code.insert(insert_pos, new_op);
+        }
+    }
+}
+
+/// Replace `aconst_null; if_acmpeq L` with `ifnull L` (and the `_acmpne`
+/// variant with `ifnonnull`). kotlinc emits the unary `ifnull`/`ifnonnull`
+/// directly when comparing a reference to null literal; we emit the explicit
+/// pair, which is one byte longer and triggers a divergent disassembly.
+fn peephole_fold_null_compare(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+) {
+    loop {
+        let mut applied: Option<(usize, u8, i32)> = None; // (start, new_op, new_rel)
+        let mut i = 0;
+        while i < code.len() {
+            // aconst_null = 0x01
+            if code[i] != 0x01 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let cmp_pos = i + 1;
+            if cmp_pos + 2 >= code.len() {
+                break;
+            }
+            let cmp_op = code[cmp_pos];
+            let new_op = match cmp_op {
+                0xA5 => 0xC6u8, // if_acmpeq → ifnull
+                0xA6 => 0xC7u8, // if_acmpne → ifnonnull
+                _ => {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+            };
+            // No branch source/target may land strictly inside the 4-byte
+            // pair (would split the instruction).
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > i && t.offset < i + 4) || (t.cmp_start > i && t.cmp_start < i + 4)
+            });
+            let block_conflict = block_offsets.iter().any(|&b| b > i && b < i + 4);
+            if cmp_conflict || block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // The if_acmp* branch source is at i+1, target = (i+1) + rel_in.
+            // After we collapse to `ifnull` at i (3 bytes) and drain 1 byte
+            // at position i+3, source moves to i. The target's *absolute*
+            // position shifts by -1 if it was past the drained byte, i.e.,
+            // if the original target absolute > i+3 (= source+3 in original
+            // numbering, which means rel_in > 2 since old_source=i+1 and
+            // i+3 = old_source + 2).
+            //
+            // - target ≤ i+3 (rel_in ≤ 2): T doesn't shift → new_rel = T - i
+            //   = (i+1+rel_in) - i = rel_in + 1.
+            // - target > i+3 (rel_in > 2):  T shifts to T-1 → new_rel = T-1-i
+            //   = rel_in.
+            //
+            // For backward branches (rel_in negative), target = (i+1)+rel_in
+            // < i+3, so the first case applies: new_rel = rel_in + 1.
+            let rel_in = i16::from_be_bytes([code[i + 2], code[i + 3]]) as i32;
+            let new_rel = if rel_in > 2 { rel_in } else { rel_in + 1 };
+            if !(i16::MIN as i32..=i16::MAX as i32).contains(&new_rel) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((i, new_op, new_rel));
+            break;
+        }
+        let Some((start, new_op, new_rel)) = applied else {
+            break;
+        };
+        // Step 1: rewrite the 4-byte block at [start..start+4] to the new
+        // 3-byte instruction at [start..start+3], leaving the 4th byte to
+        // be drained.
+        code[start] = new_op;
+        let nb = (new_rel as i16).to_be_bytes();
+        code[start + 1] = nb[0];
+        code[start + 2] = nb[1];
+        // Step 2: drain the now-redundant 4th byte (the old lo byte of the
+        // if_acmp*'s relative offset).
+        let drain_pos = start + 3;
+        let drain_size = 1usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    // Skip the just-rewritten instruction at `start`.
+                    if j != start {
+                        let new_rel2 = if (src as usize) < drain_pos
+                            && (dst as usize) >= drain_pos + drain_size
+                        {
+                            rel - drain_size as i32
+                        } else if (src as usize) >= drain_pos + drain_size
+                            && (dst as usize) <= drain_pos
+                        {
+                            rel + drain_size as i32
+                        } else {
+                            rel
+                        };
+                        if new_rel2 != rel {
+                            let nb = (new_rel2 as i16).to_be_bytes();
+                            code[j + 1] = nb[0];
+                            code[j + 2] = nb[1];
+                        }
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_pos + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_pos + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_pos + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.remove(drain_pos);
+    }
+}
+
+/// Hoist an `xload N; swap` pair that follows a value computation: rewrite
+/// `<value comp>; xload N; swap; <op>` to `xload N; <value comp>; <op>`.
+///
+/// This complements `peephole_hoist_op_general` for the case where the
+/// receiver/LHS is loaded *after* the RHS computation and a `swap` reorders
+/// them. kotlinc emits the receiver first, avoiding the swap entirely.
+///
+/// Conditions:
+/// - `xload N` is in compact form (slot 0..3), 1 byte, so the inserted load
+///   is byte-equivalent.
+/// - The straight-line region from the hoist point through `<op>` has no
+///   branch sources/targets crossing the boundary.
+/// - The hoisted load and intervening computation don't access slot N.
+fn peephole_hoist_swap_pattern(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        let mut applied: Option<(usize, usize, u8, bool)> = None;
+        let mut i = 0;
+        while i < code.len() {
+            // Match `xload N (1 byte compact)` at i.
+            let Some((slot_n, load_n_len, n_is_int)) = decode_load_with_kind(code, i) else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            if load_n_len != 1 || slot_n > 3 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Match `swap` (0x5F) at i + load_n_len.
+            let swap_pos = i + load_n_len;
+            if swap_pos >= code.len() || code[swap_pos] != 0x5F {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Match a 2-stack-consume / 1-produce op at swap_pos + 1.
+            let op_pos = swap_pos + 1;
+            if op_pos >= code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let op_code = code[op_pos];
+            let is_supported_op = matches!(op_code, 0x60..=0x83 | 0xB6 | 0xB8 | 0xBA);
+            if !is_supported_op {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Find hoist point. Stack at entry to `i` (xload N) is some
+            // value S. After `xload N; swap` the stack count is unchanged
+            // at S. Before the value computation, stack was S - 1. Find
+            // the latest position `p < i` with `stack_in[p] == S - 1`.
+            let s = stack_in.get(i).copied().unwrap_or(-1);
+            if s < 1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let target_stack = s - 1;
+            let mut hoist_point: Option<usize> = None;
+            let mut p = 0;
+            while p < i {
+                if stack_in.get(p).copied() == Some(target_stack) {
+                    hoist_point = Some(p);
+                }
+                p += instruction_len(code, p);
+            }
+            let Some(hoist_point) = hoist_point else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            // Region [hoist_point, i) must be straight-line and not touch
+            // slot N.
+            let mut k = hoist_point;
+            let mut bad = false;
+            while k < i {
+                if writes_slot_at(code, k, slot_n) {
+                    bad = true;
+                    break;
+                }
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                    bad = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if bad {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No branch into [hoist_point, op_pos] from outside.
+            let mut external_target = false;
+            let mut k2 = 0;
+            while k2 < code.len() {
+                let op = code[k2];
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k2 + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k2 + 1], code[k2 + 2]]) as i32;
+                    let tgt = (k2 as i32 + rel) as usize;
+                    if tgt >= hoist_point && tgt < op_pos && (k2 < hoist_point || k2 > op_pos) {
+                        external_target = true;
+                        break;
+                    }
+                }
+                k2 += instruction_len(code, k2);
+            }
+            if external_target {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No cmp_target / block_offset boundary in (hoist_point, op_pos].
+            let lo = hoist_point;
+            let hi = op_pos;
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > lo && t.offset <= hi) || (t.cmp_start > lo && t.cmp_start <= hi)
+            });
+            let block_conflict = block_offsets.iter().any(|&b| b > lo && b <= hi);
+            if cmp_conflict || block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((hoist_point, i, slot_n, n_is_int));
+            break;
+        }
+        let Some((insert_pos, drain_start, slot_n, n_is_int)) = applied else {
+            break;
+        };
+        // Drain `xload N (1 byte); swap (1 byte)` = 2 bytes at drain_start.
+        let drain_size = 2;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_start + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_start + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_start + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_start + drain_size);
+        // Insert xload N at insert_pos (after offsets shift by -2 for
+        // positions past drain_start, the original insert_pos stays
+        // valid since insert_pos < drain_start).
+        let new_op = if n_is_int {
+            0x1A + slot_n
+        } else {
+            0x2A + slot_n
+        };
         let mut j = 0;
         while j < code.len() {
             let op = code[j];

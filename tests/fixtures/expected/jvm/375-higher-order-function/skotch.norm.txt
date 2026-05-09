@@ -37,7 +37,7 @@ method        combine (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Fun
     0036 ireturn
   attr        RuntimeInvisibleParameterAnnotations (15 bytes)
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=2
+  code        max_stack=3 max_locals=1
     0000 new Class(InputKt$Lambda$0)
     0003 dup
     0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
@@ -71,22 +71,20 @@ method        main ()V 0x0019
     0068 new Class(InputKt$Lambda$3)
     0071 dup
     0072 invokespecial Method(InputKt$Lambda$3.<init>:()V)
-    0075 astore_0
-    0076 new Class(InputKt$Lambda$4)
-    0079 dup
-    0080 invokespecial Method(InputKt$Lambda$4.<init>:()V)
-    0083 astore_1
-    0084 aload_0
-    0085 checkcast Class(kotlin/jvm/functions/Function1)
-    0088 aload_1
-    0089 checkcast Class(kotlin/jvm/functions/Function1)
-    0092 iconst_5
-    0093 invokestatic Method(InputKt.combine:(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;I)I)
-    0096 istore_0
-    0097 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0100 iload_0
-    0101 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0104 return
+    0075 new Class(InputKt$Lambda$4)
+    0078 dup
+    0079 invokespecial Method(InputKt$Lambda$4.<init>:()V)
+    0082 astore_0
+    0083 checkcast Class(kotlin/jvm/functions/Function1)
+    0086 aload_0
+    0087 checkcast Class(kotlin/jvm/functions/Function1)
+    0090 iconst_5
+    0091 invokestatic Method(InputKt.combine:(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;I)I)
+    0094 istore_0
+    0095 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0098 iload_0
+    0099 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0102 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

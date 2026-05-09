@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=3 max_locals=3
     0000 iconst_0
     0001 istore_0
     0002 iconst_1
@@ -24,20 +24,18 @@ method        main ()V 0x0019
     0028 return
     0029 iload_2
     0030 bipush 6
-    0032 if_icmpge 49
-    0035 iload_1
-    0036 iload_2
-    0037 imul
-    0038 istore_3
-    0039 iload_0
-    0040 iload_3
-    0041 iadd
-    0042 istore_0
-    0043 op_0x84
-    0044 iconst_m1
-    0045 aconst_null
-    0046 goto 29
-    0049 goto 15
+    0032 if_icmpge 47
+    0035 iload_0
+    0036 iload_1
+    0037 iload_2
+    0038 imul
+    0039 iadd
+    0040 istore_0
+    0041 op_0x84
+    0042 iconst_m1
+    0043 aconst_null
+    0044 goto 29
+    0047 goto 15
     sub_attr  StackMapTable (19 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
