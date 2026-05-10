@@ -77,9 +77,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "InstanceOf": {
-                    "obj": 2,
-                    "type_descriptor": "Ok"
+                  "Const": {
+                    "Bool": true
                   }
                 }
               }

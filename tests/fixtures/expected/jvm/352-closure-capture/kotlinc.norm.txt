@@ -7,11 +7,7 @@ method        main ()V 0x0019
     0000 bipush 10
     0002 istore_0
     0003 iload_0
-    0004 op_0xBA
-    0005 nop
-    0006 iload_0
-    0007 nop
-    0008 nop
+    0004 invokedynamic InvokeDynamic(invoke:(I)Lkotlin/jvm/functions/Function1;)
     0009 astore_1
     0010 aload_1
     0011 iconst_5
@@ -36,11 +32,7 @@ method        main ()V 0x0019
     0059 ldc "World"
     0061 astore_2
     0062 aload_2
-    0063 op_0xBA
-    0064 nop
-    0065 lstore_3
-    0066 nop
-    0067 nop
+    0063 invokedynamic InvokeDynamic(invoke:(Ljava/lang/String;)Lkotlin/jvm/functions/Function1;)
     0068 astore_3
     0069 aload_3
     0070 ldc "Hello"
@@ -66,10 +58,6 @@ method        main$lambda$1 (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Str
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_1
     0007 aload_0
-    0008 op_0xBA
-    0009 nop
-    0010 imul
-    0011 nop
-    0012 nop
+    0008 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
     0013 areturn
 class_attr    BootstrapMethods (28 bytes)

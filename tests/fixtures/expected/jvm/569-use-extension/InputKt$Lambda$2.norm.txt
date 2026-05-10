@@ -1,0 +1,28 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$2
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function0]
+field         conn : LDbConn; 0x0001
+method        <init> (LDbConn;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(InputKt$Lambda$2.conn:LDbConn;)
+    0009 return
+method        invoke ()Ljava/lang/Object; 0x0001
+  code        max_stack=3 max_locals=1
+    0000 aload_0
+    0001 getfield Field(InputKt$Lambda$2.conn:LDbConn;)
+    0004 ldc "working"
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 invokestatic Method(InputKt.process:(LDbConn;)Ljava/lang/String;)
+    0016 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0019 swap
+    0020 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0023 aconst_null
+    0024 areturn

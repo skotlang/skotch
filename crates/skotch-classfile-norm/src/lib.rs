@@ -577,6 +577,22 @@ fn decode_instruction(
         0x4C => ("astore_1".into(), 1),
         0x4D => ("astore_2".into(), 1),
         0x4E => ("astore_3".into(), 1),
+        0x2E => ("iaload".into(), 1),
+        0x2F => ("laload".into(), 1),
+        0x30 => ("faload".into(), 1),
+        0x31 => ("daload".into(), 1),
+        0x32 => ("aaload".into(), 1),
+        0x33 => ("baload".into(), 1),
+        0x34 => ("caload".into(), 1),
+        0x35 => ("saload".into(), 1),
+        0x4F => ("iastore".into(), 1),
+        0x50 => ("lastore".into(), 1),
+        0x51 => ("fastore".into(), 1),
+        0x52 => ("dastore".into(), 1),
+        0x53 => ("aastore".into(), 1),
+        0x54 => ("bastore".into(), 1),
+        0x55 => ("castore".into(), 1),
+        0x56 => ("sastore".into(), 1),
         0x57 => ("pop".into(), 1),
         0x58 => ("pop2".into(), 1),
         0x59 => ("dup".into(), 1),
@@ -587,12 +603,63 @@ fn decode_instruction(
         0x5E => ("dup2_x2".into(), 1),
         0x5F => ("swap".into(), 1),
         0x60 => ("iadd".into(), 1),
+        0x61 => ("ladd".into(), 1),
+        0x62 => ("fadd".into(), 1),
+        0x63 => ("dadd".into(), 1),
         0x64 => ("isub".into(), 1),
+        0x65 => ("lsub".into(), 1),
+        0x66 => ("fsub".into(), 1),
+        0x67 => ("dsub".into(), 1),
         0x68 => ("imul".into(), 1),
+        0x69 => ("lmul".into(), 1),
+        0x6A => ("fmul".into(), 1),
+        0x6B => ("dmul".into(), 1),
         0x6C => ("idiv".into(), 1),
+        0x6D => ("ldiv".into(), 1),
+        0x6E => ("fdiv".into(), 1),
+        0x6F => ("ddiv".into(), 1),
         0x70 => ("irem".into(), 1),
+        0x71 => ("lrem".into(), 1),
+        0x72 => ("frem".into(), 1),
+        0x73 => ("drem".into(), 1),
+        0x74 => ("ineg".into(), 1),
+        0x75 => ("lneg".into(), 1),
+        0x76 => ("fneg".into(), 1),
+        0x77 => ("dneg".into(), 1),
+        0x78 => ("ishl".into(), 1),
+        0x79 => ("lshl".into(), 1),
+        0x7A => ("ishr".into(), 1),
+        0x7B => ("lshr".into(), 1),
+        0x7C => ("iushr".into(), 1),
+        0x7D => ("lushr".into(), 1),
         0x7E => ("iand".into(), 1),
+        0x7F => ("land".into(), 1),
         0x80 => ("ior".into(), 1),
+        0x81 => ("lor".into(), 1),
+        0x82 => ("ixor".into(), 1),
+        0x83 => ("lxor".into(), 1),
+        0x85 => ("i2l".into(), 1),
+        0x86 => ("i2f".into(), 1),
+        0x87 => ("i2d".into(), 1),
+        0x88 => ("l2i".into(), 1),
+        0x89 => ("l2f".into(), 1),
+        0x8A => ("l2d".into(), 1),
+        0x8B => ("f2i".into(), 1),
+        0x8C => ("f2l".into(), 1),
+        0x8D => ("f2d".into(), 1),
+        0x8E => ("d2i".into(), 1),
+        0x8F => ("d2l".into(), 1),
+        0x90 => ("d2f".into(), 1),
+        0x91 => ("i2b".into(), 1),
+        0x92 => ("i2c".into(), 1),
+        0x93 => ("i2s".into(), 1),
+        0x94 => ("lcmp".into(), 1),
+        0x95 => ("fcmpl".into(), 1),
+        0x96 => ("fcmpg".into(), 1),
+        0x97 => ("dcmpl".into(), 1),
+        0x98 => ("dcmpg".into(), 1),
+        // iinc <slot> <const>: increment local slot by signed byte.
+        0x84 if slice.len() >= 3 => (format!("iinc {} {}", slice[1], slice[2] as i8), 3),
         0x99 if slice.len() >= 3 => {
             let off = i16::from_be_bytes([slice[1], slice[2]]);
             (format!("ifeq {}", (code_position as i32) + off as i32), 3)
@@ -711,6 +778,36 @@ fn decode_instruction(
             }
             (buf, p)
         }
+        0xAB => {
+            // lookupswitch: 1-byte opcode + 0..3 bytes padding to the
+            // next 4-byte boundary + default:i32 + npairs:i32
+            // + npairs * (match:i32, offset:i32) pairs.
+            let pad = 3 - (code_position % 4);
+            if slice.len() < 1 + pad + 8 {
+                return (format!("op_0x{op:02X}"), 1);
+            }
+            let mut p = 1 + pad;
+            let default = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+            p += 4;
+            let npairs = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]])
+                .max(0) as usize;
+            p += 4;
+            if slice.len() < p + npairs * 8 {
+                return (format!("op_0x{op:02X}"), 1);
+            }
+            let mut buf = format!(
+                "lookupswitch default={} npairs={npairs}",
+                (code_position as i32) + default
+            );
+            for _ in 0..npairs {
+                let m = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+                p += 4;
+                let off = i32::from_be_bytes([slice[p], slice[p + 1], slice[p + 2], slice[p + 3]]);
+                p += 4;
+                buf.push_str(&format!(" {}={}", m, (code_position as i32) + off));
+            }
+            (buf, p)
+        }
         0xAC => ("ireturn".into(), 1),
         0xAD => ("lreturn".into(), 1),
         0xAE => ("freturn".into(), 1),
@@ -720,6 +817,10 @@ fn decode_instruction(
         0xB2 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("getstatic {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xB3 if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("putstatic {}", cp_symbolic(cp, idx)), 3)
         }
         0xB4 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
@@ -746,10 +847,34 @@ fn decode_instruction(
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("invokeinterface {}", cp_symbolic(cp, idx)), 5)
         }
+        // invokedynamic: 0xBA <index_hi> <index_lo> 0 0
+        0xBA if slice.len() >= 5 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("invokedynamic {}", cp_symbolic(cp, idx)), 5)
+        }
         0xBB if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("new {}", cp_symbolic(cp, idx)), 3)
         }
+        0xBC if slice.len() >= 2 => {
+            let kind = match slice[1] {
+                4 => "boolean",
+                5 => "char",
+                6 => "float",
+                7 => "double",
+                8 => "byte",
+                9 => "short",
+                10 => "int",
+                11 => "long",
+                _ => "?",
+            };
+            (format!("newarray {kind}"), 2)
+        }
+        0xBD if slice.len() >= 3 => {
+            let idx = u16::from_be_bytes([slice[1], slice[2]]);
+            (format!("anewarray {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xBE => ("arraylength".into(), 1),
         0xBF => ("athrow".into(), 1),
         0xC0 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
@@ -758,6 +883,27 @@ fn decode_instruction(
         0xC1 if slice.len() >= 3 => {
             let idx = u16::from_be_bytes([slice[1], slice[2]]);
             (format!("instanceof {}", cp_symbolic(cp, idx)), 3)
+        }
+        0xC2 => ("monitorenter".into(), 1),
+        0xC3 => ("monitorexit".into(), 1),
+        0xC8 if slice.len() >= 5 => {
+            let off = i32::from_be_bytes([slice[1], slice[2], slice[3], slice[4]]);
+            (format!("goto_w {}", code_position as i32 + off), 5)
+        }
+        0xC9 if slice.len() >= 5 => {
+            let off = i32::from_be_bytes([slice[1], slice[2], slice[3], slice[4]]);
+            (format!("jsr_w {}", code_position as i32 + off), 5)
+        }
+        0xC6 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (format!("ifnull {}", (code_position as i32) + off as i32), 3)
+        }
+        0xC7 if slice.len() >= 3 => {
+            let off = i16::from_be_bytes([slice[1], slice[2]]);
+            (
+                format!("ifnonnull {}", (code_position as i32) + off as i32),
+                3,
+            )
         }
         _ => (format!("op_0x{op:02X}"), 1),
     }
@@ -805,6 +951,15 @@ fn cp_symbolic(cp: &[CpEntry], idx: u16) -> String {
         }
         Some(CpEntry::NameAndType(n, d)) => {
             format!("NameAndType({}:{})", cp_utf8(cp, *n), cp_utf8(cp, *d))
+        }
+        // For invokedynamic, the CP entry references a bootstrap-method
+        // index plus a NameAndType. We render the NameAndType (the call
+        // signature) — that's what matters for cross-compiler parity;
+        // the bootstrap-method index is reported in the BootstrapMethods
+        // attribute and is not part of instruction-level identity.
+        Some(CpEntry::InvokeDynamic(_, nt)) => {
+            let (n, d) = cp_name_and_type(cp, *nt);
+            format!("InvokeDynamic({n}:{d})")
         }
         _ => format!("#{idx}"),
     }

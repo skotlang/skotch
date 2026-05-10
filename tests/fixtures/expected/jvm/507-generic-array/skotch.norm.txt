@@ -5,27 +5,25 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
     0000 iconst_3
-    0001 op_0xBD
-    0002 nop
-    0003 iconst_1
+    0001 anewarray Class(java/lang/Object)
     0004 astore_0
     0005 aload_0
     0006 iconst_0
     0007 ldc "Alice"
-    0009 op_0x53
+    0009 aastore
     0010 aload_0
     0011 iconst_1
     0012 ldc "Bob"
-    0014 op_0x53
+    0014 aastore
     0015 aload_0
     0016 iconst_2
     0017 ldc "Charlie"
-    0019 op_0x53
+    0019 aastore
     0020 iconst_0
     0021 istore_1
     0022 aload_0
     0023 iload_1
-    0024 op_0x32
+    0024 aaload
     0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0028 swap
     0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -33,7 +31,7 @@ method        main ()V 0x0019
     0033 istore_1
     0034 aload_0
     0035 iload_1
-    0036 op_0x32
+    0036 aaload
     0037 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0040 swap
     0041 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -41,7 +39,7 @@ method        main ()V 0x0019
     0045 istore_1
     0046 aload_0
     0047 iload_1
-    0048 op_0x32
+    0048 aaload
     0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0052 swap
     0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

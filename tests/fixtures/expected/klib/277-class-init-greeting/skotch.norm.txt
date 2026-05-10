@@ -31,7 +31,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 1
                   }
                 }
               }
@@ -311,9 +311,6 @@ unique_name=inputkt
               "Class": "Greeter"
             },
             "String",
-            "String",
-            "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -335,42 +332,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Const": {
-                        "String": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 2,
-                        "rhs": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "Const": {
-                        "String": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 4
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "Hello, \u0001!",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -390,7 +361,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 5
+                "ReturnValue": 2
               }
             }
           ],
@@ -512,8 +483,6 @@ unique_name=inputkt
   ],
   "strings": [
     "Creating greeter for ",
-    "Hello, ",
-    "!",
     "World"
   ]
 }

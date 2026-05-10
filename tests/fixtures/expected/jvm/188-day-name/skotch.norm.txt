@@ -3,44 +3,23 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        dayName (I)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=1
+  code        max_stack=1 max_locals=1
     0000 iload_0
-    0001 iconst_1
-    0002 if_icmpne 10
-    0005 ldc "Monday"
-    0007 goto 74
-    0010 iload_0
-    0011 iconst_2
-    0012 if_icmpne 20
-    0015 ldc "Tuesday"
-    0017 goto 74
-    0020 iload_0
-    0021 iconst_3
-    0022 if_icmpne 30
-    0025 ldc "Wednesday"
-    0027 goto 74
-    0030 iload_0
-    0031 iconst_4
-    0032 if_icmpne 40
-    0035 ldc "Thursday"
-    0037 goto 74
-    0040 iload_0
-    0041 iconst_5
-    0042 if_icmpne 50
-    0045 ldc "Friday"
-    0047 goto 74
-    0050 iload_0
-    0051 bipush 6
-    0053 if_icmpne 61
-    0056 ldc "Weekend"
-    0058 goto 74
-    0061 iload_0
-    0062 bipush 7
-    0064 if_icmpne 72
-    0067 ldc "Weekend"
-    0069 goto 74
-    0072 ldc "Unknown"
-    0074 areturn
+    0001 tableswitch default=74 low=1 high=7 1=44 2=49 3=54 4=59 5=64 6=69 7=69
+    0044 ldc "Monday"
+    0046 goto 76
+    0049 ldc "Tuesday"
+    0051 goto 76
+    0054 ldc "Wednesday"
+    0056 goto 76
+    0059 ldc "Thursday"
+    0061 goto 76
+    0064 ldc "Friday"
+    0066 goto 76
+    0069 ldc "Weekend"
+    0071 goto 76
+    0074 ldc "Unknown"
+    0076 areturn
     sub_attr  StackMapTable (13 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
@@ -55,9 +34,7 @@ method        main ()V 0x0019
     0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0015 swap
     0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0019 op_0x84
-    0020 nop
-    0021 aconst_null
+    0019 iinc 0 1
     0022 goto 2
     0025 return
     sub_attr  StackMapTable (7 bytes)

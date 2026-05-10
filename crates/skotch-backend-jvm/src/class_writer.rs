@@ -322,6 +322,8 @@ fn append_method_annotations(
         .any(|a| is_kotlin_deprecated_descriptor(&a.descriptor));
     let param_notnull_mask = compute_param_notnull_mask(func);
     let has_param_notnull = param_notnull_mask.iter().any(|&b| b);
+    let param_annot_kinds = compute_param_annot_kinds(func);
+    let has_param_nullable = param_annot_kinds.contains(&ParamAnnotKind::Nullable);
     let has_suspend_attrs = func.is_suspend;
 
     // Pre-register the LocalVariableTable's per-param Utf8 strings
@@ -357,6 +359,7 @@ fn append_method_annotations(
         && !has_nullable_return
         && !has_deprecated
         && !has_param_notnull
+        && !has_param_nullable
         && !has_suspend_attrs
         && !has_generic_signature
     {
@@ -383,7 +386,9 @@ fn append_method_annotations(
     if has_nullable_return {
         new_count += 1;
     }
-    if has_param_notnull {
+    if has_param_notnull || has_param_nullable {
+        // Single RuntimeInvisibleParameterAnnotations attribute covers
+        // all parameters (mixing @NotNull and @Nullable).
         new_count += 1;
     }
     method_bytes[6] = (new_count >> 8) as u8;
@@ -411,8 +416,10 @@ fn append_method_annotations(
     if has_nullable_return {
         encode_invisible_nullable_attribute(cp, method_bytes);
     }
-    if has_param_notnull {
-        encode_invisible_param_notnull_attribute(cp, &param_notnull_mask, method_bytes);
+    if has_param_notnull || has_param_nullable {
+        // Use the unified encoder so both @NotNull and @Nullable
+        // appear in a single attribute, matching kotlinc.
+        encode_invisible_param_annotations_attribute(cp, &param_annot_kinds, method_bytes);
     }
 }
 
@@ -514,9 +521,42 @@ fn compute_param_notnull_mask(func: &MirFunction) -> Vec<bool> {
         .collect()
 }
 
+/// Per-parameter nullability annotation kind.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParamAnnotKind {
+    /// No annotation (primitive, generic erased to Any, etc.).
+    None,
+    /// `@org.jetbrains.annotations.NotNull` — non-null reference param.
+    NotNull,
+    /// `@org.jetbrains.annotations.Nullable` — nullable reference param.
+    Nullable,
+}
+
+fn compute_param_annot_kinds(func: &MirFunction) -> Vec<ParamAnnotKind> {
+    let n = func.param_names.len();
+    let offset = func.params.len().saturating_sub(n);
+    (0..n)
+        .map(|i| {
+            let id = func.params[offset + i];
+            let ty = &func.locals[id.0 as usize];
+            if matches!(ty, Ty::Any) && func.has_type_params {
+                return ParamAnnotKind::None;
+            }
+            if matches!(ty, Ty::Nullable(_)) {
+                return ParamAnnotKind::Nullable;
+            }
+            if is_non_null_reference_param(ty) {
+                return ParamAnnotKind::NotNull;
+            }
+            ParamAnnotKind::None
+        })
+        .collect()
+}
+
 /// Encode a `RuntimeInvisibleParameterAnnotations` attribute. For each
 /// parameter in `mask`, emits a single `@NotNull` annotation if true,
 /// otherwise an empty annotation list.
+#[allow(dead_code)] // superseded by encode_invisible_param_annotations_attribute
 fn encode_invisible_param_notnull_attribute(
     cp: &mut ConstantPool,
     mask: &[bool],
@@ -533,6 +573,40 @@ fn encode_invisible_param_notnull_attribute(
             body.write_u16::<BigEndian>(0).unwrap(); // num_element_value_pairs
         } else {
             body.write_u16::<BigEndian>(0).unwrap(); // no annotations
+        }
+    }
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(body.len() as u32).unwrap();
+    out.write_all(&body).unwrap();
+}
+
+/// Emit a `RuntimeInvisibleParameterAnnotations` attribute that supports
+/// both `@NotNull` and `@Nullable` per-parameter annotations.
+fn encode_invisible_param_annotations_attribute(
+    cp: &mut ConstantPool,
+    kinds: &[ParamAnnotKind],
+    out: &mut Vec<u8>,
+) {
+    let attr_name = cp.utf8("RuntimeInvisibleParameterAnnotations");
+    let notnull_idx = cp.utf8("Lorg/jetbrains/annotations/NotNull;");
+    let nullable_idx = cp.utf8("Lorg/jetbrains/annotations/Nullable;");
+    let mut body = Vec::new();
+    body.push(kinds.len() as u8); // num_parameters: u1
+    for &kind in kinds {
+        match kind {
+            ParamAnnotKind::None => {
+                body.write_u16::<BigEndian>(0).unwrap();
+            }
+            ParamAnnotKind::NotNull => {
+                body.write_u16::<BigEndian>(1).unwrap();
+                body.write_u16::<BigEndian>(notnull_idx).unwrap();
+                body.write_u16::<BigEndian>(0).unwrap();
+            }
+            ParamAnnotKind::Nullable => {
+                body.write_u16::<BigEndian>(1).unwrap();
+                body.write_u16::<BigEndian>(nullable_idx).unwrap();
+                body.write_u16::<BigEndian>(0).unwrap();
+            }
         }
     }
     out.write_u16::<BigEndian>(attr_name).unwrap();
@@ -587,6 +661,139 @@ fn emit_constval_field(
     } else {
         out.write_u16::<BigEndian>(0).unwrap(); // no attributes
     }
+}
+
+/// Emit a `private static final` field for a non-`const val` top-level
+/// property. The field has no `ConstantValue` attribute — kotlinc relies
+/// on a `<clinit>` `putstatic` instead so user code can observe the
+/// initializer's reference identity.
+fn emit_property_field(name: &str, ty: &Ty, cp: &mut ConstantPool, out: &mut Vec<u8>) {
+    let access = ACC_PRIVATE | ACC_STATIC | ACC_FINAL;
+    let name_idx = cp.utf8(name);
+    let desc = jvm_type_string(ty);
+    let desc_idx = cp.utf8(&desc);
+    out.write_u16::<BigEndian>(access).unwrap();
+    out.write_u16::<BigEndian>(name_idx).unwrap();
+    out.write_u16::<BigEndian>(desc_idx).unwrap();
+    out.write_u16::<BigEndian>(0).unwrap(); // no attributes
+}
+
+/// Emit the `<clinit>()V` method that initializes every top-level
+/// non-`const val` property by `ldc <literal>; putstatic <field>; …; return`.
+fn emit_clinit_for_props(
+    class_name: &str,
+    props: &[(String, Ty, MirConst)],
+    module: &MirModule,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let access = ACC_STATIC;
+    let name_idx = cp.utf8("<clinit>");
+    let descriptor_idx = cp.utf8("()V");
+    let mut code: Vec<u8> = Vec::new();
+    let mut max_stack: i32 = 0;
+    let mut stack: i32 = 0;
+    for (field_name, ty, value) in props {
+        // Push the literal.
+        emit_load_const(cp, &mut code, &mut stack, &mut max_stack, value, module);
+        // putstatic <wrapper>.<field_name>:<descriptor>
+        let desc = jvm_type_string(ty);
+        let fr = cp.fieldref(class_name, field_name, &desc);
+        code.push(0xB3); // putstatic
+        code.write_u16::<BigEndian>(fr).unwrap();
+        let pop = if matches!(ty, Ty::Long | Ty::Double) {
+            2
+        } else {
+            1
+        };
+        bump(&mut stack, &mut max_stack, -pop);
+    }
+    code.push(0xB1); // return
+    let max_locals: u16 = 0;
+    wrap_method(
+        cp,
+        code_attr_name_idx,
+        access,
+        name_idx,
+        descriptor_idx,
+        &code,
+        max_stack as u16,
+        max_locals,
+    )
+}
+
+/// Emit a `public static final get<Name>()<Ty>` accessor for a non-
+/// `const val` top-level property — `getstatic <field>; <return>`.
+/// For non-null reference returns, also emits the
+/// `@org.jetbrains.annotations.NotNull` attribute kotlinc adds.
+fn emit_property_getter(
+    class_name: &str,
+    field_name: &str,
+    ty: &Ty,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+    // `getName` for `name`, `getGREETING` for `GREETING`.
+    let getter_name = format!(
+        "get{}{}",
+        field_name.chars().next().unwrap_or('?').to_uppercase(),
+        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
+    );
+    let name_idx = cp.utf8(&getter_name);
+    let desc = jvm_type_string(ty);
+    let descriptor = format!("(){desc}");
+    let descriptor_idx = cp.utf8(&descriptor);
+    let mut code: Vec<u8> = Vec::new();
+    // getstatic <wrapper>.<field>:<descriptor>
+    let fr = cp.fieldref(class_name, field_name, &desc);
+    code.push(0xB2);
+    code.write_u16::<BigEndian>(fr).unwrap();
+    // Return opcode based on type.
+    let return_op: u8 = match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => 0xAC, // ireturn
+        Ty::Long => 0xAD,                                             // lreturn
+        Ty::Float => 0xAE,                                            // freturn
+        Ty::Double => 0xAF,                                           // dreturn
+        Ty::Unit => 0xB1,                                             // return
+        _ => 0xB0,                                                    // areturn
+    };
+    code.push(return_op);
+    let max_stack: u16 = if matches!(ty, Ty::Long | Ty::Double) {
+        2
+    } else {
+        1
+    };
+    let max_locals: u16 = 0;
+
+    // Build the Code attribute body.
+    let mut code_attr: Vec<u8> = Vec::new();
+    code_attr.write_u16::<BigEndian>(max_stack).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // sub-attributes count
+
+    // Non-null reference returns get a `@NotNull` annotation. Primitive
+    // and Unit returns get no method-level annotation.
+    let needs_notnull = matches!(ty, Ty::String | Ty::Class(_) | Ty::IntArray | Ty::Any);
+    let attr_count: u16 = if needs_notnull { 2 } else { 1 };
+
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(access).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    method.write_u16::<BigEndian>(attr_count).unwrap();
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    if needs_notnull {
+        encode_invisible_notnull_attribute(cp, &mut method);
+    }
+    method
 }
 
 /// Encode the JVM `Deprecated` marker attribute (zero-length payload).
@@ -784,10 +991,37 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         emit_constval_field(name, ty, value, module, &mut cp, &mut blob);
         const_field_blobs.push(blob);
     }
+    // Pre-build non-`const val` property fields (private static final).
+    // The actual values are stored by the synthesized `<clinit>` below.
+    for (name, ty, _value) in &module.top_level_props {
+        let mut blob = Vec::new();
+        emit_property_field(name, ty, &mut cp, &mut blob);
+        const_field_blobs.push(blob);
+    }
 
     // Compile each method body first; the constant pool grows as a
     // side effect, and the methods reference its indices.
     let mut method_blobs: Vec<Vec<u8>> = Vec::new();
+    // `<clinit>` first — kotlinc places the static initializer before
+    // user-declared methods. Skipped when there are no top-level
+    // properties to initialize (the JVM treats classes without
+    // `<clinit>` as having an implicit no-op initializer).
+    if !module.top_level_props.is_empty() {
+        let clinit = emit_clinit_for_props(
+            class_name,
+            &module.top_level_props,
+            module,
+            &mut cp,
+            code_attr_name_idx,
+        );
+        method_blobs.push(clinit);
+        // Getter per property — `get<Name>()<ty>`.
+        for (field_name, ty, _value) in &module.top_level_props {
+            let getter =
+                emit_property_getter(class_name, field_name, ty, &mut cp, code_attr_name_idx);
+            method_blobs.push(getter);
+        }
+    }
     for func in &module.functions {
         // Skip abstract stub functions (e.g. the synthetic
         // `delay` entry used only so the state machine extractor can
@@ -2353,6 +2587,14 @@ fn emit_method_body(
     // Which blocks are exception handler entry points.
     // Comparison-internal branch targets (L_true / L_end from if_icmpXX patterns).
     let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+    // Extra frame targets recorded by peepholes that introduce branch
+    // targets at offsets that don't align with `func.blocks` boundaries
+    // (e.g. `peephole_elvis_to_dup`'s post-rewrite `ifnonnull` lands at
+    // the trailing `astore_T`). Each entry is `(offset, stack_verif)`
+    // where `stack_verif` is the verification-type bytes for the single
+    // stack item at that offset (encoded per JVMS §4.7.4 — typically a
+    // 3-byte sequence: tag 7 + 2-byte CP class index for an Object).
+    let mut extra_frame_targets: Vec<(usize, Vec<u8>)> = Vec::new();
 
     for eh in &func.exception_handlers {
         is_target[eh.handler_block as usize] = true;
@@ -2366,6 +2608,8 @@ fn emit_method_body(
     // emitted, and the use textually substitutes the constant.
     let inlinable = compute_inlinable_constants(func);
     INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
+    let inlinable_getstatic = compute_inlinable_getstatic(func);
+    INLINABLE_GETSTATIC.with(|cell| *cell.borrow_mut() = inlinable_getstatic);
 
     // Compute write-once-never-read locals so the call handlers can emit
     // `pop` / `pop2` instead of an unused `store`.
@@ -2502,6 +2746,27 @@ fn emit_method_body(
             max_stack as u16,
             actual_max_locals(&code).max(func.params.len() as u16),
         );
+    }
+
+    // Inline-function marker: kotlinc prepends `iconst_0; istore_<N>`
+    // at the start of every `inline fun` body, where N is the slot
+    // immediately after the parameters. The slot (`$i$f$<funcname>`)
+    // is unread but reserves a LocalVariableTable entry that IDEs use
+    // to render inline-call boundaries in stack traces.
+    if func.is_inline {
+        let marker_slot = next_slot;
+        code.push(0x03); // iconst_0
+        if marker_slot <= 3 {
+            code.push(0x3B + marker_slot); // istore_0..istore_3
+        } else {
+            code.push(0x36); // istore <slot>
+            code.push(marker_slot);
+        }
+        next_slot += 1;
+        if (next_slot as i32) > max_stack {
+            // Reserved slot doesn't push onto the stack — only bumps
+            // max_locals. Leave max_stack alone.
+        }
     }
 
     let mut goto_was_omitted = false;
@@ -2852,9 +3117,9 @@ fn emit_method_body(
     }
 
     // Pass 2.8: Thread `goto X → goto Y` chains so each branch jumps
-    // directly to its final target. Currently DISABLED — threading can
-    // break the live_at_end fixed-point's view of slot reachability when
-    // a slot's only initialization sits along the rewired path.
+    // directly to its final target. Currently DISABLED — kotlinc preserves
+    // some trampoline gotos in its own output, so threading drops parity
+    // (the post-thread shape is shorter than what kotlinc emits).
     let _ = peephole_thread_gotos;
 
     // Pass 2.9: Drop unreachable bytes (commonly trampoline gotos that
@@ -2925,7 +3190,21 @@ fn emit_method_body(
                 named_slots.insert(s);
             }
         }
-        peephole_elide_store_load(&mut code, &named_slots);
+        // Run the `String.toUpperCase()` / `toLowerCase()` rewrite first
+        // so subsequent peepholes see the kotlinc-shaped sequence (with
+        // its `dup; ldc; invokestatic checkNotNullExpressionValue`
+        // anchor) and can preserve the surrounding spill pattern.
+        peephole_uppercase_to_locale_root(&mut code, &mut [], &mut [], &mut [], cp);
+        // Look up the methodref for `Intrinsics.checkNotNullExpressionValue`
+        // so the swap-pattern peephole can recognize and preserve the
+        // `dup; ldc; invokestatic check..; astore_T; ...; aload_T` shape
+        // kotlinc emits for `expr!!`-style assertions.
+        let check_notnull_expr_mref = cp.lookup_methodref(
+            "kotlin/jvm/internal/Intrinsics",
+            "checkNotNullExpressionValue",
+            "(Ljava/lang/Object;Ljava/lang/String;)V",
+        );
+        peephole_elide_store_load(&mut code, &named_slots, check_notnull_expr_mref);
         // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
         // when the intermediate is straight-line, has zero net stack effect,
         // and never touches slot N. Matches kotlinc's stack-resident temp
@@ -2949,8 +3228,16 @@ fn emit_method_body(
         // passes see the post-compact slot numbers.
         let new_max = compact_local_slots(&mut code, initial_param_slots, &mut named_slots);
         max_locals = new_max as u16;
-        let safe_for_liveness =
-            matches!(kind, MethodKind::Static) && func.exception_handlers.is_empty();
+        // `liveness_reuse_slots` uses a linear "last load offset" walk
+        // that is wrong in the presence of back-edges (loops): a slot
+        // whose only loads are inside the loop body can appear "dead"
+        // past the last load when in fact every later iteration loads
+        // it again. We detect back-edges by scanning the bytecode for
+        // any branch with a negative relative offset; only enable
+        // liveness reuse when none are present. This lets try-catch
+        // functions (no loops) reuse the catch param's slot, matching
+        // kotlinc.
+        let safe_for_liveness = matches!(kind, MethodKind::Static) && !has_back_edges(&code);
         if safe_for_liveness {
             // Treat slots stored to multiple times as preserved (vars).
             let preserved_slots = compute_repeated_store_slots(&code);
@@ -2998,6 +3285,23 @@ fn emit_method_body(
                 named_slots_for_middle.insert(s);
             }
         }
+        // Catch-param slots: the JVM delivers the exception on the
+        // operand stack at handler entry, and kotlinc always materializes
+        // it via `astore_X`. Treat the catch-param slot as named so the
+        // store/load elide doesn't collapse `astore_X; aload_X` at the
+        // handler entry.
+        for eh in &func.exception_handlers {
+            let bi = eh.handler_block as usize;
+            if let Some(block) = func.blocks.get(bi) {
+                if let Some(Stmt::Assign { dest, value }) = block.stmts.first() {
+                    if matches!(value, Rvalue::Const(MirConst::Null)) {
+                        if let Some(&s) = slots.get(&dest.0) {
+                            named_slots_for_middle.insert(s);
+                        }
+                    }
+                }
+            }
+        }
         peephole_elide_middle_store_load(
             &mut code,
             &mut cmp_targets,
@@ -3042,10 +3346,10 @@ fn emit_method_body(
         max_locals = new_max as u16;
         // Liveness-based slot reuse is byte-preserving (only renumbers
         // slot indices in store/load instructions), so it's safe with
-        // intra-block branches. Restrict to static methods without
-        // exception handlers to keep parity with the no-branches path.
-        let safe_for_liveness =
-            matches!(kind, MethodKind::Static) && func.exception_handlers.is_empty();
+        // intra-block branches. Gated on no back-edges (loops) — see
+        // the comment on `has_back_edges` and the no-branches path
+        // above for the rationale.
+        let safe_for_liveness = matches!(kind, MethodKind::Static) && !has_back_edges(&code);
         if safe_for_liveness {
             let preserved_slots = compute_repeated_store_slots(&code);
             let mut effective_named = named_slots.clone();
@@ -3096,6 +3400,23 @@ fn emit_method_body(
             for recv in destructuring_receivers(func) {
                 if let Some(&s) = slots.get(&recv.0) {
                     named_slots_for_middle.insert(s);
+                }
+            }
+            // Catch-param slots: the JVM delivers the exception on the
+            // operand stack at handler entry, and kotlinc always
+            // materializes it via `astore_X`. Treat the catch-param slot
+            // as named so the store/load elide and copy-prop don't
+            // collapse the adjacent `astore_X; aload_X` at handler entry.
+            for eh in &func.exception_handlers {
+                let bi = eh.handler_block as usize;
+                if let Some(block) = func.blocks.get(bi) {
+                    if let Some(Stmt::Assign { dest, value }) = block.stmts.first() {
+                        if matches!(value, Rvalue::Const(MirConst::Null)) {
+                            if let Some(&s) = slots.get(&dest.0) {
+                                named_slots_for_middle.insert(s);
+                            }
+                        }
+                    }
                 }
             }
             // Middle-elide for inter-block functions: collapses adjacent
@@ -3223,6 +3544,57 @@ fn emit_method_body(
                 );
                 peephole_hoist_swap_pattern(&mut code, &mut cmp_targets, &mut block_offsets, &*cp);
                 peephole_fold_null_compare(&mut code, &mut cmp_targets, &mut block_offsets);
+                // Eliminate `<call>; xload N; swap` left over from
+                // swap_pattern by hoisting `xload N` to the start of the
+                // call's argument evaluation. Mirrors kotlinc's
+                // left-to-right evaluation that pre-loads the LHS
+                // before the call.
+                peephole_eliminate_swap_after_call_branched(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &*cp,
+                );
+                // Rewrite the slot-based elvis (`?:`) shape into the
+                // dup-based form kotlinc emits. The new `ifnonnull`
+                // target lands at the trailing `astore_T` (mid-block),
+                // so the peephole records an extra frame target with
+                // stack=[Object] for the SMT to honor.
+                peephole_elvis_to_dup(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut extra_frame_targets,
+                    cp,
+                );
+                // After the elvis rewrite the converged path commonly
+                // looks like `astore_T; aload_T; <use>` — the temp
+                // round-trip can collapse if T is dead afterward.
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+                // Detect a chain of int-equality comparisons emitted
+                // for `when (intExpr) { K -> e; … }` and rewrite to the
+                // `tableswitch` form kotlinc emits when the keys form a
+                // dense range. Runs late so all earlier peepholes have
+                // already collapsed any byte-noise in the case bodies.
+                peephole_if_chain_to_tableswitch(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut extra_frame_targets,
+                );
+                peephole_uppercase_to_locale_root(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut extra_frame_targets,
+                    cp,
+                );
             }
             // Slot compaction is byte-preserving, so it's safe with inter-block
             // branches. Mirrors the patches.is_empty() path.
@@ -3308,6 +3680,14 @@ fn emit_method_body(
                     Some(&mut slots),
                 );
                 max_locals = new_max as u16;
+                // NOTE: `liveness_reuse_slots` is intentionally NOT called
+                // here. Its current implementation uses a linear "last
+                // load" walk that doesn't see loop back-edges; in a
+                // function with a loop, the walk can mis-identify a slot
+                // as free for a temporary, clobbering the loop variable.
+                // (Specific failure: 164-identity-matrix's nested `for`
+                // loops.) Re-enable only after teaching the analysis
+                // about the CFG.
                 // After compaction, slot indices may now fit in 0..=3 — convert
                 // generic 2-byte forms (`istore N`) back to compact 1-byte
                 // forms (`istore_N`). Updates `block_offsets` and
@@ -3499,11 +3879,15 @@ fn emit_method_body(
         }
     }
 
-    // ── Collect ALL target offsets (inter-block + comparison-internal) ──
+    // ── Collect ALL target offsets (inter-block + comparison-internal + peephole-introduced) ──
     // Each entry: (offset, is_cmp_target_index_or_none)
     enum TargetSource {
         Block(usize),
         Cmp(usize),
+        /// Index into `extra_frame_targets`. Used by peepholes that
+        /// introduce a branch target at an offset that doesn't align
+        /// with `func.blocks` boundaries (e.g. `peephole_elvis_to_dup`).
+        Extra(usize),
     }
     let mut all_targets: Vec<(usize, TargetSource)> = Vec::new();
     for (bi, &is_tgt) in is_target.iter().enumerate() {
@@ -3513,6 +3897,9 @@ fn emit_method_body(
     }
     for (ci, ct) in cmp_targets.iter().enumerate() {
         all_targets.push((ct.offset, TargetSource::Cmp(ci)));
+    }
+    for (xi, (off, _)) in extra_frame_targets.iter().enumerate() {
+        all_targets.push((*off, TargetSource::Extra(xi)));
     }
     all_targets.sort_by_key(|&(off, _)| off);
     all_targets.dedup_by_key(|t| t.0);
@@ -3726,6 +4113,31 @@ fn emit_method_body(
                 );
                 prev_locals_verif = cur_locals_verif;
             }
+            TargetSource::Extra(xi) => {
+                // Peephole-introduced frame target. The stack
+                // verification bytes were chosen by the peephole;
+                // locals carry forward from the previous frame
+                // unchanged (the rewrite never touches local slots).
+                // An empty stack_verif vector means "stack=[]" (no
+                // operand on the stack at this branch target — used by
+                // e.g. `peephole_if_chain_to_tableswitch` for case body
+                // entry frames after the tableswitch consumes the
+                // subject).
+                let stack_verif = &extra_frame_targets[*xi].1;
+                let stack_arg = if stack_verif.is_empty() {
+                    None
+                } else {
+                    Some(stack_verif.as_slice())
+                };
+                emit_compact_frame(
+                    &mut stack_map_entries,
+                    delta as u16,
+                    &prev_locals_verif,
+                    stack_arg,
+                    &prev_locals_verif,
+                );
+                // prev_locals_verif unchanged.
+            }
         }
     }
 
@@ -3783,6 +4195,7 @@ fn emit_method_body(
     method.write_all(&code_attr).unwrap();
     // Clear inlinable-constants table for the next function.
     INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
+    INLINABLE_GETSTATIC.with(|cell| cell.borrow_mut().clear());
     UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
     NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
     EMIT_CP.with(|cell| *cell.borrow_mut() = None);
@@ -4212,7 +4625,16 @@ fn emit_method(
     } else {
         0
     };
-    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag;
+    // kotlinc marks `inline fun` methods with reified type parameters
+    // as ACC_SYNTHETIC — the body must be inlined at every call site
+    // since the reified type isn't available at runtime, but a fallback
+    // body is still emitted for cross-unit binary compatibility.
+    let synthetic_flag = if func.is_inline && func.has_type_params {
+        ACC_SYNTHETIC
+    } else {
+        0
+    };
+    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag | synthetic_flag;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
     // Pre-register attribute-driven CP entries before the body emits any
@@ -6730,8 +7152,15 @@ fn emit_mir_segment(
                 // For primitive types (Int, Long, Double, Bool), also unbox.
                 let src_ty = &func.locals[src.0 as usize];
                 let dest_ty = &func.locals[dest.0 as usize];
+                // Nullable(T) and T have the same JVM-erased
+                // representation (`L<T>;`), so a `Nullable(T)` →
+                // `T` assignment doesn't need a checkcast. Likewise an
+                // identity copy `Class(T) → Class(T)` is a JVM no-op.
+                let same_jvm_type = matches!(src_ty, Ty::Nullable(inner) if &**inner == dest_ty)
+                    || src_ty == dest_ty;
                 let needs_cast = matches!(src_ty, Ty::Any | Ty::Nullable(_))
-                    && !matches!(dest_ty, Ty::Any | Ty::Nullable(_) | Ty::Unit);
+                    && !matches!(dest_ty, Ty::Any | Ty::Nullable(_) | Ty::Unit)
+                    && !same_jvm_type;
                 if needs_cast {
                     match dest_ty {
                         Ty::Int => {
@@ -9646,6 +10075,62 @@ fn jvm_type(ty: &Ty) -> &'static str {
 /// This matches kotlinc's behavior of pushing constants directly at the use
 /// site for arithmetic/comparison operations, but materializing them to a
 /// local before method calls.
+/// Find locals whose sole producer is a `Rvalue::GetStaticField` and that
+/// are read at most once. At every use site `load_local` will re-emit the
+/// `getstatic` instruction rather than reading from a slot — matches
+/// kotlinc's "no spill" pattern for top-level property reads.
+fn compute_inlinable_getstatic(func: &MirFunction) -> FxHashMap<u32, (String, String, String)> {
+    let mut producers: FxHashMap<u32, (String, String, String)> = FxHashMap::default();
+    let mut assign_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    let mut use_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            *assign_counts.entry(dest.0).or_insert(0) += 1;
+            if let Rvalue::GetStaticField {
+                class_name,
+                field_name,
+                descriptor,
+            } = value
+            {
+                producers.entry(dest.0).or_insert_with(|| {
+                    (class_name.clone(), field_name.clone(), descriptor.clone())
+                });
+            }
+            count_rvalue_uses(value, &mut use_counts);
+        }
+        match &block.terminator {
+            Terminator::Throw(l) | Terminator::ReturnValue(l) => {
+                *use_counts.entry(l.0).or_insert(0) += 1;
+            }
+            Terminator::Branch { cond, .. } => {
+                *use_counts.entry(cond.0).or_insert(0) += 1;
+            }
+            _ => {}
+        }
+    }
+    let param_set: FxHashSet<u32> = func.params.iter().map(|p| p.0).collect();
+    let named: FxHashSet<u32> = func.named_locals.iter().map(|l| l.0).collect();
+    let mut result: FxHashMap<u32, (String, String, String)> = FxHashMap::default();
+    for (local, src) in producers {
+        if param_set.contains(&local) || named.contains(&local) {
+            continue;
+        }
+        if assign_counts.get(&local).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        // Single-read locals are safe to inline (re-emitting getstatic is
+        // semantically identical for a `final` field initialized in
+        // `<clinit>`). Multi-read locals would observe the same value
+        // anyway since the field is final, but kotlinc still tends to
+        // re-load — match that exactly.
+        if use_counts.get(&local).copied().unwrap_or(0) <= 4 {
+            result.insert(local, src);
+        }
+    }
+    result
+}
+
 fn compute_inlinable_constants(func: &MirFunction) -> FxHashMap<u32, MirConst> {
     let mut const_assign: FxHashMap<u32, MirConst> = FxHashMap::default();
     let mut assign_counts: FxHashMap<u32, u32> = FxHashMap::default();
@@ -9936,6 +10421,22 @@ fn walk_block(
         {
             continue;
         }
+        // Smart-cast assigns (`Rvalue::Local`) introduced for `is`-check
+        // narrowing are pure: skip emission if the narrowed binding is
+        // never read in the then-branch. Matches kotlinc, which only
+        // emits the checkcast/astore when the cast variable is used.
+        if matches!(value, Rvalue::Local(_)) && is_unused_local(*dest) {
+            continue;
+        }
+        // `Rvalue::GetStaticField` assigns where the destination is in
+        // `INLINABLE_GETSTATIC` are inlined at use sites (kotlinc emits
+        // `getstatic` at each read instead of materializing to a slot).
+        // Skip the assign here to avoid an unused store.
+        if matches!(value, Rvalue::GetStaticField { .. })
+            && INLINABLE_GETSTATIC.with(|cell| cell.borrow().contains_key(&dest.0))
+        {
+            continue;
+        }
         match value {
             Rvalue::Const(c) => {
                 // Fix type mismatches between const value and dest local:
@@ -9990,8 +10491,16 @@ fn walk_block(
                 // a concrete type (e.g., `when (obj) { is String -> ... }`).
                 let src_ty = &func.locals[src.0 as usize];
                 let dest_ty_here = &func.locals[dest.0 as usize];
+                // `Nullable(T)` and `T` share the same JVM-erased
+                // representation, so a `Nullable(T) → T` assignment
+                // doesn't need a runtime checkcast. Same-class
+                // assignments (`Class(T) → Class(T)`) are likewise no-
+                // ops at the JVM level.
+                let same_jvm_type = matches!(src_ty, Ty::Nullable(inner) if &**inner == dest_ty_here)
+                    || src_ty == dest_ty_here;
                 if matches!(src_ty, Ty::Any | Ty::Class(_) | Ty::Nullable(_))
                     && !matches!(dest_ty_here, Ty::Any | Ty::Nullable(_) | Ty::Unit)
+                    && !same_jvm_type
                 {
                     match dest_ty_here {
                         Ty::Int => {
@@ -10222,6 +10731,37 @@ fn walk_block(
                                 max_stack,
                                 &descriptor,
                                 &recipe,
+                            );
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+                    }
+                    // Two non-literal operands of compatible types — use
+                    // `invokedynamic makeConcatWithConstants` like kotlinc
+                    // does for every `String + value` since JDK 9. The
+                    // recipe is two placeholder `` markers (no
+                    // embedded literal text).
+                    if matches!(lhs_ty, Ty::String) {
+                        let arg_desc: Option<&str> = match rhs_ty {
+                            Ty::String => Some("Ljava/lang/String;"),
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char => Some("I"),
+                            Ty::Long => Some("J"),
+                            Ty::Float => Some("F"),
+                            Ty::Double => Some("D"),
+                            Ty::Bool => Some("Z"),
+                            _ => None,
+                        };
+                        if let Some(rd) = arg_desc {
+                            load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                            load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                            let descriptor = format!("(Ljava/lang/String;{rd})Ljava/lang/String;");
+                            emit_make_concat_with_constants(
+                                code,
+                                cp,
+                                stack,
+                                max_stack,
+                                &descriptor,
+                                "\u{1}\u{1}",
                             );
                             store_local(code, stack, slots, next_slot, *dest, &func.locals);
                             continue;
@@ -10825,13 +11365,32 @@ fn walk_block(
             }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println => {
-                    let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
-                    code.push(0xB2); // getstatic
-                    code.write_u16::<BigEndian>(fr).unwrap();
-                    bump(stack, max_stack, 1);
+                    // For inlinable-getstatic args, evaluate the arg FIRST,
+                    // then push the receiver and `swap` — kotlinc's pattern
+                    // for `println(<getstatic field>)`. Otherwise fall back
+                    // to the receiver-first form.
+                    let arg_is_inlinable_getstatic = args.first().is_some_and(|a| {
+                        INLINABLE_GETSTATIC.with(|cell| cell.borrow().contains_key(&a.0))
+                    });
+                    if arg_is_inlinable_getstatic {
+                        let a = args[0];
+                        load_local(code, stack, max_stack, slots, a, &func.locals);
+                        let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                        code.push(0xB2); // getstatic
+                        code.write_u16::<BigEndian>(fr).unwrap();
+                        bump(stack, max_stack, 1);
+                        code.push(0x5F); // swap
+                    } else {
+                        let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                        code.push(0xB2); // getstatic
+                        code.write_u16::<BigEndian>(fr).unwrap();
+                        bump(stack, max_stack, 1);
+                    }
 
                     if let Some(&a) = args.first() {
-                        load_local(code, stack, max_stack, slots, a, &func.locals);
+                        if !arg_is_inlinable_getstatic {
+                            load_local(code, stack, max_stack, slots, a, &func.locals);
+                        }
                         let arg_ty = &func.locals[a.0 as usize];
                         // Byte and Short don't have direct println overloads
                         // — kotlinc autoboxes them to Byte/Short objects and
@@ -11128,7 +11687,18 @@ fn walk_block(
                         {
                             emit_generic_call_unbox(code, cp, stack, max_stack, dest_ty);
                         }
-                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        if is_unused_local(*dest) {
+                            // Statement-level call whose return is
+                            // discarded — kotlinc emits `pop`/`pop2`
+                            // instead of materializing through a slot.
+                            let ret_is_wide = matches!(target.return_ty, Ty::Long | Ty::Double);
+                            let pop_opcode = if ret_is_wide { 0x58 } else { 0x57 };
+                            code.push(pop_opcode);
+                            let width = if ret_is_wide { -2 } else { -1 };
+                            bump(stack, max_stack, width);
+                        } else {
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        }
                         // Nothing-returning functions never return (they throw).
                         // Don't store the result — it doesn't exist.
                     }
@@ -12117,6 +12687,13 @@ thread_local! {
     static NAMED_CONST_INITS: RefCell<FxHashMap<u32, MirConst>> =
         RefCell::new(FxHashMap::default());
 
+    /// Per-function map of locals whose sole producer is `Rvalue::GetStaticField`
+    /// — at every use site `load_local` re-emits the `getstatic` instruction
+    /// rather than reading from a slot. Mirrors kotlinc's pattern of inlining
+    /// top-level property reads (`val FOO = …` → field access at every use).
+    static INLINABLE_GETSTATIC: RefCell<FxHashMap<u32, (String, String, String)>> =
+        RefCell::new(FxHashMap::default());
+
     /// Raw pointers to the active `ConstantPool` and `MirModule` so
     /// `load_local` can emit CP-backed inline constants (Strings, large
     /// numeric literals) without threading the references through 45+
@@ -12213,6 +12790,25 @@ fn load_local(
     let ty = &locals[local.0 as usize];
     if matches!(ty, Ty::Unit) {
         return;
+    }
+    // Check inlinable-getstatic table. If this local was produced by a
+    // single GetStaticField, re-emit `getstatic` instead of `aload`.
+    let getstatic_src = INLINABLE_GETSTATIC.with(|cell| cell.borrow().get(&local.0).cloned());
+    if let Some((class, field, descriptor)) = getstatic_src {
+        let cp_ptr = EMIT_CP.with(|cell| *cell.borrow());
+        if let Some(cp_raw) = cp_ptr {
+            let cp = unsafe { &mut *cp_raw };
+            let fr = cp.fieldref(&class, &field, &descriptor);
+            code.push(0xB2); // getstatic
+            code.write_u16::<BigEndian>(fr).unwrap();
+            let width = if matches!(ty, Ty::Long | Ty::Double) {
+                2
+            } else {
+                1
+            };
+            bump(stack, max_stack, width);
+            return;
+        }
     }
     // Check inlinable-constants table. If this local is a single-use
     // constant, push it directly instead of loading a slot.
@@ -12685,10 +13281,87 @@ fn recompute_max_stack_from_code(code: &[u8], cp: &ConstantPool) -> i32 {
             }
             // return / throw — no successor
             0xAC..=0xB1 | 0xBF => {}
-            // tableswitch / lookupswitch — skip target enumeration; the
-            // dataflow may under-walk these but max_stack will still be
-            // correct via fall-through paths from the rest of the code.
-            0xAA | 0xAB => {}
+            // tableswitch — enumerate default + per-case targets so the
+            // dataflow walks the body of each case (and their max_stack
+            // contributes correctly).
+            0xAA => {
+                let pad = 3 - (off % 4);
+                let dflt_pos = off + 1 + pad;
+                if dflt_pos + 12 <= code.len() {
+                    let default_rel = i32::from_be_bytes([
+                        code[dflt_pos],
+                        code[dflt_pos + 1],
+                        code[dflt_pos + 2],
+                        code[dflt_pos + 3],
+                    ]);
+                    let low = i32::from_be_bytes([
+                        code[dflt_pos + 4],
+                        code[dflt_pos + 5],
+                        code[dflt_pos + 6],
+                        code[dflt_pos + 7],
+                    ]);
+                    let high = i32::from_be_bytes([
+                        code[dflt_pos + 8],
+                        code[dflt_pos + 9],
+                        code[dflt_pos + 10],
+                        code[dflt_pos + 11],
+                    ]);
+                    let n = (high - low + 1).max(0) as usize;
+                    let cases_pos = dflt_pos + 12;
+                    let dt = (off as i32) + default_rel;
+                    if dt >= 0 {
+                        successors.push(dt as usize);
+                    }
+                    for k in 0..n {
+                        let p = cases_pos + 4 * k;
+                        if p + 4 > code.len() {
+                            break;
+                        }
+                        let rel =
+                            i32::from_be_bytes([code[p], code[p + 1], code[p + 2], code[p + 3]]);
+                        let t = (off as i32) + rel;
+                        if t >= 0 {
+                            successors.push(t as usize);
+                        }
+                    }
+                }
+            }
+            0xAB => {
+                let pad = 3 - (off % 4);
+                let dflt_pos = off + 1 + pad;
+                if dflt_pos + 8 <= code.len() {
+                    let default_rel = i32::from_be_bytes([
+                        code[dflt_pos],
+                        code[dflt_pos + 1],
+                        code[dflt_pos + 2],
+                        code[dflt_pos + 3],
+                    ]);
+                    let npairs = i32::from_be_bytes([
+                        code[dflt_pos + 4],
+                        code[dflt_pos + 5],
+                        code[dflt_pos + 6],
+                        code[dflt_pos + 7],
+                    ])
+                    .max(0) as usize;
+                    let dt = (off as i32) + default_rel;
+                    if dt >= 0 {
+                        successors.push(dt as usize);
+                    }
+                    let pairs_pos = dflt_pos + 8;
+                    for k in 0..npairs {
+                        let p = pairs_pos + 8 * k + 4; // skip the match key
+                        if p + 4 > code.len() {
+                            break;
+                        }
+                        let rel =
+                            i32::from_be_bytes([code[p], code[p + 1], code[p + 2], code[p + 3]]);
+                        let t = (off as i32) + rel;
+                        if t >= 0 {
+                            successors.push(t as usize);
+                        }
+                    }
+                }
+            }
             _ => {
                 successors.push(off + len);
             }
@@ -14860,6 +15533,996 @@ fn peephole_eliminate_swap_after_call(code: &mut Vec<u8>) {
     }
 }
 
+/// Rewrite skotch's `invokevirtual String.toUpperCase()String` /
+/// `toLowerCase()String` (the no-arg, deprecated forms) to kotlinc's
+/// canonical lowering of `s.uppercase()` / `s.lowercase()`:
+///   `getstatic Locale.ROOT;
+///    invokevirtual toUpperCase(Locale);
+///    dup;
+///    ldc "toUpperCase(...)";
+///    invokestatic Intrinsics.checkNotNullExpressionValue`
+///
+/// Net change: +9 bytes per call. Adjusts every branch instruction's
+/// relative offset, every `cmp_targets` entry, every `block_offsets`
+/// entry, and every `extra_frame_targets` offset for the byte
+/// movements. Bumps the per-call max_stack contribution by 1 (the dup
+/// + intermediate ldc transient).
+fn peephole_uppercase_to_locale_root(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    extra_frame_targets: &mut [(usize, Vec<u8>)],
+    cp: &mut ConstantPool,
+) {
+    // Two cases: the no-arg `toUpperCase` form (Kotlin's `uppercase()`
+    // extension) and the no-arg `toLowerCase` form (`lowercase()`).
+    // Both share the same `Intrinsics.checkNotNullExpressionValue`
+    // wrapper in kotlinc's emission.
+    for (kotlin_method, jvm_method, intrinsic_msg) in [
+        ("uppercase", "toUpperCase", "toUpperCase(...)"),
+        ("lowercase", "toLowerCase", "toLowerCase(...)"),
+    ] {
+        let _ = kotlin_method;
+        let target_mref =
+            match cp.lookup_methodref("java/lang/String", jvm_method, "()Ljava/lang/String;") {
+                Some(idx) => idx,
+                None => continue, // method isn't referenced in this class
+            };
+        // Resolve (or add) the new CP entries we'll need.
+        let locale_field = cp.fieldref("java/util/Locale", "ROOT", "Ljava/util/Locale;");
+        let upper_locale_mref = cp.methodref(
+            "java/lang/String",
+            jvm_method,
+            "(Ljava/util/Locale;)Ljava/lang/String;",
+        );
+        let intrinsic_msg_str = cp.string(intrinsic_msg);
+        let check_mref = cp.methodref(
+            "kotlin/jvm/internal/Intrinsics",
+            "checkNotNullExpressionValue",
+            "(Ljava/lang/Object;Ljava/lang/String;)V",
+        );
+        // Find every `invokevirtual <target_mref>` and rewrite it.
+        // Walk the code; for each match, splice in the replacement and
+        // adjust offsets. Restart the scan after each rewrite so the
+        // `instruction_len`-driven walk re-aligns past the splice.
+        loop {
+            let mut found: Option<usize> = None;
+            let mut i = 0;
+            while i + 3 <= code.len() {
+                let len = instruction_len(code, i);
+                // Only treat the byte as an opcode if our walker
+                // landed on it. Walking with `instruction_len` from the
+                // start of the method gives instruction-aligned
+                // positions; bytes inside operand fields are skipped.
+                if code[i] == 0xB6 && i + 3 <= code.len() {
+                    let idx = u16::from_be_bytes([code[i + 1], code[i + 2]]);
+                    if idx == target_mref {
+                        found = Some(i);
+                        break;
+                    }
+                }
+                i += len;
+            }
+            let Some(call_pos) = found else {
+                break;
+            };
+            // Replacement bytes (12 bytes total, +9 vs the old 3-byte
+            // invokevirtual):
+            //   getstatic Locale.ROOT (3)
+            //   invokevirtual toUpperCase(Locale) (3)
+            //   dup (1)
+            //   ldc <intrinsic_msg> (2 if cp ≤ 255 else ldc_w 3)
+            //   invokestatic Intrinsics.checkNotNullExpressionValue (3)
+            let mut replacement: Vec<u8> = Vec::with_capacity(13);
+            replacement.push(0xB2); // getstatic
+            replacement.extend_from_slice(&locale_field.to_be_bytes());
+            replacement.push(0xB6); // invokevirtual toUpperCase(Locale)
+            replacement.extend_from_slice(&upper_locale_mref.to_be_bytes());
+            replacement.push(0x59); // dup
+            if intrinsic_msg_str <= 255 {
+                replacement.push(0x12); // ldc
+                replacement.push(intrinsic_msg_str as u8);
+            } else {
+                replacement.push(0x13); // ldc_w
+                replacement.extend_from_slice(&intrinsic_msg_str.to_be_bytes());
+            }
+            replacement.push(0xB8); // invokestatic
+            replacement.extend_from_slice(&check_mref.to_be_bytes());
+            let old_len = 3;
+            let new_len = replacement.len();
+            let delta = new_len as i32 - old_len as i32;
+            // Adjust every branch instruction whose source/target spans
+            // the rewrite boundary.
+            let mut j = 0;
+            while j < code.len() {
+                let op = code[j];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                    if j + 2 < code.len() {
+                        let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                        let src = j as i32;
+                        let dst = src + rel;
+                        let in_old =
+                            |x: i32| (x as usize) >= call_pos && (x as usize) < call_pos + old_len;
+                        let new_rel = if in_old(src) || in_old(dst) {
+                            // Branch endpoint is inside the original
+                            // invokevirtual — shouldn't happen for a
+                            // 3-byte call.
+                            rel
+                        } else if (src as usize) < call_pos && (dst as usize) >= call_pos + old_len
+                        {
+                            rel + delta
+                        } else if (src as usize) >= call_pos + old_len && (dst as usize) <= call_pos
+                        {
+                            rel - delta
+                        } else {
+                            rel
+                        };
+                        if new_rel != rel {
+                            if !(i16::MIN as i32..=i16::MAX as i32).contains(&new_rel) {
+                                return; // out of range — bail
+                            }
+                            let nb = (new_rel as i16).to_be_bytes();
+                            code[j + 1] = nb[0];
+                            code[j + 2] = nb[1];
+                        }
+                    }
+                    j += 3;
+                    continue;
+                }
+                if matches!(op, 0xC8 | 0xC9) {
+                    if j + 4 < code.len() {
+                        let rel = i32::from_be_bytes([
+                            code[j + 1],
+                            code[j + 2],
+                            code[j + 3],
+                            code[j + 4],
+                        ]);
+                        let src = j as i32;
+                        let dst = src + rel;
+                        let new_rel = if (src as usize) < call_pos
+                            && (dst as usize) >= call_pos + old_len
+                        {
+                            rel + delta
+                        } else if (src as usize) >= call_pos + old_len && (dst as usize) <= call_pos
+                        {
+                            rel - delta
+                        } else {
+                            rel
+                        };
+                        if new_rel != rel {
+                            let nb = new_rel.to_be_bytes();
+                            code[j + 1] = nb[0];
+                            code[j + 2] = nb[1];
+                            code[j + 3] = nb[2];
+                            code[j + 4] = nb[3];
+                        }
+                    }
+                    j += 5;
+                    continue;
+                }
+                j += instruction_len(code, j);
+            }
+            // Splice: replace 3 bytes at call_pos with `new_len` bytes.
+            code.splice(call_pos..call_pos + old_len, replacement.iter().copied());
+            // Shift cmp_targets / block_offsets / extra_frame_targets.
+            for ct in cmp_targets.iter_mut() {
+                if ct.offset >= call_pos + old_len {
+                    ct.offset = ((ct.offset as i32) + delta) as usize;
+                }
+                if ct.cmp_start >= call_pos + old_len {
+                    ct.cmp_start = ((ct.cmp_start as i32) + delta) as usize;
+                }
+            }
+            for b in block_offsets.iter_mut() {
+                if *b >= call_pos + old_len {
+                    *b = ((*b as i32) + delta) as usize;
+                }
+            }
+            for ft in extra_frame_targets.iter_mut() {
+                if ft.0 >= call_pos + old_len {
+                    ft.0 = ((ft.0 as i32) + delta) as usize;
+                }
+            }
+        }
+    }
+}
+
+/// Detect the `iload X; iconst K; if_icmpne L; <body>; goto L_END; …`
+/// chain emitted by skotch's MIR-lower for a `when (intExpr) { N -> e;
+/// M -> e; else -> e_else }` expression with int-literal cases, and
+/// rewrite it to the `tableswitch`-based form kotlinc emits when keys
+/// form a dense range.
+///
+/// Only fires when:
+/// - All cases compare the same `iload X` against int constants.
+/// - Each case body is straight-line and ends with `goto L_END`.
+/// - The else body is straight-line, the last chunk before L_END.
+/// - Case keys form a dense `[low, high]` range with each key unique.
+/// - All gotos in case bodies target the same L_END.
+///
+/// The rewrite EXPANDS bytecode (tableswitch is 13 + 4N bytes for an
+/// N-entry dense range, vs. the chain's 4–6 bytes per case header) but
+/// matches kotlinc's preferred shape so the parity comparison passes.
+#[allow(clippy::too_many_arguments)]
+fn peephole_if_chain_to_tableswitch(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut Vec<usize>,
+    extra_frame_targets: &mut Vec<(usize, Vec<u8>)>,
+) {
+    // Track whether any rewrite happened — bail after one application
+    // per call; the outer codegen pipeline never iterates this peephole
+    // and the rewrite is structural enough that running it once
+    // suffices for the patterns we target.
+    let _ = extra_frame_targets;
+    let mut i = 0;
+    while i + 5 <= code.len() {
+        // Need at least: iload_X (1) + ifne (3) + 1 body byte = 5.
+        let op0 = code[i];
+        // iload_X (compact): 0x1A..=0x1D for slots 0..3.
+        if !(0x1A..=0x1D).contains(&op0) {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // Try to parse a case chain starting at i+1.
+        let chain = match parse_when_chain(code, i, op0) {
+            Some(c) => c,
+            None => {
+                i += instruction_len(code, i);
+                continue;
+            }
+        };
+        // Verify density: keys form [low, high] with no gaps and no
+        // duplicates.
+        let mut keys: Vec<i32> = chain.cases.iter().map(|c| c.key).collect();
+        keys.sort();
+        let low = keys[0];
+        let high = keys[keys.len() - 1];
+        let len = high - low + 1;
+        if len <= 0 || (len as usize) != keys.len() {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // No duplicates.
+        if keys.windows(2).any(|w| w[0] == w[1]) {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // Verify external branches don't land inside the rewrite region
+        // (other than into the case bodies themselves, which we'll
+        // re-resolve).
+        let region_end = chain.l_end; // exclusive in the sense that L_END's first instr stays put after rewrite
+        let region_start = i + 1;
+        let mut external = false;
+        let mut k = 0;
+        while k < code.len() {
+            let op = code[k];
+            let (rel, is_branch) = match op {
+                0x99..=0xA8 | 0xC6 | 0xC7 => {
+                    if k + 2 >= code.len() {
+                        (0, false)
+                    } else {
+                        (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                    }
+                }
+                _ => (0, false),
+            };
+            if is_branch {
+                let tgt = (k as i32 + rel) as usize;
+                let in_region = |p: usize| p >= region_start && p < region_end;
+                let inside_chain = chain.case_branch_positions.contains(&k);
+                if in_region(k) && !inside_chain {
+                    external = true;
+                    break;
+                }
+                if in_region(tgt) {
+                    // Allowed inside-region targets are: a case body
+                    // start, the else body start, L_END, or any of the
+                    // intra-chain header positions (the if-branches we
+                    // emitted, and the iload_X starting each case).
+                    let allowed = tgt == chain.l_end
+                        || tgt == chain.else_start
+                        || chain.cases.iter().any(|c| c.body_start == tgt)
+                        || chain.case_iload_positions.contains(&tgt);
+                    if !allowed {
+                        external = true;
+                        break;
+                    }
+                }
+            }
+            k += instruction_len(code, k);
+        }
+        if external {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // No cmp_targets/block_offsets boundaries inside the rewrite
+        // region (other than at body start positions).
+        let cmp_conflict = cmp_targets.iter().any(|t| {
+            let inside_offset = t.offset > region_start && t.offset < region_end;
+            let inside_cmp_start = t.cmp_start > region_start && t.cmp_start < region_end;
+            inside_offset || inside_cmp_start
+        });
+        if cmp_conflict {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // Block boundaries inside the rewrite are OK if they match a
+        // case body start, the else body start, or L_END (those map
+        // cleanly to the new layout).
+        let allowed_boundary = |b: usize| -> bool {
+            b <= region_start
+                || b == chain.l_end
+                || b == chain.else_start
+                || chain.cases.iter().any(|c| c.body_start == b)
+                || chain.case_iload_positions.contains(&b)
+        };
+        if let Some(&_bad) = block_offsets.iter().find(|&&b| !allowed_boundary(b)) {
+            i += instruction_len(code, i);
+            continue;
+        }
+        // OK to rewrite. Build the new bytecode:
+        //   prefix: bytes [0, i+1) — unchanged (everything up to and
+        //     including the iload_X).
+        //   tableswitch instruction
+        //   case bodies in key order (low → high)
+        //   else body
+        //   suffix: bytes [chain.l_end, code.len()) — unchanged
+        //
+        // Each case body is the bytes from `case.body_start` up to
+        // (but not including) its terminating `goto L_END` — we'll
+        // re-emit our own gotos for each.
+        let prefix = code[..i + 1].to_vec();
+        let suffix = code[chain.l_end..].to_vec();
+        let mut new_code: Vec<u8> = Vec::with_capacity(code.len());
+        new_code.extend_from_slice(&prefix);
+        // tableswitch starts here.
+        let ts_op_pos = new_code.len();
+        new_code.push(0xAA);
+        // padding to 4-byte alignment (relative to ts_op_pos's
+        // position-after-opcode = ts_op_pos + 1).
+        let pad = 3 - (ts_op_pos % 4);
+        new_code.extend(std::iter::repeat_n(0u8, pad));
+        // Placeholders for default/low/high/cases — patched below.
+        let patch_default = new_code.len();
+        new_code.extend_from_slice(&[0u8; 4]);
+        new_code.extend_from_slice(&low.to_be_bytes());
+        new_code.extend_from_slice(&high.to_be_bytes());
+        let patch_cases_start = new_code.len();
+        for _ in 0..len {
+            new_code.extend_from_slice(&[0u8; 4]);
+        }
+        // Emit case bodies in SOURCE ORDER (matching kotlinc's layout)
+        // and dedupe cases whose body bytes are textually identical —
+        // those collapse to a single body with multiple jump-table
+        // entries pointing at it (e.g. `9, 10 -> "A"`).
+        //
+        // `case_to_body_idx[i]` records which emitted body
+        // `chain.cases[i]` maps to. `body_positions[bi]` records the
+        // post-rewrite start offset of body `bi`.
+        let mut body_positions: Vec<usize> = Vec::new();
+        let mut case_to_body_idx: Vec<usize> = Vec::with_capacity(chain.cases.len());
+        // Track each body's source bytes so we can detect duplicates.
+        let mut body_bytes_cache: Vec<&[u8]> = Vec::new();
+        for c in &chain.cases {
+            let body_bytes = &code[c.body_start..c.body_goto_pos];
+            if let Some(idx) = body_bytes_cache.iter().position(|b| *b == body_bytes) {
+                case_to_body_idx.push(idx);
+            } else {
+                body_bytes_cache.push(body_bytes);
+                let idx = body_positions.len();
+                body_positions.push(new_code.len());
+                new_code.extend_from_slice(body_bytes);
+                // Trailing `goto L_END` — patched once L_END is known.
+                new_code.push(0xA7);
+                new_code.extend_from_slice(&[0u8; 2]);
+                case_to_body_idx.push(idx);
+            }
+        }
+        // Else body.
+        let else_pos = new_code.len();
+        new_code.extend_from_slice(&code[chain.else_start..chain.l_end]);
+        // Append suffix (starting with whatever was at L_END).
+        let l_end_pos = new_code.len();
+        new_code.extend_from_slice(&suffix);
+        // Patch the tableswitch jump table (default + per-case offsets,
+        // all relative to ts_op_pos).
+        let default_rel = (else_pos as i32) - (ts_op_pos as i32);
+        new_code[patch_default..patch_default + 4].copy_from_slice(&default_rel.to_be_bytes());
+        // Build a map from each case key to the emitted-body position.
+        let mut key_to_pos: std::collections::HashMap<i32, usize> =
+            std::collections::HashMap::new();
+        for (i, c) in chain.cases.iter().enumerate() {
+            key_to_pos.insert(c.key, body_positions[case_to_body_idx[i]]);
+        }
+        for k_off in 0..len {
+            let k_val = low + k_off;
+            let body_pos = key_to_pos[&k_val];
+            let rel = (body_pos as i32) - (ts_op_pos as i32);
+            let dst = patch_cases_start + (k_off as usize) * 4;
+            new_code[dst..dst + 4].copy_from_slice(&rel.to_be_bytes());
+        }
+        // Patch each emitted body's trailing `goto L_END`. Since each
+        // body is emitted once (deduped), iterate `body_positions`.
+        for (bi, &body_pos) in body_positions.iter().enumerate() {
+            // Find the source case that produced this body — its
+            // body length tells us where the trailing goto sits.
+            let case_idx = case_to_body_idx
+                .iter()
+                .position(|&x| x == bi)
+                .expect("body_positions and case_to_body_idx are in sync");
+            let c = &chain.cases[case_idx];
+            let body_len = c.body_goto_pos - c.body_start;
+            let goto_pos = body_pos + body_len;
+            let rel = (l_end_pos as i32) - (goto_pos as i32);
+            if !(i16::MIN as i32..=i16::MAX as i32).contains(&rel) {
+                return;
+            }
+            let nb = (rel as i16).to_be_bytes();
+            new_code[goto_pos + 1] = nb[0];
+            new_code[goto_pos + 2] = nb[1];
+        }
+        // Adjust branches in `suffix` and `prefix` that reference the
+        // old positions (>= chain.l_end). Branches in suffix that point
+        // into suffix-relative addresses keep their relative form
+        // because both src and dst shift by the same amount — but if
+        // either endpoint is in a different region, we need to adjust.
+        //
+        // For simplicity, since the prefix is unchanged and the suffix
+        // starts at l_end_pos in the new code (was chain.l_end in old),
+        // suffix-internal branches are preserved by the bulk copy.
+        // Branches in prefix that point past chain.l_end need their
+        // rel offsets adjusted to account for the change in distance.
+        let suffix_shift = (l_end_pos as i32) - (chain.l_end as i32);
+        if suffix_shift != 0 {
+            let mut j = 0;
+            while j < new_code.len() {
+                let op = new_code[j];
+                // Stop scanning once we leave the prefix; tableswitch
+                // and bodies are already correct.
+                if j >= ts_op_pos {
+                    break;
+                }
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                    if j + 2 < new_code.len() {
+                        let rel = i16::from_be_bytes([new_code[j + 1], new_code[j + 2]]) as i32;
+                        let src = j as i32;
+                        let old_dst = src + rel;
+                        if (old_dst as usize) >= chain.l_end {
+                            let new_rel = rel + suffix_shift;
+                            if (i16::MIN as i32..=i16::MAX as i32).contains(&new_rel) {
+                                let nb = (new_rel as i16).to_be_bytes();
+                                new_code[j + 1] = nb[0];
+                                new_code[j + 2] = nb[1];
+                            } else {
+                                // Out of range — bail.
+                                return;
+                            }
+                        }
+                    }
+                    j += 3;
+                    continue;
+                }
+                j += instruction_len(&new_code, j);
+            }
+        }
+        // Adjust block_offsets:
+        //   - boundaries <= region_start: unchanged
+        //   - boundaries == case body start: map to new case position
+        //   - boundary == else_start: map to else_pos
+        //   - boundary == l_end: map to l_end_pos
+        //   - boundary >= l_end: shift by suffix_shift
+        let mut new_blocks: Vec<usize> = Vec::with_capacity(block_offsets.len());
+        for &b in block_offsets.iter() {
+            let nb = if b <= region_start {
+                b
+            } else if b == chain.l_end {
+                l_end_pos
+            } else if b == chain.else_start {
+                else_pos
+            } else if let Some(idx) = chain.cases.iter().position(|c| c.body_start == b) {
+                body_positions[case_to_body_idx[idx]]
+            } else if let Some(case_idx) = chain.case_iload_positions.iter().position(|&x| x == b) {
+                // The boundary fell on a case's iload_X position (the
+                // start of a case in the original layout). In the new
+                // layout these positions are gone — collapse to the
+                // start of that case's body in the rewritten code.
+                if case_idx == 0 {
+                    // First case's iload_X is BEFORE the rewrite's
+                    // tableswitch; but it's part of the prefix we kept,
+                    // so the boundary maps to itself.
+                    b
+                } else {
+                    body_positions[case_to_body_idx[case_idx]]
+                }
+            } else if b > chain.l_end {
+                ((b as i32) + suffix_shift) as usize
+            } else {
+                // Inside region but not a known boundary — shouldn't
+                // happen given the allowed_boundary check above.
+                b
+            };
+            new_blocks.push(nb);
+        }
+        *block_offsets = new_blocks;
+        // Adjust cmp_targets:
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= chain.l_end {
+                ct.offset = ((ct.offset as i32) + suffix_shift) as usize;
+            }
+            if ct.cmp_start >= chain.l_end {
+                ct.cmp_start = ((ct.cmp_start as i32) + suffix_shift) as usize;
+            }
+        }
+        // Adjust extra_frame_targets:
+        for ft in extra_frame_targets.iter_mut() {
+            if ft.0 >= chain.l_end {
+                ft.0 = ((ft.0 as i32) + suffix_shift) as usize;
+            }
+        }
+        // Register frame targets for each tableswitch branch
+        // destination (case body starts and the else body). All with
+        // empty stack — tableswitch consumes the integer subject
+        // before transferring control.
+        for &pos in &body_positions {
+            if !extra_frame_targets.iter().any(|ft| ft.0 == pos) {
+                extra_frame_targets.push((pos, Vec::new()));
+            }
+        }
+        if !extra_frame_targets.iter().any(|ft| ft.0 == else_pos) {
+            extra_frame_targets.push((else_pos, Vec::new()));
+        }
+        *code = new_code;
+        // Bail after one rewrite — outer pipeline doesn't iterate.
+        return;
+    }
+}
+
+/// Single case in a parsed when-chain.
+#[derive(Clone)]
+struct WhenCase {
+    /// Integer constant being compared against (e.g. 0, 1, 2).
+    key: i32,
+    /// Byte offset of the first byte of the case body (after the
+    /// `if_icmpne`/`ifne` instruction).
+    body_start: usize,
+    /// Byte offset of the trailing `goto L_END` instruction.
+    body_goto_pos: usize,
+}
+
+/// A parsed when-chain.
+struct WhenChain {
+    cases: Vec<WhenCase>,
+    /// Byte offset where the else body starts.
+    else_start: usize,
+    /// Byte offset of the merge label (where all case `goto` branches
+    /// land, and where the function continues after the chain).
+    l_end: usize,
+    /// Positions of the `if_icmpne`/`ifne` and `goto` branches inside
+    /// the chain — used to filter "external" branches during the
+    /// safety check.
+    case_branch_positions: Vec<usize>,
+    /// Positions of the `iload_X` instructions starting each case
+    /// (including the very first one). Allowed branch targets within
+    /// the chain — preceding case's `if_icmpne` jumps to the next
+    /// case's iload_X.
+    case_iload_positions: Vec<usize>,
+}
+
+fn parse_when_chain(code: &[u8], iload_pos: usize, iload_op: u8) -> Option<WhenChain> {
+    let mut cases: Vec<WhenCase> = Vec::new();
+    let mut case_branch_positions: Vec<usize> = Vec::new();
+    let mut case_iload_positions: Vec<usize> = vec![iload_pos];
+    let mut p = iload_pos + 1; // start after the first iload_X
+    let mut l_end: Option<usize> = None;
+    // Parse cases.
+    loop {
+        // Try to decode the case header at position `p`.
+        // Form A (first case only, key=0): ifne L (3 bytes).
+        // Form B: iconst_K (1B) ; if_icmpne L (3B).
+        // Form C: bipush K (2B) ; if_icmpne L (3B).
+        // Form D: sipush K (3B) ; if_icmpne L (3B).
+        let (key, header_len, branch_pos) = if p < code.len() && code[p] == 0x9A {
+            // ifne (key implicitly 0). Only valid as the first case.
+            if !cases.is_empty() {
+                return None;
+            }
+            (0i32, 3usize, p)
+        } else if p + 4 <= code.len() && (0x02..=0x08).contains(&code[p]) {
+            // iconst_m1 (0x02) .. iconst_5 (0x08).
+            let key = (code[p] as i32) - 0x03;
+            if code[p + 1] != 0xA0 {
+                return None;
+            }
+            (key, 4, p + 1)
+        } else if p + 5 <= code.len() && code[p] == 0x10 {
+            // bipush K
+            let key = (code[p + 1] as i8) as i32;
+            if code[p + 2] != 0xA0 {
+                return None;
+            }
+            (key, 5, p + 2)
+        } else if p + 6 <= code.len() && code[p] == 0x11 {
+            // sipush K
+            let key = i16::from_be_bytes([code[p + 1], code[p + 2]]) as i32;
+            if code[p + 3] != 0xA0 {
+                return None;
+            }
+            (key, 6, p + 3)
+        } else {
+            // No more cases — `p` is the start of the else body.
+            break;
+        };
+        case_branch_positions.push(branch_pos);
+        let branch_rel = i16::from_be_bytes([code[branch_pos + 1], code[branch_pos + 2]]) as i32;
+        let next_l = ((branch_pos as i32) + branch_rel) as usize;
+        // Body starts immediately after the if-branch (3 bytes).
+        let body_start = branch_pos + 3;
+        // Walk straight-line to find the trailing `goto L_END`. The goto
+        // must end the body, and its target must be consistent across
+        // all cases.
+        let mut q = body_start;
+        let mut body_goto_pos: Option<usize> = None;
+        while q < code.len() {
+            let op = code[q];
+            if op == 0xA7 {
+                // goto — must be the body terminator.
+                body_goto_pos = Some(q);
+                break;
+            }
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                // Other branch — body isn't straight-line.
+                return None;
+            }
+            if matches!(op, 0xAC..=0xB1 | 0xBF | 0xAA | 0xAB) {
+                // Return / throw / switch in the body — abort.
+                return None;
+            }
+            q += instruction_len(code, q);
+        }
+        let body_goto_pos = body_goto_pos?;
+        case_branch_positions.push(body_goto_pos);
+        let goto_rel =
+            i16::from_be_bytes([code[body_goto_pos + 1], code[body_goto_pos + 2]]) as i32;
+        let goto_target = ((body_goto_pos as i32) + goto_rel) as usize;
+        // L_END must be the same for all cases.
+        if let Some(prev) = l_end {
+            if prev != goto_target {
+                return None;
+            }
+        } else {
+            l_end = Some(goto_target);
+        }
+        cases.push(WhenCase {
+            key,
+            body_start,
+            body_goto_pos,
+        });
+        // The if-branch's target should land at the next case's iload_X
+        // (or at the else body if this was the last case).
+        if next_l == body_goto_pos + 3 {
+            // Standard layout: case body ends with goto, then next
+            // case's iload_X starts immediately. p should be next_l =
+            // body_goto_pos + 3.
+            p = next_l;
+        } else {
+            return None;
+        }
+        // Check whether we're now at another iload_X (next case) or
+        // the else body.
+        if p < code.len() && code[p] == iload_op {
+            // Continue parsing next case.
+            case_iload_positions.push(p);
+            p += 1;
+            let _ = header_len;
+            continue;
+        }
+        break;
+    }
+    if cases.len() < 2 {
+        return None;
+    }
+    let l_end = l_end?;
+    let else_start = p;
+    if else_start > l_end {
+        return None;
+    }
+    Some(WhenChain {
+        cases,
+        else_start,
+        l_end,
+        case_branch_positions,
+        case_iload_positions,
+    })
+}
+
+/// Branch-aware variant of `peephole_eliminate_swap_after_call`. Walks
+/// back from the trailing `invokestatic; xload N; swap` using a forward
+/// stack-height analysis to find the start of the call's argument
+/// evaluation, then hoists `xload N` to that point. Adjusts every
+/// branch instruction's relative offset, every `cmp_targets` entry, and
+/// every `block_offsets` entry for the byte changes (drain 2, insert 1
+/// → net -1 byte).
+fn peephole_eliminate_swap_after_call_branched(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        let mut applied: Option<(usize, usize, u8, bool)> = None;
+        // (insert_pos, drain_start, slot_n, is_int)
+        let mut w = 0;
+        while w < code.len() {
+            // `swap` (0x5F) at w, preceded by `xload N` (1-byte compact).
+            if code[w] != 0x5F {
+                w += instruction_len(code, w);
+                continue;
+            }
+            if w < 1 {
+                w += instruction_len(code, w);
+                continue;
+            }
+            let load_pos = w - 1;
+            let Some((slot_n, ld_len, ld_is_int)) =
+                decode_load_with_kind(code, load_pos).filter(|&(_, l, _)| l == 1)
+            else {
+                w += instruction_len(code, w);
+                continue;
+            };
+            let _ = ld_len;
+            // The instruction immediately before `xload N` must be an
+            // invokestatic (0xB8) or invokevirtual (0xB6) — both 3 bytes
+            // ending at load_pos.
+            if load_pos < 3 || !matches!(code[load_pos - 3], 0xB6 | 0xB8) {
+                w += instruction_len(code, w);
+                continue;
+            }
+            let invoke_pos = load_pos - 3;
+            let post_invoke = load_pos; // == invoke_pos + 3
+                                        // Determine target stack height for the insert point: we
+                                        // want `stack_in[P] == stack_in[post_invoke] - 1` so that
+                                        // after inserting `xload N` at P, the args evaluation +
+                                        // invoke ends with the same stack as `[xload N then swap]`
+                                        // would have produced.
+            let target = match stack_in.get(post_invoke).copied() {
+                Some(h) if h >= 1 => h - 1,
+                _ => {
+                    w += instruction_len(code, w);
+                    continue;
+                }
+            };
+            // Search for the latest p < invoke_pos with stack_in[p] == target.
+            let mut hoist_point: Option<usize> = None;
+            let mut p = 0;
+            while p < invoke_pos {
+                if stack_in.get(p).copied() == Some(target) {
+                    hoist_point = Some(p);
+                }
+                p += instruction_len(code, p);
+            }
+            let Some(hoist_point) = hoist_point else {
+                w += instruction_len(code, w);
+                continue;
+            };
+            // Slot N must not be modified between hoist_point and invoke_pos.
+            let mut k = hoist_point;
+            let mut n_changed = false;
+            let mut has_branch = false;
+            while k < post_invoke {
+                if writes_slot_at(code, k, slot_n) {
+                    n_changed = true;
+                    break;
+                }
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                    has_branch = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if n_changed || has_branch {
+                w += instruction_len(code, w);
+                continue;
+            }
+            // No external branch may land strictly inside (hoist_point, post_invoke).
+            let mut k = 0;
+            let mut external_target = false;
+            while k < code.len() {
+                let op = code[k];
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                    let tgt = (k as i32 + rel) as usize;
+                    if tgt > hoist_point && tgt < post_invoke && (k < hoist_point || k > w) {
+                        external_target = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if external_target {
+                w += instruction_len(code, w);
+                continue;
+            }
+            // No cmp_target / block_offset boundary in (hoist_point, w].
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > hoist_point && t.offset <= w)
+                    || (t.cmp_start > hoist_point && t.cmp_start <= w)
+            });
+            let block_conflict = block_offsets.iter().any(|&b| b > hoist_point && b <= w);
+            if cmp_conflict || block_conflict {
+                w += instruction_len(code, w);
+                continue;
+            }
+            // slot_n must fit in compact range (≤ 3) so the inserted load
+            // is exactly 1 byte.
+            if slot_n > 3 {
+                w += instruction_len(code, w);
+                continue;
+            }
+            applied = Some((hoist_point, post_invoke, slot_n, ld_is_int));
+            break;
+        }
+        let Some((insert_pos, drain_start, slot_n, is_int)) = applied else {
+            break;
+        };
+        // Drain `xload N; swap` (2 bytes) at drain_start, then insert
+        // `xload N` (1 byte) at insert_pos.
+        let drain_size: usize = 2;
+        let drain_end = drain_start + drain_size;
+        // Adjust branches for the drain.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start && (dst as usize) >= drain_end {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_end && (dst as usize) <= drain_start {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start && (dst as usize) >= drain_end {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_end && (dst as usize) <= drain_start {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_end {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_end {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_end {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_end);
+        // Adjust branches for the upcoming insert.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    // A branch whose target equals `insert_pos` should
+                    // continue to point at `insert_pos` after the
+                    // insertion — the inserted byte (xload N) becomes
+                    // the new "loop top" / branch target. So treat
+                    // `dst == insert_pos` as "dst stays put" for the
+                    // purpose of computing the new relative offset.
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
+                        rel + 1
+                    } else if (src as usize) >= insert_pos && (dst as usize) <= insert_pos {
+                        rel - 1
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    // A branch whose target equals `insert_pos` should
+                    // continue to point at `insert_pos` after the
+                    // insertion — the inserted byte (xload N) becomes
+                    // the new "loop top" / branch target. So treat
+                    // `dst == insert_pos` as "dst stays put" for the
+                    // purpose of computing the new relative offset.
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
+                        rel + 1
+                    } else if (src as usize) >= insert_pos && (dst as usize) <= insert_pos {
+                        rel - 1
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset > insert_pos {
+                ct.offset += 1;
+            }
+            if ct.cmp_start > insert_pos {
+                ct.cmp_start += 1;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            // A block boundary at insert_pos stays put: the inserted
+            // `xload N` belongs to the block that starts at insert_pos
+            // (it's the moved load from after the call, which is inside
+            // that block). Only boundaries strictly after insert_pos
+            // shift forward.
+            if *b > insert_pos {
+                *b += 1;
+            }
+        }
+        let new_op = if is_int { 0x1A + slot_n } else { 0x2A + slot_n };
+        code.insert(insert_pos, new_op);
+    }
+}
+
 /// General operand-hoist peephole. For the pattern
 ///   `<value computation>; xstore T; xload N; xload T; <op>`
 /// where:
@@ -15013,7 +16676,14 @@ fn peephole_hoist_op_general(
                 {
                     let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
                     let tgt = (k as i32 + rel) as usize;
-                    if tgt >= hoist_point && tgt < i && (k < hoist_point || k > i) {
+                    // A branch landing exactly at hoist_point is OK: the
+                    // rewrite simply inserts `xload N` at hoist_point so the
+                    // branch's StackMapTable frame still describes the same
+                    // entry stack (the inserted load executes after the
+                    // branch; it pushes one value, matching what the
+                    // original `<expr>` would have produced before the
+                    // store/reload cancellation).
+                    if tgt > hoist_point && tgt < i && (k < hoist_point || k > i) {
                         external_target = true;
                         break;
                     }
@@ -15151,9 +16821,15 @@ fn peephole_hoist_op_general(
                     let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
                     let src = j as i32;
                     let dst = src + rel;
+                    // Branches whose target equals `insert_pos` should
+                    // continue pointing at `insert_pos` after the
+                    // insertion — the inserted bytes (xload N chain)
+                    // become the new target. So treat
+                    // `dst == insert_pos` as "dst stays put" for the
+                    // purpose of computing the new relative offset.
                     let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
                         rel + inserted as i32
-                    } else if (src as usize) > insert_pos && (dst as usize) < insert_pos {
+                    } else if (src as usize) >= insert_pos && (dst as usize) <= insert_pos {
                         rel - inserted as i32
                     } else {
                         rel
@@ -15184,6 +16860,478 @@ fn peephole_hoist_op_general(
         }
         for _ in 0..inserted {
             code.insert(insert_pos, new_op);
+        }
+    }
+}
+
+/// Rewrite Kotlin's elvis operator `lhs ?: rhs` from the slot-based MIR
+/// shape skotch's lowerer emits into kotlinc's stack-based shape.
+///
+/// Detects:
+/// ```text
+///   aload_X            (compact, 1 byte)
+///   ifnull L_else      (3 bytes, rel=8)
+///   aload_X            (same slot, 1 byte)
+///   astore_T           (compact, 1 byte)
+///   goto L_merge       (3 bytes)
+///   <rhs>              (E bytes, straight-line, 1 stack value out)
+///   astore_T           (same slot, 1 byte)  ← position S2
+///   <continuation>     ← L_merge
+/// ```
+/// Rewrites to:
+/// ```text
+///   aload_X
+///   dup
+///   ifnonnull L_skip   (target = post-rhs astore_T)
+///   pop
+///   <rhs>
+///   astore_T
+///   <continuation>
+/// ```
+/// Net change: drop 3 bytes. The lhs stays on the operand stack for the
+/// non-null path; the rhs branch pops the duplicated null and produces
+/// its own value. Both paths converge at the single trailing `astore_T`.
+///
+/// Updates every branch instruction's relative offset, every cmp_targets
+/// entry, and every block_offsets entry for the byte movements.
+///
+/// Also handles the slot-less variant emitted when the elvis result is
+/// consumed directly (e.g. `return name ?: "default"`):
+/// ```text
+///   aload_X            (1 byte)
+///   ifnull L_else      (3 bytes, rel=7)
+///   aload_X            (1 byte)
+///   goto L_merge       (3 bytes)
+///   <rhs>              (E bytes)
+///   <continuation, e.g. areturn>
+/// ```
+/// Same rewrite to the dup-based form, but no trailing astore_T.
+fn peephole_elvis_to_dup(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    extra_frame_targets: &mut Vec<(usize, Vec<u8>)>,
+    cp: &mut ConstantPool,
+) {
+    loop {
+        // (i, region_end_before_rewrite, has_trailing_astore_T)
+        // - region_end is the exclusive byte where the drain ends (s2 in
+        //   variant A, L_merge in variant B).
+        // - has_trailing_astore_T indicates whether the convergence
+        //   point includes an astore_T that needs to be preserved
+        //   post-rewrite (variant A) or whether the merge falls
+        //   straight into the continuation (variant B).
+        let mut applied: Option<(usize, usize, bool)> = None;
+        let mut i = 0;
+        // Need at least i+8 bytes for variant B (aload + ifnull3 + aload
+        // + goto3) plus 1 byte of rhs. Variant A needs one more (the
+        // astore_T). The detector checks the variant-specific size
+        // explicitly below; this is just the cheap upper-bound guard.
+        while i + 9 <= code.len() {
+            // i: aload_X (compact, 0x2A..=0x2D)
+            let op0 = code[i];
+            if !(0x2A..=0x2D).contains(&op0) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let _slot_x = op0 - 0x2A;
+            // i+1: ifnull (0xC6). rel = 8 (variant A, with astore_T) or
+            // 7 (variant B, slot-less).
+            if code[i + 1] != 0xC6 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let rel = i16::from_be_bytes([code[i + 2], code[i + 3]]) as i32;
+            let variant_a = rel == 8;
+            let variant_b = rel == 7;
+            if !variant_a && !variant_b {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+4: aload_X (same slot)
+            if code[i + 4] != op0 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // For variant A: i+5 = astore_T, i+6 = goto.
+            // For variant B: i+5 = goto (no astore_T).
+            let (store_op, goto_pos) = if variant_a {
+                let s = code[i + 5];
+                if !(0x4B..=0x4E).contains(&s) {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                (Some(s), i + 6)
+            } else {
+                (None, i + 5)
+            };
+            if code[goto_pos] != 0xA7 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let goto_rel = i16::from_be_bytes([code[goto_pos + 1], code[goto_pos + 2]]) as i32;
+            let m = (goto_pos as i32 + goto_rel) as usize;
+            // rhs starts immediately after the goto (i+9 in A, i+8 in B).
+            let rhs_start = goto_pos + 3;
+            // Region end: in variant A this is `s2 + 1` where s2 is the
+            // trailing astore_T; in variant B it's exactly `m` (rhs
+            // flows straight into L_merge).
+            let region_end = if variant_a {
+                let store_op_a = store_op.unwrap();
+                let mut p = rhs_start;
+                let mut s2: Option<usize> = None;
+                let mut rhs_branch = false;
+                while p < code.len() {
+                    let op = code[p];
+                    if op == store_op_a {
+                        s2 = Some(p);
+                        break;
+                    }
+                    if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                        rhs_branch = true;
+                        break;
+                    }
+                    if matches!(op, 0xAC..=0xB1 | 0xBF | 0xAA | 0xAB) {
+                        break;
+                    }
+                    p += instruction_len(code, p);
+                }
+                if rhs_branch || s2.is_none() {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                let s2 = s2.unwrap();
+                if m != s2 + 1 {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                s2 + 1
+            } else {
+                // Variant B: walk rhs straight-line, must reach exactly m.
+                let mut p = rhs_start;
+                let mut rhs_ok = false;
+                while p < code.len() {
+                    if p == m {
+                        rhs_ok = true;
+                        break;
+                    }
+                    if p > m {
+                        break;
+                    }
+                    let op = code[p];
+                    if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                        break;
+                    }
+                    if matches!(op, 0xAC..=0xB1 | 0xBF | 0xAA | 0xAB) {
+                        break;
+                    }
+                    p += instruction_len(code, p);
+                }
+                if !rhs_ok {
+                    i += instruction_len(code, i);
+                    continue;
+                }
+                m
+            };
+            let s2 = region_end - 1; // inclusive end (only meaningful in variant A)
+                                     // No external branch may land in (i, s2+1) other than the
+                                     // ifnull (at i+1) and goto (at i+6) we're rewriting.
+                                     // No branch source other than those two may sit inside.
+            let mut external = false;
+            let mut k = 0;
+            while k < code.len() {
+                let op = code[k];
+                let (rel_off, is_branch) = match op {
+                    0x99..=0xA7 | 0xC6 | 0xC7 => {
+                        if k + 2 >= code.len() {
+                            (0i32, false)
+                        } else {
+                            (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                        }
+                    }
+                    0xA8 => {
+                        if k + 2 >= code.len() {
+                            (0, false)
+                        } else {
+                            (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                        }
+                    }
+                    0xC8 | 0xC9 => {
+                        if k + 4 >= code.len() {
+                            (0, false)
+                        } else {
+                            (
+                                i32::from_be_bytes([
+                                    code[k + 1],
+                                    code[k + 2],
+                                    code[k + 3],
+                                    code[k + 4],
+                                ]),
+                                true,
+                            )
+                        }
+                    }
+                    _ => (0, false),
+                };
+                if is_branch {
+                    let tgt = (k as i32 + rel_off) as usize;
+                    let in_region = |p: usize| p > i && p < region_end;
+                    let is_ours_ifnull = k == i + 1;
+                    let is_ours_goto = k == goto_pos;
+                    if in_region(k) && !is_ours_ifnull && !is_ours_goto {
+                        external = true;
+                        break;
+                    }
+                    if in_region(tgt) && tgt != rhs_start && tgt != m {
+                        external = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if external {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No cmp_target may sit strictly inside (i, region_end) —
+            // we'd have to translate them and that's not worth the
+            // complexity for this peephole. (Block-offset boundaries
+            // inside the rewrite region — for the now-eliminated then-
+            // block — are handled at rewrite time below.)
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > i && t.offset < region_end)
+                    || (t.cmp_start > i && t.cmp_start < region_end)
+            });
+            if cmp_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((i, s2, variant_a));
+            break;
+        }
+        let Some((i, s2, variant_a)) = applied else {
+            break;
+        };
+        // Re-derive the prefix sizes and the rhs region from `i` and
+        // the variant flag (the original detection state isn't in
+        // scope here).
+        let drain_end = if variant_a { i + 9 } else { i + 8 };
+        let drain_size = drain_end - (i + 1);
+        // rhs starts at `drain_end` (the byte after the prefix we're
+        // about to drain).
+        let rhs_start = drain_end;
+        // Continuation in pre-rewrite numbering:
+        //   variant A: m = s2 + 1 (just past the trailing astore_T)
+        //   variant B: m = i + 8 + E (the goto target). For variant B
+        //     `s2` we stored is `region_end - 1`, so m = s2 + 1 here too.
+        let m = s2 + 1;
+        // rhs length in bytes.
+        let e = m - rhs_start - if variant_a { 1 } else { 0 };
+        let _ = e;
+        // ifnonnull's target after rewrite = position of trailing astore_T
+        // in the post-rewrite numbering. Pre-rewrite trailing astore_T is
+        // at s2; post-rewrite it shifts left by 3, to s2 - 3. ifnonnull
+        // is at i+2 (post-rewrite). Rel = (s2 - 3) - (i + 2) = s2 - i - 5
+        //   = (i + 9 + e) - i - 5 = 4 + e.
+        let ifnonnull_rel: i32 = 4 + e as i32;
+
+        // Drain the prefix [i+1, drain_end), then insert 5 bytes at
+        // position i+1.
+        let drain_start = i + 1;
+        // Adjust branches for the upcoming drain. Branches whose source
+        // is past drain_end shift back by drain_size; same for targets.
+        // The two ifnull/goto branches we're removing are dropped and
+        // need no adjustment — they are inside the drained region.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let in_drain = |x: i32| (x as usize) >= drain_start && (x as usize) < drain_end;
+                    if in_drain(src) {
+                        // Drained — will be removed.
+                        j += 3;
+                        continue;
+                    }
+                    let new_rel = if !in_drain(dst) {
+                        // Both endpoints outside drained region.
+                        if (src as usize) < drain_start && (dst as usize) >= drain_end {
+                            rel - drain_size as i32
+                        } else if (src as usize) >= drain_end && (dst as usize) <= drain_start {
+                            rel + drain_size as i32
+                        } else {
+                            rel
+                        }
+                    } else {
+                        // Target was inside drained region — only allowed
+                        // values are rhs_start and m (the goto's target).
+                        // After rewrite, rhs starts at drain_start
+                        // (post-drain) and the continuation (m) becomes
+                        // m - drain_size.
+                        let new_dst_post_drain = if dst as usize == rhs_start {
+                            drain_start
+                        } else if dst as usize == m {
+                            m - drain_size
+                        } else {
+                            (dst as usize).saturating_sub(drain_size)
+                        };
+                        let new_src = if (src as usize) >= drain_end {
+                            (src as usize) - drain_size
+                        } else {
+                            src as usize
+                        };
+                        new_dst_post_drain as i32 - new_src as i32
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start && (dst as usize) >= drain_end {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_end && (dst as usize) <= drain_start {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_end {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_end {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_end {
+                *b -= drain_size;
+            } else if *b > drain_start && *b < drain_end {
+                *b = drain_start;
+            }
+        }
+        code.drain(drain_start..drain_end);
+
+        // Now insert 5 bytes at drain_start: dup, ifnonnull (3B), pop.
+        let insert_pos = drain_start;
+        let inserted = 5usize;
+        // Adjust branches for the insert.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start >= insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= insert_pos {
+                *b += inserted;
+            }
+        }
+        // Splice in the 5 bytes: dup (1) + ifnonnull (3) + pop (1).
+        let rel_bytes = (ifnonnull_rel as i16).to_be_bytes();
+        let new_bytes = [0x59u8, 0xC7u8, rel_bytes[0], rel_bytes[1], 0x57u8];
+        code.splice(insert_pos..insert_pos, new_bytes.iter().copied());
+        // Existing branches whose targets shifted past the rewrite need
+        // their offsets adjusted in extra_frame_targets too.
+        for ft in extra_frame_targets.iter_mut() {
+            // Drain phase moved targets >= drain_end down by drain_size.
+            if ft.0 >= drain_end {
+                ft.0 -= drain_size;
+            }
+            // Insert phase moved targets >= insert_pos up by inserted.
+            if ft.0 >= insert_pos {
+                ft.0 += inserted;
+            }
+        }
+        // The ifnonnull's post-rewrite target is the trailing astore_T.
+        // Record an extra frame target there with stack=[Object] so the
+        // StackMapTable construction emits a `same_locals_1_stack_item`
+        // frame at that offset.
+        let new_target = insert_pos + 1 + ifnonnull_rel as usize;
+        // Verification type for `Object` (java/lang/Object): tag 7 +
+        // 2-byte CP class index.
+        let object_cls_idx = cp.class("java/lang/Object");
+        let mut stack_verif = vec![7u8];
+        stack_verif.extend_from_slice(&object_cls_idx.to_be_bytes());
+        if !extra_frame_targets.iter().any(|ft| ft.0 == new_target) {
+            extra_frame_targets.push((new_target, stack_verif));
         }
     }
 }
@@ -16389,7 +18537,11 @@ fn peephole_elide_tail_store_load(code: &mut Vec<u8>, min_offset: usize) {
     }
 }
 
-fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
+fn peephole_elide_store_load(
+    code: &mut Vec<u8>,
+    named_slots: &FxHashSet<u8>,
+    check_notnull_expr_mref: Option<u16>,
+) {
     // We may need multiple passes since removing one pair can create new
     // adjacent pairs (e.g., astore_1; aload_1; astore_2; aload_2 → after
     // removing the first pair, astore_2; aload_2 becomes exposed).
@@ -16434,7 +18586,7 @@ fn peephole_elide_store_load(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
     // when slot N is not used elsewhere AND not a named local. This matches
     // kotlinc's pattern for arguments computed inline before another value
     // (e.g., `println(literal)` where receiver is pushed after the arg).
-    peephole_swap_pattern(code, named_slots);
+    peephole_swap_pattern(code, named_slots, check_notnull_expr_mref);
 
     // Third pass: elide `istore_N ; <RHS> ; iload_N ; swap ; <op>` when slot
     // N is dead afterward, not named, and <RHS> doesn't touch N. The LHS
@@ -16579,7 +18731,11 @@ fn peephole_cancel_double_swap(code: &mut Vec<u8>) {
 ///
 /// Only handles category-1 values (non-Long/Double); swap doesn't work for
 /// category-2 values.
-fn peephole_swap_pattern(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
+fn peephole_swap_pattern(
+    code: &mut Vec<u8>,
+    named_slots: &FxHashSet<u8>,
+    check_notnull_expr_mref: Option<u16>,
+) {
     loop {
         let mut applied: Option<(usize, usize, Vec<u8>)> = None; // (start, old_len, replacement)
         let mut i = 0;
@@ -16643,6 +18799,20 @@ fn peephole_swap_pattern(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
             if slot_loaded_elsewhere(code, store_slot, pattern_end) {
                 i += instruction_len(code, i);
                 continue;
+            }
+            // kotlinc preserves the spill (astore + reload) when the value
+            // on the stack was just `dup`-anchored across an
+            // `Intrinsics.checkNotNullExpressionValue(...)V` call — that
+            // sequence comes from `expr!!`-shaped lowerings where the
+            // expression result is materialized to a local before being
+            // consumed by the next operation.
+            if !is_int && i >= 3 && code[i - 3] == 0xB8 {
+                if let Some(idx) = check_notnull_expr_mref {
+                    if u16::from_be_bytes([code[i - 2], code[i - 1]]) == idx {
+                        i += instruction_len(code, i);
+                        continue;
+                    }
+                }
             }
             // Build replacement: <push bytes> ; swap (0x5F)
             let mut replacement = Vec::with_capacity(push_len + 1);
@@ -17368,6 +19538,42 @@ fn compute_repeated_store_slots(code: &[u8]) -> FxHashSet<u8> {
         .collect()
 }
 
+/// True if the bytecode contains any branch instruction whose target
+/// offset is at or before its source — i.e., a back-edge that may form
+/// part of a loop. Used to gate `liveness_reuse_slots`, which uses a
+/// linear "last load" walk that's incorrect in the presence of loops.
+/// Tableswitch / lookupswitch are not enumerated here; their case
+/// targets are always forward in skotch's emission so they never form
+/// back-edges.
+fn has_back_edges(code: &[u8]) -> bool {
+    let mut i = 0;
+    while i < code.len() {
+        let op = code[i];
+        if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+            if i + 2 < code.len() {
+                let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                if rel <= 0 {
+                    return true;
+                }
+            }
+            i += 3;
+            continue;
+        }
+        if matches!(op, 0xC8 | 0xC9) {
+            if i + 4 < code.len() {
+                let rel = i32::from_be_bytes([code[i + 1], code[i + 2], code[i + 3], code[i + 4]]);
+                if rel <= 0 {
+                    return true;
+                }
+            }
+            i += 5;
+            continue;
+        }
+        i += instruction_len(code, i);
+    }
+    false
+}
+
 fn liveness_reuse_slots(
     code: &mut [u8],
     initial_param_slots: u8,
@@ -17992,8 +20198,45 @@ fn instruction_len(code: &[u8], pos: usize) -> usize {
                 4 // wide load/store
             }
         }
-        // tableswitch, lookupswitch: variable — just return 1 to advance
-        0xAA | 0xAB => 1,
+        // tableswitch: 1 (opcode) + 0..3 (padding) + 12 (default+low+high)
+        //   + 4*(high-low+1) (case offsets).
+        0xAA => {
+            let pad = 3 - (pos % 4);
+            let header_end = pos + 1 + pad + 12;
+            if header_end > code.len() {
+                return 1; // malformed — bail
+            }
+            let low = i32::from_be_bytes([
+                code[pos + 1 + pad + 4],
+                code[pos + 2 + pad + 4],
+                code[pos + 3 + pad + 4],
+                code[pos + 4 + pad + 4],
+            ]);
+            let high = i32::from_be_bytes([
+                code[pos + 1 + pad + 8],
+                code[pos + 2 + pad + 8],
+                code[pos + 3 + pad + 8],
+                code[pos + 4 + pad + 8],
+            ]);
+            let n_cases = (high - low + 1).max(0) as usize;
+            1 + pad + 12 + 4 * n_cases
+        }
+        // lookupswitch: 1 (opcode) + 0..3 (padding) + 4 (default) + 4
+        //   (npairs) + 8*npairs (key+offset pairs).
+        0xAB => {
+            let pad = 3 - (pos % 4);
+            let header_end = pos + 1 + pad + 8;
+            if header_end > code.len() {
+                return 1;
+            }
+            let npairs = i32::from_be_bytes([
+                code[pos + 1 + pad + 4],
+                code[pos + 2 + pad + 4],
+                code[pos + 3 + pad + 4],
+                code[pos + 4 + pad + 4],
+            ]).max(0) as usize;
+            1 + pad + 8 + 8 * npairs
+        }
         _ => 1,
     }
 }
@@ -18175,7 +20418,26 @@ fn write_slot_verif(
                     let idx = cp.class("[I");
                     out.write_u16::<BigEndian>(idx).unwrap();
                 }
-                Ty::Nullable(_) | Ty::Any => {
+                Ty::Nullable(inner) => {
+                    out.push(7); // Object_variable_info
+                    let cn: &str = match inner.as_ref() {
+                        Ty::String => "java/lang/String",
+                        Ty::Class(name) => name.as_str(),
+                        Ty::Int => "java/lang/Integer",
+                        Ty::Long => "java/lang/Long",
+                        Ty::Float => "java/lang/Float",
+                        Ty::Double => "java/lang/Double",
+                        Ty::Bool => "java/lang/Boolean",
+                        Ty::Byte => "java/lang/Byte",
+                        Ty::Short => "java/lang/Short",
+                        Ty::Char => "java/lang/Character",
+                        Ty::IntArray => "[I",
+                        _ => "java/lang/Object",
+                    };
+                    let idx = cp.class(cn);
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::Any => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class("java/lang/Object");
                     out.write_u16::<BigEndian>(idx).unwrap();

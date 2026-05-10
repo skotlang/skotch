@@ -12,11 +12,7 @@ method        greet (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0012 aload_1
     0013 aload_0
-    0014 op_0xBA
-    0015 nop
-    0016 iload_2
-    0017 nop
-    0018 nop
+    0014 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
     0019 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (13 bytes)

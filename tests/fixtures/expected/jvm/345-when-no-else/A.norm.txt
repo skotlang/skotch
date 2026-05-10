@@ -1,0 +1,9 @@
+class_version major=61 minor=0
+this_class    A
+super_class   S
+access_flags  0x0021
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(S.<init>:()V)
+    0004 return

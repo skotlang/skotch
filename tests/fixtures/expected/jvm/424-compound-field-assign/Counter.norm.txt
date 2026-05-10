@@ -1,0 +1,24 @@
+class_version major=61 minor=0
+this_class    Counter
+super_class   java/lang/Object
+access_flags  0x0021
+field         n : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Counter.n:I)
+    0009 return
+method        getN ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Counter.n:I)
+    0004 ireturn
+method        setN (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 iload_1
+    0002 putfield Field(Counter.n:I)
+    0005 return

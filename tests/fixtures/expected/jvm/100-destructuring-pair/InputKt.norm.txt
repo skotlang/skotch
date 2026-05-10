@@ -1,0 +1,64 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=7
+    0000 bipush 42
+    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0005 astore_0
+    0006 new Class(kotlin/Pair)
+    0009 dup
+    0010 ldc "hello"
+    0012 aload_0
+    0013 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0016 astore_1
+    0017 aload_1
+    0018 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
+    0021 astore_0
+    0022 aload_1
+    0023 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
+    0026 aload_0
+    0027 swap
+    0028 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 swap
+    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0040 iconst_1
+    0041 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0044 astore_0
+    0045 iconst_2
+    0046 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0049 astore_2
+    0050 iconst_3
+    0051 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0054 astore_3
+    0055 new Class(kotlin/Triple)
+    0058 dup
+    0059 aload_0
+    0060 aload_2
+    0061 aload_3
+    0062 invokespecial Method(kotlin/Triple.<init>:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V)
+    0065 astore 6
+    0067 aload 6
+    0069 invokevirtual Method(kotlin/Triple.component1:()Ljava/lang/Object;)
+    0072 astore_0
+    0073 aload 6
+    0075 invokevirtual Method(kotlin/Triple.component2:()Ljava/lang/Object;)
+    0078 astore_2
+    0079 aload 6
+    0081 invokevirtual Method(kotlin/Triple.component3:()Ljava/lang/Object;)
+    0084 astore_3
+    0085 aload_0
+    0086 aload_2
+    0087 aload_3
+    0088 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0093 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0096 swap
+    0097 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0100 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (14 bytes)

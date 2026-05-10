@@ -1,0 +1,70 @@
+class_version major=61 minor=0
+this_class    Matrix$Cell
+super_class   java/lang/Object
+access_flags  0x0021
+field         c : I 0x0001
+field         r : I 0x0001
+field         this$0 : LMatrix; 0x0001
+method        <init> (LMatrix;II)V 0x0001
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Matrix$Cell.this$0:LMatrix;)
+    0009 aload_0
+    0010 iload_2
+    0011 putfield Field(Matrix$Cell.r:I)
+    0014 aload_0
+    0015 iload_3
+    0016 putfield Field(Matrix$Cell.c:I)
+    0019 return
+method        getC ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Matrix$Cell.c:I)
+    0004 ireturn
+method        getR ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Matrix$Cell.r:I)
+    0004 ireturn
+method        getThis$0 ()LMatrix; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Matrix$Cell.this$0:LMatrix;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        index ()I 0x0001
+  code        max_stack=3 max_locals=6
+    0000 aload_0
+    0001 getfield Field(Matrix$Cell.this$0:LMatrix;)
+    0004 astore_1
+    0005 aload_0
+    0006 getfield Field(Matrix$Cell.r:I)
+    0009 istore_2
+    0010 aload_0
+    0011 getfield Field(Matrix$Cell.c:I)
+    0014 istore_3
+    0015 aload_0
+    0016 getfield Field(Matrix$Cell.this$0:LMatrix;)
+    0019 astore 4
+    0021 aload 4
+    0023 getfield Field(Matrix.rows:I)
+    0026 istore 5
+    0028 iload_2
+    0029 aload 4
+    0031 getfield Field(Matrix.cols:I)
+    0034 imul
+    0035 iload_3
+    0036 iadd
+    0037 aload_0
+    0038 aload_1
+    0039 putfield Field(Matrix$Cell.this$0:LMatrix;)
+    0042 aload_0
+    0043 iload_2
+    0044 putfield Field(Matrix$Cell.r:I)
+    0047 aload_0
+    0048 iload_3
+    0049 putfield Field(Matrix$Cell.c:I)
+    0052 ireturn

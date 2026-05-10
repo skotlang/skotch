@@ -29,9 +29,7 @@ method        fibonacci (I)I 0x0019
     0028 iload_3
     0029 iload_0
     0030 if_icmpeq 39
-    0033 op_0x84
-    0034 iconst_0
-    0035 aconst_null
+    0033 iinc 3 1
     0036 goto 18
     0039 iload_2
     0040 ireturn
@@ -61,20 +59,13 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=2
     0000 bipush 10
     0002 invokestatic Method(InputKt.sumOfOdds:(I)I)
-    0005 op_0xBA
-    0006 nop
-    0007 dload_0
-    0008 nop
-    0009 nop
+    0005 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0013 swap
     0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0017 bipush 10
     0019 invokestatic Method(InputKt.fibonacci:(I)I)
-    0022 op_0xBA
-    0023 nop
-    0024 lstore 0
-    0026 nop
+    0022 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0030 swap
     0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -88,11 +79,7 @@ method        main ()V 0x0019
     0050 ldc "small"
     0052 astore_0
     0053 aload_0
-    0054 op_0xBA
-    0055 nop
-    0056 lstore_1
-    0057 nop
-    0058 nop
+    0054 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0062 swap
     0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -108,17 +95,11 @@ method        main ()V 0x0019
     0082 ldc "odd"
     0084 goto 89
     0087 ldc "even"
-    0089 op_0xBA
-    0090 nop
-    0091 astore_0
-    0092 nop
-    0093 nop
+    0089 invokedynamic InvokeDynamic(makeConcatWithConstants:(ILjava/lang/String;)Ljava/lang/String;)
     0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0097 swap
     0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0101 op_0x84
-    0102 aconst_null
-    0103 aconst_null
+    0101 iinc 1 1
     0104 goto 68
     0107 return
     sub_attr  StackMapTable (32 bytes)
@@ -146,9 +127,7 @@ method        sumOfOdds (I)I 0x0019
     0023 iload_2
     0024 iload_0
     0025 if_icmpeq 34
-    0028 op_0x84
-    0029 iconst_m1
-    0030 aconst_null
+    0028 iinc 2 1
     0031 goto 9
     0034 iload_1
     0035 ireturn

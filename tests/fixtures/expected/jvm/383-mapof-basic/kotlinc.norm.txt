@@ -5,9 +5,7 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=4 max_locals=2
     0000 iconst_3
-    0001 op_0xBD
-    0002 nop
-    0003 iconst_5
+    0001 anewarray Class(kotlin/Pair)
     0004 astore_1
     0005 aload_1
     0006 iconst_0
@@ -15,21 +13,21 @@ method        main ()V 0x0019
     0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0011 ldc "one"
     0013 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
-    0016 op_0x53
+    0016 aastore
     0017 aload_1
     0018 iconst_1
     0019 iconst_2
     0020 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0023 ldc "two"
     0025 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
-    0028 op_0x53
+    0028 aastore
     0029 aload_1
     0030 iconst_2
     0031 iconst_3
     0032 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0035 ldc "three"
     0037 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
-    0040 op_0x53
+    0040 aastore
     0041 aload_1
     0042 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
     0045 astore_0

@@ -1,0 +1,5 @@
+class_version major=61 minor=0
+this_class    Shape
+super_class   java/lang/Object
+access_flags  0x0601
+method        area ()D 0x0401

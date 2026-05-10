@@ -117,7 +117,7 @@ unique_name=inputkt
                 "dest": 2,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -127,9 +127,9 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 2,
-                    "rhs": 1
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 2
                   }
                 }
               }

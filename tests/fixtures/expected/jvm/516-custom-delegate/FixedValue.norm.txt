@@ -1,0 +1,25 @@
+class_version major=61 minor=0
+this_class    FixedValue
+super_class   java/lang/Object
+access_flags  0x0021
+field         value : Ljava/lang/String; 0x0001
+method        <init> (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload 0
+    0002 invokespecial Method(java/lang/Object.<init>:()V)
+    0005 aload 0
+    0007 aload 1
+    0009 putfield Field(FixedValue.value:Ljava/lang/String;)
+    0012 return
+method        getValue ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload 0
+    0002 getfield Field(FixedValue.value:Ljava/lang/String;)
+    0005 astore 1
+    0007 aload 1
+    0009 astore 2
+    0011 aload 0
+    0013 aload 1
+    0015 putfield Field(FixedValue.value:Ljava/lang/String;)
+    0018 aload 2
+    0020 areturn

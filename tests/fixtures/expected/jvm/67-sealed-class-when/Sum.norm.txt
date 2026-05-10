@@ -1,0 +1,134 @@
+class_version major=61 minor=0
+this_class    Sum
+super_class   Expr
+access_flags  0x0021
+field         left : LExpr; 0x0001
+field         right : LExpr; 0x0001
+method        <init> (LExpr;LExpr;)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(Expr.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Sum.left:LExpr;)
+    0009 aload_0
+    0010 aload_2
+    0011 putfield Field(Sum.right:LExpr;)
+    0014 return
+method        component1 ()LExpr; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Sum.left:LExpr;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        component2 ()LExpr; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Sum.right:LExpr;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        copy (LExpr;LExpr;)LSum; 0x0001
+  code        max_stack=4 max_locals=3
+    0000 new Class(Sum)
+    0003 dup
+    0004 aload_1
+    0005 aload_2
+    0006 invokespecial Method(Sum.<init>:(LExpr;LExpr;)V)
+    0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        equals (Ljava/lang/Object;)Z 0x0001
+  code        max_stack=2 max_locals=15
+    0000 aload_0
+    0001 astore_2
+    0002 aload_2
+    0003 aload_1
+    0004 if_acmpne 13
+    0007 iconst_1
+    0008 istore 4
+    0010 iload 4
+    0012 ireturn
+    0013 aload_1
+    0014 instanceof Class(Sum)
+    0017 istore 5
+    0019 iload 5
+    0021 ifne 30
+    0024 iconst_0
+    0025 istore 6
+    0027 iload 6
+    0029 ireturn
+    0030 aload_1
+    0031 checkcast Class(Sum)
+    0034 astore 7
+    0036 aload_0
+    0037 getfield Field(Sum.left:LExpr;)
+    0040 astore 8
+    0042 aload 7
+    0044 getfield Field(Sum.left:LExpr;)
+    0047 astore 9
+    0049 aload 8
+    0051 aload 9
+    0053 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0056 istore 10
+    0058 aload_0
+    0059 getfield Field(Sum.right:LExpr;)
+    0062 astore 11
+    0064 aload 7
+    0066 getfield Field(Sum.right:LExpr;)
+    0069 astore 12
+    0071 aload 11
+    0073 aload 12
+    0075 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0078 istore 13
+    0080 iload 10
+    0082 iload 13
+    0084 imul
+    0085 istore 14
+    0087 iload 14
+    0089 ireturn
+    sub_attr  StackMapTable (14 bytes)
+method        getLeft ()LExpr; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Sum.left:LExpr;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        getRight ()LExpr; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Sum.right:LExpr;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        hashCode ()I 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Sum.left:LExpr;)
+    0004 invokevirtual Method(java/lang/Object.hashCode:()I)
+    0007 istore_1
+    0008 aload_0
+    0009 getfield Field(Sum.right:LExpr;)
+    0012 invokevirtual Method(java/lang/Object.hashCode:()I)
+    0015 istore_2
+    0016 bipush 31
+    0018 iload_1
+    0019 imul
+    0020 iload_2
+    0021 iadd
+    0022 ireturn
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=1
+    0000 ldc "Sum("
+    0002 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0007 aload_0
+    0008 getfield Field(Sum.left:LExpr;)
+    0011 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0014 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0017 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0022 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0027 aload_0
+    0028 getfield Field(Sum.right:LExpr;)
+    0031 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0034 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0037 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0042 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (26 bytes)

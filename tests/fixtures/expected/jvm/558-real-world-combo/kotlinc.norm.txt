@@ -27,9 +27,8 @@ method        classify (I)Ljava/lang/String; 0x0019
 method        main ()V 0x0019
   code        max_stack=6 max_locals=3
     0000 iconst_3
-    0001 op_0xBD
-    0002 nop
-    0003 fload 76
+    0001 anewarray Class(Student)
+    0004 astore_1
     0005 aload_1
     0006 iconst_0
     0007 new Class(Student)
@@ -37,7 +36,7 @@ method        main ()V 0x0019
     0011 ldc "Alice"
     0013 bipush 95
     0015 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0018 op_0x53
+    0018 aastore
     0019 aload_1
     0020 iconst_1
     0021 new Class(Student)
@@ -45,7 +44,7 @@ method        main ()V 0x0019
     0025 ldc "Bob"
     0027 bipush 82
     0029 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0032 op_0x53
+    0032 aastore
     0033 aload_1
     0034 iconst_2
     0035 new Class(Student)
@@ -53,7 +52,7 @@ method        main ()V 0x0019
     0039 ldc "Carol"
     0041 bipush 67
     0043 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
-    0046 op_0x53
+    0046 aastore
     0047 aload_1
     0048 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0051 astore_0
@@ -72,11 +71,7 @@ method        main ()V 0x0019
     0082 aload_2
     0083 invokevirtual Method(Student.getGrade:()I)
     0086 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
-    0089 op_0xBA
-    0090 nop
-    0091 astore_2
-    0092 nop
-    0093 nop
+    0089 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
     0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0097 swap
     0098 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

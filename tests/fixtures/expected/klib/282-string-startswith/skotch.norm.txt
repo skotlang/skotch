@@ -21,6 +21,9 @@ unique_name=inputkt
         "String",
         "String",
         "String",
+        "Bool",
+        "Int",
+        "Any",
         "Bool"
       ],
       "blocks": [
@@ -50,17 +53,48 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
+                  "Const": {
+                    "Bool": false
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": {
+                    "Int": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
                   "Call": {
                     "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "startsWith",
-                        "descriptor": "(Ljava/lang/String;)Z"
+                      "StaticJava": {
+                        "class_name": "kotlin/text/StringsKt",
+                        "method_name": "startsWith$default",
+                        "descriptor": "(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z"
                       }
                     },
                     "args": [
                       0,
-                      2
+                      2,
+                      3,
+                      4,
+                      5
                     ]
                   }
                 }
@@ -68,7 +102,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 3
+            "ReturnValue": 6
           }
         }
       ],

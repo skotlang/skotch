@@ -54,10 +54,10 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
+                      "StaticJava": {
+                        "class_name": "kotlin/text/StringsKt",
                         "method_name": "repeat",
-                        "descriptor": "(I)Ljava/lang/String;"
+                        "descriptor": "(Ljava/lang/CharSequence;I)Ljava/lang/String;"
                       }
                     },
                     "args": [
@@ -107,10 +107,10 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
+                      "StaticJava": {
+                        "class_name": "kotlin/text/StringsKt",
                         "method_name": "repeat",
-                        "descriptor": "(I)Ljava/lang/String;"
+                        "descriptor": "(Ljava/lang/CharSequence;I)Ljava/lang/String;"
                       }
                     },
                     "args": [

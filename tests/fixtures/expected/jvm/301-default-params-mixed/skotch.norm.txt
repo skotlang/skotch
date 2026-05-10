@@ -13,11 +13,7 @@ method        format (ILjava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0
     0012 aload_1
     0013 iload_0
     0014 aload_2
-    0015 op_0xBA
-    0016 nop
-    0017 iload_3
-    0018 nop
-    0019 nop
+    0015 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;ILjava/lang/String;)Ljava/lang/String;)
     0020 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (15 bytes)

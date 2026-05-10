@@ -21,10 +21,6 @@ unique_name=inputkt
       "locals": [
         "String",
         "String",
-        "String",
-        "String",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -34,61 +30,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 1,
-                    "rhs": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 3,
-                    "rhs": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "Const": {
-                    "String": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 5
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001, \u0001!",
+                        "descriptor": "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      1,
+                      0
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 6
+            "ReturnValue": 2
           }
         }
       ],
@@ -181,7 +140,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 4
+                    "String": 2
                   }
                 }
               }
@@ -230,7 +189,7 @@ unique_name=inputkt
                 "dest": 8,
                 "value": {
                   "Const": {
-                    "String": 4
+                    "String": 2
                   }
                 }
               }
@@ -240,7 +199,7 @@ unique_name=inputkt
                 "dest": 9,
                 "value": {
                   "Const": {
-                    "String": 5
+                    "String": 3
                   }
                 }
               }
@@ -278,7 +237,19 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "default_call_masks": [
+        [
+          0,
+          2,
+          3
+        ],
+        [
+          0,
+          6,
+          2
+        ]
+      ]
     },
     {
       "id": 2,
@@ -471,8 +442,6 @@ unique_name=inputkt
   "strings": [
     "World",
     "Hello",
-    ", ",
-    "!",
     "Kotlin",
     "Hi"
   ]

@@ -6,9 +6,7 @@ field         GREETING : Ljava/lang/String; 0x001A
 method        <clinit> ()V 0x0008
   code        max_stack=1 max_locals=0
     0000 ldc "hi"
-    0002 op_0xB3
-    0003 nop
-    0004 fconst_0
+    0002 putstatic Field(InputKt.GREETING:Ljava/lang/String;)
     0005 return
 method        getGREETING ()Ljava/lang/String; 0x0019
   code        max_stack=1 max_locals=0

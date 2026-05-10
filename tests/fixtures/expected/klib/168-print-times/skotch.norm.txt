@@ -25,6 +25,7 @@ unique_name=inputkt
         "Int",
         "Bool",
         "Unit",
+        "Bool",
         "Int",
         "Int"
       ],
@@ -73,7 +74,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 4,
               "then_block": 2,
-              "else_block": 4
+              "else_block": 5
             }
           }
         },
@@ -103,6 +104,29 @@ unique_name=inputkt
               "Assign": {
                 "dest": 6,
                 "value": {
+                  "BinOp": {
+                    "op": "CmpNe",
+                    "lhs": 3,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 6,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 7,
+                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -111,12 +135,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 8,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 3,
-                    "rhs": 6
+                    "rhs": 7
                   }
                 }
               }
@@ -125,13 +149,13 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "Local": 7
+                  "Local": 8
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 1
+            "Goto": 2
           }
         },
         {

@@ -749,10 +749,30 @@ impl<'a> BlockWalker<'a> {
                     }
                 }
             }
+            Rvalue::GetStaticField {
+                class_name,
+                field_name,
+                ..
+            } => {
+                // Fold reads of top-level vals (`val NAME = …`) back to
+                // their compile-time constant. The LLVM/native backend
+                // doesn't model classes or static fields, so we treat
+                // these as inlined literals.
+                if class_name == &self.module.wrapper_class {
+                    if let Some((_, _, value)) = self
+                        .module
+                        .top_level_props
+                        .iter()
+                        .find(|(n, _, _)| n == field_name)
+                    {
+                        let value = value.clone();
+                        self.lower_const(dest, &value);
+                    }
+                }
+            }
             Rvalue::NewInstance(_)
             | Rvalue::GetField { .. }
             | Rvalue::PutField { .. }
-            | Rvalue::GetStaticField { .. }
             | Rvalue::InstanceOf { .. }
             | Rvalue::CheckCast { .. } => {
                 // TODO: class/instanceof/checkcast support in LLVM backend

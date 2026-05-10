@@ -3,32 +3,32 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        len (Ljava/lang/String;)Ljava/lang/String; 0x0019
-  code        max_stack=1 max_locals=3
+  code        max_stack=3 max_locals=3
     0000 aload_0
-    0001 op_0xC6
-    0002 nop
-    0003 dconst_0
+    0001 ifnull 21
     0004 aload_0
-    0005 checkcast Class(java/lang/String)
-    0008 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0011 astore_1
-    0012 goto 17
-    0015 aconst_null
-    0016 astore_1
-    0017 aload_1
-    0018 op_0xC6
-    0019 nop
-    0020 iconst_5
-    0021 aload_1
-    0022 astore_2
-    0023 goto 29
-    0026 ldc "null"
+    0005 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0008 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0011 dup
+    0012 ldc "toUpperCase(...)"
+    0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0017 astore_1
+    0018 goto 23
+    0021 aconst_null
+    0022 astore_1
+    0023 aload_1
+    0024 ifnull 32
+    0027 aload_1
     0028 astore_2
-    0029 aload_2
-    0030 checkcast Class(java/lang/String)
-    0033 areturn
+    0029 goto 35
+    0032 ldc "null"
+    0034 astore_2
+    0035 aload_2
+    0036 checkcast Class(java/lang/String)
+    0039 areturn
     sub_attr  StackMapTable (16 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
     0000 ldc "hello"

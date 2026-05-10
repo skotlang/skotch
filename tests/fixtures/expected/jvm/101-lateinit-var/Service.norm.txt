@@ -1,0 +1,32 @@
+class_version major=61 minor=0
+this_class    Service
+super_class   java/lang/Object
+access_flags  0x0021
+field         name : Ljava/lang/String; 0x0001
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        getName ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Service.name:Ljava/lang/String;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        setName (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 aload_1
+    0002 putfield Field(Service.name:Ljava/lang/String;)
+    0005 return
+method        setup (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Service.name:Ljava/lang/String;)
+    0004 astore_2
+    0005 aload_1
+    0006 aload_0
+    0007 swap
+    0008 putfield Field(Service.name:Ljava/lang/String;)
+    0011 return

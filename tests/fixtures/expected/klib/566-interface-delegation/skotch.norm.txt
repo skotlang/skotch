@@ -80,7 +80,7 @@ unique_name=inputkt
                 "dest": 2,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 2
                   }
                 }
               }
@@ -90,7 +90,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 2
                   }
                 }
               }
@@ -557,8 +557,6 @@ unique_name=inputkt
             },
             "String",
             "String",
-            "String",
-            "String",
             "Unit"
           ],
           "blocks": [
@@ -580,8 +578,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Const": {
-                        "String": 2
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "[PREFIX] \u0001",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -590,10 +596,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 4,
                     "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 1
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "[PREFIX] \u0001",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -601,28 +613,6 @@ unique_name=inputkt
                 {
                   "Assign": {
                     "dest": 5,
-                    "value": {
-                      "Const": {
-                        "String": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 5,
-                        "rhs": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
                     "value": {
                       "Call": {
                         "kind": {
@@ -633,7 +623,7 @@ unique_name=inputkt
                         },
                         "args": [
                           2,
-                          6
+                          4
                         ]
                       }
                     }
@@ -811,7 +801,6 @@ unique_name=inputkt
   "strings": [
     "[LOG] ",
     "INFO",
-    "[PREFIX] ",
     "hello"
   ]
 }

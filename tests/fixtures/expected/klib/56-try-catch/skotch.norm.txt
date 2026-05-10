@@ -139,7 +139,8 @@ unique_name=inputkt
       ],
       "named_locals": [
         2
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,

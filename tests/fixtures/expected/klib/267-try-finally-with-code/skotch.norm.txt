@@ -24,6 +24,11 @@ unique_name=inputkt
         "Unit",
         "String",
         "Unit",
+        {
+          "Class": "java/lang/Throwable"
+        },
+        "String",
+        "Unit",
         "String",
         "Unit"
       ],
@@ -52,7 +57,14 @@ unique_name=inputkt
                   }
                 }
               }
-            },
+            }
+          ],
+          "terminator": {
+            "Goto": 1
+          }
+        },
+        {
+          "stmts": [
             {
               "Assign": {
                 "dest": 2,
@@ -98,7 +110,14 @@ unique_name=inputkt
                   }
                 }
               }
-            },
+            }
+          ],
+          "terminator": {
+            "Goto": 2
+          }
+        },
+        {
+          "stmts": [
             {
               "Assign": {
                 "dest": 6,
@@ -121,10 +140,55 @@ unique_name=inputkt
                   }
                 }
               }
-            },
+            }
+          ],
+          "terminator": {
+            "Goto": 4
+          }
+        },
+        {
+          "stmts": [
             {
               "Assign": {
                 "dest": 8,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Const": {
+                    "String": 2
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      9
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Throw": 8
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 11,
                 "value": {
                   "Const": {
                     "String": 3
@@ -134,12 +198,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 12,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      8
+                      11
                     ]
                   }
                 }
@@ -150,6 +214,14 @@ unique_name=inputkt
         }
       ],
       "return_ty": "Unit",
+      "exception_handlers": [
+        {
+          "try_start_block": 1,
+          "try_end_block": 2,
+          "handler_block": 3,
+          "catch_type": null
+        }
+      ],
       "named_locals": [
         4
       ]

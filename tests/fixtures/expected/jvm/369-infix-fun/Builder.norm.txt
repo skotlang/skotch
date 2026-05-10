@@ -1,0 +1,33 @@
+class_version major=61 minor=0
+this_class    Builder
+super_class   java/lang/Object
+access_flags  0x0021
+field         name : Ljava/lang/String; 0x0001
+method        <init> (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Builder.name:Ljava/lang/String;)
+    0009 return
+method        getName ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Builder.name:Ljava/lang/String;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        with (Ljava/lang/String;)Ljava/lang/String; 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Builder.name:Ljava/lang/String;)
+    0004 astore_2
+    0005 aload_2
+    0006 aload_1
+    0007 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0012 aload_0
+    0013 aload_2
+    0014 putfield Field(Builder.name:Ljava/lang/String;)
+    0017 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

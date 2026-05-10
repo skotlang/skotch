@@ -436,11 +436,7 @@ unique_name=inputkt
               "Class": "Shape"
             },
             "String",
-            "String",
-            "String",
             "Int",
-            "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -462,28 +458,6 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Const": {
-                        "String": 0
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 1,
-                        "rhs": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
                       "Call": {
                         "kind": {
                           "Virtual": {
@@ -500,34 +474,19 @@ unique_name=inputkt
                 },
                 {
                   "Assign": {
-                    "dest": 5,
+                    "dest": 3,
                     "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 4
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "Const": {
-                        "String": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 5,
-                        "rhs": 6
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "\u0001(area=\u0001)",
+                            "descriptor": "(Ljava/lang/String;I)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1,
+                          2
+                        ]
                       }
                     }
                   }
@@ -547,7 +506,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 7
+                "ReturnValue": 3
               }
             }
           ],
@@ -785,7 +744,7 @@ unique_name=inputkt
                   "dest": 2,
                   "value": {
                     "Const": {
-                      "String": 2
+                      "String": 0
                     }
                   }
                 }
@@ -828,8 +787,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    "(area=",
-    ")",
     "Square"
   ]
 }

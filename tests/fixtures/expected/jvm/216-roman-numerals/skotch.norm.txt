@@ -44,10 +44,7 @@ method        toRoman (I)Ljava/lang/String; 0x0019
     0006 sipush 1000
     0009 if_icmplt 28
     0012 aload_1
-    0013 op_0xBA
-    0014 nop
-    0015 iload 0
-    0017 nop
+    0013 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0018 astore_1
     0019 iload_2
     0020 sipush 1000
@@ -58,10 +55,7 @@ method        toRoman (I)Ljava/lang/String; 0x0019
     0029 sipush 900
     0032 if_icmplt 51
     0035 aload_1
-    0036 op_0xBA
-    0037 nop
-    0038 dload 0
-    0040 nop
+    0036 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0041 astore_1
     0042 iload_2
     0043 sipush 900
@@ -72,11 +66,7 @@ method        toRoman (I)Ljava/lang/String; 0x0019
     0052 sipush 500
     0055 if_icmplt 74
     0058 aload_1
-    0059 op_0xBA
-    0060 nop
-    0061 iload_1
-    0062 nop
-    0063 nop
+    0059 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0064 astore_1
     0065 iload_2
     0066 sipush 500
@@ -87,11 +77,7 @@ method        toRoman (I)Ljava/lang/String; 0x0019
     0075 sipush 400
     0078 if_icmplt 97
     0081 aload_1
-    0082 op_0xBA
-    0083 nop
-    0084 lload_0
-    0085 nop
-    0086 nop
+    0082 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0087 astore_1
     0088 iload_2
     0089 sipush 400
@@ -102,125 +88,73 @@ method        toRoman (I)Ljava/lang/String; 0x0019
     0098 bipush 100
     0100 if_icmplt 116
     0103 aload_1
-    0104 op_0xBA
-    0105 nop
-    0106 lload_3
-    0107 nop
-    0108 nop
+    0104 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0109 astore_1
-    0110 op_0x84
-    0111 iconst_m1
-    0112 ifge -22417
-    0115 op_0xF0
+    0110 iinc 2 -100
+    0113 goto 97
     0116 iload_2
     0117 bipush 90
     0119 if_icmplt 135
     0122 aload_1
-    0123 op_0xBA
-    0124 nop
-    0125 fload_2
-    0126 nop
-    0127 nop
+    0123 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0128 astore_1
-    0129 op_0x84
-    0130 iconst_m1
-    0131 if_acmpne -22398
-    0134 op_0xF0
+    0129 iinc 2 -90
+    0132 goto 116
     0135 iload_2
     0136 bipush 50
     0138 if_icmplt 154
     0141 aload_1
-    0142 op_0xBA
-    0143 nop
-    0144 dload_1
-    0145 nop
-    0146 nop
+    0142 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0147 astore_1
-    0148 op_0x84
-    0149 iconst_m1
-    0150 op_0xCE
+    0148 iinc 2 -50
     0151 goto 135
     0154 iload_2
     0155 bipush 40
     0157 if_icmplt 173
     0160 aload_1
-    0161 op_0xBA
-    0162 nop
-    0163 aload_0
-    0164 nop
-    0165 nop
+    0161 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0166 astore_1
-    0167 op_0x84
-    0168 iconst_m1
-    0169 op_0xD8
+    0167 iinc 2 -40
     0170 goto 154
     0173 iload_2
     0174 bipush 10
     0176 if_icmplt 192
     0179 aload_1
-    0180 op_0xBA
-    0181 nop
-    0182 aload_3
-    0183 nop
-    0184 nop
+    0180 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0185 astore_1
-    0186 op_0x84
-    0187 iconst_m1
-    0188 op_0xF6
+    0186 iinc 2 -10
     0189 goto 173
     0192 iload_2
     0193 bipush 9
     0195 if_icmplt 211
     0198 aload_1
-    0199 op_0xBA
-    0200 nop
-    0201 op_0x30
-    0202 nop
-    0203 nop
+    0199 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0204 astore_1
-    0205 op_0x84
-    0206 iconst_m1
-    0207 op_0xF7
+    0205 iinc 2 -9
     0208 goto 192
     0211 iload_2
     0212 iconst_5
     0213 if_icmplt 229
     0216 aload_1
-    0217 op_0xBA
-    0218 nop
-    0219 op_0x33
-    0220 nop
-    0221 nop
+    0217 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0222 astore_1
-    0223 op_0x84
-    0224 iconst_m1
-    0225 op_0xFB
+    0223 iinc 2 -5
     0226 goto 211
     0229 iload_2
     0230 iconst_4
     0231 if_icmplt 247
     0234 aload_1
-    0235 op_0xBA
-    0236 nop
-    0237 istore 0
-    0239 nop
+    0235 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0240 astore_1
-    0241 op_0x84
-    0242 iconst_m1
-    0243 op_0xFC
+    0241 iinc 2 -4
     0244 goto 229
     0247 iload_2
     0248 iconst_1
     0249 if_icmplt 265
     0252 aload_1
-    0253 op_0xBA
-    0254 nop
-    0255 dstore 0
-    0257 nop
+    0253 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0258 astore_1
-    0259 op_0x84
-    0260 iconst_m1
-    0261 op_0xFF
+    0259 iinc 2 -1
     0262 goto 247
     0265 aload_1
     0266 areturn

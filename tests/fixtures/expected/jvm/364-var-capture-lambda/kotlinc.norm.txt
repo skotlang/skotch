@@ -9,11 +9,7 @@ method        main ()V 0x0019
     0004 invokespecial Method(kotlin/jvm/internal/Ref$IntRef.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 op_0xBA
-    0010 nop
-    0011 lload_1
-    0012 nop
-    0013 nop
+    0009 invokedynamic InvokeDynamic(invoke:(Lkotlin/jvm/internal/Ref$IntRef;)Lkotlin/jvm/functions/Function0;)
     0014 astore_1
     0015 aload_1
     0016 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)

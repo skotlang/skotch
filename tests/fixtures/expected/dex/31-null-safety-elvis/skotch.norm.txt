@@ -1,6 +1,6 @@
 dex_version   035
-strings       13
-types         6
+strings       14
+types         7
 methods       4
 classes       1
 
@@ -8,6 +8,7 @@ classes       1
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
+  "Ljava/lang/String;"
   "Ljava/lang/System;"
   "V"
   "VL"
@@ -23,6 +24,7 @@ classes       1
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
+  Ljava/lang/String;
   Ljava/lang/System;
   V
   [Ljava/lang/String;
@@ -31,7 +33,7 @@ classes       1
   LInputKt;.greet(Ljava/lang/Object;)V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
-  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
 
 --- class[0] ---
   descriptor   LInputKt;

@@ -1,0 +1,29 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$0
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function1]
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        invoke (Ljava/lang/Object;)Ljava/lang/Object; 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_1
+    0001 checkcast Class(java/lang/StringBuilder)
+    0004 astore_2
+    0005 aload_2
+    0006 ldc "Hello"
+    0008 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0011 pop
+    0012 aload_2
+    0013 ldc ", "
+    0015 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0018 pop
+    0019 aload_2
+    0020 ldc "world!"
+    0022 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0025 pop
+    0026 aconst_null
+    0027 areturn

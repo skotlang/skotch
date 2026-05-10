@@ -26,73 +26,11 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
-        "String",
-        "String",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
         {
-          "stmts": [
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 0,
-                    "rhs": 3
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 6,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 5,
-                    "rhs": 6
-                  }
-                }
-              }
-            }
-          ],
+          "stmts": [],
           "terminator": {
             "Branch": {
               "cond": 2,
@@ -105,19 +43,19 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 9,
+                "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 0
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 3,
                 "value": {
-                  "Local": 9
+                  "Local": 4
                 }
               }
             }
@@ -130,19 +68,19 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 10,
+                "dest": 5,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 1
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 8,
+                "dest": 3,
                 "value": {
-                  "Local": 10
+                  "Local": 5
                 }
               }
             }
@@ -155,19 +93,27 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 11,
+                "dest": 6,
                 "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 7,
-                    "rhs": 8
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001 (age \u0001) - \u0001",
+                        "descriptor": "(Ljava/lang/String;ILjava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0,
+                      1,
+                      3
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 6
           }
         }
       ],
@@ -208,7 +154,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 4
+                    "String": 2
                   }
                 }
               }
@@ -268,7 +214,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Const": {
-                    "String": 5
+                    "String": 3
                   }
                 }
               }
@@ -518,8 +464,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    " (age ",
-    ") - ",
     "active",
     "inactive",
     "Alice",

@@ -28,7 +28,6 @@ unique_name=inputkt
         },
         "String",
         "String",
-        "String",
         "Bool",
         {
           "Class": "Square"
@@ -78,16 +77,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -104,12 +93,18 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 5
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "circle: \u0001",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
                   }
                 }
               }
@@ -118,7 +113,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 6
+                  "Local": 5
                 }
               }
             }
@@ -131,7 +126,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 7,
+                "dest": 6,
                 "value": {
                   "InstanceOf": {
                     "obj": 0,
@@ -143,7 +138,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 7,
+              "cond": 6,
               "then_block": 4,
               "else_block": 5
             }
@@ -153,7 +148,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 8,
+                "dest": 7,
                 "value": {
                   "Local": 0
                 }
@@ -161,10 +156,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
+                "dest": 8,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 0
                   }
                 }
               }
@@ -173,7 +168,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 9
+                  "Local": 8
                 }
               }
             }
@@ -239,7 +234,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 1
                   }
                 }
               }
@@ -796,7 +791,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    "circle: ",
     "square",
     "big"
   ]

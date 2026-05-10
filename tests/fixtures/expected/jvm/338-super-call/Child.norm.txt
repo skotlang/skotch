@@ -1,0 +1,17 @@
+class_version major=61 minor=0
+this_class    Child
+super_class   Base
+access_flags  0x0021
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(Base.<init>:()V)
+    0004 return
+method        greet ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(Base.greet:()Ljava/lang/String;)
+    0004 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

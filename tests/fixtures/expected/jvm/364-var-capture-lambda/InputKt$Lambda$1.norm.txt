@@ -1,0 +1,31 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$1
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function0]
+field         count : L$Ref$0; 0x0001
+method        <init> (L$Ref$0;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(InputKt$Lambda$1.count:L$Ref$0;)
+    0009 return
+method        invoke ()Ljava/lang/Object; 0x0001
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 getfield Field(InputKt$Lambda$1.count:L$Ref$0;)
+    0004 astore_1
+    0005 aload_1
+    0006 getfield Field($Ref$0.element:I)
+    0009 iconst_1
+    0010 iadd
+    0011 istore_3
+    0012 aload_1
+    0013 iload_3
+    0014 putfield Field($Ref$0.element:I)
+    0017 iload_3
+    0018 istore_2
+    0019 aconst_null
+    0020 areturn

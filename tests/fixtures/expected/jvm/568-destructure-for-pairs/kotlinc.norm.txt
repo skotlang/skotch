@@ -5,9 +5,7 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=4 max_locals=5
     0000 iconst_2
-    0001 op_0xBD
-    0002 nop
-    0003 iconst_5
+    0001 anewarray Class(kotlin/Pair)
     0004 astore_1
     0005 aload_1
     0006 iconst_0
@@ -15,14 +13,14 @@ method        main ()V 0x0019
     0009 bipush 10
     0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0014 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
-    0017 op_0x53
+    0017 aastore
     0018 aload_1
     0019 iconst_1
     0020 ldc "y"
     0022 bipush 20
     0024 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0027 invokestatic Method(kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;)
-    0030 op_0x53
+    0030 aastore
     0031 aload_1
     0032 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0035 astore_0
@@ -47,11 +45,7 @@ method        main ()V 0x0019
     0080 istore 4
     0082 aload_3
     0083 iload 4
-    0085 op_0xBA
-    0086 nop
-    0087 dstore_1
-    0088 nop
-    0089 nop
+    0085 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
     0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0093 swap
     0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

@@ -148,7 +148,8 @@ unique_name=inputkt
           "handler_block": 2,
           "catch_type": "java/lang/IllegalArgumentException"
         }
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,

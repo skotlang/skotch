@@ -802,6 +802,17 @@ pub struct MirModule {
     /// ConstantValue attribute.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub top_level_consts: Vec<(String, Ty, MirConst)>,
+    /// Non-`const val` top-level properties (e.g. `val GREETING = "hi"`).
+    /// kotlinc emits these as `private static final` fields initialized
+    /// in `<clinit>`, with public `get<Name>()` accessor methods. Use
+    /// sites read them via `getstatic` (no inlining).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub top_level_props: Vec<(String, Ty, MirConst)>,
+    /// Names (as strings — same as kotlinc's `field.name`) of top-level
+    /// non-`const val` properties. Used by the lowerer's Ident lookup
+    /// to emit `Rvalue::GetStaticField` instead of inlining the literal.
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
+    pub top_level_prop_names: rustc_hash::FxHashSet<String>,
 }
 
 impl MirModule {

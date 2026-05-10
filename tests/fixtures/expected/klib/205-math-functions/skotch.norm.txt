@@ -329,11 +329,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Math",
-                        "method_name": "abs",
-                        "descriptor": "(I)I"
-                      }
+                      "Static": 0
                     },
                     "args": [
                       0
@@ -356,11 +352,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Math",
-                        "method_name": "abs",
-                        "descriptor": "(I)I"
-                      }
+                      "Static": 0
                     },
                     "args": [
                       1
@@ -632,11 +624,7 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Math",
-                        "method_name": "abs",
-                        "descriptor": "(I)I"
-                      }
+                      "Static": 0
                     },
                     "args": [
                       0

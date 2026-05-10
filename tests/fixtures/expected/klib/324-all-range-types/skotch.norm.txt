@@ -89,7 +89,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Const": {
-                    "Int": 5
+                    "Int": 6
                   }
                 }
               }
@@ -114,7 +114,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "BinOp": {
-                    "op": "CmpLe",
+                    "op": "CmpLt",
                     "lhs": 4,
                     "rhs": 3
                   }
@@ -427,7 +427,7 @@ unique_name=inputkt
                 "dest": 27,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -452,9 +452,9 @@ unique_name=inputkt
                 "dest": 29,
                 "value": {
                   "BinOp": {
-                    "op": "CmpGe",
-                    "lhs": 28,
-                    "rhs": 27
+                    "op": "CmpLt",
+                    "lhs": 27,
+                    "rhs": 28
                   }
                 }
               }

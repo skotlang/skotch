@@ -1,0 +1,19 @@
+class_version major=61 minor=0
+this_class    Greeter
+super_class   java/lang/Object
+access_flags  0x0601
+method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokeinterface InterfaceMethod(Greeter.greeting:()Ljava/lang/String;)
+    0006 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0011 aload_1
+    0012 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0017 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        greeting ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 ldc "Hello"
+    0002 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (14 bytes)

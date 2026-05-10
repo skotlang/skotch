@@ -1,0 +1,19 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$3
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function1]
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        invoke (Ljava/lang/Object;)Ljava/lang/Object; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_1
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 iconst_1
+    0008 iadd
+    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0012 areturn

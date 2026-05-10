@@ -25,8 +25,6 @@ unique_name=inputkt
         "Bool",
         "Int",
         "Int",
-        "Any",
-        "Any",
         "Int"
       ],
       "blocks": [
@@ -95,49 +93,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      1
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 7,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      5
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 8,
-                "value": {
-                  "Call": {
-                    "kind": {
                       "Static": 0
                     },
                     "args": [
-                      6,
-                      7
+                      1,
+                      5
                     ]
                   }
                 }
@@ -145,7 +105,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 8
+            "ReturnValue": 6
           }
         }
       ],

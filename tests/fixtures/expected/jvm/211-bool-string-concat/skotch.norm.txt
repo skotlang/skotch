@@ -9,42 +9,24 @@ method        main ()V 0x0019
     0003 iconst_1
     0004 istore_1
     0005 iload_0
-    0006 op_0xBA
-    0007 nop
-    0008 ldc #0
-    0010 nop
+    0006 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0014 swap
     0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0018 iload_1
-    0019 op_0xBA
-    0020 nop
-    0021 fload_1
-    0022 nop
-    0023 nop
+    0019 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
     0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0027 swap
     0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0031 iload_0
-    0032 op_0xBA
-    0033 nop
-    0034 dload_0
-    0035 nop
-    0036 nop
-    0037 op_0xBA
-    0038 nop
-    0039 aload_1
-    0040 nop
-    0041 nop
-    0042 iload_1
-    0043 invokestatic Method(java/lang/String.valueOf:(Z)Ljava/lang/String;)
-    0046 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 swap
-    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0056 return
+    0032 iload_1
+    0033 invokedynamic InvokeDynamic(makeConcatWithConstants:(IZ)Ljava/lang/String;)
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 swap
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (26 bytes)
+class_attr    BootstrapMethods (20 bytes)

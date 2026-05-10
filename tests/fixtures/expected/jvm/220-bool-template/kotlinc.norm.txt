@@ -17,19 +17,12 @@ method        main ()V 0x0019
     0014 iconst_0
     0015 istore_2
     0016 iload_1
-    0017 op_0xBA
-    0018 nop
-    0019 ldc #0
-    0021 nop
+    0017 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
     0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0025 swap
     0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0029 iload_2
-    0030 op_0xBA
-    0031 nop
-    0032 lload_3
-    0033 nop
-    0034 nop
+    0030 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
     0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0038 swap
     0039 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

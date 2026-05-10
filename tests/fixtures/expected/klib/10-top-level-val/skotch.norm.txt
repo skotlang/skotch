@@ -26,8 +26,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 0,
                 "value": {
-                  "Const": {
-                    "String": 0
+                  "GetStaticField": {
+                    "class_name": "InputKt",
+                    "field_name": "GREETING",
+                    "descriptor": "Ljava/lang/String;"
                   }
                 }
               }
@@ -241,5 +243,17 @@ unique_name=inputkt
   "classes": [],
   "strings": [
     "hi"
+  ],
+  "top_level_props": [
+    [
+      "GREETING",
+      "String",
+      {
+        "String": 0
+      }
+    ]
+  ],
+  "top_level_prop_names": [
+    "GREETING"
   ]
 }

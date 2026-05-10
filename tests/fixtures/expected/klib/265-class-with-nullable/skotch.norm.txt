@@ -25,7 +25,7 @@ unique_name=inputkt
           "Nullable": "Any"
         },
         "Bool",
-        "Any",
+        "String",
         "String"
       ],
       "blocks": [

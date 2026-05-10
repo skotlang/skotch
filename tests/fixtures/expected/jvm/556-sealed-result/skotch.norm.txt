@@ -3,37 +3,34 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (LResult;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=1
+  code        max_stack=2 max_locals=2
     0000 aload_0
     0001 ldc "r"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
-    0007 instanceof Class(Success)
-    0010 ifeq 28
-    0013 aload_0
-    0014 checkcast Class(Success)
-    0017 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
-    0020 op_0xBA
-    0021 nop
-    0022 lload_3
-    0023 nop
-    0024 nop
-    0025 goto 51
-    0028 aload_0
-    0029 instanceof Class(Failure)
-    0032 ifeq 50
-    0035 aload_0
-    0036 checkcast Class(Failure)
-    0039 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
-    0042 op_0xBA
-    0043 nop
-    0044 dload_3
-    0045 nop
-    0046 nop
-    0047 goto 51
-    0050 aconst_null
-    0051 areturn
-    sub_attr  StackMapTable (8 bytes)
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(Success)
+    0012 ifeq 30
+    0015 aload_0
+    0016 checkcast Class(Success)
+    0019 invokevirtual Method(Success.getValue:()Ljava/lang/String;)
+    0022 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0027 goto 60
+    0030 aload_1
+    0031 instanceof Class(Failure)
+    0034 ifeq 52
+    0037 aload_0
+    0038 checkcast Class(Failure)
+    0041 invokevirtual Method(Failure.getError:()Ljava/lang/String;)
+    0044 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0049 goto 60
+    0052 new Class(kotlin/NoWhenBranchMatchedException)
+    0055 dup
+    0056 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0059 athrow
+    0060 areturn
+    sub_attr  StackMapTable (13 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019

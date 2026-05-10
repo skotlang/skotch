@@ -320,9 +320,6 @@ unique_name=inputkt
             },
             "Any",
             "String",
-            "String",
-            "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -340,49 +337,23 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Const": {
-                        "String": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "Const": {
-                        "String": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 4,
-                        "rhs": 5
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "Hello, \u0001!",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          2
+                        ]
                       }
                     }
                   }
                 }
               ],
               "terminator": {
-                "ReturnValue": 6
+                "ReturnValue": 3
               }
             }
           ],
@@ -427,8 +398,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    "World",
-    "Hello, ",
-    "!"
+    "World"
   ]
 }

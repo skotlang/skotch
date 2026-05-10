@@ -19,9 +19,20 @@ unique_name=inputkt
         "String",
         "Unit",
         "String",
+        "Unit",
+        {
+          "Class": "java/lang/Throwable"
+        },
+        "String",
         "Unit"
       ],
       "blocks": [
+        {
+          "stmts": [],
+          "terminator": {
+            "Goto": 1
+          }
+        },
         {
           "stmts": [
             {
@@ -46,7 +57,14 @@ unique_name=inputkt
                   }
                 }
               }
-            },
+            }
+          ],
+          "terminator": {
+            "Goto": 2
+          }
+        },
+        {
+          "stmts": [
             {
               "Assign": {
                 "dest": 2,
@@ -71,10 +89,63 @@ unique_name=inputkt
               }
             }
           ],
+          "terminator": {
+            "Goto": 4
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
+                  "Const": "Null"
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 5,
+                "value": {
+                  "Const": {
+                    "String": 1
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 6,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Throw": 4
+          }
+        },
+        {
+          "stmts": [],
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "exception_handlers": [
+        {
+          "try_start_block": 1,
+          "try_end_block": 2,
+          "handler_block": 3,
+          "catch_type": null
+        }
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,

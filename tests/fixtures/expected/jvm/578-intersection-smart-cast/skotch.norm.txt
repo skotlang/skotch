@@ -27,11 +27,7 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0035 ifeq 48
     0038 aload_0
     0039 checkcast Class(java/lang/String)
-    0042 op_0xBA
-    0043 nop
-    0044 lload_3
-    0045 nop
-    0046 nop
+    0042 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0047 areturn
     0048 aload_0
     0049 instanceof Class(java/lang/Integer)
@@ -39,11 +35,7 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0055 aload_0
     0056 checkcast Class(java/lang/Integer)
     0059 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0062 op_0xBA
-    0063 nop
-    0064 aload_1
-    0065 nop
-    0066 nop
+    0062 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0067 areturn
     0068 ldc "other"
     0070 areturn

@@ -31,29 +31,17 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        power (II)I 0x0019
-  code        max_stack=3 max_locals=5
+  code        max_stack=4 max_locals=2
     0000 iload_1
     0001 ifne 6
     0004 iconst_1
     0005 ireturn
-    0006 iload_1
-    0007 iconst_1
-    0008 isub
-    0009 istore_2
-    0010 iload_0
-    0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0014 astore_3
-    0015 iload_2
-    0016 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0019 astore 4
-    0021 iload_0
-    0022 aload_3
-    0023 checkcast Class(java/lang/Integer)
-    0026 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0029 aload 4
-    0031 checkcast Class(java/lang/Integer)
-    0034 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0037 invokestatic Method(InputKt.power:(II)I)
-    0040 imul
-    0041 ireturn
+    0006 iload_0
+    0007 iload_0
+    0008 iload_1
+    0009 iconst_1
+    0010 isub
+    0011 invokestatic Method(InputKt.power:(II)I)
+    0014 imul
+    0015 ireturn
     sub_attr  StackMapTable (3 bytes)

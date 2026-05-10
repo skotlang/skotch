@@ -1,0 +1,48 @@
+class_version major=61 minor=0
+this_class    Outer$Inner
+super_class   java/lang/Object
+access_flags  0x0021
+field         this$0 : LOuter; 0x0001
+field         y : I 0x0001
+method        <init> (LOuter;I)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Outer$Inner.this$0:LOuter;)
+    0009 aload_0
+    0010 iload_2
+    0011 putfield Field(Outer$Inner.y:I)
+    0014 return
+method        getThis$0 ()LOuter; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Outer$Inner.this$0:LOuter;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        getY ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Outer$Inner.y:I)
+    0004 ireturn
+method        sum ()I 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Outer$Inner.this$0:LOuter;)
+    0004 astore_1
+    0005 aload_0
+    0006 getfield Field(Outer$Inner.y:I)
+    0009 istore_2
+    0010 aload_0
+    0011 getfield Field(Outer$Inner.this$0:LOuter;)
+    0014 getfield Field(Outer.x:I)
+    0017 iload_2
+    0018 iadd
+    0019 aload_0
+    0020 aload_1
+    0021 putfield Field(Outer$Inner.this$0:LOuter;)
+    0024 aload_0
+    0025 iload_2
+    0026 putfield Field(Outer$Inner.y:I)
+    0029 ireturn

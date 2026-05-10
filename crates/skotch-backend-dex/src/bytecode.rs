@@ -437,11 +437,19 @@ fn walk_block(
                 field_name,
                 descriptor,
             } => {
-                // sget-object vAA, field@BBBB (format 21c, opcode 0x62)
+                // Opcode varies by field type:
+                //   sget        (0x60) — int/bool/byte/char/short
+                //   sget-wide   (0x61) — long/double
+                //   sget-object (0x62) — reference/array
                 let dest_reg = slot_get(&slot, &dest.0);
+                let opcode: u8 = match descriptor.as_str() {
+                    "I" | "Z" | "B" | "C" | "S" | "F" => 0x60,
+                    "J" | "D" => 0x61,
+                    _ => 0x62,
+                };
                 let field_idx =
                     pools.intern_field(&format!("L{class_name};"), field_name, descriptor);
-                code.push(opcode_aa(0x62, dest_reg as u8));
+                code.push(opcode_aa(opcode, dest_reg as u8));
                 patches.push(Patch {
                     insn_offset: code.len(),
                     kind: PatchKind::Field,

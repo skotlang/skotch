@@ -18,9 +18,7 @@ method        factorial (I)I 0x0019
     0013 iload_2
     0014 iload_0
     0015 if_icmpeq 24
-    0018 op_0x84
-    0019 iconst_m1
-    0020 aconst_null
+    0018 iinc 2 1
     0021 goto 9
     0024 iload_1
     0025 ireturn
@@ -52,9 +50,7 @@ method        isPrime (I)Z 0x0019
     0030 ireturn
     0031 iconst_0
     0032 ireturn
-    0033 op_0x84
-    0034 aconst_null
-    0035 aconst_null
+    0033 iinc 1 1
     0036 goto 9
     sub_attr  StackMapTable (14 bytes)
 method        main ()V 0x0019
@@ -68,9 +64,7 @@ method        main ()V 0x0019
     0009 invokestatic Method(InputKt.isPrime:(I)Z)
     0012 ifeq 42
     0015 goto 35
-    0018 op_0x84
-    0019 nop
-    0020 aconst_null
+    0018 iinc 0 1
     0021 goto 2
     0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0027 invokevirtual Method(java/io/PrintStream.println:()V)
@@ -90,9 +84,7 @@ method        main ()V 0x0019
     0056 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0059 iload_2
     0060 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0063 op_0x84
-    0064 aconst_null
-    0065 aconst_null
+    0063 iinc 1 1
     0066 goto 45
     0069 return
     sub_attr  StackMapTable (15 bytes)

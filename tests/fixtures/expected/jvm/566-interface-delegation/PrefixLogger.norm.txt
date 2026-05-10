@@ -1,0 +1,45 @@
+class_version major=61 minor=0
+this_class    PrefixLogger
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [Logger]
+field         inner : LLogger; 0x0001
+method        <init> (LLogger;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(PrefixLogger.inner:LLogger;)
+    0009 return
+method        getInner ()LLogger; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(PrefixLogger.inner:LLogger;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        level ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(PrefixLogger.inner:LLogger;)
+    0004 invokeinterface InterfaceMethod(Logger.level:()Ljava/lang/String;)
+    0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        log (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 getfield Field(PrefixLogger.inner:LLogger;)
+    0004 astore_2
+    0005 aload_1
+    0006 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0011 astore_3
+    0012 aload_1
+    0013 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0018 aload_2
+    0019 swap
+    0020 invokeinterface InterfaceMethod(Logger.log:(Ljava/lang/String;)V)
+    0025 aload_0
+    0026 aload_2
+    0027 putfield Field(PrefixLogger.inner:LLogger;)
+    0030 return
+class_attr    BootstrapMethods (8 bytes)

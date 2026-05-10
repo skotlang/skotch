@@ -15,9 +15,7 @@ method        main ()V 0x0019
     0011 iload_1
     0012 iadd
     0013 istore_0
-    0014 op_0x84
-    0015 aconst_null
-    0016 aconst_null
+    0014 iinc 1 1
     0017 goto 4
     0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0023 iload_0
@@ -33,9 +31,7 @@ method        main ()V 0x0019
     0038 iload_3
     0039 iadd
     0040 istore_2
-    0041 op_0x84
-    0042 iconst_0
-    0043 aconst_null
+    0041 iinc 3 1
     0044 goto 31
     0047 iload_2
     0048 istore 4
@@ -53,9 +49,7 @@ method        main ()V 0x0019
     0072 iload 6
     0074 iadd
     0075 istore 5
-    0077 op_0x84
-    0078 iconst_3
-    0079 op_0xFF
+    0077 iinc 6 -1
     0080 goto 64
     0083 iload 5
     0085 istore 7

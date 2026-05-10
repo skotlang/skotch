@@ -26,9 +26,7 @@ method        collatz (I)I 0x0019
     0025 iconst_1
     0026 iadd
     0027 istore_1
-    0028 op_0x84
-    0029 iconst_m1
-    0030 aconst_null
+    0028 iinc 2 1
     0031 goto 4
     0034 iload_2
     0035 ireturn
@@ -43,17 +41,11 @@ method        main ()V 0x0019
     0008 iload_0
     0009 iload_0
     0010 invokestatic Method(InputKt.collatz:(I)I)
-    0013 op_0xBA
-    0014 nop
-    0015 iload_0
-    0016 nop
-    0017 nop
+    0013 invokedynamic InvokeDynamic(makeConcatWithConstants:(II)Ljava/lang/String;)
     0018 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0021 swap
     0022 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0025 op_0x84
-    0026 nop
-    0027 aconst_null
+    0025 iinc 0 1
     0028 goto 2
     0031 return
     sub_attr  StackMapTable (7 bytes)

@@ -344,7 +344,8 @@ unique_name=inputkt
       ],
       "param_defaults": [
         null
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,
@@ -378,7 +379,7 @@ unique_name=inputkt
                 "dest": 1,
                 "value": {
                   "Const": {
-                    "Int": 15
+                    "Int": 16
                   }
                 }
               }
@@ -403,7 +404,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "BinOp": {
-                    "op": "CmpLe",
+                    "op": "CmpLt",
                     "lhs": 2,
                     "rhs": 1
                   }

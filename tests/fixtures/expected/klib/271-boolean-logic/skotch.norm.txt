@@ -167,7 +167,7 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -177,9 +177,9 @@ unique_name=inputkt
                 "dest": 7,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 6,
-                    "rhs": 0
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 6
                   }
                 }
               }
@@ -202,7 +202,7 @@ unique_name=inputkt
                 "dest": 9,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -212,9 +212,9 @@ unique_name=inputkt
                 "dest": 10,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 9,
-                    "rhs": 1
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 9
                   }
                 }
               }
@@ -258,7 +258,7 @@ unique_name=inputkt
                 "dest": 13,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -268,9 +268,9 @@ unique_name=inputkt
                 "dest": 14,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 13,
-                    "rhs": 1
+                    "op": "CmpEq",
+                    "lhs": 1,
+                    "rhs": 13
                   }
                 }
               }

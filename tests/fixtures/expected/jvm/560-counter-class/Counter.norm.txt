@@ -1,0 +1,67 @@
+class_version major=61 minor=0
+this_class    Counter
+super_class   java/lang/Object
+access_flags  0x0021
+field         count : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Counter.count:I)
+    0009 return
+method        decrement ()V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 iconst_1
+    0005 isub
+    0006 istore_1
+    0007 aload_0
+    0008 iload_1
+    0009 putfield Field(Counter.count:I)
+    0012 return
+method        getCount ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 ireturn
+method        increment ()V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 iconst_1
+    0005 iadd
+    0006 istore_1
+    0007 aload_0
+    0008 iload_1
+    0009 putfield Field(Counter.count:I)
+    0012 return
+method        reset ()V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 istore_1
+    0005 iconst_0
+    0006 istore_1
+    0007 aload_0
+    0008 iload_1
+    0009 putfield Field(Counter.count:I)
+    0012 return
+method        setCount (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 iload_1
+    0002 putfield Field(Counter.count:I)
+    0005 return
+method        value ()I 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 istore_1
+    0005 aload_0
+    0006 iload_1
+    0007 putfield Field(Counter.count:I)
+    0010 iload_1
+    0011 ireturn

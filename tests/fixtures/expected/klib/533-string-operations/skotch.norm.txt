@@ -36,6 +36,9 @@ unique_name=inputkt
         "String",
         "String",
         "Bool",
+        "Int",
+        "Any",
+        "Bool",
         "Unit",
         "String",
         "String",
@@ -301,18 +304,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 19,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "VirtualJava": {
-                        "class_name": "java/lang/String",
-                        "method_name": "startsWith",
-                        "descriptor": "(Ljava/lang/String;)Z"
-                      }
-                    },
-                    "args": [
-                      0,
-                      18
-                    ]
+                  "Const": {
+                    "Bool": false
                   }
                 }
               }
@@ -321,11 +314,8 @@ unique_name=inputkt
               "Assign": {
                 "dest": 20,
                 "value": {
-                  "Call": {
-                    "kind": "Println",
-                    "args": [
-                      19
-                    ]
+                  "Const": {
+                    "Int": 2
                   }
                 }
               }
@@ -334,15 +324,49 @@ unique_name=inputkt
               "Assign": {
                 "dest": 21,
                 "value": {
-                  "Const": {
-                    "String": 3
-                  }
+                  "Const": "Null"
                 }
               }
             },
             {
               "Assign": {
                 "dest": 22,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "StaticJava": {
+                        "class_name": "kotlin/text/StringsKt",
+                        "method_name": "startsWith$default",
+                        "descriptor": "(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z"
+                      }
+                    },
+                    "args": [
+                      0,
+                      18,
+                      19,
+                      20,
+                      21
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 23,
+                "value": {
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      22
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 24,
                 "value": {
                   "Const": {
                     "String": 3
@@ -352,7 +376,17 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 23,
+                "dest": 25,
+                "value": {
+                  "Const": {
+                    "String": 3
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 26,
                 "value": {
                   "Call": {
                     "kind": {
@@ -364,7 +398,7 @@ unique_name=inputkt
                     },
                     "args": [
                       0,
-                      22
+                      25
                     ]
                   }
                 }
@@ -372,12 +406,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 24,
+                "dest": 27,
                 "value": {
                   "Call": {
                     "kind": "Println",
                     "args": [
-                      23
+                      26
                     ]
                   }
                 }

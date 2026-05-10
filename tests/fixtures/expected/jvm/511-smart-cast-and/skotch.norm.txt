@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
-  code        max_stack=2 max_locals=3
+  code        max_stack=3 max_locals=3
     0000 aload_0
     0001 ldc "x"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
@@ -24,18 +24,18 @@ method        describe (Ljava/lang/Object;)Ljava/lang/String; 0x0019
     0032 iconst_0
     0033 istore_2
     0034 iload_2
-    0035 ifeq 51
+    0035 ifeq 60
     0038 aload_0
     0039 checkcast Class(java/lang/String)
-    0042 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0045 op_0xBA
-    0046 nop
-    0047 fload_3
-    0048 nop
-    0049 nop
-    0050 areturn
-    0051 ldc "other"
-    0053 areturn
+    0042 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0045 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0048 dup
+    0049 ldc "toUpperCase(...)"
+    0051 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0054 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0059 areturn
+    0060 ldc "other"
+    0062 areturn
     sub_attr  StackMapTable (11 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

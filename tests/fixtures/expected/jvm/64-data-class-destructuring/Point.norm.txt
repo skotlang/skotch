@@ -1,0 +1,132 @@
+class_version major=61 minor=0
+this_class    Point
+super_class   java/lang/Object
+access_flags  0x0021
+field         x : I 0x0001
+field         y : I 0x0001
+method        <init> (II)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Point.x:I)
+    0009 aload_0
+    0010 iload_2
+    0011 putfield Field(Point.y:I)
+    0014 return
+method        component1 ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Point.x:I)
+    0004 ireturn
+method        component2 ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Point.y:I)
+    0004 ireturn
+method        copy (II)LPoint; 0x0001
+  code        max_stack=4 max_locals=3
+    0000 new Class(Point)
+    0003 dup
+    0004 iload_1
+    0005 iload_2
+    0006 invokespecial Method(Point.<init>:(II)V)
+    0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        equals (Ljava/lang/Object;)Z 0x0001
+  code        max_stack=2 max_locals=15
+    0000 aload_0
+    0001 astore_2
+    0002 aload_2
+    0003 aload_1
+    0004 if_acmpne 13
+    0007 iconst_1
+    0008 istore 4
+    0010 iload 4
+    0012 ireturn
+    0013 aload_1
+    0014 instanceof Class(Point)
+    0017 istore 5
+    0019 iload 5
+    0021 ifne 30
+    0024 iconst_0
+    0025 istore 6
+    0027 iload 6
+    0029 ireturn
+    0030 aload_1
+    0031 checkcast Class(Point)
+    0034 astore 7
+    0036 aload_0
+    0037 getfield Field(Point.x:I)
+    0040 istore 8
+    0042 aload 7
+    0044 getfield Field(Point.x:I)
+    0047 istore 9
+    0049 iload 8
+    0051 iload 9
+    0053 if_icmpne 60
+    0056 iconst_1
+    0057 goto 61
+    0060 iconst_0
+    0061 istore 10
+    0063 aload_0
+    0064 getfield Field(Point.y:I)
+    0067 istore 11
+    0069 aload 7
+    0071 getfield Field(Point.y:I)
+    0074 istore 12
+    0076 iload 11
+    0078 iload 12
+    0080 if_icmpne 87
+    0083 iconst_1
+    0084 goto 88
+    0087 iconst_0
+    0088 istore 13
+    0090 iload 10
+    0092 iload 13
+    0094 imul
+    0095 istore 14
+    0097 iload 14
+    0099 ireturn
+    sub_attr  StackMapTable (49 bytes)
+method        getX ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Point.x:I)
+    0004 ireturn
+method        getY ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Point.y:I)
+    0004 ireturn
+method        hashCode ()I 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Point.x:I)
+    0004 istore_1
+    0005 aload_0
+    0006 getfield Field(Point.y:I)
+    0009 istore_2
+    0010 bipush 31
+    0012 iload_1
+    0013 imul
+    0014 iload_2
+    0015 iadd
+    0016 ireturn
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=1
+    0000 ldc "Point("
+    0002 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0007 aload_0
+    0008 getfield Field(Point.x:I)
+    0011 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0016 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0021 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0026 aload_0
+    0027 getfield Field(Point.y:I)
+    0030 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0035 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0040 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (32 bytes)

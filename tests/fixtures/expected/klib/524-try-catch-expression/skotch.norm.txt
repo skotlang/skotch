@@ -24,7 +24,6 @@ unique_name=inputkt
         "String",
         "Int",
         "String",
-        "String",
         "Any",
         "String"
       ],
@@ -53,20 +52,16 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 3
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "Result: \u0001",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      3
+                    ]
                   }
                 }
               }
@@ -75,7 +70,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 5
+                  "Local": 4
                 }
               }
             }
@@ -88,7 +83,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
                   "Const": "Null"
                 }
@@ -96,10 +91,10 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 7,
+                "dest": 6,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 0
                   }
                 }
               }
@@ -108,7 +103,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 7
+                  "Local": 6
                 }
               }
             }
@@ -144,7 +139,8 @@ unique_name=inputkt
       ],
       "named_locals": [
         3
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,
@@ -456,7 +452,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    "Result: ",
     "Error"
   ]
 }

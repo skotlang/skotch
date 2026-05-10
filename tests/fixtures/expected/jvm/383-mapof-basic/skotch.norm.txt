@@ -32,22 +32,20 @@ method        main ()V 0x0019
     0044 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
     0047 astore_2
     0048 iconst_3
-    0049 op_0xBD
-    0050 nop
-    0051 dconst_0
+    0049 anewarray Class(kotlin/Pair)
     0052 astore_3
     0053 aload_3
     0054 iconst_0
     0055 aload_0
-    0056 op_0x53
+    0056 aastore
     0057 aload_3
     0058 iconst_1
     0059 aload_1
-    0060 op_0x53
+    0060 aastore
     0061 aload_3
     0062 iconst_2
     0063 aload_2
-    0064 op_0x53
+    0064 aastore
     0065 aload_3
     0066 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
     0069 astore 7

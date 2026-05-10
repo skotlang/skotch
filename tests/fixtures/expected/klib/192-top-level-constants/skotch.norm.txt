@@ -35,8 +35,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Const": {
-                    "Int": 100
+                  "GetStaticField": {
+                    "class_name": "InputKt",
+                    "field_name": "MAX",
+                    "descriptor": "I"
                   }
                 }
               }
@@ -68,8 +70,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "Int": 100
+                  "GetStaticField": {
+                    "class_name": "InputKt",
+                    "field_name": "MAX",
+                    "descriptor": "I"
                   }
                 }
               }
@@ -181,8 +185,10 @@ unique_name=inputkt
               "Assign": {
                 "dest": 0,
                 "value": {
-                  "Const": {
-                    "String": 0
+                  "GetStaticField": {
+                    "class_name": "InputKt",
+                    "field_name": "GREETING",
+                    "descriptor": "Ljava/lang/String;"
                   }
                 }
               }
@@ -510,5 +516,25 @@ unique_name=inputkt
   "classes": [],
   "strings": [
     "Hello"
+  ],
+  "top_level_props": [
+    [
+      "MAX",
+      "Int",
+      {
+        "Int": 100
+      }
+    ],
+    [
+      "GREETING",
+      "String",
+      {
+        "String": 0
+      }
+    ]
+  ],
+  "top_level_prop_names": [
+    "MAX",
+    "GREETING"
   ]
 }

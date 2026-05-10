@@ -9,42 +9,23 @@ method        main ()V 0x0019
     0003 bipush 42
     0005 istore_1
     0006 aload_0
-    0007 op_0xBA
-    0008 nop
-    0009 ldc2_w #0
-    0012 op_0xBA
-    0013 nop
-    0014 fload 0
-    0016 nop
-    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 swap
-    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0024 iload_1
-    0025 op_0xBA
-    0026 nop
-    0027 dload_2
-    0028 nop
-    0029 nop
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 swap
-    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0037 iload_1
-    0038 op_0xBA
-    0039 nop
-    0040 aload_1
-    0041 nop
-    0042 nop
-    0043 op_0xBA
-    0044 nop
-    0045 op_0x2E
-    0046 nop
-    0047 nop
-    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0051 swap
-    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0055 return
+    0007 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 iload_1
+    0020 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 swap
+    0029 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0032 iload_1
+    0033 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 swap
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (32 bytes)
+class_attr    BootstrapMethods (20 bytes)

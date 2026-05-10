@@ -1,0 +1,37 @@
+class_version major=61 minor=0
+this_class    Counter
+super_class   java/lang/Object
+access_flags  0x0021
+field         count : I 0x0001
+method        <init> ()V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 iconst_0
+    0005 istore_1
+    0006 aload_0
+    0007 iload_1
+    0008 putfield Field(Counter.count:I)
+    0011 return
+method        getCount ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 ireturn
+method        setCount (I)V 0x0001
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 getfield Field(Counter.count:I)
+    0004 istore_2
+    0005 aload_0
+    0006 getfield Field(Counter.count:I)
+    0009 istore_3
+    0010 iload_1
+    0011 iflt 16
+    0014 iload_1
+    0015 istore_3
+    0016 aload_0
+    0017 iload_3
+    0018 putfield Field(Counter.count:I)
+    0021 return
+    sub_attr  StackMapTable (7 bytes)

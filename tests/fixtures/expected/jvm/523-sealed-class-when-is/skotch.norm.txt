@@ -3,42 +3,47 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        area (LShape;)I 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=2 max_locals=5
     0000 aload_0
     0001 ldc "s"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
-    0007 instanceof Class(Circle)
-    0010 ifeq 32
-    0013 aload_0
-    0014 checkcast Class(Circle)
-    0017 astore_1
-    0018 aload_1
-    0019 invokevirtual Method(Circle.getR:()I)
-    0022 aload_1
-    0023 invokevirtual Method(Circle.getR:()I)
-    0026 imul
-    0027 iconst_3
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(Circle)
+    0012 ifeq 34
+    0015 aload_0
+    0016 checkcast Class(Circle)
+    0019 astore_2
+    0020 aload_2
+    0021 invokevirtual Method(Circle.getR:()I)
+    0024 aload_2
+    0025 invokevirtual Method(Circle.getR:()I)
     0028 imul
-    0029 goto 60
-    0032 aload_0
-    0033 instanceof Class(Rect)
-    0036 ifeq 59
-    0039 aload_0
-    0040 checkcast Class(Rect)
-    0043 astore_2
-    0044 aload_2
-    0045 invokevirtual Method(Rect.getW:()I)
-    0048 istore_3
-    0049 aload_2
-    0050 invokevirtual Method(Rect.getH:()I)
-    0053 iload_3
-    0054 swap
-    0055 imul
-    0056 goto 60
-    0059 iconst_0
-    0060 ireturn
-    sub_attr  StackMapTable (6 bytes)
+    0029 iconst_3
+    0030 imul
+    0031 goto 71
+    0034 aload_1
+    0035 instanceof Class(Rect)
+    0038 ifeq 63
+    0041 aload_0
+    0042 checkcast Class(Rect)
+    0045 astore_3
+    0046 aload_3
+    0047 invokevirtual Method(Rect.getW:()I)
+    0050 istore 4
+    0052 aload_3
+    0053 invokevirtual Method(Rect.getH:()I)
+    0056 iload 4
+    0058 swap
+    0059 imul
+    0060 goto 71
+    0063 new Class(kotlin/NoWhenBranchMatchedException)
+    0066 dup
+    0067 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0070 athrow
+    0071 ireturn
+    sub_attr  StackMapTable (11 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
   code        max_stack=4 max_locals=1

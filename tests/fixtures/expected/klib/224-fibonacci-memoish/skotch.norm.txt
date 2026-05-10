@@ -87,7 +87,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Const": {
-                    "Int": 14
+                    "Int": 15
                   }
                 }
               }
@@ -112,7 +112,7 @@ unique_name=inputkt
                 "dest": 7,
                 "value": {
                   "BinOp": {
-                    "op": "CmpLe",
+                    "op": "CmpLt",
                     "lhs": 6,
                     "rhs": 5
                   }

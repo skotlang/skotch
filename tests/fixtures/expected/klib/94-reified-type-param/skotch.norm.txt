@@ -49,7 +49,8 @@ unique_name=inputkt
       "param_defaults": [
         null
       ],
-      "is_inline": true
+      "is_inline": true,
+      "has_type_params": true
     },
     {
       "id": 1,

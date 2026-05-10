@@ -29,9 +29,7 @@ method        isPrime (I)Z 0x0019
     0030 ireturn
     0031 iconst_0
     0032 ireturn
-    0033 op_0x84
-    0034 aconst_null
-    0035 aconst_null
+    0033 iinc 1 1
     0036 goto 9
     sub_attr  StackMapTable (14 bytes)
 method        main ()V 0x0019
@@ -47,17 +45,13 @@ method        main ()V 0x0019
     0011 invokestatic Method(InputKt.isPrime:(I)Z)
     0014 ifeq 37
     0017 goto 34
-    0020 op_0x84
-    0021 aconst_null
-    0022 aconst_null
+    0020 iinc 1 1
     0023 goto 4
     0026 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0029 iload_0
     0030 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0033 return
-    0034 op_0x84
-    0035 nop
-    0036 aconst_null
+    0034 iinc 0 1
     0037 goto 20
     sub_attr  StackMapTable (11 bytes)
 method        main ([Ljava/lang/String;)V 0x1009

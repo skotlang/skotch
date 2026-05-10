@@ -369,12 +369,6 @@ unique_name=inputkt
             },
             "Int",
             "Int",
-            "String",
-            "String",
-            "String",
-            "String",
-            "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -408,76 +402,17 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 3,
                     "value": {
-                      "Const": {
-                        "String": 0
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 4,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 3,
-                        "rhs": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 5,
-                    "value": {
-                      "Const": {
-                        "String": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 6,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 4,
-                        "rhs": 5
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 7,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 6,
-                        "rhs": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 8,
-                    "value": {
-                      "Const": {
-                        "String": 2
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 9,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 7,
-                        "rhs": 8
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "(\u0001, \u0001)",
+                            "descriptor": "(II)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1,
+                          2
+                        ]
                       }
                     }
                   }
@@ -510,7 +445,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 9
+                "ReturnValue": 3
               }
             }
           ],
@@ -654,9 +589,5 @@ unique_name=inputkt
       }
     }
   ],
-  "strings": [
-    "(",
-    ", ",
-    ")"
-  ]
+  "strings": []
 }

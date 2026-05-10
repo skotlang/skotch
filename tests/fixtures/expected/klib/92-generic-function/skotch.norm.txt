@@ -35,7 +35,8 @@ unique_name=inputkt
       ],
       "param_defaults": [
         null
-      ]
+      ],
+      "has_type_params": true
     },
     {
       "id": 1,
@@ -47,8 +48,6 @@ unique_name=inputkt
       "locals": [
         "Any",
         "Any",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -58,39 +57,24 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 0,
-                    "rhs": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 3,
-                    "rhs": 1
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001 and \u0001",
+                        "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0,
+                      1
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 2
           }
         }
       ],
@@ -103,7 +87,8 @@ unique_name=inputkt
       "param_defaults": [
         null,
         null
-      ]
+      ],
+      "has_type_params": true
     },
     {
       "id": 2,
@@ -112,7 +97,7 @@ unique_name=inputkt
       "locals": [
         "Int",
         "Any",
-        "Any",
+        "Int",
         "Unit",
         "String",
         "Any",
@@ -189,7 +174,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 0
                   }
                 }
               }
@@ -504,7 +489,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    " and ",
     "hello"
   ]
 }

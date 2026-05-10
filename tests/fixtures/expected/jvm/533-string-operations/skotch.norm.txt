@@ -13,47 +13,57 @@ method        main ()V 0x0019
     0011 iload_1
     0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0015 aload_0
-    0016 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0022 swap
-    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0026 aload_0
-    0027 invokevirtual Method(java/lang/String.toLowerCase:()Ljava/lang/String;)
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 swap
-    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0037 aload_0
-    0038 iconst_0
-    0039 iconst_5
-    0040 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 swap
-    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0050 aload_0
-    0051 ldc "World"
-    0053 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
-    0056 istore_1
-    0057 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0060 iload_1
-    0061 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0064 aload_0
-    0065 ldc "Hello"
-    0067 iconst_0
-    0068 iconst_2
-    0069 aconst_null
-    0070 invokestatic Method(kotlin/text/StringsKt.startsWith$default:(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z)
-    0073 istore_1
-    0074 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0077 iload_1
-    0078 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0081 aload_0
-    0082 ldc "!"
-    0084 invokevirtual Method(java/lang/String.endsWith:(Ljava/lang/String;)Z)
-    0087 istore_1
-    0088 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0091 iload_1
-    0092 invokevirtual Method(java/io/PrintStream.println:(Z)V)
-    0095 return
+    0016 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0019 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0022 dup
+    0023 ldc "toUpperCase(...)"
+    0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0028 astore_1
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload_1
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 aload_0
+    0037 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0040 invokevirtual Method(java/lang/String.toLowerCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0043 dup
+    0044 ldc "toLowerCase(...)"
+    0046 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0049 astore_1
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 aload_1
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0057 aload_0
+    0058 iconst_0
+    0059 iconst_5
+    0060 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 swap
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0070 aload_0
+    0071 ldc "World"
+    0073 invokevirtual Method(java/lang/String.contains:(Ljava/lang/CharSequence;)Z)
+    0076 istore_1
+    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0080 iload_1
+    0081 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0084 aload_0
+    0085 ldc "Hello"
+    0087 iconst_0
+    0088 iconst_2
+    0089 aconst_null
+    0090 invokestatic Method(kotlin/text/StringsKt.startsWith$default:(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z)
+    0093 istore_1
+    0094 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0097 iload_1
+    0098 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0101 aload_0
+    0102 ldc "!"
+    0104 invokevirtual Method(java/lang/String.endsWith:(Ljava/lang/String;)Z)
+    0107 istore_1
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 iload_1
+    0112 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0115 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

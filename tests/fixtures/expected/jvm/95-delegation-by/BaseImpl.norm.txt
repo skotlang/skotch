@@ -1,0 +1,31 @@
+class_version major=61 minor=0
+this_class    BaseImpl
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [Base]
+field         x : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(BaseImpl.x:I)
+    0009 return
+method        getX ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(BaseImpl.x:I)
+    0004 ireturn
+method        print ()V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(BaseImpl.x:I)
+    0004 istore_1
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 iload_1
+    0009 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0012 aload_0
+    0013 iload_1
+    0014 putfield Field(BaseImpl.x:I)
+    0017 return

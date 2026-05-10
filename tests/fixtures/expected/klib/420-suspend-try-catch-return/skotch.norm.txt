@@ -163,7 +163,8 @@ unique_name=inputkt
           }
         ],
         "is_instance_method": false
-      }
+      },
+      "needs_leading_nop": true
     },
     {
       "id": 1,

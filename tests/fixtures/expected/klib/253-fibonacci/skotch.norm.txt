@@ -33,6 +33,7 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
+        "Bool",
         "Int",
         "Int",
         "Int"
@@ -163,7 +164,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 10,
               "then_block": 5,
-              "else_block": 7
+              "else_block": 8
             }
           }
         },
@@ -232,6 +233,29 @@ unique_name=inputkt
               "Assign": {
                 "dest": 15,
                 "value": {
+                  "BinOp": {
+                    "op": "CmpNe",
+                    "lhs": 9,
+                    "rhs": 0
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 15,
+              "then_block": 7,
+              "else_block": 8
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 16,
+                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -240,12 +264,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 16,
+                "dest": 17,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 9,
-                    "rhs": 15
+                    "rhs": 16
                   }
                 }
               }
@@ -254,20 +278,20 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Local": 16
+                  "Local": 17
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 4
+            "Goto": 5
           }
         },
         {
           "stmts": [
             {
               "Assign": {
-                "dest": 17,
+                "dest": 18,
                 "value": {
                   "Local": 7
                 }
@@ -275,7 +299,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 17
+            "ReturnValue": 18
           }
         }
       ],
@@ -325,7 +349,7 @@ unique_name=inputkt
                 "dest": 1,
                 "value": {
                   "Const": {
-                    "Int": 10
+                    "Int": 11
                   }
                 }
               }
@@ -350,7 +374,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "BinOp": {
-                    "op": "CmpLe",
+                    "op": "CmpLt",
                     "lhs": 2,
                     "rhs": 1
                   }

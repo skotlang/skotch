@@ -1,0 +1,50 @@
+class_version major=61 minor=0
+this_class    Circle
+super_class   java/lang/Object
+access_flags  0x0021
+field         area : D 0x0001
+field         diameter : D 0x0001
+field         radius : D 0x0001
+method        <init> (D)V 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 dload_1
+    0006 putfield Field(Circle.radius:D)
+    0009 return
+method        getArea ()D 0x0001
+  code        max_stack=4 max_locals=7
+    0000 aload_0
+    0001 getfield Field(Circle.radius:D)
+    0004 dstore_1
+    0005 aload_0
+    0006 getfield Field(Circle.area:D)
+    0009 dstore_3
+    0010 aload_0
+    0011 getfield Field(Circle.diameter:D)
+    0014 dstore 5
+    0016 ldc2_w double(3.14159)
+    0019 dload_1
+    0020 dmul
+    0021 dload_1
+    0022 dmul
+    0023 dreturn
+method        getDiameter ()D 0x0001
+  code        max_stack=4 max_locals=5
+    0000 aload_0
+    0001 getfield Field(Circle.radius:D)
+    0004 aload_0
+    0005 getfield Field(Circle.area:D)
+    0008 dstore_1
+    0009 aload_0
+    0010 getfield Field(Circle.diameter:D)
+    0013 dstore_3
+    0014 ldc2_w double(2)
+    0017 dmul
+    0018 dreturn
+method        getRadius ()D 0x0001
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Circle.radius:D)
+    0004 dreturn

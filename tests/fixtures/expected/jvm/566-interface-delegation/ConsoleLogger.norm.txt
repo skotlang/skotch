@@ -1,0 +1,24 @@
+class_version major=61 minor=0
+this_class    ConsoleLogger
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [Logger]
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        level ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 ldc "INFO"
+    0002 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        log (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_1
+    0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 return
+class_attr    BootstrapMethods (8 bytes)

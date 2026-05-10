@@ -1,0 +1,86 @@
+class_version major=61 minor=0
+this_class    Num
+super_class   Expr
+access_flags  0x0021
+field         value : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(Expr.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Num.value:I)
+    0009 return
+method        component1 ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Num.value:I)
+    0004 ireturn
+method        copy (I)LNum; 0x0001
+  code        max_stack=3 max_locals=2
+    0000 new Class(Num)
+    0003 dup
+    0004 iload_1
+    0005 invokespecial Method(Num.<init>:(I)V)
+    0008 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        equals (Ljava/lang/Object;)Z 0x0001
+  code        max_stack=2 max_locals=11
+    0000 aload_0
+    0001 astore_2
+    0002 aload_2
+    0003 aload_1
+    0004 if_acmpne 13
+    0007 iconst_1
+    0008 istore 4
+    0010 iload 4
+    0012 ireturn
+    0013 aload_1
+    0014 instanceof Class(Num)
+    0017 istore 5
+    0019 iload 5
+    0021 ifne 30
+    0024 iconst_0
+    0025 istore 6
+    0027 iload 6
+    0029 ireturn
+    0030 aload_1
+    0031 checkcast Class(Num)
+    0034 astore 7
+    0036 aload_0
+    0037 getfield Field(Num.value:I)
+    0040 istore 8
+    0042 aload 7
+    0044 getfield Field(Num.value:I)
+    0047 istore 9
+    0049 iload 8
+    0051 iload 9
+    0053 if_icmpne 60
+    0056 iconst_1
+    0057 goto 61
+    0060 iconst_0
+    0061 istore 10
+    0063 iload 10
+    0065 ireturn
+    sub_attr  StackMapTable (41 bytes)
+method        getValue ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Num.value:I)
+    0004 ireturn
+method        hashCode ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Num.value:I)
+    0004 ireturn
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=1
+    0000 ldc "Num("
+    0002 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0007 aload_0
+    0008 getfield Field(Num.value:I)
+    0011 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0016 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0021 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (20 bytes)

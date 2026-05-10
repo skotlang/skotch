@@ -23,9 +23,7 @@ method        nameOrDefault (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 dup
-    0002 op_0xC7
-    0003 nop
-    0004 iconst_3
+    0002 ifnonnull 8
     0005 pop
     0006 ldc "World"
     0008 areturn

@@ -28,11 +28,9 @@ unique_name=inputkt
         "Int",
         "String",
         "String",
-        "String",
         "Bool",
         "Int",
         "Int",
-        "String",
         "String",
         "String"
       ],
@@ -156,27 +154,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 9,
-                    "rhs": 8
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "long string: \u0001",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      8
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 10
+            "ReturnValue": 9
           }
         },
         {
@@ -189,7 +183,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 11,
+                "dest": 10,
                 "value": {
                   "InstanceOf": {
                     "obj": 0,
@@ -201,7 +195,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 11,
+              "cond": 10,
               "then_block": 6,
               "else_block": 7
             }
@@ -211,7 +205,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 13,
+                "dest": 12,
                 "value": {
                   "Local": 0
                 }
@@ -219,29 +213,25 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 14,
+                "dest": 13,
                 "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 15,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 14,
-                    "rhs": 13
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "integer: \u0001",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      12
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 15
+            "ReturnValue": 13
           }
         },
         {
@@ -254,17 +244,17 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 16,
+                "dest": 14,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 0
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 16
+            "ReturnValue": 14
           }
         }
       ],
@@ -305,7 +295,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 1
                   }
                 }
               }
@@ -343,7 +333,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Const": {
-                    "String": 4
+                    "String": 2
                   }
                 }
               }
@@ -685,8 +675,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    "long string: ",
-    "integer: ",
     "other",
     "hello",
     "hi"

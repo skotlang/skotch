@@ -1,0 +1,28 @@
+class_version major=61 minor=0
+this_class    InputKt$fetchValue$1
+super_class   kotlin/coroutines/jvm/internal/ContinuationImpl
+access_flags  0x0021
+field         label : I 0x0001
+field         result : Ljava/lang/Object; 0x0001
+method        <init> (Lkotlin/coroutines/Continuation;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 aload_1
+    0002 invokespecial Method(kotlin/coroutines/jvm/internal/ContinuationImpl.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0005 return
+method        invokeSuspend (Ljava/lang/Object;)Ljava/lang/Object; 0x0011
+  code        max_stack=4 max_locals=2
+    0000 aload_0
+    0001 aload_1
+    0002 putfield Field(InputKt$fetchValue$1.result:Ljava/lang/Object;)
+    0005 aload_0
+    0006 aload_0
+    0007 getfield Field(InputKt$fetchValue$1.label:I)
+    0010 ldc int(-2147483648)
+    0012 ior
+    0013 putfield Field(InputKt$fetchValue$1.label:I)
+    0016 aload_0
+    0017 checkcast Class(kotlin/coroutines/Continuation)
+    0020 invokestatic Method(InputKt.fetchValue:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0023 areturn
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

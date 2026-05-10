@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=5 max_locals=7
+  code        max_stack=5 max_locals=11
     0000 bipush 42
     0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0005 astore_0
@@ -15,49 +15,49 @@ method        main ()V 0x0019
     0016 astore_1
     0017 aload_1
     0018 invokevirtual Method(kotlin/Pair.component1:()Ljava/lang/Object;)
-    0021 astore_0
-    0022 aload_0
-    0023 aload_1
-    0024 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
-    0027 op_0xBA
-    0028 nop
-    0029 dload_1
-    0030 nop
-    0031 nop
-    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0035 swap
-    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0039 iconst_1
-    0040 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0043 astore_0
-    0044 iconst_2
-    0045 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0048 astore_2
-    0049 iconst_3
-    0050 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0053 astore_3
-    0054 new Class(kotlin/Triple)
-    0057 dup
-    0058 aload_0
-    0059 aload_2
-    0060 aload_3
-    0061 invokespecial Method(kotlin/Triple.<init>:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V)
-    0064 astore 6
-    0066 aload 6
-    0068 invokevirtual Method(kotlin/Triple.component1:()Ljava/lang/Object;)
-    0071 aload 6
-    0073 invokevirtual Method(kotlin/Triple.component2:()Ljava/lang/Object;)
-    0076 aload 6
-    0078 invokevirtual Method(kotlin/Triple.component3:()Ljava/lang/Object;)
-    0081 op_0xBA
-    0082 nop
-    0083 lstore_3
-    0084 nop
-    0085 nop
-    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0089 swap
-    0090 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0093 return
+    0021 astore_2
+    0022 aload_1
+    0023 invokevirtual Method(kotlin/Pair.component2:()Ljava/lang/Object;)
+    0026 astore_3
+    0027 aload_2
+    0028 aload_3
+    0029 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 swap
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 iconst_1
+    0042 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0045 astore_0
+    0046 iconst_2
+    0047 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0050 astore 4
+    0052 iconst_3
+    0053 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0056 astore 5
+    0058 new Class(kotlin/Triple)
+    0061 dup
+    0062 aload_0
+    0063 aload 4
+    0065 aload 5
+    0067 invokespecial Method(kotlin/Triple.<init>:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V)
+    0070 astore 7
+    0072 aload 7
+    0074 invokevirtual Method(kotlin/Triple.component1:()Ljava/lang/Object;)
+    0077 astore 8
+    0079 aload 7
+    0081 invokevirtual Method(kotlin/Triple.component2:()Ljava/lang/Object;)
+    0084 astore 9
+    0086 aload 7
+    0088 invokevirtual Method(kotlin/Triple.component3:()Ljava/lang/Object;)
+    0091 astore 10
+    0093 aload 8
+    0095 aload 9
+    0097 aload 10
+    0099 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0104 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0107 swap
+    0108 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0111 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

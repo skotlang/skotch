@@ -31,7 +31,7 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        power (II)I 0x0019
-  code        max_stack=3 max_locals=9
+  code        max_stack=4 max_locals=3
     0000 iload_1
     0001 ifne 6
     0004 iconst_1
@@ -39,47 +39,23 @@ method        power (II)I 0x0019
     0006 iload_1
     0007 iconst_2
     0008 irem
-    0009 ifne 53
-    0012 iload_1
-    0013 iconst_2
-    0014 idiv
-    0015 istore_2
-    0016 iload_0
-    0017 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0020 astore_3
+    0009 ifne 24
+    0012 iload_0
+    0013 iload_1
+    0014 iconst_2
+    0015 idiv
+    0016 invokestatic Method(InputKt.power:(II)I)
+    0019 istore_2
+    0020 iload_2
     0021 iload_2
-    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0025 astore 4
-    0027 aload_3
-    0028 checkcast Class(java/lang/Integer)
-    0031 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0034 aload 4
-    0036 checkcast Class(java/lang/Integer)
-    0039 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0042 invokestatic Method(InputKt.power:(II)I)
-    0045 istore 5
-    0047 iload 5
-    0049 iload 5
-    0051 imul
-    0052 ireturn
-    0053 iload_1
-    0054 iconst_1
-    0055 isub
-    0056 istore 6
-    0058 iload_0
-    0059 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0062 astore 7
-    0064 iload 6
-    0066 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0069 astore 8
-    0071 iload_0
-    0072 aload 7
-    0074 checkcast Class(java/lang/Integer)
-    0077 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0080 aload 8
-    0082 checkcast Class(java/lang/Integer)
-    0085 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0088 invokestatic Method(InputKt.power:(II)I)
-    0091 imul
-    0092 ireturn
+    0022 imul
+    0023 ireturn
+    0024 iload_0
+    0025 iload_0
+    0026 iload_1
+    0027 iconst_1
+    0028 isub
+    0029 invokestatic Method(InputKt.power:(II)I)
+    0032 imul
+    0033 ireturn
     sub_attr  StackMapTable (4 bytes)

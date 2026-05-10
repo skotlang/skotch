@@ -5,6 +5,7 @@ methods       3
 classes       1
 
 --- strings ---
+  "GREETING"
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
@@ -13,7 +14,6 @@ classes       1
   "V"
   "VL"
   "[Ljava/lang/String;"
-  "hi"
   "input.kt"
   "main"
   "out"

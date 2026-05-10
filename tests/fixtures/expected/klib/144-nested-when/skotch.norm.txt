@@ -568,7 +568,8 @@ unique_name=inputkt
       "param_defaults": [
         null,
         null
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,

@@ -32,6 +32,8 @@ unique_name=inputkt
         "String",
         "String",
         "String",
+        "String",
+        "Bool",
         "Int",
         "Int",
         "String"
@@ -99,7 +101,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 5,
               "then_block": 2,
-              "else_block": 4
+              "else_block": 5
             }
           }
         },
@@ -131,8 +133,8 @@ unique_name=inputkt
           "terminator": {
             "Branch": {
               "cond": 7,
-              "then_block": 5,
-              "else_block": 6
+              "then_block": 6,
+              "else_block": 7
             }
           }
         },
@@ -140,7 +142,30 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 14,
+                "dest": 15,
+                "value": {
+                  "BinOp": {
+                    "op": "CmpNe",
+                    "lhs": 4,
+                    "rhs": 0
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 15,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 16,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -150,12 +175,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 15,
+                "dest": 17,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 4,
-                    "rhs": 14
+                    "rhs": 16
                   }
                 }
               }
@@ -164,20 +189,20 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Local": 15
+                  "Local": 17
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 1
+            "Goto": 2
           }
         },
         {
           "stmts": [
             {
               "Assign": {
-                "dest": 16,
+                "dest": 18,
                 "value": {
                   "Local": 2
                 }
@@ -185,7 +210,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 16
+            "ReturnValue": 18
           }
         },
         {
@@ -230,13 +255,13 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "Goto": 7
+            "Goto": 8
           }
         },
         {
           "stmts": [],
           "terminator": {
-            "Goto": 7
+            "Goto": 8
           }
         },
         {
@@ -253,10 +278,28 @@ unique_name=inputkt
               "Assign": {
                 "dest": 13,
                 "value": {
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 14,
+                "value": {
                   "BinOp": {
                     "op": "ConcatStr",
                     "lhs": 12,
-                    "rhs": 4
+                    "rhs": 13
                   }
                 }
               }
@@ -265,7 +308,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Local": 13
+                  "Local": 14
                 }
               }
             }

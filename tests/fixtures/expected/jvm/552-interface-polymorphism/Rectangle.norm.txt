@@ -1,0 +1,46 @@
+class_version major=61 minor=0
+this_class    Rectangle
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [Shape]
+field         height : D 0x0001
+field         width : D 0x0001
+method        <init> (DD)V 0x0001
+  code        max_stack=4 max_locals=5
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 dload_1
+    0006 putfield Field(Rectangle.width:D)
+    0009 aload_0
+    0010 dload_3
+    0011 putfield Field(Rectangle.height:D)
+    0014 return
+method        area ()D 0x0001
+  code        max_stack=5 max_locals=5
+    0000 aload_0
+    0001 getfield Field(Rectangle.width:D)
+    0004 dstore_1
+    0005 aload_0
+    0006 getfield Field(Rectangle.height:D)
+    0009 dstore_3
+    0010 dload_1
+    0011 dload_3
+    0012 dmul
+    0013 aload_0
+    0014 dload_1
+    0015 putfield Field(Rectangle.width:D)
+    0018 aload_0
+    0019 dload_3
+    0020 putfield Field(Rectangle.height:D)
+    0023 dreturn
+method        getHeight ()D 0x0001
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Rectangle.height:D)
+    0004 dreturn
+method        getWidth ()D 0x0001
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Rectangle.width:D)
+    0004 dreturn

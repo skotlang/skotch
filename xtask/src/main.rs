@@ -70,6 +70,12 @@ enum Sub {
         #[arg(long, value_enum, default_value_t = TargetArg::Jvm)]
         target: TargetArg,
     },
+    /// Re-normalize committed `.class` goldens using the current
+    /// `skotch-classfile-norm` decoder. Useful after the disassembler is
+    /// extended (new opcode coverage) — refreshes both `kotlinc.norm.txt`
+    /// and `skotch.norm.txt` from the committed `.class` bytes without
+    /// invoking `kotlinc` or `skotch`.
+    RenormGoldens,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -104,7 +110,37 @@ fn main() -> Result<()> {
         } => gen_fixtures(&workspace, target, fixture.as_deref(), skotch_only),
         Sub::RefreshSkotchGoldens { target } => gen_fixtures(&workspace, target, None, true),
         Sub::Verify { target } => verify(&workspace, target),
+        Sub::RenormGoldens => renorm_goldens(&workspace),
     }
+}
+
+fn renorm_goldens(workspace: &Path) -> Result<()> {
+    let jvm_dir = workspace.join("tests/fixtures/expected/jvm");
+    let mut count = 0u32;
+    let mut entries: Vec<_> = std::fs::read_dir(&jvm_dir)?.flatten().collect();
+    entries.sort_by_key(|e| e.path());
+    for entry in entries {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        for inner in std::fs::read_dir(&dir)?.flatten() {
+            let p = inner.path();
+            let Some(ext) = p.extension() else { continue };
+            if ext != "class" {
+                continue;
+            }
+            let bytes = std::fs::read(&p)?;
+            let normed = skotch_classfile_norm::normalize_default(&bytes)
+                .map_err(|e| anyhow!("normalizing {}: {e}", p.display()))?;
+            let stem = p.file_stem().unwrap().to_string_lossy().to_string();
+            let out = dir.join(format!("{stem}.norm.txt"));
+            std::fs::write(&out, normed.as_text())?;
+            count += 1;
+        }
+    }
+    println!("renormalized {count} files");
+    Ok(())
 }
 
 fn workspace_root() -> Result<PathBuf> {

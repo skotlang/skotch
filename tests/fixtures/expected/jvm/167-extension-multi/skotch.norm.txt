@@ -51,5 +51,5 @@ method        main ([Ljava/lang/String;)V 0x1009
 method        negate (I)I 0x0019
   code        max_stack=1 max_locals=1
     0000 iload_0
-    0001 op_0x74
+    0001 ineg
     0002 ireturn

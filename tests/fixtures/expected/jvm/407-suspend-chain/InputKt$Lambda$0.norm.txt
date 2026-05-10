@@ -1,0 +1,85 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$0
+super_class   kotlin/coroutines/jvm/internal/SuspendLambda
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function2]
+field         label : I 0x0001
+field         p$0 : Ljava/lang/Object; 0x0001
+method        <init> (Lkotlin/coroutines/Continuation;)V 0x0001
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 iconst_2
+    0002 aload_1
+    0003 invokespecial Method(kotlin/coroutines/jvm/internal/SuspendLambda.<init>:(ILkotlin/coroutines/Continuation;)V)
+    0006 return
+method        create (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation; 0x0011
+  code        max_stack=4 max_locals=3
+    0000 new Class(InputKt$Lambda$0)
+    0003 dup
+    0004 aload_2
+    0005 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0008 dup
+    0009 aload_1
+    0010 putfield Field(InputKt$Lambda$0.p$0:Ljava/lang/Object;)
+    0013 checkcast Class(kotlin/coroutines/Continuation)
+    0016 areturn
+method        invoke (Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; 0x1051
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 aload_1
+    0002 aload_2
+    0003 checkcast Class(kotlin/coroutines/Continuation)
+    0006 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0009 areturn
+method        invoke (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0011
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 aload_1
+    0002 aload_2
+    0003 invokevirtual Method(InputKt$Lambda$0.create:(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation;)
+    0006 checkcast Class(InputKt$Lambda$0)
+    0009 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0012 invokevirtual Method(InputKt$Lambda$0.invokeSuspend:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0015 areturn
+method        invokeSuspend (Ljava/lang/Object;)Ljava/lang/Object; 0x0011
+  code        max_stack=16 max_locals=32
+    0000 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0003 astore_2
+    0004 aconst_null
+    0005 astore 4
+    0007 aconst_null
+    0008 astore 3
+    0010 aload_0
+    0011 getfield Field(InputKt$Lambda$0.label:I)
+    0014 tableswitch default=83 low=0 high=1 0=36 1=61
+    0036 aload_1
+    0037 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0040 aconst_null
+    0041 astore_3
+    0042 aload_0
+    0043 checkcast Class(kotlin/coroutines/Continuation)
+    0046 aload_0
+    0047 iconst_1
+    0048 putfield Field(InputKt$Lambda$0.label:I)
+    0051 invokestatic Method(InputKt.processData:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0054 dup
+    0055 aload_2
+    0056 if_acmpne 66
+    0059 aload_2
+    0060 areturn
+    0061 aload_1
+    0062 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0065 aload_1
+    0066 checkcast Class(java/lang/String)
+    0069 astore 4
+    0071 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0074 aload 4
+    0076 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0079 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0082 areturn
+    0083 new Class(java/lang/IllegalStateException)
+    0086 dup
+    0087 ldc "call to 'resume' before 'invoke' with coroutine"
+    0089 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0092 athrow
+    sub_attr  StackMapTable (30 bytes)

@@ -27,8 +27,6 @@ unique_name=inputkt
         "Int",
         "Int",
         "Int",
-        "Any",
-        "Any",
         "Int",
         "Int"
       ],
@@ -119,14 +117,11 @@ unique_name=inputkt
                 "value": {
                   "Call": {
                     "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
+                      "Static": 0
                     },
                     "args": [
-                      0
+                      0,
+                      7
                     ]
                   }
                 }
@@ -136,52 +131,17 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Call": {
-                    "kind": {
-                      "StaticJava": {
-                        "class_name": "java/lang/Integer",
-                        "method_name": "valueOf",
-                        "descriptor": "(I)Ljava/lang/Integer;"
-                      }
-                    },
-                    "args": [
-                      7
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
-                  "Call": {
-                    "kind": {
-                      "Static": 0
-                    },
-                    "args": [
-                      8,
-                      9
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 11,
-                "value": {
                   "BinOp": {
                     "op": "MulI",
                     "lhs": 0,
-                    "rhs": 10
+                    "rhs": 8
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 9
           }
         }
       ],

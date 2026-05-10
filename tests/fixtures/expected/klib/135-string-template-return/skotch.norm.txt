@@ -19,9 +19,6 @@ unique_name=inputkt
       ],
       "locals": [
         "String",
-        "String",
-        "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -31,49 +28,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 1,
-                    "rhs": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 3,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 2,
-                    "rhs": 3
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "Hello, \u0001!",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 1
           }
         }
       ],
@@ -94,7 +65,6 @@ unique_name=inputkt
       ],
       "locals": [
         "Int",
-        "String",
         "String"
       ],
       "blocks": [
@@ -104,27 +74,23 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Const": {
-                    "String": 2
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 2,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 1,
-                    "rhs": 0
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "Number: \u0001",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      0
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 2
+            "ReturnValue": 1
           }
         }
       ],
@@ -157,7 +123,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 0
                   }
                 }
               }
@@ -423,9 +389,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    "Hello, ",
-    "!",
-    "Number: ",
     "Kotlin"
   ]
 }

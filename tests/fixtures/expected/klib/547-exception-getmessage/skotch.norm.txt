@@ -280,7 +280,7 @@ unique_name=inputkt
                   "Call": {
                     "kind": {
                       "VirtualJava": {
-                        "class_name": "java/lang/Throwable",
+                        "class_name": "java/lang/Exception",
                         "method_name": "toString",
                         "descriptor": "()Ljava/lang/String;"
                       }

@@ -12,9 +12,7 @@ method        main ()V 0x0019
     0007 iconst_1
     0008 istore_1
     0009 goto 19
-    0012 op_0x84
-    0013 nop
-    0014 aconst_null
+    0012 iinc 0 1
     0015 goto 2
     0018 return
     0019 iload_1
@@ -27,9 +25,7 @@ method        main ()V 0x0019
     0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0031 iload_2
     0032 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0035 op_0x84
-    0036 aconst_null
-    0037 aconst_null
+    0035 iinc 1 1
     0038 goto 19
     0041 goto 12
     sub_attr  StackMapTable (18 bytes)

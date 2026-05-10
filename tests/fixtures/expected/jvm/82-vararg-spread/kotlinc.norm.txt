@@ -5,26 +5,25 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2
     0000 iconst_3
-    0001 op_0xBC
-    0002 lconst_1
+    0001 newarray int
     0003 astore_1
     0004 aload_1
     0005 iconst_0
     0006 bipush 10
-    0008 op_0x4F
+    0008 iastore
     0009 aload_1
     0010 iconst_1
     0011 bipush 20
-    0013 op_0x4F
+    0013 iastore
     0014 aload_1
     0015 iconst_2
     0016 bipush 30
-    0018 op_0x4F
+    0018 iastore
     0019 aload_1
     0020 astore_0
     0021 aload_0
     0022 aload_0
-    0023 op_0xBE
+    0023 arraylength
     0024 invokestatic Method(java/util/Arrays.copyOf:([II)[I)
     0027 invokestatic Method(InputKt.sum:([I)I)
     0030 istore_1
@@ -46,22 +45,20 @@ method        sum ([I)I 0x0099
     0008 iconst_0
     0009 istore_2
     0010 aload_0
-    0011 op_0xBE
+    0011 arraylength
     0012 istore_3
     0013 iload_2
     0014 iload_3
     0015 if_icmpge 34
     0018 aload_0
     0019 iload_2
-    0020 op_0x2E
+    0020 iaload
     0021 istore 4
     0023 iload_1
     0024 iload 4
     0026 iadd
     0027 istore_1
-    0028 op_0x84
-    0029 iconst_m1
-    0030 aconst_null
+    0028 iinc 2 1
     0031 goto 13
     0034 iload_1
     0035 ireturn

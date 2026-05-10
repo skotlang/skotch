@@ -271,9 +271,14 @@ impl Pools {
             proto_remap_old_to_new[*old_i] = new_i as u32;
         }
 
-        // 4. Sort fields by (class_idx, type_idx, name_idx). Each
-        //    field key is in *new* type/string indices.
-        let mut field_keys: Vec<((u32, u32, u32), usize)> = self
+        // 4. Sort fields by `(class_idx, name_idx, type_idx)` — the
+        //    DEX spec mandates that within a class field_ids are
+        //    sorted by name first, then by type. The triple stored on
+        //    each `FieldRow` is still emitted as
+        //    `(class_idx, type_idx, name_idx)` (the on-disk layout),
+        //    but the sort key is the spec-mandated triple.
+        type FieldSortEntry = ((u32, u32, u32), (u32, u32, u32), usize);
+        let mut field_keys: Vec<FieldSortEntry> = self
             .fields
             .iter()
             .enumerate()
@@ -281,13 +286,17 @@ impl Pools {
                 let class_idx = new_type_idx[class];
                 let type_idx = new_type_idx[ty];
                 let name_idx = new_string_idx[name];
-                ((class_idx, type_idx, name_idx), old_i)
+                let sort_key = (class_idx, name_idx, type_idx);
+                let row_key = (class_idx, type_idx, name_idx);
+                (sort_key, row_key, old_i)
             })
             .collect();
         field_keys.sort_by_key(|a| a.0);
         let mut fields: Vec<FieldRow> = Vec::with_capacity(self.fields.len());
         let mut field_remap_old_to_new = vec![0u32; self.fields.len()];
-        for (new_i, ((class_idx, type_idx, name_idx), old_i)) in field_keys.iter().enumerate() {
+        for (new_i, (_sort_key, (class_idx, type_idx, name_idx), old_i)) in
+            field_keys.iter().enumerate()
+        {
             fields.push(FieldRow {
                 class_idx: *class_idx as u16,
                 type_idx: *type_idx as u16,

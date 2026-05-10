@@ -11,27 +11,26 @@ method        main ()V 0x0019
     0004 iconst_3
     0005 istore_2
     0006 iconst_3
-    0007 op_0xBC
-    0008 lconst_1
+    0007 newarray int
     0009 astore_3
     0010 iconst_0
     0011 istore 4
     0013 aload_3
     0014 iload 4
     0016 iload_0
-    0017 op_0x4F
+    0017 iastore
     0018 iconst_1
     0019 istore_0
     0020 aload_3
     0021 iload_0
     0022 iload_1
-    0023 op_0x4F
+    0023 iastore
     0024 iconst_2
     0025 istore_0
     0026 aload_3
     0027 iload_0
     0028 iload_2
-    0029 op_0x4F
+    0029 iastore
     0030 aload_3
     0031 invokestatic Method(InputKt.sum:([I)I)
     0034 istore_0
@@ -50,7 +49,7 @@ method        sum ([I)I 0x0099
     0002 iconst_0
     0003 istore_2
     0004 aload_0
-    0005 op_0xBE
+    0005 arraylength
     0006 istore_3
     0007 iload_2
     0008 iload_3
@@ -58,12 +57,10 @@ method        sum ([I)I 0x0099
     0012 iload_1
     0013 aload_0
     0014 iload_2
-    0015 op_0x2E
+    0015 iaload
     0016 iadd
     0017 istore_1
-    0018 op_0x84
-    0019 iconst_m1
-    0020 aconst_null
+    0018 iinc 2 1
     0021 goto 7
     0024 iload_1
     0025 ireturn

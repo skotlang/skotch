@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        fibonacci (I)I 0x0019
-  code        max_stack=2 max_locals=6
+  code        max_stack=2 max_locals=5
     0000 iload_0
     0001 iconst_1
     0002 if_icmpgt 7
@@ -17,26 +17,22 @@ method        fibonacci (I)I 0x0019
     0012 istore_3
     0013 iload_3
     0014 iload_0
-    0015 if_icmpgt 43
-    0018 iload_2
-    0019 istore 4
-    0021 iload_1
-    0022 iload 4
-    0024 iadd
-    0025 istore 5
-    0027 iload_2
-    0028 istore_1
-    0029 iload 5
-    0031 istore_2
-    0032 iload_3
-    0033 iload_0
-    0034 if_icmpeq 43
-    0037 op_0x84
-    0038 iconst_0
-    0039 aconst_null
-    0040 goto 18
-    0043 iload_2
-    0044 ireturn
+    0015 if_icmpgt 39
+    0018 iload_1
+    0019 iload_2
+    0020 iadd
+    0021 istore 4
+    0023 iload_2
+    0024 istore_1
+    0025 iload 4
+    0027 istore_2
+    0028 iload_3
+    0029 iload_0
+    0030 if_icmpeq 39
+    0033 iinc 3 1
+    0036 goto 18
+    0039 iload_2
+    0040 ireturn
     sub_attr  StackMapTable (10 bytes)
 method        isEven (I)Z 0x0019
   code        max_stack=2 max_locals=1
@@ -63,21 +59,13 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=3
     0000 bipush 10
     0002 invokestatic Method(InputKt.sumOfOdds:(I)I)
-    0005 op_0xBA
-    0006 nop
-    0007 lload_3
-    0008 nop
-    0009 nop
+    0005 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0013 swap
     0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0017 bipush 10
     0019 invokestatic Method(InputKt.fibonacci:(I)I)
-    0022 op_0xBA
-    0023 nop
-    0024 op_0x32
-    0025 nop
-    0026 nop
+    0022 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
     0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0030 swap
     0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -91,11 +79,7 @@ method        main ()V 0x0019
     0050 ldc "small"
     0052 astore_0
     0053 aload_0
-    0054 op_0xBA
-    0055 nop
-    0056 istore_0
-    0057 nop
-    0058 nop
+    0054 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0059 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0062 swap
     0063 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -108,9 +92,7 @@ method        main ()V 0x0019
     0075 invokestatic Method(InputKt.isOdd:(I)Z)
     0078 ifeq 97
     0081 goto 91
-    0084 op_0x84
-    0085 aconst_null
-    0086 aconst_null
+    0084 iinc 1 1
     0087 goto 68
     0090 return
     0091 ldc "odd"
@@ -120,11 +102,7 @@ method        main ()V 0x0019
     0099 astore_2
     0100 iload_1
     0101 aload_2
-    0102 op_0xBA
-    0103 nop
-    0104 fstore_3
-    0105 nop
-    0106 nop
+    0102 invokedynamic InvokeDynamic(makeConcatWithConstants:(ILjava/lang/String;)Ljava/lang/String;)
     0107 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0110 swap
     0111 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
@@ -150,9 +128,7 @@ method        sumOfOdds (I)I 0x0019
     0019 iload_2
     0020 iload_0
     0021 if_icmpeq 30
-    0024 op_0x84
-    0025 iconst_m1
-    0026 aconst_null
+    0024 iinc 2 1
     0027 goto 9
     0030 iload_1
     0031 ireturn

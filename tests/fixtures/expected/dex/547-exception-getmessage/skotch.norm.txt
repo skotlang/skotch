@@ -12,11 +12,11 @@ classes       1
   "L"
   "LInputKt;"
   "Ljava/io/PrintStream;"
+  "Ljava/lang/Exception;"
   "Ljava/lang/IllegalArgumentException;"
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
-  "Ljava/lang/Throwable;"
   "V"
   "VI"
   "VL"
@@ -32,11 +32,11 @@ classes       1
   I
   LInputKt;
   Ljava/io/PrintStream;
+  Ljava/lang/Exception;
   Ljava/lang/IllegalArgumentException;
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
-  Ljava/lang/Throwable;
   V
   [Ljava/lang/String;
 
@@ -46,8 +46,8 @@ classes       1
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Exception;.toString()Ljava/lang/String;
   Ljava/lang/IllegalArgumentException;.<init>(Ljava/lang/String;)V
-  Ljava/lang/Throwable;.toString()Ljava/lang/String;
 
 --- class[0] ---
   descriptor   LInputKt;

@@ -162,7 +162,8 @@ unique_name=inputkt
           "handler_block": 2,
           "catch_type": "java/lang/Exception"
         }
-      ]
+      ],
+      "needs_leading_nop": true
     },
     {
       "id": 1,

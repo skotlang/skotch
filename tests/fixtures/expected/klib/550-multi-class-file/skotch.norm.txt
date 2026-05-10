@@ -37,7 +37,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 0
                   }
                 }
               }
@@ -101,7 +101,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 1
                   }
                 }
               }
@@ -378,7 +378,6 @@ unique_name=inputkt
               "Class": "Dog"
             },
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -400,20 +399,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Const": {
-                        "String": 0
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 1,
-                        "rhs": 2
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "\u0001 says Woof!",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -433,7 +428,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 3
+                "ReturnValue": 2
               }
             }
           ],
@@ -550,7 +545,6 @@ unique_name=inputkt
               "Class": "Cat"
             },
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -572,20 +566,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Const": {
-                        "String": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 1,
-                        "rhs": 2
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "\u0001 says Meow!",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -605,7 +595,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 3
+                "ReturnValue": 2
               }
             }
           ],
@@ -700,8 +690,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    " says Woof!",
-    " says Meow!",
     "Rex",
     "Whiskers"
   ]

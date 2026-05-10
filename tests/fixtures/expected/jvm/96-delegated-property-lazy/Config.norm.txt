@@ -1,0 +1,34 @@
+class_version major=61 minor=0
+this_class    Config
+super_class   java/lang/Object
+access_flags  0x0021
+field         greeting : Ljava/lang/String; 0x0001
+field         greeting$initialized : Z 0x0001
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        getGreeting ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Config.greeting$initialized:Z)
+    0004 ifne 30
+    0007 ldc "computing..."
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 swap
+    0013 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0016 ldc "Hello!"
+    0018 aload_0
+    0019 swap
+    0020 putfield Field(Config.greeting:Ljava/lang/String;)
+    0023 iconst_1
+    0024 istore_1
+    0025 aload_0
+    0026 iload_1
+    0027 putfield Field(Config.greeting$initialized:Z)
+    0030 aload_0
+    0031 getfield Field(Config.greeting:Ljava/lang/String;)
+    0034 areturn
+    sub_attr  StackMapTable (3 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)

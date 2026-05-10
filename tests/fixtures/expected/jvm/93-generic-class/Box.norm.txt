@@ -1,0 +1,28 @@
+class_version major=61 minor=0
+this_class    Box
+super_class   java/lang/Object
+access_flags  0x0021
+field         value : Ljava/lang/Object; 0x0001
+method        <init> (Ljava/lang/Object;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Box.value:Ljava/lang/Object;)
+    0009 return
+method        get ()Ljava/lang/Object; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Box.value:Ljava/lang/Object;)
+    0004 astore_1
+    0005 aload_0
+    0006 aload_1
+    0007 putfield Field(Box.value:Ljava/lang/Object;)
+    0010 aload_1
+    0011 areturn
+method        getValue ()Ljava/lang/Object; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Box.value:Ljava/lang/Object;)
+    0004 areturn

@@ -6,9 +6,9 @@ method        area (D)D 0x0019
   code        max_stack=4 max_locals=2
     0000 dload_0
     0001 dload_0
-    0002 op_0x6B
+    0002 dmul
     0003 ldc2_w double(3.14159)
-    0006 op_0x6B
+    0006 dmul
     0007 dreturn
 method        main ()V 0x0019
   code        max_stack=3 max_locals=2

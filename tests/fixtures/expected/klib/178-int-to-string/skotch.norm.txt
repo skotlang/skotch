@@ -17,6 +17,7 @@ unique_name=inputkt
       "params": [],
       "locals": [
         "Int",
+        "String",
         "Unit",
         "String",
         "Unit",
@@ -42,7 +43,12 @@ unique_name=inputkt
                 "dest": 1,
                 "value": {
                   "Call": {
-                    "kind": "Println",
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001",
+                        "descriptor": "(I)Ljava/lang/String;"
+                      }
+                    },
                     "args": [
                       0
                     ]
@@ -54,8 +60,11 @@ unique_name=inputkt
               "Assign": {
                 "dest": 2,
                 "value": {
-                  "Const": {
-                    "String": 0
+                  "Call": {
+                    "kind": "Println",
+                    "args": [
+                      1
+                    ]
                   }
                 }
               }
@@ -64,10 +73,20 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
+                  "Const": {
+                    "String": 0
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 4,
+                "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      2,
+                      3,
                       0
                     ]
                   }
@@ -76,7 +95,7 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 4,
+                "dest": 5,
                 "value": {
                   "Const": {
                     "Int": 1
@@ -86,24 +105,24 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 5,
+                "dest": 6,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 0,
-                    "rhs": 4
+                    "rhs": 5
                   }
                 }
               }
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 7,
                 "value": {
                   "Call": {
                     "kind": "PrintlnConcat",
                     "args": [
-                      5
+                      6
                     ]
                   }
                 }
@@ -116,7 +135,7 @@ unique_name=inputkt
       "return_ty": "Unit",
       "named_locals": [
         0,
-        0
+        1
       ]
     },
     {

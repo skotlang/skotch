@@ -1,0 +1,39 @@
+class_version major=61 minor=0
+this_class    Temperature
+super_class   java/lang/Object
+access_flags  0x0021
+field         celsius : D 0x0001
+field         fahrenheit : D 0x0001
+method        <init> (D)V 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 dload_1
+    0006 putfield Field(Temperature.celsius:D)
+    0009 return
+method        getCelsius ()D 0x0001
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Temperature.celsius:D)
+    0004 dreturn
+method        getFahrenheit ()D 0x0001
+  code        max_stack=4 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Temperature.celsius:D)
+    0004 aload_0
+    0005 getfield Field(Temperature.fahrenheit:D)
+    0008 dstore_1
+    0009 ldc2_w double(9)
+    0012 dmul
+    0013 ldc2_w double(5)
+    0016 ddiv
+    0017 ldc2_w double(32)
+    0020 dadd
+    0021 dreturn
+method        setCelsius (D)V 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 dload_1
+    0002 putfield Field(Temperature.celsius:D)
+    0005 return

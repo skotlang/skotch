@@ -34,7 +34,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 0
                   }
                 }
               }
@@ -361,7 +361,6 @@ unique_name=inputkt
               "Class": "Document"
             },
             "String",
-            "String",
             "String"
           ],
           "blocks": [
@@ -383,20 +382,16 @@ unique_name=inputkt
                   "Assign": {
                     "dest": 2,
                     "value": {
-                      "Const": {
-                        "String": 0
-                      }
-                    }
-                  }
-                },
-                {
-                  "Assign": {
-                    "dest": 3,
-                    "value": {
-                      "BinOp": {
-                        "op": "ConcatStr",
-                        "lhs": 2,
-                        "rhs": 1
+                      "Call": {
+                        "kind": {
+                          "MakeConcatWithConstants": {
+                            "recipe": "Document: \u0001",
+                            "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                          }
+                        },
+                        "args": [
+                          1
+                        ]
                       }
                     }
                   }
@@ -416,7 +411,7 @@ unique_name=inputkt
                 }
               ],
               "terminator": {
-                "ReturnValue": 3
+                "ReturnValue": 2
               }
             }
           ],
@@ -511,7 +506,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    "Document: ",
     "Hello"
   ]
 }

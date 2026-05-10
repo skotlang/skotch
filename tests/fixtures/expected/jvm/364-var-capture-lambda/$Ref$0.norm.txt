@@ -1,0 +1,13 @@
+class_version major=61 minor=0
+this_class    $Ref$0
+super_class   java/lang/Object
+access_flags  0x0021
+field         element : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field($Ref$0.element:I)
+    0009 return

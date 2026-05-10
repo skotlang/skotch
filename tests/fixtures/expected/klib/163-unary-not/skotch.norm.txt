@@ -55,7 +55,7 @@ unique_name=inputkt
                 "dest": 1,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -65,9 +65,9 @@ unique_name=inputkt
                 "dest": 2,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 1,
-                    "rhs": 0
+                    "op": "CmpEq",
+                    "lhs": 0,
+                    "rhs": 1
                   }
                 }
               }
@@ -100,7 +100,7 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -110,9 +110,9 @@ unique_name=inputkt
                 "dest": 6,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 5,
-                    "rhs": 4
+                    "op": "CmpEq",
+                    "lhs": 4,
+                    "rhs": 5
                   }
                 }
               }
@@ -167,7 +167,7 @@ unique_name=inputkt
                 "dest": 11,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -177,9 +177,9 @@ unique_name=inputkt
                 "dest": 12,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 11,
-                    "rhs": 10
+                    "op": "CmpEq",
+                    "lhs": 10,
+                    "rhs": 11
                   }
                 }
               }
@@ -212,7 +212,7 @@ unique_name=inputkt
                 "dest": 15,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -222,9 +222,9 @@ unique_name=inputkt
                 "dest": 16,
                 "value": {
                   "BinOp": {
-                    "op": "SubI",
-                    "lhs": 15,
-                    "rhs": 14
+                    "op": "CmpEq",
+                    "lhs": 14,
+                    "rhs": 15
                   }
                 }
               }

@@ -1,7 +1,7 @@
 dex_version   035
-strings       22
-types         9
-methods       8
+strings       23
+types         10
+methods       9
 classes       1
 
 --- strings ---
@@ -15,6 +15,7 @@ classes       1
   "Ljava/lang/Object;"
   "Ljava/lang/String;"
   "Ljava/lang/System;"
+  "Lkotlin/NoWhenBranchMatchedException;"
   "V"
   "VL"
   "[Ljava/lang/String;"
@@ -36,6 +37,7 @@ classes       1
   Ljava/lang/Object;
   Ljava/lang/String;
   Ljava/lang/System;
+  Lkotlin/NoWhenBranchMatchedException;
   V
   [Ljava/lang/String;
 
@@ -48,11 +50,12 @@ classes       1
   LSuccess;.<init>(Ljava/lang/String;)V
   LSuccess;.getValue()Ljava/lang/String;
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Lkotlin/NoWhenBranchMatchedException;.<init>()V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=10 ins=1 outs=1 insns=26
+  method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=12 ins=1 outs=1 insns=31
   method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=33
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

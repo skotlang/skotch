@@ -636,7 +636,21 @@ pub fn lower_file(
                 + if f.is_suspend { 1 } else { 0 };
             let placeholder_params: Vec<LocalId> =
                 (0..placeholder_param_count as u32).map(LocalId).collect();
-            let placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
+            // Populate the placeholder param types from the typechecker so
+            // recursive calls see the real param types (not `Any`) and skip
+            // autoboxing primitive arguments.
+            let mut placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
+            if !f.is_suspend {
+                let receiver_offset = if f.receiver_ty.is_some() { 1 } else { 0 };
+                if let Some(tf) = typed.functions.get(fn_pass1_idx) {
+                    for (i, ty) in tf.param_tys.iter().enumerate() {
+                        let pos = receiver_offset + i;
+                        if pos < placeholder_locals.len() {
+                            placeholder_locals[pos] = ty.clone();
+                        }
+                    }
+                }
+            }
             let fn_annotations = lower_annotations(&f.annotations, interner, None);
             module.functions.push(MirFunction {
                 id,
@@ -1019,15 +1033,23 @@ pub fn lower_file(
     for decl in &file.decls {
         if let Decl::Val(v) = decl {
             if let Some(c) = lower_const_init(&v.init, &mut module) {
-                name_to_global.insert(v.name, c.clone());
-                // Track for emission as a static field in the wrapper
-                // class. kotlinc emits all top-level vals (including
-                // non-`const`) as static fields with getter methods,
-                // but we only handle `const val` here for now.
+                let ty = const_ty(&c);
+                let name_str = interner.resolve(v.name).to_string();
                 if v.is_const {
-                    let ty = const_ty(&c);
-                    let name_str = interner.resolve(v.name).to_string();
+                    // `const val` → `public static final` field with
+                    // ConstantValue attribute. Use sites inline the
+                    // literal directly.
+                    name_to_global.insert(v.name, c.clone());
                     module.top_level_consts.push((name_str, ty, c));
+                } else {
+                    // Regular `val` → `private static final` field plus
+                    // `<clinit>` initializer plus public getter. Use
+                    // sites must NOT inline; they read via `getstatic`.
+                    // Track in `top_level_prop_names` (as a string set on
+                    // the module) so the Ident lookup can recognize and
+                    // emit `Rvalue::GetStaticField` instead of inlining.
+                    module.top_level_props.push((name_str.clone(), ty, c));
+                    module.top_level_prop_names.insert(name_str);
                 }
             }
             // If we can't extract a constant, typeck already errored;
@@ -4803,6 +4825,10 @@ fn lower_stmt(
                         args: vec![init_local],
                     },
                 });
+                // Each destructuring binding (`val (x, y) = ...`) is a
+                // named local — kotlinc materializes them to slots even
+                // when their first use is the next instruction.
+                fb.mf.named_locals.push(result);
                 scope.push((*name, result));
             }
             true
@@ -5230,6 +5256,32 @@ fn lower_expr(
                     value: Rvalue::Const(constant.clone()),
                 });
                 Some(dest)
+            } else if module
+                .top_level_prop_names
+                .contains(interner.resolve(*name))
+            {
+                // Non-`const val` top-level property: kotlinc emits a
+                // `getstatic <wrapper>.<name>:<descriptor>` rather than
+                // inlining the literal.
+                let name_str = interner.resolve(*name).to_string();
+                let prop = module
+                    .top_level_props
+                    .iter()
+                    .find(|(n, _, _)| n == &name_str)
+                    .cloned();
+                let ty = prop.as_ref().map(|p| p.1.clone()).unwrap_or(Ty::Any);
+                let descriptor = jvm_type_string_for_ty(&ty);
+                let class_name = module.wrapper_class.clone();
+                let dest = fb.new_local(ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::GetStaticField {
+                        class_name,
+                        field_name: name_str,
+                        descriptor,
+                    },
+                });
+                Some(dest)
             } else if let Some(jvm_class) = module.import_map.get(interner.resolve(*name)) {
                 // Imported class/object reference (e.g. MaterialTheme, Modifier, R).
                 // Emit as a class reference — used for static field access, companion calls.
@@ -5403,6 +5455,102 @@ fn lower_expr(
                 });
                 fb.terminate_and_switch(Terminator::Goto(merge_block), merge_block);
                 return Some(result);
+            }
+
+            // ── String-concat chain fusion ─────────────────────────────
+            // `"a" + x + ", b=" + y + ", c=" + z` parses as nested
+            // `BinOp::Add`. kotlinc collapses the entire chain into a
+            // single `invokedynamic makeConcatWithConstants` with one
+            // recipe and one arg per dynamic operand. We mirror that:
+            // when the outer op is `+` and any operand is a String,
+            // walk the chain into a flat list, build a recipe, and
+            // emit one `MakeConcatWithConstants` call.
+            if matches!(op, BinOp::Add) {
+                let mut chain: Vec<&Expr> = Vec::new();
+                fn collect_add<'a>(e: &'a Expr, out: &mut Vec<&'a Expr>) {
+                    if let Expr::Binary {
+                        op: BinOp::Add,
+                        lhs,
+                        rhs,
+                        ..
+                    } = e
+                    {
+                        collect_add(lhs, out);
+                        collect_add(rhs, out);
+                    } else {
+                        out.push(e);
+                    }
+                }
+                collect_add(lhs, &mut chain);
+                collect_add(rhs, &mut chain);
+                if chain.len() >= 3 {
+                    // Heuristic: walk the chain, peek each operand's
+                    // shape. If the FIRST operand looks String-like
+                    // (literal/template/known-string Ident), commit to
+                    // the fused emission.
+                    let first_is_stringy = matches!(
+                        chain.first(),
+                        Some(Expr::StringLit(_, _) | Expr::StringTemplate(_, _))
+                    );
+                    if first_is_stringy {
+                        let mut recipe = String::new();
+                        let mut args: Vec<LocalId> = Vec::new();
+                        let mut descriptor = String::from("(");
+                        let mut recipe_safe = true;
+                        for op_expr in &chain {
+                            if let Expr::StringLit(s, _) = op_expr {
+                                if s.contains('\u{1}') || s.contains('\u{2}') {
+                                    recipe_safe = false;
+                                    break;
+                                }
+                                recipe.push_str(s);
+                                continue;
+                            }
+                            let Some(local) = lower_expr(
+                                op_expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            ) else {
+                                recipe_safe = false;
+                                break;
+                            };
+                            let ty = fb.mf.locals[local.0 as usize].clone();
+                            let desc = match &ty {
+                                Ty::String => "Ljava/lang/String;".to_string(),
+                                Ty::Int | Ty::Byte | Ty::Short | Ty::Char => "I".to_string(),
+                                Ty::Long => "J".to_string(),
+                                Ty::Float => "F".to_string(),
+                                Ty::Double => "D".to_string(),
+                                Ty::Bool => "Z".to_string(),
+                                _ => {
+                                    recipe_safe = false;
+                                    break;
+                                }
+                            };
+                            descriptor.push_str(&desc);
+                            args.push(local);
+                            recipe.push('\u{1}');
+                        }
+                        if recipe_safe && !args.is_empty() {
+                            descriptor.push_str(")Ljava/lang/String;");
+                            let dest = fb.new_local(Ty::String);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::MakeConcatWithConstants { recipe, descriptor },
+                                    args,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                }
             }
 
             // ── Constant folding for integer arithmetic ──────────────
@@ -7843,17 +7991,23 @@ fn lower_expr(
                             )
                         {
                             // Dispatch on the receiver's static type
-                            // when the method was inherited from a
-                            // supertype — kotlinc emits
-                            // `invokevirtual <ReceiverClass>` even when
-                            // the method is defined on a parent. Keep
-                            // the resolved class for true JDK methods
-                            // (e.g. `String.length()` on String).
-                            let is_user_class = module.classes.iter().any(|c| c.name == jvm_class);
-                            let dispatch_class = if is_user_class && found_class != jvm_class {
-                                jvm_class.to_string()
-                            } else {
+                            // (kotlinc emits `invokevirtual
+                            // <ReceiverClass>` even when the method is
+                            // declared on a parent class). The JVM's
+                            // virtual dispatch finds the actual
+                            // implementation at runtime, so this is
+                            // semantically equivalent to dispatching
+                            // on `found_class`. Use `found_class` as a
+                            // fallback when `jvm_class` is `Object`
+                            // (recv was `Any` / `Nullable(Any)`) and
+                            // the actual method lives on a more
+                            // specific JDK class.
+                            let dispatch_class = if jvm_class == "java/lang/Object"
+                                && found_class != "java/lang/Object"
+                            {
                                 found_class
+                            } else {
+                                jvm_class.to_string()
                             };
                             let dest = fb.new_local(ret_ty);
                             fb.push_stmt(MStmt::Assign {
@@ -11783,7 +11937,7 @@ fn lower_expr(
             //   else e3
             // Detect subjectless when: subject is BoolLit(true).
             let is_subjectless = matches!(subject.as_ref(), Expr::BoolLit(true, _));
-            let subj = lower_expr(
+            let subj_raw = lower_expr(
                 subject,
                 fb,
                 scope,
@@ -11794,6 +11948,43 @@ fn lower_expr(
                 diags,
                 loop_ctx,
             )?;
+            // For reference-typed when-subjects that are bare identifiers
+            // (param/local), kotlinc materializes a fresh copy in a new
+            // slot so all `is`/`==` reads anchor to the same location.
+            // Primitive subjects use the original slot (kotlinc emits
+            // `iload_<slot>` once per branch). Detect by:
+            //   1. subject AST is `Expr::Ident`
+            //   2. lowered subject's MIR type is a reference (Class, Any,
+            //      Nullable, String) — primitives skip materialization
+            // For reference-typed when-subjects that are bare identifiers
+            // (param/local), kotlinc materializes a fresh copy in a new
+            // slot for `is`-check dispatch. In the BODY of each branch
+            // kotlinc still uses the ORIGINAL identifier (the
+            // smart-cast applies to the source variable, not the copy).
+            // We therefore do NOT push the copy into scope; subsequent
+            // lowering of the body's identifier reads finds the
+            // original. The copy is referenced explicitly by the
+            // pattern-dispatch lowering below.
+            let subj = if is_subjectless {
+                subj_raw
+            } else {
+                let raw_ty = fb.mf.locals[subj_raw.0 as usize].clone();
+                let needs_copy = matches!(subject.as_ref(), Expr::Ident(_, _))
+                    && matches!(
+                        raw_ty,
+                        Ty::Class(_) | Ty::Any | Ty::Nullable(_) | Ty::String
+                    );
+                if needs_copy {
+                    let copy = fb.new_local(raw_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: copy,
+                        value: Rvalue::Local(subj_raw),
+                    });
+                    copy
+                } else {
+                    subj_raw
+                }
+            };
 
             // Sealed class exhaustiveness check: if the subject is a sealed
             // class, verify all subclasses are covered by `is` patterns.
@@ -11853,6 +12044,8 @@ fn lower_expr(
                 cmp_blks.push(fb.new_block());
                 body_blks.push(fb.new_block());
             }
+            let body_is_first: Vec<bool> = vec![true; branches.len()];
+            let _ = body_is_first;
             // Always create an else block — even without an explicit else body,
             // we need it to assign a default value so the JVM verifier sees an
             // initialized result on all paths.
@@ -11867,18 +12060,86 @@ fn lower_expr(
             }
 
             for (i, branch) in branches.iter().enumerate() {
-                // We're now in cmp_blks[i]
-                let pattern_local = lower_expr(
-                    &branch.pattern,
-                    fb,
-                    scope,
-                    module,
-                    name_to_func,
-                    name_to_global,
-                    interner,
-                    diags,
-                    loop_ctx,
-                )?;
+                // We're now in cmp_blks[i].
+                // For `is`-check patterns when the subject was materialized
+                // to a fresh local, dispatch directly off `subj` (the
+                // materialized copy) rather than re-lowering the pattern's
+                // cloned `Ident` (which would resolve to the original
+                // parameter). This matches kotlinc's slot allocation:
+                // dispatch reads the materialized slot, body reads the
+                // original.
+                let pattern_local = if let Expr::IsCheck {
+                    type_name, negated, ..
+                } = &branch.pattern
+                {
+                    if subj != subj_raw && !is_subjectless {
+                        let raw_type_str = interner.resolve(*type_name);
+                        let substituted = fb.reified_types.get(raw_type_str).cloned();
+                        let type_str = substituted.as_deref().unwrap_or(raw_type_str);
+                        let jvm_type = match type_str {
+                            "String" => "java/lang/String".to_string(),
+                            "Int" => "java/lang/Integer".to_string(),
+                            "Long" => "java/lang/Long".to_string(),
+                            "Double" => "java/lang/Double".to_string(),
+                            "Boolean" => "java/lang/Boolean".to_string(),
+                            "Any" => "java/lang/Object".to_string(),
+                            other => other.to_string(),
+                        };
+                        let dest = fb.new_local(Ty::Bool);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::InstanceOf {
+                                obj: subj,
+                                type_descriptor: jvm_type,
+                            },
+                        });
+                        if *negated {
+                            // Negate via `dest == false` — produces 1
+                            // when `dest` was 0 and 0 when `dest` was 1.
+                            let zero = fb.new_local(Ty::Bool);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: zero,
+                                value: Rvalue::Const(MirConst::Bool(false)),
+                            });
+                            let neg = fb.new_local(Ty::Bool);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: neg,
+                                value: Rvalue::BinOp {
+                                    op: MBinOp::CmpEq,
+                                    lhs: dest,
+                                    rhs: zero,
+                                },
+                            });
+                            neg
+                        } else {
+                            dest
+                        }
+                    } else {
+                        lower_expr(
+                            &branch.pattern,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?
+                    }
+                } else {
+                    lower_expr(
+                        &branch.pattern,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        loop_ctx,
+                    )?
+                };
 
                 // Determine the comparison for this branch.
                 let cmp = if let Some(ref range_end_expr) = branch.range_end {
@@ -12189,23 +12450,84 @@ fn lower_expr(
                     }
                 }
             } else {
-                // No else body — assign a default to the result local so the
-                // JVM verifier doesn't see an uninitialized local on the
-                // implicit fall-through path.
-                let result_ty = &fb.mf.locals[result.0 as usize];
-                let default_val = match result_ty {
-                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
-                        MirConst::Int(0)
+                // No else body. Detect "exhaustive when on a sealed
+                // class" (every direct subclass appears as an `is`
+                // pattern). kotlinc throws `NoWhenBranchMatchedException`
+                // for that path; otherwise we fall back to a default
+                // value (matches kotlinc for non-exhaustive whens too).
+                let throws_no_branch = !is_subjectless && {
+                    let subj_ty = fb.mf.locals[subj.0 as usize].clone();
+                    if let Ty::Class(class_name) = subj_ty {
+                        let is_sealed = module
+                            .classes
+                            .iter()
+                            .any(|c| c.name == class_name && c.is_abstract && !c.is_interface);
+                        if is_sealed {
+                            let subclasses: Vec<String> = module
+                                .classes
+                                .iter()
+                                .filter(|c| c.super_class.as_deref() == Some(class_name.as_str()))
+                                .map(|c| c.name.clone())
+                                .collect();
+                            let covered: rustc_hash::FxHashSet<String> = branches
+                                .iter()
+                                .filter_map(|b| {
+                                    if let Expr::IsCheck { type_name, .. } = &b.pattern {
+                                        Some(interner.resolve(*type_name).to_string())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            !subclasses.is_empty()
+                                && subclasses.iter().all(|s| covered.contains(s.as_str()))
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
                     }
-                    Ty::Long => MirConst::Long(0),
-                    Ty::Double => MirConst::Double(0.0),
-                    _ => MirConst::Null,
                 };
-                fb.push_stmt(MStmt::Assign {
-                    dest: result,
-                    value: Rvalue::Const(default_val),
-                });
-                fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+
+                if throws_no_branch {
+                    let exc_class = "kotlin/NoWhenBranchMatchedException".to_string();
+                    let exc = fb.new_local(Ty::Class(exc_class.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: exc,
+                        value: Rvalue::NewInstance(exc_class.clone()),
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest: exc,
+                        value: Rvalue::Call {
+                            kind: CallKind::ConstructorJava {
+                                class_name: exc_class,
+                                descriptor: "()V".to_string(),
+                            },
+                            args: vec![],
+                        },
+                    });
+                    // Set terminator on the current (else) block; do NOT
+                    // switch to merge — the throw is the path's terminus.
+                    fb.set_terminator(Terminator::Throw(exc));
+                    // Switch to merge_blk so the trailing fix-up below
+                    // operates on the correct block.
+                    fb.cur_block = merge_blk;
+                } else {
+                    let result_ty = &fb.mf.locals[result.0 as usize];
+                    let default_val = match result_ty {
+                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool | Ty::Float => {
+                            MirConst::Int(0)
+                        }
+                        Ty::Long => MirConst::Long(0),
+                        Ty::Double => MirConst::Double(0.0),
+                        _ => MirConst::Null,
+                    };
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Const(default_val),
+                    });
+                    fb.terminate_and_switch(Terminator::Goto(merge_blk), merge_blk);
+                }
             }
 
             // If the merge block is unreachable (all branches
@@ -12883,9 +13205,16 @@ fn lower_expr(
                 then_block,
             );
 
-            // Result typed as Any (java/lang/Object) so both branches
-            // (nullable lhs or concrete rhs) are verifier-compatible.
-            let result = fb.new_local(Ty::Any);
+            // Type the result with the lhs's non-nullable inner type
+            // when lhs is Nullable(T). This lets follow-on code skip a
+            // checkcast that would otherwise narrow Object → T at the
+            // use site. If rhs's type diverges, fall back to Ty::Any.
+            let lhs_ty = fb.mf.locals[l.0 as usize].clone();
+            let initial_result_ty = match &lhs_ty {
+                Ty::Nullable(inner) => (**inner).clone(),
+                _ => Ty::Any,
+            };
+            let result = fb.new_local(initial_result_ty.clone());
             fb.push_stmt(MStmt::Assign {
                 dest: result,
                 value: Rvalue::Local(l),
@@ -12904,6 +13233,12 @@ fn lower_expr(
                 diags,
                 loop_ctx,
             )?;
+            // If rhs's type diverges from the chosen result type, widen
+            // to Any so the verifier accepts both paths.
+            let r_ty = fb.mf.locals[r.0 as usize].clone();
+            if r_ty != initial_result_ty {
+                fb.mf.locals[result.0 as usize] = Ty::Any;
+            }
             fb.push_stmt(MStmt::Assign {
                 dest: result,
                 value: Rvalue::Local(r),
@@ -13414,16 +13749,70 @@ fn lower_expr(
                     other
                 }
             };
-            // Const-fold when `obj`'s static type already matches the
-            // checked type — kotlinc emits `iconst_1` for an `is` against
-            // the same class. Limited to exact-match (no subtype walk yet).
+            // Const-fold when `obj`'s static or last-assigned type
+            // already matches the checked type — kotlinc emits
+            // `iconst_1` for an `is` against the same class. Only
+            // applies when the local has a single producer in the
+            // current block (no later overwrite or join), so the type
+            // narrowing is unambiguous.
             if !*negated {
                 let obj_ty = fb.mf.locals[obj.0 as usize].clone();
-                let obj_class = match &obj_ty {
-                    Ty::Class(n) => Some(n.as_str()),
-                    Ty::String if jvm_type == "java/lang/String" => Some("java/lang/String"),
+                let mut obj_class: Option<String> = match &obj_ty {
+                    Ty::Class(n) => Some(n.clone()),
+                    Ty::String if jvm_type == "java/lang/String" => {
+                        Some("java/lang/String".to_string())
+                    }
                     _ => None,
                 };
+                // If the static type is a different class, see whether
+                // the most recent assignment to `obj`'s local was a
+                // `NewInstance`/`Constructor` of a more specific class.
+                // This catches `val r: Result = Ok(42); r is Ok` where
+                // r's declared type is `Result` but we just stored an
+                // `Ok` instance into it.
+                if obj_class.as_deref() != Some(jvm_type) {
+                    // Walk the producer chain backwards through copies
+                    // and `CheckCast` widenings to find the underlying
+                    // class of the object stored into `obj`. Stops at
+                    // a `NewInstance` (definitive class) or a non-copy
+                    // assignment (gives up).
+                    let blk = &fb.mf.blocks[fb.cur_block as usize];
+                    let mut current = obj.0;
+                    for _ in 0..16 {
+                        // bound the chain walk to avoid pathological cases
+                        let mut stepped = false;
+                        for stmt in blk.stmts.iter().rev() {
+                            let MStmt::Assign { dest, value } = stmt;
+                            if dest.0 != current {
+                                continue;
+                            }
+                            match value {
+                                Rvalue::NewInstance(name) => {
+                                    obj_class = Some(name.clone());
+                                }
+                                Rvalue::Local(src) => {
+                                    current = src.0;
+                                    stepped = true;
+                                }
+                                Rvalue::CheckCast { obj: src, .. } => {
+                                    current = src.0;
+                                    stepped = true;
+                                }
+                                Rvalue::Call {
+                                    kind: CallKind::Constructor(name),
+                                    ..
+                                } => {
+                                    obj_class = Some(name.clone());
+                                }
+                                _ => {}
+                            }
+                            break;
+                        }
+                        if !stepped {
+                            break;
+                        }
+                    }
+                }
                 if let Some(class) = obj_class {
                     if class == jvm_type {
                         let dest = fb.new_local(Ty::Bool);
@@ -17792,22 +18181,25 @@ mod tests {
     fn lower_top_level_val_string_inlines_constant() {
         // The val should be inlined as a `Const(String)` at the
         // reference site inside `main`. The MIR should NOT contain
-        // any synthetic global field — vals are pure inlined
-        // constants in skotch's lowering.
+        // Non-`const val` top-level properties become static fields
+        // initialized in `<clinit>` with public getters; references read
+        // them via `GetStaticField`. Matches kotlinc's emission and lets
+        // user code observe re-initialization on class reload.
         let (m, d) = lower(r#"val GREETING = "hi"; fun main() { println(GREETING) }"#);
         assert!(d.is_empty(), "{:?}", d);
-        let real_fns: Vec<_> = m.functions.iter().filter(|f| !f.is_abstract).collect();
-        assert_eq!(real_fns.len(), 1, "no synthetic <clinit> generated");
-        // The string pool has "hi" once (deduped between the val
-        // initializer and any other use).
-        assert_eq!(m.strings, vec!["hi".to_string()]);
-        let main = real_fns[0];
-        // The body must contain a Const(String) load for "hi" — that
-        // came from the inlined global.
+        // The MIR module records the property and its initializer.
+        assert_eq!(m.top_level_props.len(), 1);
+        assert_eq!(m.top_level_props[0].0, "GREETING");
+        // The string pool has "hi" — used by `<clinit>` to put the
+        // value into the field.
+        assert!(m.strings.contains(&"hi".to_string()));
+        let main = m.functions.iter().find(|f| f.name == "main").unwrap();
+        // The body reads the property via `GetStaticField`, NOT an
+        // inlined `Const(String)`.
         assert!(main.blocks[0].stmts.iter().any(|s| matches!(
             s,
             MStmt::Assign {
-                value: Rvalue::Const(MirConst::String(_)),
+                value: Rvalue::GetStaticField { .. },
                 ..
             }
         )));
@@ -17826,7 +18218,9 @@ mod tests {
 
     #[test]
     fn lower_top_level_val_int_inlines_constant() {
-        let (m, d) = lower(r#"val ANSWER = 42; fun main() { println(ANSWER) }"#);
+        // Same as the String case above — non-`const val` properties go
+        // through `GetStaticField`. Use `const val` for inlining.
+        let (m, d) = lower(r#"const val ANSWER = 42; fun main() { println(ANSWER) }"#);
         assert!(d.is_empty(), "{:?}", d);
         let main = &m.functions[0];
         assert!(main.blocks[0].stmts.iter().any(|s| matches!(

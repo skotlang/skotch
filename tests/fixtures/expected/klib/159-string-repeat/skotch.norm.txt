@@ -28,6 +28,7 @@ unique_name=inputkt
         "Bool",
         "String",
         "String",
+        "Bool",
         "Int",
         "Int",
         "String"
@@ -95,7 +96,7 @@ unique_name=inputkt
             "Branch": {
               "cond": 6,
               "then_block": 2,
-              "else_block": 4
+              "else_block": 5
             }
           }
         },
@@ -140,6 +141,29 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
+                  "BinOp": {
+                    "op": "CmpNe",
+                    "lhs": 5,
+                    "rhs": 1
+                  }
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "Branch": {
+              "cond": 9,
+              "then_block": 4,
+              "else_block": 5
+            }
+          }
+        },
+        {
+          "stmts": [
+            {
+              "Assign": {
+                "dest": 10,
+                "value": {
                   "Const": {
                     "Int": 1
                   }
@@ -148,12 +172,12 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 10,
+                "dest": 11,
                 "value": {
                   "BinOp": {
                     "op": "AddI",
                     "lhs": 5,
-                    "rhs": 9
+                    "rhs": 10
                   }
                 }
               }
@@ -162,20 +186,20 @@ unique_name=inputkt
               "Assign": {
                 "dest": 5,
                 "value": {
-                  "Local": 10
+                  "Local": 11
                 }
               }
             }
           ],
           "terminator": {
-            "Goto": 1
+            "Goto": 2
           }
         },
         {
           "stmts": [
             {
               "Assign": {
-                "dest": 11,
+                "dest": 12,
                 "value": {
                   "Local": 3
                 }
@@ -183,7 +207,7 @@ unique_name=inputkt
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 12
           }
         }
       ],

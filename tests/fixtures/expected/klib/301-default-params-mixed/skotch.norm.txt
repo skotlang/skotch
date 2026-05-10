@@ -23,7 +23,6 @@ unique_name=inputkt
         "Int",
         "String",
         "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -33,29 +32,25 @@ unique_name=inputkt
               "Assign": {
                 "dest": 3,
                 "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 1,
-                    "rhs": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 4,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 3,
-                    "rhs": 2
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "\u0001\u0001\u0001",
+                        "descriptor": "(Ljava/lang/String;ILjava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      1,
+                      0,
+                      2
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 4
+            "ReturnValue": 3
           }
         }
       ],
@@ -284,7 +279,19 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "default_call_masks": [
+        [
+          0,
+          3,
+          6
+        ],
+        [
+          0,
+          8,
+          4
+        ]
+      ]
     },
     {
       "id": 2,

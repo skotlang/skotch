@@ -41,20 +41,17 @@ method        sumOfSquares (I)I 0x0019
     0003 istore_2
     0004 iload_2
     0005 iload_0
-    0006 if_icmpgt 28
-    0009 iload_2
-    0010 invokestatic Method(InputKt.squared:(I)I)
-    0013 iload_1
-    0014 swap
-    0015 iadd
-    0016 istore_1
-    0017 iload_2
-    0018 iload_0
-    0019 if_icmpeq 28
-    0022 op_0x84
-    0023 iconst_m1
-    0024 aconst_null
-    0025 goto 9
-    0028 iload_1
-    0029 ireturn
+    0006 if_icmpgt 27
+    0009 iload_1
+    0010 iload_2
+    0011 invokestatic Method(InputKt.squared:(I)I)
+    0014 iadd
+    0015 istore_1
+    0016 iload_2
+    0017 iload_0
+    0018 if_icmpeq 27
+    0021 iinc 2 1
+    0024 goto 9
+    0027 iload_1
+    0028 ireturn
     sub_attr  StackMapTable (8 bytes)

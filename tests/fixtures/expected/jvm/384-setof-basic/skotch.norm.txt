@@ -5,9 +5,7 @@ access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=3 max_locals=7
     0000 iconst_5
-    0001 op_0xBD
-    0002 nop
-    0003 iconst_1
+    0001 anewarray Class(java/lang/Object)
     0004 astore_0
     0005 iconst_1
     0006 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
@@ -15,35 +13,35 @@ method        main ()V 0x0019
     0010 aload_0
     0011 iconst_0
     0012 aload_1
-    0013 op_0x53
+    0013 aastore
     0014 iconst_2
     0015 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0018 astore_1
     0019 aload_0
     0020 iconst_1
     0021 aload_1
-    0022 op_0x53
+    0022 aastore
     0023 iconst_3
     0024 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0027 astore_1
     0028 aload_0
     0029 iconst_2
     0030 aload_1
-    0031 op_0x53
+    0031 aastore
     0032 iconst_2
     0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0036 astore_1
     0037 aload_0
     0038 iconst_3
     0039 aload_1
-    0040 op_0x53
+    0040 aastore
     0041 iconst_1
     0042 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0045 astore_1
     0046 aload_0
     0047 iconst_4
     0048 aload_1
-    0049 op_0x53
+    0049 aastore
     0050 aload_0
     0051 invokestatic Method(kotlin/collections/SetsKt.setOf:([Ljava/lang/Object;)Ljava/util/Set;)
     0054 astore 6

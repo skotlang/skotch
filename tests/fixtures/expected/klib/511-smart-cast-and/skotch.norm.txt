@@ -29,7 +29,6 @@ unique_name=inputkt
         "String",
         "String",
         "String",
-        "String",
         "String"
       ],
       "blocks": [
@@ -152,16 +151,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 9,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
-                "value": {
                   "Call": {
                     "kind": {
                       "VirtualJava": {
@@ -179,19 +168,25 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
+                "dest": 10,
                 "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 9,
-                    "rhs": 10
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "long string: \u0001",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      9
+                    ]
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 11
+            "ReturnValue": 10
           }
         },
         {
@@ -204,17 +199,17 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 12,
+                "dest": 11,
                 "value": {
                   "Const": {
-                    "String": 1
+                    "String": 0
                   }
                 }
               }
             }
           ],
           "terminator": {
-            "ReturnValue": 12
+            "ReturnValue": 11
           }
         }
       ],
@@ -251,7 +246,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 1
                   }
                 }
               }
@@ -289,7 +284,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 2
                   }
                 }
               }
@@ -574,7 +569,6 @@ unique_name=inputkt
   ],
   "classes": [],
   "strings": [
-    "long string: ",
     "other",
     "hello",
     "hi"

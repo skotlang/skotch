@@ -1,0 +1,16 @@
+class_version major=61 minor=0
+this_class    InputKt$main$h$1
+super_class   Handler
+access_flags  0x0021
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(Handler.<init>:()V)
+    0004 return
+method        handle (Ljava/lang/String;)Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=2
+    0000 aload_1
+    0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0006 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

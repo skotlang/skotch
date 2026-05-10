@@ -28,12 +28,10 @@ unique_name=inputkt
         },
         "String",
         "String",
-        "String",
         "Bool",
         {
           "Class": "Failure"
         },
-        "String",
         "String",
         "String"
       ],
@@ -80,16 +78,6 @@ unique_name=inputkt
               "Assign": {
                 "dest": 4,
                 "value": {
-                  "Const": {
-                    "String": 0
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 5,
-                "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
@@ -106,12 +94,18 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 6,
+                "dest": 5,
                 "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 4,
-                    "rhs": 5
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "OK: \u0001",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
+                      }
+                    },
+                    "args": [
+                      4
+                    ]
                   }
                 }
               }
@@ -120,7 +114,7 @@ unique_name=inputkt
               "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 6
+                  "Local": 5
                 }
               }
             }
@@ -133,7 +127,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 7,
+                "dest": 6,
                 "value": {
                   "InstanceOf": {
                     "obj": 0,
@@ -145,7 +139,7 @@ unique_name=inputkt
           ],
           "terminator": {
             "Branch": {
-              "cond": 7,
+              "cond": 6,
               "then_block": 4,
               "else_block": 5
             }
@@ -155,7 +149,7 @@ unique_name=inputkt
           "stmts": [
             {
               "Assign": {
-                "dest": 8,
+                "dest": 7,
                 "value": {
                   "Local": 0
                 }
@@ -163,23 +157,31 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 9,
-                "value": {
-                  "Const": {
-                    "String": 1
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
-                "dest": 10,
+                "dest": 8,
                 "value": {
                   "Call": {
                     "kind": {
                       "Virtual": {
                         "class_name": "Failure",
                         "method_name": "getError"
+                      }
+                    },
+                    "args": [
+                      7
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Assign": {
+                "dest": 9,
+                "value": {
+                  "Call": {
+                    "kind": {
+                      "MakeConcatWithConstants": {
+                        "recipe": "ERR: \u0001",
+                        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;"
                       }
                     },
                     "args": [
@@ -191,21 +193,9 @@ unique_name=inputkt
             },
             {
               "Assign": {
-                "dest": 11,
-                "value": {
-                  "BinOp": {
-                    "op": "ConcatStr",
-                    "lhs": 9,
-                    "rhs": 10
-                  }
-                }
-              }
-            },
-            {
-              "Assign": {
                 "dest": 1,
                 "value": {
-                  "Local": 11
+                  "Local": 9
                 }
               }
             }
@@ -271,7 +261,7 @@ unique_name=inputkt
                 "dest": 0,
                 "value": {
                   "Const": {
-                    "String": 2
+                    "String": 0
                   }
                 }
               }
@@ -332,7 +322,7 @@ unique_name=inputkt
                 "dest": 4,
                 "value": {
                   "Const": {
-                    "String": 3
+                    "String": 1
                   }
                 }
               }
@@ -828,8 +818,6 @@ unique_name=inputkt
     }
   ],
   "strings": [
-    "OK: ",
-    "ERR: ",
     "hello",
     "oops"
   ]

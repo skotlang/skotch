@@ -382,7 +382,14 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "named_locals": [
+        4,
+        5,
+        15,
+        16,
+        17
+      ]
     },
     {
       "id": 1,

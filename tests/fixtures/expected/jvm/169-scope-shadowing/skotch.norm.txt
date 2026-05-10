@@ -21,9 +21,7 @@ method        main ()V 0x0019
     0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0025 iload_2
     0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0029 op_0x84
-    0030 aconst_null
-    0031 aconst_null
+    0029 iinc 1 1
     0032 goto 12
     0035 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0038 iload_0

@@ -15,25 +15,16 @@ method        joinNumbers (I)Ljava/lang/String; 0x0019
     0011 iconst_1
     0012 if_icmple 22
     0015 aload_1
-    0016 op_0xBA
-    0017 nop
-    0018 iload 0
-    0020 nop
+    0016 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0021 astore_1
     0022 aload_1
     0023 iload_2
-    0024 op_0xBA
-    0025 nop
-    0026 iload_0
-    0027 nop
-    0028 nop
+    0024 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
     0029 astore_1
     0030 iload_2
     0031 iload_0
     0032 if_icmpeq 41
-    0035 op_0x84
-    0036 iconst_m1
-    0037 aconst_null
+    0035 iinc 2 1
     0038 goto 10
     0041 aload_1
     0042 areturn

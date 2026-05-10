@@ -3,46 +3,41 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=4
+  code        max_stack=3 max_locals=4
     0000 ldc "hello"
     0002 astore_0
     0003 aload_0
-    0004 op_0xC6
-    0005 nop
-    0006 sipush 10944
-    0009 nop
-    0010 lconst_1
-    0011 invokevirtual Method(java/lang/String.length:()I)
-    0014 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0017 astore_1
-    0018 goto 23
-    0021 aconst_null
-    0022 astore_1
-    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0026 aload_1
-    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0030 aload_0
-    0031 op_0xC7
-    0032 nop
-    0033 fconst_0
-    0034 new Class(java/lang/NullPointerException)
-    0037 dup
-    0038 invokespecial Method(java/lang/NullPointerException.<init>:()V)
-    0041 athrow
-    0042 aload_0
-    0043 checkcast Class(java/lang/String)
-    0046 invokevirtual Method(java/lang/String.toUpperCase:()Ljava/lang/String;)
-    0049 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0052 swap
-    0053 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0056 aconst_null
-    0057 astore_2
-    0058 aload_2
-    0059 op_0xC6
-    0060 nop
-    0061 sipush 11456
-    0064 nop
-    0065 lconst_1
+    0004 ifnull 18
+    0007 aload_0
+    0008 invokevirtual Method(java/lang/String.length:()I)
+    0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0014 astore_1
+    0015 goto 20
+    0018 aconst_null
+    0019 astore_1
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 aload_1
+    0024 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0027 aload_0
+    0028 ifnonnull 39
+    0031 new Class(java/lang/NullPointerException)
+    0034 dup
+    0035 invokespecial Method(java/lang/NullPointerException.<init>:()V)
+    0038 athrow
+    0039 aload_0
+    0040 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0043 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0046 dup
+    0047 ldc "toUpperCase(...)"
+    0049 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 swap
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 aconst_null
+    0060 astore_2
+    0061 aload_2
+    0062 ifnull 76
+    0065 aload_2
     0066 invokevirtual Method(java/lang/String.length:()I)
     0069 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0072 astore_3

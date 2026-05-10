@@ -1,0 +1,35 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$1
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function1]
+field         a : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(InputKt$Lambda$1.a:I)
+    0009 return
+method        invoke (Ljava/lang/Object;)Ljava/lang/Object; 0x0001
+  code        max_stack=4 max_locals=5
+    0000 aload_0
+    0001 getfield Field(InputKt$Lambda$1.a:I)
+    0004 istore_2
+    0005 aload_1
+    0006 checkcast Class(java/lang/Integer)
+    0009 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0012 istore_3
+    0013 new Class(InputKt$Lambda$2)
+    0016 dup
+    0017 iload_2
+    0018 iload_3
+    0019 invokespecial Method(InputKt$Lambda$2.<init>:(II)V)
+    0022 astore 4
+    0024 iconst_3
+    0025 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0028 aload 4
+    0030 swap
+    0031 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0034 areturn

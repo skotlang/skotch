@@ -1,0 +1,23 @@
+class_version major=61 minor=0
+this_class    Child
+super_class   Base
+access_flags  0x0021
+field         y : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 iload_1
+    0001 iconst_2
+    0002 imul
+    0003 istore_2
+    0004 aload_0
+    0005 iload_2
+    0006 invokespecial Method(Base.<init>:(I)V)
+    0009 aload_0
+    0010 iload_1
+    0011 putfield Field(Child.y:I)
+    0014 return
+method        getY ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Child.y:I)
+    0004 ireturn

@@ -1,0 +1,134 @@
+class_version major=61 minor=0
+this_class    Student
+super_class   java/lang/Object
+access_flags  0x0021
+field         grade : I 0x0001
+field         name : Ljava/lang/String; 0x0001
+method        <init> (Ljava/lang/String;I)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Student.name:Ljava/lang/String;)
+    0009 aload_0
+    0010 iload_2
+    0011 putfield Field(Student.grade:I)
+    0014 return
+method        component1 ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Student.name:Ljava/lang/String;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        component2 ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Student.grade:I)
+    0004 ireturn
+method        copy (Ljava/lang/String;I)LStudent; 0x0001
+  code        max_stack=4 max_locals=3
+    0000 new Class(Student)
+    0003 dup
+    0004 aload_1
+    0005 iload_2
+    0006 invokespecial Method(Student.<init>:(Ljava/lang/String;I)V)
+    0009 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        equals (Ljava/lang/Object;)Z 0x0001
+  code        max_stack=2 max_locals=15
+    0000 aload_0
+    0001 astore_2
+    0002 aload_2
+    0003 aload_1
+    0004 if_acmpne 13
+    0007 iconst_1
+    0008 istore 4
+    0010 iload 4
+    0012 ireturn
+    0013 aload_1
+    0014 instanceof Class(Student)
+    0017 istore 5
+    0019 iload 5
+    0021 ifne 30
+    0024 iconst_0
+    0025 istore 6
+    0027 iload 6
+    0029 ireturn
+    0030 aload_1
+    0031 checkcast Class(Student)
+    0034 astore 7
+    0036 aload_0
+    0037 getfield Field(Student.name:Ljava/lang/String;)
+    0040 astore 8
+    0042 aload 7
+    0044 getfield Field(Student.name:Ljava/lang/String;)
+    0047 astore 9
+    0049 aload 8
+    0051 aload 9
+    0053 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0056 istore 10
+    0058 aload_0
+    0059 getfield Field(Student.grade:I)
+    0062 istore 11
+    0064 aload 7
+    0066 getfield Field(Student.grade:I)
+    0069 istore 12
+    0071 iload 11
+    0073 iload 12
+    0075 if_icmpne 82
+    0078 iconst_1
+    0079 goto 83
+    0082 iconst_0
+    0083 istore 13
+    0085 iload 10
+    0087 iload 13
+    0089 imul
+    0090 istore 14
+    0092 iload 14
+    0094 ireturn
+    sub_attr  StackMapTable (48 bytes)
+method        getGrade ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Student.grade:I)
+    0004 ireturn
+method        getName ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Student.name:Ljava/lang/String;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        hashCode ()I 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Student.name:Ljava/lang/String;)
+    0004 invokevirtual Method(java/lang/String.hashCode:()I)
+    0007 istore_1
+    0008 aload_0
+    0009 getfield Field(Student.grade:I)
+    0012 istore_2
+    0013 bipush 31
+    0015 iload_1
+    0016 imul
+    0017 iload_2
+    0018 iadd
+    0019 ireturn
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 ldc "Student("
+    0002 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0007 astore_1
+    0008 aload_1
+    0009 aload_0
+    0010 getfield Field(Student.name:Ljava/lang/String;)
+    0013 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0018 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0023 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0028 aload_0
+    0029 getfield Field(Student.grade:I)
+    0032 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0037 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0042 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (32 bytes)

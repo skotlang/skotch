@@ -11,49 +11,7 @@ method        greetByLang (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0007 astore_1
     0008 aload_1
     0009 invokevirtual Method(java/lang/String.hashCode:()I)
-    0012 op_0xAB
-    0013 nop
-    0014 nop
-    0015 nop
-    0016 nop
-    0017 nop
-    0018 nop
-    0019 irem
-    0020 nop
-    0021 nop
-    0022 nop
-    0023 iconst_1
-    0024 nop
-    0025 nop
-    0026 fconst_1
-    0027 op_0x81
-    0028 nop
-    0029 nop
-    0030 nop
-    0031 aload_2
-    0032 nop
-    0033 nop
-    0034 fconst_1
-    0035 op_0xA9
-    0036 nop
-    0037 nop
-    0038 nop
-    0039 fstore 0
-    0041 nop
-    0042 fconst_1
-    0043 freturn
-    0044 nop
-    0045 nop
-    0046 nop
-    0047 op_0x50
-    0048 nop
-    0049 nop
-    0050 fconst_1
-    0051 op_0xCC
-    0052 nop
-    0053 nop
-    0054 nop
-    0055 fstore_1
+    0012 lookupswitch default=124 npairs=4 3201=56 3241=68 3246=92 3276=80
     0056 aload_1
     0057 ldc "de"
     0059 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)

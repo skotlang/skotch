@@ -1,0 +1,67 @@
+class_version major=61 minor=0
+this_class    Rectangle
+super_class   java/lang/Object
+access_flags  0x0021
+field         height : I 0x0001
+field         width : I 0x0001
+method        <init> (II)V 0x0001
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Rectangle.width:I)
+    0009 aload_0
+    0010 iload_2
+    0011 putfield Field(Rectangle.height:I)
+    0014 return
+method        area ()I 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Rectangle.width:I)
+    0004 istore_1
+    0005 aload_0
+    0006 getfield Field(Rectangle.height:I)
+    0009 istore_2
+    0010 iload_1
+    0011 iload_2
+    0012 imul
+    0013 aload_0
+    0014 iload_1
+    0015 putfield Field(Rectangle.width:I)
+    0018 aload_0
+    0019 iload_2
+    0020 putfield Field(Rectangle.height:I)
+    0023 ireturn
+method        getHeight ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Rectangle.height:I)
+    0004 ireturn
+method        getWidth ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Rectangle.width:I)
+    0004 ireturn
+method        perimeter ()I 0x0001
+  code        max_stack=3 max_locals=4
+    0000 aload_0
+    0001 getfield Field(Rectangle.width:I)
+    0004 istore_1
+    0005 aload_0
+    0006 getfield Field(Rectangle.height:I)
+    0009 istore_2
+    0010 iload_1
+    0011 iload_2
+    0012 iadd
+    0013 istore_3
+    0014 iconst_2
+    0015 iload_3
+    0016 imul
+    0017 aload_0
+    0018 iload_1
+    0019 putfield Field(Rectangle.width:I)
+    0022 aload_0
+    0023 iload_2
+    0024 putfield Field(Rectangle.height:I)
+    0027 ireturn

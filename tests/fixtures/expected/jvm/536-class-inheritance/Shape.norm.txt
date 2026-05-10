@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    Shape
+super_class   java/lang/Object
+access_flags  0x0021
+field         name : Ljava/lang/String; 0x0001
+method        <init> (Ljava/lang/String;)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 aload_1
+    0006 putfield Field(Shape.name:Ljava/lang/String;)
+    0009 return
+method        area ()I 0x0001
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Shape.name:Ljava/lang/String;)
+    0004 astore_1
+    0005 iconst_0
+    0006 aload_0
+    0007 aload_1
+    0008 putfield Field(Shape.name:Ljava/lang/String;)
+    0011 ireturn
+method        getName ()Ljava/lang/String; 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Shape.name:Ljava/lang/String;)
+    0004 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        toString ()Ljava/lang/String; 0x0001
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 getfield Field(Shape.name:Ljava/lang/String;)
+    0004 astore_1
+    0005 aload_1
+    0006 aload_0
+    0007 invokevirtual Method(Shape.area:()I)
+    0010 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0015 aload_0
+    0016 aload_1
+    0017 putfield Field(Shape.name:Ljava/lang/String;)
+    0020 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

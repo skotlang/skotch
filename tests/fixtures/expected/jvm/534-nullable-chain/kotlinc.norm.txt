@@ -6,18 +6,14 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0019
   code        max_stack=3 max_locals=1
     0000 aload_0
     0001 dup
-    0002 op_0xC6
-    0003 nop
-    0004 ldc_w #45568
-    0007 dconst_0
+    0002 ifnull 21
+    0005 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
     0008 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
     0011 dup
     0012 ldc "toUpperCase(...)"
     0014 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
     0017 dup
-    0018 op_0xC7
-    0019 nop
-    0020 iconst_3
+    0018 ifnonnull 24
     0021 pop
     0022 ldc "STRANGER"
     0024 areturn

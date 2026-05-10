@@ -1,0 +1,31 @@
+class_version major=61 minor=0
+this_class    Box
+super_class   java/lang/Object
+access_flags  0x0021
+field         size : I 0x0001
+method        <init> (I)V 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 aload_0
+    0005 iload_1
+    0006 putfield Field(Box.size:I)
+    0009 return
+method        compareTo (LBox;)I 0x0001
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 getfield Field(Box.size:I)
+    0004 istore_2
+    0005 iload_2
+    0006 aload_1
+    0007 getfield Field(Box.size:I)
+    0010 isub
+    0011 aload_0
+    0012 iload_2
+    0013 putfield Field(Box.size:I)
+    0016 ireturn
+method        getSize ()I 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 getfield Field(Box.size:I)
+    0004 ireturn

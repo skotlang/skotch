@@ -176,7 +176,14 @@ unique_name=inputkt
           "terminator": "Return"
         }
       ],
-      "return_ty": "Unit"
+      "return_ty": "Unit",
+      "default_call_masks": [
+        [
+          0,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": 2,

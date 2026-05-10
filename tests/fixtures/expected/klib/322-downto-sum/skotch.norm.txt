@@ -65,7 +65,7 @@ unique_name=inputkt
                 "dest": 3,
                 "value": {
                   "Const": {
-                    "Int": 1
+                    "Int": 0
                   }
                 }
               }
@@ -90,9 +90,9 @@ unique_name=inputkt
                 "dest": 5,
                 "value": {
                   "BinOp": {
-                    "op": "CmpGe",
-                    "lhs": 4,
-                    "rhs": 3
+                    "op": "CmpLt",
+                    "lhs": 3,
+                    "rhs": 4
                   }
                 }
               }

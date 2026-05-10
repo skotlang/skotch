@@ -32,22 +32,20 @@ method        main ()V 0x0019
     0046 invokespecial Method(kotlin/Pair.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V)
     0049 astore 5
     0051 iconst_3
-    0052 op_0xBD
-    0053 nop
-    0054 dconst_0
+    0052 anewarray Class(kotlin/Pair)
     0055 astore 6
     0057 aload 6
     0059 iconst_0
     0060 aload_1
-    0061 op_0x53
+    0061 aastore
     0062 aload 6
     0064 iconst_1
     0065 aload_3
-    0066 op_0x53
+    0066 aastore
     0067 aload 6
     0069 iconst_2
     0070 aload 5
-    0072 op_0x53
+    0072 aastore
     0073 aload 6
     0075 invokestatic Method(kotlin/collections/MapsKt.mapOf:([Lkotlin/Pair;)Ljava/util/Map;)
     0078 astore 7
@@ -69,11 +67,7 @@ method        main ()V 0x0019
     0127 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
     0132 aload 10
     0134 swap
-    0135 op_0xBA
-    0136 nop
-    0137 dstore_1
-    0138 nop
-    0139 nop
+    0135 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
     0140 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0143 swap
     0144 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

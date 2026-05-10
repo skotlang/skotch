@@ -1,0 +1,25 @@
+class_version major=61 minor=0
+this_class    InputKt$Lambda$0
+super_class   java/lang/Object
+access_flags  0x0021
+interfaces    [kotlin/jvm/functions/Function1]
+method        <init> ()V 0x0001
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokespecial Method(java/lang/Object.<init>:()V)
+    0004 return
+method        invoke (Ljava/lang/Object;)Ljava/lang/Object; 0x0001
+  code        max_stack=2 max_locals=2
+    0000 aload_1
+    0001 iconst_3
+    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0005 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0008 ifeq 13
+    0011 aconst_null
+    0012 areturn
+    0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0016 aload_1
+    0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0020 aconst_null
+    0021 areturn
+    sub_attr  StackMapTable (3 bytes)
