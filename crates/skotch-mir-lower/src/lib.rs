@@ -13033,11 +13033,7 @@ fn lower_expr(
                         .next()
                         .map(|c| c.to_uppercase().to_string())
                         .unwrap_or_default(),
-                    &field_str[field_str
-                        .chars()
-                        .next()
-                        .map(char::len_utf8)
-                        .unwrap_or(0)..]
+                    &field_str[field_str.chars().next().map(char::len_utf8).unwrap_or(0)..]
                 );
                 let companion_hit: Option<(String, String, Ty)> = module
                     .classes
