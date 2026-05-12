@@ -802,6 +802,8 @@ mod tests {
             is_cross_file_stub: false,
             annotations: vec![],
             has_type_params: false,
+            is_object_singleton: false,
+            companion_class_name: None,
         }
     }
 

@@ -693,6 +693,100 @@ fn emit_constval_field(
 /// property. The field has no `ConstantValue` attribute — kotlinc relies
 /// on a `<clinit>` `putstatic` instead so user code can observe the
 /// initializer's reference identity.
+/// Emit a `<clinit>()V` static initializer for an `object Singleton`
+/// class. The body constructs the lone instance and stores it in the
+/// static `INSTANCE` field:
+///   `new Singleton; dup; invokespecial Singleton.<init>()V; putstatic
+///    Singleton.INSTANCE; return`.
+fn emit_singleton_clinit(
+    class_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let name_idx = cp.utf8("<clinit>");
+    let desc_idx = cp.utf8("()V");
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(ACC_STATIC).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(desc_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+
+    // Build the body. cls_idx, init_mref, instance_field_idx must be
+    // emitted in the order kotlinc uses for stable CP layout.
+    let cls_idx = cp.class(class_name);
+    let init_mref = cp.methodref(class_name, "<init>", "()V");
+    let inst_fr = cp.fieldref(class_name, "INSTANCE", &format!("L{};", class_name));
+
+    let mut code: Vec<u8> = Vec::new();
+    code.push(0xBB); // new
+    code.write_u16::<BigEndian>(cls_idx).unwrap();
+    code.push(0x59); // dup
+    code.push(0xB7); // invokespecial
+    code.write_u16::<BigEndian>(init_mref).unwrap();
+    code.push(0xB3); // putstatic
+    code.write_u16::<BigEndian>(inst_fr).unwrap();
+    code.push(0xB1); // return
+
+    // Code attribute.
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    // attribute_length = u16 max_stack + u16 max_locals + u32 code_length
+    //                  + code_length + u16 exception_count + u16 attr_count
+    let attr_len = 2 + 2 + 4 + (code.len() as u32) + 2 + 2;
+    method.write_u32::<BigEndian>(attr_len).unwrap();
+    method.write_u16::<BigEndian>(2).unwrap(); // max_stack (new + dup)
+    method.write_u16::<BigEndian>(0).unwrap(); // max_locals
+    method.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    method.extend_from_slice(&code);
+    method.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    method.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+
+    method
+}
+
+/// Emit `<clinit>()V` for an outer class that owns a companion:
+/// `new CompClass; dup; invokespecial CompClass.<init>()V; putstatic
+///  Outer.Companion; return`.
+fn emit_companion_clinit(
+    outer_name: &str,
+    comp_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let name_idx = cp.utf8("<clinit>");
+    let desc_idx = cp.utf8("()V");
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(ACC_STATIC).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(desc_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap();
+
+    let cls_idx = cp.class(comp_name);
+    let init_mref = cp.methodref(comp_name, "<init>", "()V");
+    let comp_fr = cp.fieldref(outer_name, "Companion", &format!("L{};", comp_name));
+
+    let mut code: Vec<u8> = Vec::new();
+    code.push(0xBB); // new
+    code.write_u16::<BigEndian>(cls_idx).unwrap();
+    code.push(0x59); // dup
+    code.push(0xB7); // invokespecial
+    code.write_u16::<BigEndian>(init_mref).unwrap();
+    code.push(0xB3); // putstatic
+    code.write_u16::<BigEndian>(comp_fr).unwrap();
+    code.push(0xB1); // return
+
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    let attr_len = 2 + 2 + 4 + (code.len() as u32) + 2 + 2;
+    method.write_u32::<BigEndian>(attr_len).unwrap();
+    method.write_u16::<BigEndian>(2).unwrap();
+    method.write_u16::<BigEndian>(0).unwrap();
+    method.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    method.extend_from_slice(&code);
+    method.write_u16::<BigEndian>(0).unwrap();
+    method.write_u16::<BigEndian>(0).unwrap();
+
+    method
+}
+
 fn emit_property_field(name: &str, ty: &Ty, cp: &mut ConstantPool, out: &mut Vec<u8>) {
     let access = ACC_PRIVATE | ACC_STATIC | ACC_FINAL;
     let name_idx = cp.utf8(name);
@@ -1366,20 +1460,37 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let code2 = cp2.utf8("Code");
     let sf_name2 = cp2.utf8("SourceFile");
     let sf_val2 = cp2.utf8(&format!("{}.kt", class.name));
-    // Pre-register field entries.
-    let mut field_infos = Vec::new();
+    // Pre-register field entries. Each tuple is (name_idx, desc_idx,
+    // access_flags).
+    let mut field_infos: Vec<(u16, u16, u16)> = Vec::new();
     // Suspend lambdas need a `label:I` field for the
     // state machine dispatcher. kotlinc declares it on the concrete
     // lambda class (it's not inherited from SuspendLambda).
     if effective_suspend_lambda {
         let n = cp2.utf8("label");
         let d = cp2.utf8("I");
-        field_infos.push((n, d));
+        field_infos.push((n, d, ACC_PUBLIC));
     }
     for field in &class.fields {
         let n = cp2.utf8(&field.name);
         let d = cp2.utf8(&jvm_param_type_string(&field.ty));
-        field_infos.push((n, d));
+        field_infos.push((n, d, ACC_PUBLIC));
+    }
+    // Object singletons get a public static final `INSTANCE` field of
+    // type `LClassName;` that holds the lone instance. Initialized in
+    // `<clinit>` (emitted below alongside the method blobs).
+    if class.is_object_singleton {
+        let n = cp2.utf8("INSTANCE");
+        let d = cp2.utf8(&format!("L{};", class.name));
+        field_infos.push((n, d, ACC_PUBLIC | ACC_STATIC | ACC_FINAL));
+    }
+    // Outer class with a companion: emit a public static final
+    // `Companion` field typed `L<CompanionClass>;`. The outer's
+    // synthetic `<clinit>` initializes this field.
+    if let Some(comp) = class.companion_class_name.as_deref() {
+        let n = cp2.utf8("Companion");
+        let d = cp2.utf8(&format!("L{};", comp));
+        field_infos.push((n, d, ACC_PUBLIC | ACC_STATIC | ACC_FINAL));
     }
     // Pre-register interface entries.
     let iface_indices2: Vec<u16> = class
@@ -1404,6 +1515,19 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             method_blobs2.push(blob);
         }
     } else if !class.is_interface {
+        // Object singletons get a synthetic `<clinit>` that builds
+        // the lone instance and stores it in INSTANCE.
+        if class.is_object_singleton {
+            let blob = emit_singleton_clinit(&class.name, &mut cp2, code2);
+            method_blobs2.push(blob);
+        }
+        // Outer class with a companion: emit a `<clinit>` that
+        // builds the companion instance and stores it in the
+        // `Companion` static field.
+        if let Some(comp) = class.companion_class_name.as_deref() {
+            let blob = emit_companion_clinit(&class.name, comp, &mut cp2, code2);
+            method_blobs2.push(blob);
+        }
         if !primary_conflicts {
             let init2 = emit_user_method(
                 &class.constructor,
@@ -1564,8 +1688,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     }
     out2.write_u16::<BigEndian>(field_infos.len() as u16)
         .unwrap();
-    for (n, d) in &field_infos {
-        out2.write_u16::<BigEndian>(ACC_PUBLIC).unwrap();
+    for (n, d, flags) in &field_infos {
+        out2.write_u16::<BigEndian>(*flags).unwrap();
         out2.write_u16::<BigEndian>(*n).unwrap();
         out2.write_u16::<BigEndian>(*d).unwrap();
         out2.write_u16::<BigEndian>(0).unwrap();
@@ -12826,6 +12950,105 @@ fn walk_block(
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
                     }
                     emit_make_concat_with_constants(code, cp, stack, max_stack, descriptor, recipe);
+                    if !matches!(&func.locals[dest.0 as usize], Ty::Unit) {
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    }
+                }
+                CallKind::LambdaMetafactory {
+                    arity,
+                    method_name,
+                    specialized_descriptor,
+                    impl_class,
+                } => {
+                    // Load captures (args[0..]) onto the stack — none
+                    // for non-capturing lambdas.
+                    for a in args {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                    }
+                    // Call-site descriptor: takes captures, returns
+                    // Kotlin Function<arity>.
+                    let mut call_desc = String::from("(");
+                    for a in args {
+                        let ty = &func.locals[a.0 as usize];
+                        call_desc.push_str(&jvm_param_type_string(ty));
+                    }
+                    call_desc.push(')');
+                    call_desc.push_str(&format!("Lkotlin/jvm/functions/Function{};", arity));
+                    // SAM method type: (Object^arity)Object.
+                    let mut sam = String::from("(");
+                    for _ in 0..*arity {
+                        sam.push_str("Ljava/lang/Object;");
+                    }
+                    sam.push_str(")Ljava/lang/Object;");
+                    // Method handle to the static impl method.
+                    let impl_mref = cp.methodref(impl_class, method_name, specialized_descriptor);
+                    let impl_mh = cp.method_handle(6, impl_mref); // REF_invokeStatic
+                    let sam_mt = cp.method_type(&sam);
+                    let inst_mt = cp.method_type(specialized_descriptor);
+                    let bootstrap_mref = cp.methodref(
+                        "java/lang/invoke/LambdaMetafactory",
+                        "metafactory",
+                        "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;",
+                    );
+                    let bootstrap_mh = cp.method_handle(6, bootstrap_mref);
+                    let bootstrap_idx = cp.bootstrap_method(crate::constant_pool::BootstrapEntry {
+                        method_handle_index: bootstrap_mh,
+                        args: vec![sam_mt, impl_mh, inst_mt],
+                    });
+                    let nat = cp.name_and_type("invoke", &call_desc);
+                    let indy = cp.invoke_dynamic(bootstrap_idx, nat);
+                    code.push(0xBA); // invokedynamic
+                    code.write_u16::<BigEndian>(indy).unwrap();
+                    code.push(0);
+                    code.push(0);
+                    // Stack: pop captures, push 1 Function instance.
+                    let pop = count_descriptor_arg_slots(&call_desc);
+                    bump(stack, max_stack, -pop + 1);
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                }
+                CallKind::FunctionInvoke { arity } => {
+                    // args[0] = receiver, args[1..] = invoke args.
+                    for (i, a) in args.iter().enumerate() {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        // Box primitive invoke args. The receiver is
+                        // always a reference, so skip i == 0.
+                        if i > 0 {
+                            let ty = &func.locals[a.0 as usize];
+                            let box_info: Option<(&str, &str)> = match ty {
+                                Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                    Some(("java/lang/Integer", "(I)Ljava/lang/Integer;"))
+                                }
+                                Ty::Bool => Some(("java/lang/Boolean", "(Z)Ljava/lang/Boolean;")),
+                                Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/Long;")),
+                                Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/Float;")),
+                                Ty::Double => Some(("java/lang/Double", "(D)Ljava/lang/Double;")),
+                                _ => None,
+                            };
+                            if let Some((box_class, box_desc)) = box_info {
+                                let mref = cp.methodref(box_class, "valueOf", box_desc);
+                                code.push(0xB8); // invokestatic
+                                code.write_u16::<BigEndian>(mref).unwrap();
+                                let is_wide = matches!(ty, Ty::Long | Ty::Double);
+                                bump(stack, max_stack, if is_wide { -1 } else { 0 });
+                            }
+                        }
+                    }
+                    let mut inv_desc = String::from("(");
+                    for _ in 0..*arity {
+                        inv_desc.push_str("Ljava/lang/Object;");
+                    }
+                    inv_desc.push_str(")Ljava/lang/Object;");
+                    let mref = cp.interface_methodref(
+                        &format!("kotlin/jvm/functions/Function{}", arity),
+                        "invoke",
+                        &inv_desc,
+                    );
+                    code.push(0xB9); // invokeinterface
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                    code.push(*arity + 1); // count: receiver + N args
+                    code.push(0);
+                    // Pop receiver + N args, push 1 Object.
+                    bump(stack, max_stack, -(*arity as i32));
                     if !matches!(&func.locals[dest.0 as usize], Ty::Unit) {
                         store_local(code, stack, slots, next_slot, *dest, &func.locals);
                     }

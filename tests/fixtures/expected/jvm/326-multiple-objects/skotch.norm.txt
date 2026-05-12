@@ -2,28 +2,18 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        appName ()Ljava/lang/String; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 ldc "MyApp"
-    0002 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        info (Ljava/lang/String;)V 0x0019
-  code        max_stack=2 max_locals=1
-    0000 aload_0
-    0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
-    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0009 swap
-    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0013 return
 method        main ()V 0x0019
-  code        max_stack=1 max_locals=0
-    0000 ldc "started"
-    0002 invokestatic Method(InputKt.info:(Ljava/lang/String;)V)
-    0005 invokestatic Method(InputKt.appName:()Ljava/lang/String;)
-    0008 invokestatic Method(InputKt.info:(Ljava/lang/String;)V)
-    0011 return
+  code        max_stack=2 max_locals=0
+    0000 getstatic Field(Logger.INSTANCE:LLogger;)
+    0003 ldc "started"
+    0005 invokevirtual Method(Logger.info:(Ljava/lang/String;)V)
+    0008 getstatic Field(Config.INSTANCE:LConfig;)
+    0011 invokevirtual Method(Config.appName:()Ljava/lang/String;)
+    0014 getstatic Field(Logger.INSTANCE:LLogger;)
+    0017 swap
+    0018 invokevirtual Method(Logger.info:(Ljava/lang/String;)V)
+    0021 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    BootstrapMethods (8 bytes)

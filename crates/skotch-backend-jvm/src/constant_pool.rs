@@ -28,6 +28,7 @@ enum Key {
     Methodref(u16, u16),
     InterfaceMethodref(u16, u16),
     MethodHandle(u8, u16),
+    MethodType(u16),
     InvokeDynamic(u16, u16),
 }
 
@@ -46,6 +47,8 @@ enum Entry {
     InterfaceMethodref(u16, u16),
     /// CONSTANT_MethodHandle (tag 15): reference_kind, reference_index.
     MethodHandle(u8, u16),
+    /// CONSTANT_MethodType (tag 16): descriptor_index → Utf8.
+    MethodType(u16),
     /// CONSTANT_InvokeDynamic (tag 18): bootstrap_method_attr_index,
     /// name_and_type_index.
     InvokeDynamic(u16, u16),
@@ -169,6 +172,13 @@ impl ConstantPool {
             Key::MethodHandle(kind, reference_index),
             Entry::MethodHandle(kind, reference_index),
         )
+    }
+
+    /// CONSTANT_MethodType (tag 16). `descriptor` is the JVM method
+    /// descriptor (e.g. `"(Ljava/lang/Object;)Ljava/lang/Object;"`).
+    pub fn method_type(&mut self, descriptor: &str) -> u16 {
+        let utf = self.utf8(descriptor);
+        self.add(Key::MethodType(utf), Entry::MethodType(utf))
     }
 
     /// CONSTANT_InvokeDynamic. `bootstrap_index` is the index into the
@@ -308,6 +318,10 @@ impl ConstantPool {
                     out.push(15);
                     out.push(*k);
                     out.write_u16::<BigEndian>(*r).unwrap();
+                }
+                Entry::MethodType(d) => {
+                    out.push(16);
+                    out.write_u16::<BigEndian>(*d).unwrap();
                 }
                 Entry::InvokeDynamic(bm, nt) => {
                     out.push(18);

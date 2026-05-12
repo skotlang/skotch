@@ -796,7 +796,9 @@ impl<'a> BlockWalker<'a> {
                 | CallKind::Virtual { .. }
                 | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. }
-                | CallKind::MakeConcatWithConstants { .. } => {
+                | CallKind::MakeConcatWithConstants { .. }
+                | CallKind::LambdaMetafactory { .. }
+                | CallKind::FunctionInvoke { .. } => {
                     // TODO: class support in LLVM backend. Bind a
                     // null-pointer placeholder for the dest so later
                     // lookups don't panic; the resulting LLVM IR is
@@ -873,7 +875,9 @@ impl<'a> BlockWalker<'a> {
             | CallKind::Virtual { .. }
             | CallKind::Super { .. }
             | CallKind::VirtualJava { .. }
-            | CallKind::MakeConcatWithConstants { .. } => {
+            | CallKind::MakeConcatWithConstants { .. }
+            | CallKind::LambdaMetafactory { .. }
+            | CallKind::FunctionInvoke { .. } => {
                 let placeholder = self.fresh();
                 writeln!(self.out, "  {placeholder} = inttoptr i64 0 to ptr").unwrap();
                 self.ssa_for_local[dest.0 as usize] = Some(placeholder);

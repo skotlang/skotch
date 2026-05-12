@@ -1205,6 +1205,8 @@ pub fn lower_file(
                     is_cross_file_stub: true,
                     annotations: Vec::new(),
                     has_type_params: false,
+                    is_object_singleton: false,
+                    companion_class_name: None,
                 });
             }
         }
@@ -1816,6 +1818,8 @@ fn build_continuation_class(
         is_cross_file_stub: false,
         annotations: Vec::new(),
         has_type_params: false,
+        is_object_singleton: false,
+        companion_class_name: None,
     }
 }
 
@@ -6395,6 +6399,118 @@ fn lower_expr(
                                 return Some(dest);
                             }
                         }
+                    }
+                }
+
+                // Object singleton method call: `ObjectName.method(args)`.
+                // Emits `getstatic ObjectName.INSTANCE; invokevirtual
+                // ObjectName.method(args)`. This is the kotlinc shape
+                // for `object X { fun y() }` calls.
+                //
+                // Companion object method call: `OuterClass.method(args)`
+                // where `OuterClass` has a `companion object { fun method }`.
+                // Emits `getstatic OuterClass.Companion; invokevirtual
+                // OuterClass$Companion.method(args)`.
+                if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                    let recv_name = interner.resolve(*recv_sym).to_string();
+                    let method_str = interner.resolve(method_name).to_string();
+                    let singleton_match: Option<(String, Ty)> = module
+                        .classes
+                        .iter()
+                        .find(|c| c.is_object_singleton && c.name == recv_name)
+                        .and_then(|c| {
+                            c.methods
+                                .iter()
+                                .find(|m| m.name == method_str)
+                                .map(|m| (c.name.clone(), m.return_ty.clone()))
+                        });
+                    if let Some((class_name, ret_ty)) = singleton_match {
+                        let instance_local = fb.new_local(Ty::Class(class_name.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: instance_local,
+                            value: Rvalue::GetStaticField {
+                                class_name: class_name.clone(),
+                                field_name: "INSTANCE".to_string(),
+                                descriptor: format!("L{};", class_name),
+                            },
+                        });
+                        let mut arg_locals = vec![instance_local];
+                        for a in args {
+                            let id = lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            arg_locals.push(id);
+                        }
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name,
+                                    method_name: method_str,
+                                },
+                                args: arg_locals,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                    // Companion-object dispatch: receiver is an outer
+                    // class name and the method lives on its companion.
+                    let companion_match: Option<(String, String, Ty)> = module
+                        .classes
+                        .iter()
+                        .find(|c| c.name == recv_name && c.companion_class_name.is_some())
+                        .and_then(|outer| {
+                            let comp_name = outer.companion_class_name.clone().unwrap();
+                            let comp = module.classes.iter().find(|c| c.name == comp_name)?;
+                            let m = comp.methods.iter().find(|m| m.name == method_str)?;
+                            Some((outer.name.clone(), comp_name, m.return_ty.clone()))
+                        });
+                    if let Some((outer_name, comp_name, ret_ty)) = companion_match {
+                        let instance_local = fb.new_local(Ty::Class(comp_name.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: instance_local,
+                            value: Rvalue::GetStaticField {
+                                class_name: outer_name,
+                                field_name: "Companion".to_string(),
+                                descriptor: format!("L{};", comp_name),
+                            },
+                        });
+                        let mut arg_locals = vec![instance_local];
+                        for a in args {
+                            let id = lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            arg_locals.push(id);
+                        }
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: comp_name,
+                                    method_name: method_str,
+                                },
+                                args: arg_locals,
+                            },
+                        });
+                        return Some(dest);
                     }
                 }
 
@@ -12904,6 +13020,59 @@ fn lower_expr(
             name,
             span,
         } => {
+            // Companion property access: `OuterClass.PROP` →
+            // `getstatic Outer.Companion; invokevirtual
+            //  Outer$Companion.get<PROP>()`. Matches kotlinc's emission.
+            if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
+                let recv_str = interner.resolve(*recv_sym).to_string();
+                let field_str = interner.resolve(*name).to_string();
+                let getter_name = format!(
+                    "get{}{}",
+                    field_str
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().to_string())
+                        .unwrap_or_default(),
+                    &field_str[field_str
+                        .chars()
+                        .next()
+                        .map(char::len_utf8)
+                        .unwrap_or(0)..]
+                );
+                let companion_hit: Option<(String, String, Ty)> = module
+                    .classes
+                    .iter()
+                    .find(|c| c.name == recv_str && c.companion_class_name.is_some())
+                    .and_then(|outer| {
+                        let cn = outer.companion_class_name.clone().unwrap();
+                        let comp = module.classes.iter().find(|c| c.name == cn)?;
+                        let m = comp.methods.iter().find(|m| m.name == getter_name)?;
+                        Some((outer.name.clone(), cn, m.return_ty.clone()))
+                    });
+                if let Some((outer_name, comp_name, ret_ty)) = companion_hit {
+                    let instance_local = fb.new_local(Ty::Class(comp_name.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: instance_local,
+                        value: Rvalue::GetStaticField {
+                            class_name: outer_name,
+                            field_name: "Companion".to_string(),
+                            descriptor: format!("L{};", comp_name),
+                        },
+                    });
+                    let dest = fb.new_local(ret_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Call {
+                            kind: CallKind::Virtual {
+                                class_name: comp_name,
+                                method_name: getter_name,
+                            },
+                            args: vec![instance_local],
+                        },
+                    });
+                    return Some(dest);
+                }
+            }
             // Companion object property access: ClassName.PROP → global constant lookup.
             if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
                 let recv_str = interner.resolve(*recv_sym).to_string();
@@ -14313,6 +14482,8 @@ fn lower_expr(
                     is_cross_file_stub: false,
                     annotations: Vec::new(),
                     has_type_params: false,
+                    is_object_singleton: false,
+                    companion_class_name: None,
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -14399,6 +14570,8 @@ fn lower_expr(
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
                 has_type_params: false,
+                is_object_singleton: false,
+                companion_class_name: None,
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -14936,6 +15109,8 @@ fn lower_expr(
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
                 has_type_params: false,
+                is_object_singleton: false,
+                companion_class_name: None,
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -15154,6 +15329,8 @@ fn lower_expr(
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
                 has_type_params: false,
+                is_object_singleton: false,
+                companion_class_name: None,
             });
 
             // Instantiate. Type as the synthetic anonymous class so
@@ -15939,6 +16116,8 @@ fn lower_enum(
         is_cross_file_stub: false,
         annotations: Vec::new(),
         has_type_params: false,
+        is_object_singleton: false,
+        companion_class_name: None,
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -16161,8 +16340,12 @@ fn lower_enum(
     }
 }
 
-/// Calls like `Singleton.greet()` are resolved as static calls on the
-/// wrapper class that delegate to the object's methods.
+/// Lower an `object` declaration to a MirClass with an INSTANCE
+/// singleton field. Methods become virtual methods on the class with
+/// `this` as their first parameter. Call sites for `Object.method()`
+/// detect the singleton at lowering time and emit `getstatic INSTANCE;
+/// invokevirtual method` (see the Call lowering code path that walks
+/// `module.classes` for `is_object_singleton`).
 fn lower_object(
     o: &skotch_syntax::ObjectDecl,
     name_to_func: &mut FxHashMap<Symbol, FuncId>,
@@ -16173,7 +16356,7 @@ fn lower_object(
 ) {
     let obj_name = interner.resolve(o.name).to_string();
 
-    // Build an empty <init> constructor.
+    // Build the private `<init>` constructor: just call super (Object) and return.
     let mut init_fn = MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
@@ -16198,34 +16381,36 @@ fn lower_object(
         suspend_state_machine: None,
         annotations: Vec::new(),
         named_locals: Vec::new(),
-        is_private: false,
+        is_private: true,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
     };
-    let _this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
-    init_fn.params.push(LocalId(0));
+    let this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
+    init_fn.params.push(this_id);
+    // Emit super.<init>() — `aload_0; invokespecial Object.<init>()V`.
+    init_fn.blocks[0].stmts.push(MStmt::Assign {
+        dest: this_id,
+        value: Rvalue::Call {
+            kind: CallKind::Constructor("java/lang/Object".to_string()),
+            args: vec![this_id],
+        },
+    });
 
-    // Lower each method as a top-level static function on the wrapper class.
-    // This way `Singleton.greet()` resolves via try_java_static_call or
-    // the normal name_to_func lookup.
+    // Lower each method as a VIRTUAL method on the singleton class.
+    // The first parameter is the singleton instance (`this`).
+    let mut mir_methods: Vec<MirFunction> = Vec::new();
     for method in &o.methods {
         let method_name = interner.resolve(method.name).to_string();
         let return_ty = method
             .return_ty
             .as_ref()
-            .map(|tr| {
-                let resolved = resolve_type(interner.resolve(tr.name), module);
-                resolved
-            })
+            .map(|tr| resolve_type(interner.resolve(tr.name), module))
             .unwrap_or(Ty::Unit);
 
-        // Register as a top-level function so Singleton.method() resolves.
-        let fn_idx = module.functions.len();
-        let fn_id = FuncId(fn_idx as u32);
-        name_to_func.insert(method.name, fn_id);
-
+        let fn_idx = module.functions.len() + mir_methods.len();
         let mut fb = FnBuilder::new(fn_idx, method_name, return_ty);
-        // Object methods have no `this` — they're effectively static.
+        let this_local = fb.new_local(Ty::Class(obj_name.clone()));
+        fb.mf.params.push(this_local);
         let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
         for p in &method.params {
             let ty = resolve_type(interner.resolve(p.ty.name), module);
@@ -16233,7 +16418,6 @@ fn lower_object(
             fb.mf.params.push(id);
             scope.push((p.name, id));
         }
-
         for s in &method.body.stmts {
             lower_stmt(
                 s,
@@ -16247,13 +16431,27 @@ fn lower_object(
                 None,
             );
         }
-
-        module.add_function(fb.finish());
+        mir_methods.push(fb.finish());
     }
 
-    // We don't add the object as a MirClass — its methods are top-level
-    // static functions on the wrapper class. This matches how kotlinc
-    // compiles `object` declarations for the JVM.
+    module.classes.push(MirClass {
+        name: obj_name,
+        super_class: None,
+        is_open: false,
+        is_abstract: false,
+        is_interface: false,
+        interfaces: Vec::new(),
+        fields: Vec::new(),
+        methods: mir_methods,
+        constructor: init_fn,
+        secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
+        is_cross_file_stub: false,
+        annotations: Vec::new(),
+        has_type_params: false,
+        is_object_singleton: true,
+        companion_class_name: None,
+    });
 }
 
 fn lower_class(
@@ -16588,6 +16786,8 @@ fn lower_class(
         is_cross_file_stub: false,
         annotations: Vec::new(),
         has_type_params: !c.type_params.is_empty(),
+        is_object_singleton: false,
+        companion_class_name: None,
     });
 
     // Lower methods.
@@ -17221,51 +17421,167 @@ fn lower_class(
         }
     }
 
-    // Lower companion object methods as top-level static functions.
-    // This makes ClassName.staticMethod() work via name_to_func lookup.
-    for method in &c.companion_methods {
-        let method_name = interner.resolve(method.name).to_string();
-        let return_ty = method
-            .return_ty
-            .as_ref()
-            .map(|tr| {
-                let resolved = resolve_type(interner.resolve(tr.name), module);
-                resolved
-            })
-            .unwrap_or(Ty::Unit);
+    // Lower companion object methods to a separate `<class>$Companion`
+    // MirClass with virtual methods. The outer class gets a static
+    // `Companion` field initialized in its `<clinit>`. Call sites for
+    // `<ClassName>.<companionMethod>(...)` resolve to `getstatic
+    // <ClassName>.Companion; invokevirtual <ClassName>$Companion.<m>`.
+    let companion_class_name_opt: Option<String> =
+        if !c.companion_methods.is_empty() || !c.companion_properties.is_empty() {
+            Some(format!("{}$Companion", class_name))
+        } else {
+            None
+        };
+    if let Some(ref companion_cls) = companion_class_name_opt {
+        // Build private `<init>()V` constructor for the companion.
+        let mut comp_init = MirFunction {
+            id: FuncId(0),
+            name: "<init>".to_string(),
+            params: Vec::new(),
+            locals: Vec::new(),
+            blocks: vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_defaults: Vec::new(),
+            param_receiver_types: Vec::new(),
+            is_abstract: false,
+            exception_handlers: Vec::new(),
+            vararg_index: None,
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: true,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+        };
+        let comp_this = comp_init.new_local(Ty::Class(companion_cls.clone()));
+        comp_init.params.push(comp_this);
+        comp_init.blocks[0].stmts.push(MStmt::Assign {
+            dest: comp_this,
+            value: Rvalue::Call {
+                kind: CallKind::Constructor("java/lang/Object".to_string()),
+                args: vec![comp_this],
+            },
+        });
 
-        let fn_idx = module.functions.len();
-        let fn_id = FuncId(fn_idx as u32);
-        name_to_func.insert(method.name, fn_id);
-
-        let mut fb = FnBuilder::new(fn_idx, method_name, return_ty);
-        let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
-        for p in &method.params {
-            let ty = resolve_type(interner.resolve(p.ty.name), module);
-            let id = fb.new_local(ty);
-            fb.mf.params.push(id);
-            scope.push((p.name, id));
+        let mut comp_methods: Vec<MirFunction> = Vec::new();
+        for method in &c.companion_methods {
+            let m_name = interner.resolve(method.name).to_string();
+            let m_ret = method
+                .return_ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Unit);
+            let fn_idx = module.functions.len() + comp_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, m_name, m_ret);
+            let this_local = fb.new_local(Ty::Class(companion_cls.clone()));
+            fb.mf.params.push(this_local);
+            let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
+            for p in &method.params {
+                let ty = resolve_type(interner.resolve(p.ty.name), module);
+                let id = fb.new_local(ty);
+                fb.mf.params.push(id);
+                scope.push((p.name, id));
+            }
+            for s in &method.body.stmts {
+                lower_stmt(
+                    s,
+                    &mut fb,
+                    &mut scope,
+                    module,
+                    name_to_func,
+                    name_to_global,
+                    interner,
+                    diags,
+                    None,
+                );
+            }
+            let mut finished = fb.finish();
+            finished.annotations =
+                lower_annotations(&method.annotations, interner, Some(&module.import_map));
+            comp_methods.push(finished);
         }
 
-        for s in &method.body.stmts {
-            lower_stmt(
-                s,
-                &mut fb,
-                &mut scope,
-                module,
-                name_to_func,
-                name_to_global,
-                interner,
-                diags,
-                None,
+        // Generate JVM getter methods for each companion property —
+        // `val VERSION: Int = 42` → `getVERSION()I` returning 42.
+        // The getter is what kotlinc emits at every `ClassName.PROP`
+        // call site (via invokevirtual on Companion).
+        for prop in &c.companion_properties {
+            let prop_name = interner.resolve(prop.name).to_string();
+            let prop_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Error);
+            // Build initial-value constant from the init expression.
+            // For non-trivial init we fall through to a Null/default.
+            let init_const: Option<MirConst> = prop.init.as_ref().and_then(|e| match e {
+                Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),
+                Expr::LongLit(v, _) => Some(MirConst::Long(*v)),
+                Expr::FloatLit(v, _) => Some(MirConst::Float(*v as f32)),
+                Expr::DoubleLit(v, _) => Some(MirConst::Double(*v)),
+                Expr::BoolLit(v, _) => Some(MirConst::Bool(*v)),
+                Expr::StringLit(s, _) => {
+                    let sid = module.intern_string(s);
+                    Some(MirConst::String(sid))
+                }
+                _ => None,
+            });
+            let getter_name = format!(
+                "get{}{}",
+                prop_name
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default(),
+                &prop_name[prop_name.chars().next().map(char::len_utf8).unwrap_or(0)..]
             );
+            let fn_idx = module.functions.len() + comp_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, getter_name, prop_ty.clone());
+            let this_local = fb.new_local(Ty::Class(companion_cls.clone()));
+            fb.mf.params.push(this_local);
+            let dest = fb.new_local(prop_ty);
+            if let Some(cv) = init_const {
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(cv),
+                });
+            } else {
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+            }
+            fb.set_terminator(Terminator::ReturnValue(dest));
+            comp_methods.push(fb.finish());
         }
 
-        let mut finished = fb.finish();
-        // Propagate annotations from the companion method (e.g., @JvmStatic).
-        finished.annotations =
-            lower_annotations(&method.annotations, interner, Some(&module.import_map));
-        module.add_function(finished);
+        module.classes.push(MirClass {
+            name: companion_cls.clone(),
+            super_class: None,
+            is_open: false,
+            is_abstract: false,
+            is_interface: false,
+            interfaces: Vec::new(),
+            fields: Vec::new(),
+            methods: comp_methods,
+            constructor: comp_init,
+            secondary_constructors: Vec::new(),
+            is_suspend_lambda: false,
+            is_cross_file_stub: false,
+            annotations: Vec::new(),
+            has_type_params: false,
+            is_object_singleton: true,
+            companion_class_name: None,
+        });
     }
 
     // Lower companion object properties as static fields.
@@ -18033,6 +18349,8 @@ fn lower_class(
         is_cross_file_stub: false,
         annotations: Vec::new(),
         has_type_params: !c.type_params.is_empty(),
+        is_object_singleton: false,
+        companion_class_name: companion_class_name_opt.clone(),
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -18182,6 +18500,8 @@ fn lower_interface(
         is_cross_file_stub: false,
         annotations: Vec::new(),
         has_type_params: false,
+        is_object_singleton: false,
+        companion_class_name: None,
     });
 
     // Lower method bodies for default methods (non-abstract).

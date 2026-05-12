@@ -329,7 +329,9 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
                 | CallKind::Virtual { .. }
                 | CallKind::Super { .. }
                 | CallKind::VirtualJava { .. }
-                | CallKind::MakeConcatWithConstants { .. } => 0,
+                | CallKind::MakeConcatWithConstants { .. }
+                | CallKind::LambdaMetafactory { .. }
+                | CallKind::FunctionInvoke { .. } => 0,
             };
             needed = needed.max(n);
         }
@@ -1247,7 +1249,9 @@ fn emit_call(
             }
             regs.len() as u16
         }
-        CallKind::MakeConcatWithConstants { .. } => {
+        CallKind::MakeConcatWithConstants { .. }
+        | CallKind::LambdaMetafactory { .. }
+        | CallKind::FunctionInvoke { .. } => {
             // DEX backend doesn't yet emit invokedynamic — leave the
             // dest register unset; the higher-level caller's stub
             // handler will treat it as null.

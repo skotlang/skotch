@@ -300,6 +300,27 @@ pub enum CallKind {
         recipe: std::string::String,
         descriptor: std::string::String,
     },
+    /// Create a Kotlin Function instance via JDK's LambdaMetafactory.
+    /// Emits `invokedynamic invoke(<captures>)Lkotlin/jvm/functions/FunctionN;`
+    /// referring to a static helper method that holds the lambda body.
+    /// The call's `args` list carries the captured values (in order).
+    LambdaMetafactory {
+        /// FunctionN arity (number of lambda params, 0..=22).
+        arity: u8,
+        /// Static helper method name on `impl_class`.
+        method_name: std::string::String,
+        /// Specialized impl method descriptor, e.g. `"(I)I"`.
+        specialized_descriptor: std::string::String,
+        /// Class containing the static helper method (typically the
+        /// wrapper class, e.g. "InputKt").
+        impl_class: std::string::String,
+    },
+    /// Invoke a Kotlin Function instance via `invokeinterface
+    /// FunctionN.invoke(...)`. The first arg is the Function instance
+    /// (receiver), remaining args are the lambda's invoke args. Each
+    /// invoke arg is treated as an Object on the wire; the call result
+    /// is always Object.
+    FunctionInvoke { arity: u8 },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -745,6 +766,24 @@ pub struct MirClass {
     /// (fixture 367: `fun printHolder(h: Holder<*>)`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub has_type_params: bool,
+    /// True when this class was synthesized from a Kotlin `object`
+    /// declaration. The JVM backend emits a static `INSTANCE` field
+    /// (typed as `LClassName;`) plus a `<clinit>` that constructs and
+    /// stores the singleton. Call sites in MIR-lower emit
+    /// `getstatic INSTANCE; invokevirtual method` instead of routing
+    /// through a top-level static helper (fixtures 28/68/325/326/532).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_object_singleton: bool,
+    /// When `Some(name)`, this class has a Kotlin `companion object`
+    /// lowered to a sibling MirClass named `name` (typically
+    /// `<OuterName>$Companion`). The JVM backend emits a static
+    /// `Companion` field on this outer class (typed `L<name>;`) plus
+    /// initialization in `<clinit>`. MIR-lower routes
+    /// `<OuterName>.<companionMethod>(...)` through `getstatic
+    /// Companion; invokevirtual <name>.<method>` (fixtures 27/69/512
+    /// et al.).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub companion_class_name: Option<std::string::String>,
 }
 
 /// A field in a MIR class.

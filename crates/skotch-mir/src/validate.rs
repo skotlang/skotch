@@ -580,6 +580,8 @@ mod tests {
             is_cross_file_stub: true,
             annotations: Vec::new(),
             has_type_params: false,
+            is_object_singleton: false,
+            companion_class_name: None,
         });
         let errors = validate_module(&m);
         assert!(errors.is_empty(), "Stub class should not cause errors");
