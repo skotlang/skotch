@@ -61,6 +61,18 @@ fn discover_e2e_fixtures() -> Vec<String> {
 
 #[test]
 fn skotch_classes_run_under_java_and_stdout_matches() {
+    // Run on a generous-stack thread — the JVM backend recurses
+    // through MIR + bytecode for every fixture and the cumulative
+    // work pushes past the default 2 MiB test-thread stack.
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run_e2e_jvm_test)
+        .expect("spawning e2e_jvm thread")
+        .join()
+        .expect("e2e_jvm thread");
+}
+
+fn run_e2e_jvm_test() {
     let java = match which::which("java") {
         Ok(p) => p,
         Err(_) => {

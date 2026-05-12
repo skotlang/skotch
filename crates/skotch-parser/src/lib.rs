@@ -2470,6 +2470,7 @@ impl<'a> Parser<'a> {
                     catch_param,
                     catch_type,
                     catch_body,
+                    extra_catches,
                     finally_body,
                     span,
                 } = try_expr
@@ -2479,6 +2480,7 @@ impl<'a> Parser<'a> {
                         catch_param,
                         catch_type,
                         catch_body: catch_body.map(|b| *b),
+                        extra_catches,
                         finally_body: finally_body.map(|b| *b),
                         span,
                     }
@@ -4177,6 +4179,7 @@ impl<'a> Parser<'a> {
         let mut catch_param = None;
         let mut catch_type = None;
         let mut catch_body = None;
+        let mut extra_catches: Vec<(Symbol, Symbol, skotch_syntax::Block)> = Vec::new();
         let mut finally_body = None;
 
         if self.eat(TokenKind::KwCatch) {
@@ -4194,14 +4197,11 @@ impl<'a> Parser<'a> {
             catch_body = Some(Box::new(self.parse_block()));
             self.skip_trivia();
 
-            // Support sequential catch clauses:
-            // try { } catch (e: A) { } catch (e: B) { }
-            // Nest as: try { } catch (e: A) { } → wrapped, with the
-            // second catch applied to the whole try-catch as a new try-catch.
-            // This is handled by the statement-level TryStmt which already
-            // supports multiple catch blocks. For the expression-level Try,
-            // we parse additional catches into the same block by wrapping
-            // the catch body in another try-catch.
+            // Support sequential catch clauses by collecting additional
+            // clauses into `extra_catches`. MIR-lower emits one exception
+            // handler per catch in source order — the JVM tries them in
+            // order so the first matching type wins (matches Kotlin's
+            // multi-catch semantics).
             while self.peek_kind() == TokenKind::KwCatch {
                 self.bump(); // consume 'catch'
                 self.expect(TokenKind::LParen, "(");
@@ -4217,16 +4217,7 @@ impl<'a> Parser<'a> {
                 self.skip_trivia();
                 let body2 = self.parse_block();
                 self.skip_trivia();
-                // Nest: wrap the original try { body } catch(A) { catch_body }
-                // as a new try-catch around the whole thing.
-                // Actually, Kotlin semantics: multiple catches are tried in
-                // order. We update to the new catch, keeping the original
-                // body. This is a simplification — real multi-catch requires
-                // multiple exception table entries. For now, replace the
-                // catch (only the LAST catch is effective).
-                catch_param = Some(param2);
-                catch_type = Some(type2);
-                catch_body = Some(Box::new(body2));
+                extra_catches.push((param2, type2, body2));
             }
         }
 
@@ -4237,6 +4228,8 @@ impl<'a> Parser<'a> {
 
         let end = if let Some(fb) = &finally_body {
             fb.span
+        } else if let Some((_, _, last_body)) = extra_catches.last() {
+            last_body.span
         } else if let Some(cb) = &catch_body {
             cb.span
         } else {
@@ -4248,6 +4241,7 @@ impl<'a> Parser<'a> {
             catch_param,
             catch_type,
             catch_body,
+            extra_catches,
             finally_body,
             span: kw.merge(end),
         }

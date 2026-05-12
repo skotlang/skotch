@@ -1204,6 +1204,7 @@ pub fn lower_file(
                     is_suspend_lambda: false,
                     is_cross_file_stub: true,
                     annotations: Vec::new(),
+                    has_type_params: false,
                 });
             }
         }
@@ -1814,6 +1815,7 @@ fn build_continuation_class(
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
+        has_type_params: false,
     }
 }
 
@@ -3474,6 +3476,31 @@ fn lower_stmt(
             true
         }
         Stmt::While { cond, body, .. } => {
+            // Special-case `while (true) { body }`: no cond block, body
+            // is the loop header; continue/break wire to body/exit
+            // directly. kotlinc emits the body inline with `break` as
+            // the only exit path (fixture 143).
+            if matches!(cond, Expr::BoolLit(true, _)) {
+                let body_block = fb.new_block();
+                let exit_block = fb.new_block();
+                fb.terminate_and_switch(Terminator::Goto(body_block), body_block);
+                let lctx = Some((body_block, exit_block));
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        fb,
+                        scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        lctx,
+                    );
+                }
+                fb.terminate_and_switch(Terminator::Goto(body_block), exit_block);
+                return true;
+            }
             // while (cond) { body }
             //   → current → goto cond_block
             //     cond_block: eval cond → Branch(cond, body_block, exit_block)
@@ -4494,6 +4521,7 @@ fn lower_stmt(
             catch_param,
             catch_type,
             catch_body,
+            extra_catches,
             finally_body,
             ..
         } => {
@@ -4509,6 +4537,12 @@ fn lower_stmt(
                 // Exception handler: [try_block .. catch_block) → catch_block
                 let try_block = fb.new_block();
                 let catch_block = fb.new_block();
+                // Pre-allocate one block per extra catch clause BEFORE
+                // after_block so MIR emission order is try, catch1,
+                // catch2, ..., after — matching kotlinc's layout for
+                // multi-catch (510).
+                let extra_catch_blocks: Vec<u32> =
+                    extra_catches.iter().map(|_| fb.new_block()).collect();
                 let after_block = fb.new_block();
 
                 // Jump from current block into the try body.
@@ -4647,6 +4681,108 @@ fn lower_stmt(
                     handler_block: catch_block,
                     catch_type: jvm_catch_type,
                 });
+
+                // Process additional catch clauses (multi-catch).
+                // Each gets its own block + exception handler. All share
+                // the same try region [try_start, first_catch_start).
+                for (idx, (extra_param, extra_type, extra_body)) in extra_catches.iter().enumerate()
+                {
+                    let extra_catch_block = extra_catch_blocks[idx];
+                    // Resolve declared exception type.
+                    let extra_name = interner.resolve(*extra_type);
+                    let extra_exc_ty = match extra_name {
+                        "IllegalStateException" => {
+                            Ty::Class("java/lang/IllegalStateException".into())
+                        }
+                        "IllegalArgumentException" => {
+                            Ty::Class("java/lang/IllegalArgumentException".into())
+                        }
+                        "RuntimeException" => Ty::Class("java/lang/RuntimeException".into()),
+                        "Exception" => Ty::Class("java/lang/Exception".into()),
+                        "Throwable" => Ty::Class("java/lang/Throwable".into()),
+                        "NullPointerException" => {
+                            Ty::Class("java/lang/NullPointerException".into())
+                        }
+                        other => Ty::Class(other.to_string()),
+                    };
+                    fb.cur_block = extra_catch_block;
+                    let extra_exc_local = fb.new_local(extra_exc_ty);
+                    let scope_entry = (*extra_param, extra_exc_local);
+                    scope.push(scope_entry);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: extra_exc_local,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    for s in &extra_body.stmts {
+                        lower_stmt(
+                            s,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        );
+                    }
+                    // Pop the catch param's scope entry so subsequent
+                    // catches don't see it.
+                    if let Some(pos) = scope
+                        .iter()
+                        .rposition(|(s, l)| *s == scope_entry.0 && *l == scope_entry.1)
+                    {
+                        scope.remove(pos);
+                    }
+                    let cur = fb.cur_block as usize;
+                    let cur_term = &fb.mf.blocks[cur].terminator;
+                    if !matches!(cur_term, Terminator::ReturnValue(_) | Terminator::Throw(_)) {
+                        fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
+                    } else {
+                        fb.cur_block = after_block;
+                    }
+                    // Map declared type name to FQN for exception table.
+                    let jvm_extra_type = {
+                        let n = interner.resolve(*extra_type).to_string();
+                        match n.as_str() {
+                            "Exception" => "java/lang/Exception".to_string(),
+                            "RuntimeException" => "java/lang/RuntimeException".to_string(),
+                            "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
+                            "NullPointerException" => "java/lang/NullPointerException".to_string(),
+                            "IllegalArgumentException" => {
+                                "java/lang/IllegalArgumentException".to_string()
+                            }
+                            "IllegalStateException" => {
+                                "java/lang/IllegalStateException".to_string()
+                            }
+                            "IndexOutOfBoundsException" => {
+                                "java/lang/IndexOutOfBoundsException".to_string()
+                            }
+                            "ClassCastException" => "java/lang/ClassCastException".to_string(),
+                            "NumberFormatException" => {
+                                "java/lang/NumberFormatException".to_string()
+                            }
+                            "UnsupportedOperationException" => {
+                                "java/lang/UnsupportedOperationException".to_string()
+                            }
+                            "Throwable" => "java/lang/Throwable".to_string(),
+                            "Error" => "java/lang/Error".to_string(),
+                            other => {
+                                if other.contains('/') {
+                                    other.to_string()
+                                } else {
+                                    format!("java/lang/{other}")
+                                }
+                            }
+                        }
+                    };
+                    fb.mf.exception_handlers.push(ExceptionHandler {
+                        try_start_block: try_block,
+                        try_end_block: catch_block,
+                        handler_block: extra_catch_block,
+                        catch_type: Some(jvm_extra_type),
+                    });
+                }
 
                 // Finally block (if present) is inlined after the catch.
                 if let Some(fb_block) = finally_body {
@@ -7574,6 +7710,55 @@ fn lower_expr(
                 // `s.repeat(n)` is a Kotlin stdlib extension on
                 // `CharSequence` — kotlinc compiles it to
                 // `StringsKt.repeat(s as CharSequence, n)`.
+                // `<String>.isEmpty()` is `inline fun CharSequence.isEmpty()
+                // : Boolean = length == 0` — kotlinc inlines as:
+                //   aload s
+                //   checkcast CharSequence
+                //   invokeinterface CharSequence.length()
+                //   ifne <skip>; iconst_1; goto <end>; <skip>: iconst_0
+                if matches!(&recv_ty, Ty::String) && method_name_str == "isEmpty" && args.is_empty()
+                {
+                    let recv = all_args[0];
+                    // Cast s to CharSequence.
+                    let cast_local = fb.new_local(Ty::Class("java/lang/CharSequence".to_string()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: cast_local,
+                        value: Rvalue::CheckCast {
+                            obj: recv,
+                            target_class: "java/lang/CharSequence".to_string(),
+                        },
+                    });
+                    // Call CharSequence.length() via invokeinterface.
+                    let length_local = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: length_local,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/lang/CharSequence".to_string(),
+                                method_name: "length".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![cast_local],
+                        },
+                    });
+                    // length == 0 → Bool result.
+                    let zero_local = fb.new_local(Ty::Int);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: zero_local,
+                        value: Rvalue::Const(MirConst::Int(0)),
+                    });
+                    let dest = fb.new_local(Ty::Bool);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::BinOp {
+                            op: MBinOp::CmpEq,
+                            lhs: length_local,
+                            rhs: zero_local,
+                        },
+                    });
+                    return Some(dest);
+                }
+
                 if matches!(&recv_ty, Ty::String) && method_name_str == "repeat" && args.len() == 1
                 {
                     let dest = fb.new_local(Ty::String);
@@ -14127,6 +14312,7 @@ fn lower_expr(
                     is_suspend_lambda: false,
                     is_cross_file_stub: false,
                     annotations: Vec::new(),
+                    has_type_params: false,
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -14212,6 +14398,7 @@ fn lower_expr(
                 is_suspend_lambda,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
+                has_type_params: false,
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -14748,6 +14935,7 @@ fn lower_expr(
                 is_suspend_lambda,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
+                has_type_params: false,
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -14965,6 +15153,7 @@ fn lower_expr(
                 is_suspend_lambda: false,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
+                has_type_params: false,
             });
 
             // Instantiate. Type as the synthetic anonymous class so
@@ -15749,6 +15938,7 @@ fn lower_enum(
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
+        has_type_params: false,
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -16397,6 +16587,7 @@ fn lower_class(
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
+        has_type_params: !c.type_params.is_empty(),
     });
 
     // Lower methods.
@@ -17841,6 +18032,7 @@ fn lower_class(
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
+        has_type_params: !c.type_params.is_empty(),
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -17989,6 +18181,7 @@ fn lower_interface(
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
+        has_type_params: false,
     });
 
     // Lower method bodies for default methods (non-abstract).

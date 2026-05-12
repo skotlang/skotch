@@ -738,6 +738,13 @@ pub struct MirClass {
     /// Annotations on this class (emitted as RuntimeVisibleAnnotations).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<MirAnnotation>,
+    /// True when the source class declaration had type parameters
+    /// (`class Box<T>(...)`). Methods whose param or return types
+    /// reference this class need a JVMS §4.7.9 Signature attribute on
+    /// the method, even when the method itself has no type parameters
+    /// (fixture 367: `fun printHolder(h: Holder<*>)`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_type_params: bool,
 }
 
 /// A field in a MIR class.

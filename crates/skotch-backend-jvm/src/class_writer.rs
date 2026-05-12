@@ -308,6 +308,7 @@ fn append_method_annotations(
     method_bytes: &mut Vec<u8>,
     func: &MirFunction,
     cp: &mut ConstantPool,
+    module: &MirModule,
 ) {
     let runtime_annots: Vec<_> = func
         .annotations
@@ -352,8 +353,33 @@ fn append_method_annotations(
     // generics carry a JVMS §4.7.9 Signature giving the type-erased
     // JVM descriptor's source-level form (`<T:Ljava/lang/Object;>(TT;)TT;`
     // for `<T> identity(x: T): T`). Only the byte count matters for
-    // parity — we use a placeholder string of the same shape.
-    let has_generic_signature = !has_suspend_attrs && func.has_type_params;
+    // parity — we use a placeholder string of the same shape. A
+    // method also needs Signature when any of its parameter or return
+    // types reference a generic class (`fun printHolder(h: Holder<*>)`
+    // — fixture 367).
+    let uses_generic_class = |ty: &Ty| -> bool {
+        match ty {
+            Ty::Class(name) => module
+                .classes
+                .iter()
+                .any(|c| &c.name == name && c.has_type_params),
+            Ty::Nullable(inner) => match inner.as_ref() {
+                Ty::Class(name) => module
+                    .classes
+                    .iter()
+                    .any(|c| &c.name == name && c.has_type_params),
+                _ => false,
+            },
+            _ => false,
+        }
+    };
+    let method_uses_generic_class = func
+        .params
+        .iter()
+        .any(|pid| uses_generic_class(&func.locals[pid.0 as usize]))
+        || uses_generic_class(&func.return_ty);
+    let has_generic_signature =
+        !has_suspend_attrs && (func.has_type_params || method_uses_generic_class);
     if runtime_annots.is_empty()
         && !has_notnull_return
         && !has_nullable_return
@@ -1031,7 +1057,7 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             continue;
         }
         let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
-        append_method_annotations(&mut blob, func, &mut cp);
+        append_method_annotations(&mut blob, func, &mut cp, module);
         method_blobs.push(blob);
 
         // Emit the `name$default` synthetic for any function with default
@@ -1415,10 +1441,18 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 code2,
                 false,
             );
-            append_method_annotations(&mut blob, method, &mut cp2);
+            append_method_annotations(&mut blob, method, &mut cp2, module);
             method_blobs2.push(blob);
         }
     }
+
+    // Patch ATTR_PLACEHOLDER_* sentinels in method blobs before
+    // writing the constant pool — placeholder-named attributes are
+    // resolved to real CP utf8 indices here. Without this, generic
+    // Signature attributes on user-class methods would carry stale
+    // 0xFEFD placeholders into the .class file (fixture 366/93 fail
+    // at runtime with "Invalid method attribute name index 65277").
+    patch_attribute_name_placeholders(&mut method_blobs2, &mut cp2);
 
     let mut out2: Vec<u8> = Vec::with_capacity(1024);
     out2.write_u32::<BigEndian>(skotch_config::jvm::CLASS_FILE_MAGIC)
@@ -2271,7 +2305,7 @@ fn emit_user_method(
                 return blob;
             }
         }
-        return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC);
+        return emit_stub_method(func, cp, code_attr_name_idx, ACC_PUBLIC, module);
     }
     // Lambda invoke methods whose interface was bumped by the Compose
     // transform (Function0→Function2). If the body has broken patterns
@@ -2600,6 +2634,15 @@ fn emit_method_body(
         is_target[eh.handler_block as usize] = true;
         is_handler[eh.handler_block as usize] = true;
     }
+    // kotlinc emits a `nop` as the first instruction inside every try
+    // region — the protected `pc` range starts at the nop, so an
+    // exception thrown by the very first try-body instruction has a
+    // distinct line-number anchor. Mirror this for parity by tracking
+    // try-start blocks and prepending a nop when their bytecode begins.
+    let mut is_try_start = vec![false; func.blocks.len()];
+    for eh in &func.exception_handlers {
+        is_try_start[eh.try_start_block as usize] = true;
+    }
 
     // Compute single-use constant locals that can be inlined at use site
     // instead of being materialized to a slot. Safe across blocks because
@@ -2777,6 +2820,19 @@ fn emit_method_body(
         // athrow/return with no StackMapTable entry, causing VerifyError.
         if !reachable[bi] {
             continue;
+        }
+
+        // Try-start anchor: kotlinc emits a `nop` as the first
+        // instruction inside every try region. The protected `pc`
+        // range starts at the nop. We DON'T adjust `block_offsets[bi]`
+        // — leaving it at the nop position so the exception table's
+        // start_pc lands on the nop, matching kotlinc's table.
+        // Skip when the previous instruction is already a nop (the
+        // function-level `needs_leading_nop` already emitted one and
+        // this try is the function body — the same nop serves both
+        // purposes).
+        if is_try_start[bi] && code.last().is_none_or(|&b| b != 0x00) {
+            code.push(0x00); // nop
         }
 
         // Exception handler blocks: the JVM pushes the exception object
@@ -3117,10 +3173,11 @@ fn emit_method_body(
     }
 
     // Pass 2.8: Thread `goto X → goto Y` chains so each branch jumps
-    // directly to its final target. Currently DISABLED — kotlinc preserves
-    // some trampoline gotos in its own output, so threading drops parity
-    // (the post-thread shape is shorter than what kotlinc emits).
-    let _ = peephole_thread_gotos;
+    // directly to its final target. Currently DISABLED — both the
+    // unconditional and conditional variants drop parity on at least
+    // one fixture (kotlinc preserves some trampoline gotos in shapes
+    // that don't have a single rule we can match yet).
+    let _ = (peephole_thread_gotos, peephole_thread_cond_gotos);
 
     // Pass 2.9: Drop unreachable bytes (commonly trampoline gotos that
     // threading detached). Skipped when there are exception handlers,
@@ -3137,6 +3194,10 @@ fn emit_method_body(
     if func.exception_handlers.is_empty() {
         peephole_drop_redundant_gotos(&mut code, &mut cmp_targets, &mut block_offsets);
     }
+
+    // Pass 2.11: Tail-block inline peephole is run AFTER slot
+    // compaction (inside the third branch below) so the conditional +
+    // goto + tail body sit at the offsets the pattern matcher expects.
 
     // Pass 3: Peephole optimization — elide adjacent store+load of same slot.
     // Safe when:
@@ -3246,6 +3307,17 @@ fn emit_method_body(
             let reused_max = liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
             if reused_max > 0 && (reused_max as u16) < max_locals {
                 max_locals = reused_max as u16;
+            }
+            // Compact named-local slots: pack each named val/var into the
+            // lowest slot whose lifetime can hold it without colliding
+            // with another named. Matches kotlinc on shapes like fixture
+            // 548 — `val x; <println(double())>; val greeting` — where
+            // greeting moves into the slot just vacated by the double()
+            // result temp.
+            let compact_max =
+                try_compact_named_slots(func, &mut code, &mut slots, initial_param_slots);
+            if compact_max > 0 && (compact_max as u16) < max_locals {
+                max_locals = compact_max as u16;
             }
         }
         compress_to_compact_forms(&mut code);
@@ -3368,6 +3440,15 @@ fn emit_method_body(
             // and target is above it (or vice versa).
             compress_to_compact_forms_with_branches(&mut code, &mut cmp_targets);
         }
+        // Rewrite `<recv>.toUpperCase()` to `<recv>.toUpperCase(Locale
+        // .ROOT)` + checkNotNullExpressionValue intrinsic, matching
+        // kotlinc's `inline fun String.uppercase(): String =
+        // toUpperCase(Locale.ROOT)`. Also the toLowerCase variant.
+        // Runs on the intra-block-branches path so fixtures that have
+        // both String.uppercase() AND another expression that creates
+        // a cmp_target (e.g. fixture 274 with `s.isEmpty()`) still
+        // get the rewrite.
+        peephole_uppercase_to_locale_root(&mut code, &mut cmp_targets, &mut [], &mut [], cp);
         // Recompute max_stack after intra-block peepholes (mirrors the
         // no_branches path).
         let recomputed = recompute_max_stack_from_code(&code, cp);
@@ -3515,6 +3596,27 @@ fn emit_method_body(
             // expression contexts; only apply stack-merge when there are no
             // exception handlers in this function.
             if !is_data_class_helper && func.exception_handlers.is_empty() {
+                peephole_stack_merge_returns(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                );
+                peephole_elide_middle_store_load(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut [],
+                    &named_slots_for_middle,
+                );
+                // After stack-merge collapses `astore N; ...; aload N;
+                // xreturn` patterns, some `aload N; goto T` chains may
+                // resolve into `aload N; goto T` where T is now the
+                // xreturn. Rewrite those to inline xreturn so the
+                // returned value stays on the stack throughout.
+                peephole_goto_to_return(&mut code, &mut cmp_targets, &mut block_offsets);
+                // Re-run stack-merge: now that we've inlined the
+                // return, more astore/aload pairs may be eliminable.
                 peephole_stack_merge_returns(
                     &mut code,
                     &mut cmp_targets,
@@ -3688,6 +3790,11 @@ fn emit_method_body(
                 // (Specific failure: 164-identity-matrix's nested `for`
                 // loops.) Re-enable only after teaching the analysis
                 // about the CFG.
+                //
+                // The targeted `try_reuse_catch_param_slots` pass below
+                // handles the named-slot-reuse-for-catch-param case
+                // (matches kotlinc) without the over-packing that broke
+                // 547 when liveness ran here.
                 // After compaction, slot indices may now fit in 0..=3 — convert
                 // generic 2-byte forms (`istore N`) back to compact 1-byte
                 // forms (`istore_N`). Updates `block_offsets` and
@@ -3705,6 +3812,62 @@ fn emit_method_body(
             // true peak.
             max_stack = recompute_max_stack_from_code(&code, cp);
         }
+    }
+
+    // Catch-param slot reuse: when a catch handler's exception param has
+    // a slot higher than a named local that is dead by the time the
+    // handler is reached, kotlinc reuses the named slot for the param.
+    // Match that shape to drop max_locals and switch `astore_X` to the
+    // compact `astore_S` form.
+    if matches!(kind, MethodKind::Static) && !has_back_edges(&code) {
+        let mut named_slots_set: FxHashSet<u8> = func
+            .named_locals
+            .iter()
+            .filter_map(|l| slots.get(&l.0).copied())
+            .collect();
+        for recv in destructuring_receivers(func) {
+            if let Some(&s) = slots.get(&recv.0) {
+                named_slots_set.insert(s);
+            }
+        }
+        // Phi-temp reuse: when a try-expression's result is stored to a
+        // synthetic slot by both the try-end block and the handler
+        // block, then loaded at the merge point, kotlinc reuses a dead
+        // named slot for that phi-temp. Move the phi-temp's slot down
+        // to a dead named slot, then let `try_reuse_catch_param_slots`
+        // (which now sees a freed gap) drop the catch param to fill it.
+        try_reuse_try_phi_temp_slots(
+            func,
+            &mut code,
+            &block_offsets,
+            &mut slots,
+            &mut max_locals,
+            &named_slots_set,
+        );
+        try_reuse_catch_param_slots(
+            func,
+            &mut code,
+            &block_offsets,
+            &mut slots,
+            &mut max_locals,
+            &named_slots_set,
+        );
+        // Re-run compact-form compression after our slot rewrites: a slot
+        // moved from >3 to 0..=3 should switch from the 2-byte generic
+        // form (`astore 3`) to the 1-byte compact form (`astore_3`).
+        // This shifts subsequent offsets, so feed `cmp_targets` and
+        // `block_offsets` so branches stay consistent.
+        compress_to_compact_forms_with_blocks(&mut code, &mut cmp_targets, &mut block_offsets);
+    }
+
+    // Inline-tail-block peephole runs once everything else is in
+    // compact form. Pattern: conditional + `goto T2` where T2's body
+    // is a single 3-byte instruction followed by a goto back to the
+    // conditional's other target. We thread the conditional past the
+    // trampoline, inline the body where the unconditional goto was,
+    // and drain the now-dead tail. Fixture 194 et al.
+    if func.exception_handlers.is_empty() {
+        peephole_inline_tail_match_block(&mut code, &mut cmp_targets, &mut block_offsets);
     }
 
     // Re-derive `is_target` from the post-peephole bytecode.
@@ -3811,8 +3974,42 @@ fn emit_method_body(
         }
     }
     let mut slot_to_local: Vec<Option<u32>> = vec![None; slot_count];
+    // Identify catch-param mir_ids so we can deprioritize them when
+    // multiple locals share a slot. The named local (e.g. try-body's
+    // `x: Int`) should win the slot's SMT type, matching kotlinc's
+    // behavior where the catch param is "transient" in the slot.
+    let catch_param_mir_ids: FxHashSet<u32> = func
+        .exception_handlers
+        .iter()
+        .filter_map(|eh| {
+            let bi = eh.handler_block as usize;
+            let blk = func.blocks.get(bi)?;
+            let first = blk.stmts.first()?;
+            let Stmt::Assign { dest, value } = first;
+            if !matches!(value, Rvalue::Const(MirConst::Null)) {
+                return None;
+            }
+            Some(dest.0)
+        })
+        .collect();
+    // Two-pass: first assign non-catch-param locals, then fill in
+    // catch params only for slots still vacant.
     for (&mir_id, &jvm_slot) in slots.iter() {
+        if catch_param_mir_ids.contains(&mir_id) {
+            continue;
+        }
         if (jvm_slot as usize) < slot_used.len() && slot_used[jvm_slot as usize] {
+            slot_to_local[jvm_slot as usize] = Some(mir_id);
+        }
+    }
+    for (&mir_id, &jvm_slot) in slots.iter() {
+        if !catch_param_mir_ids.contains(&mir_id) {
+            continue;
+        }
+        if (jvm_slot as usize) < slot_used.len()
+            && slot_used[jvm_slot as usize]
+            && slot_to_local[jvm_slot as usize].is_none()
+        {
             slot_to_local[jvm_slot as usize] = Some(mir_id);
         }
     }
@@ -3852,6 +4049,48 @@ fn emit_method_body(
                     }
                 }
             }
+            // Exception handler blocks: their live-IN is the live-IN of
+            // the try-start block (state when entering the protected
+            // region — exceptions can be thrown by ANY instruction
+            // inside, so the verifier-visible state is the entry state).
+            for eh in &func.exception_handlers {
+                if eh.handler_block as usize == bi {
+                    let try_start_pi = eh.try_start_block as usize;
+                    let mut ts_in = vec![true; max_slots];
+                    let mut any_ts_pred = false;
+                    for (pi, pblk) in func.blocks.iter().enumerate() {
+                        let is_p = match &pblk.terminator {
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block as usize == try_start_pi
+                                    || *else_block as usize == try_start_pi
+                            }
+                            Terminator::Goto(t) => *t as usize == try_start_pi,
+                            _ => false,
+                        };
+                        if is_p {
+                            any_ts_pred = true;
+                            for s in 0..max_slots {
+                                ts_in[s] = ts_in[s] && live_at_end[pi][s];
+                            }
+                        }
+                    }
+                    if any_ts_pred {
+                        if has_pred {
+                            for s in 0..max_slots {
+                                inherited[s] = inherited[s] && ts_in[s];
+                            }
+                        } else {
+                            inherited = ts_in;
+                            has_pred = true;
+                        }
+                    }
+                    break;
+                }
+            }
             if !has_pred && bi == 0 {
                 for (s, val) in inherited.iter_mut().enumerate() {
                     *val = s < (initial_locals_count as usize);
@@ -3879,6 +4118,94 @@ fn emit_method_body(
         }
     }
 
+    // After catch-param slot reuse, two MIR locals can share a single JVM
+    // slot — the named local (used in the try region, e.g. an `int x`) and
+    // the catch param (used in the handler region, e.g. a `Throwable e`).
+    // At a block where both paths merge, the slot's type is incompatible
+    // (int vs Object), so kotlinc treats the slot as dead at the merge.
+    // Mirror that: kill shared slots in `inherited_per_block` (and
+    // `live_at_end`) at any block reached via the handler block's
+    // fall-through/goto. Skipped if the handler ends in athrow/return —
+    // no merge happens, and slot tracking stays untouched.
+    {
+        let mut slot_use_count: FxHashMap<u8, u32> = FxHashMap::default();
+        for &s in slots.values() {
+            *slot_use_count.entry(s).or_insert(0) += 1;
+        }
+        let shared: Vec<u8> = slot_use_count
+            .iter()
+            .filter_map(|(s, c)| if *c > 1 { Some(*s) } else { None })
+            .collect();
+        if !shared.is_empty() {
+            // Helper: get the LAST store kind ('I','J','F','D','A') for
+            // a slot within a block, or None if no store. The last store
+            // determines what's in the slot at block end (i.e., at the
+            // merge point), which is what the SMT cares about.
+            let block_store_kind = |bi: usize, slot: u8| -> Option<char> {
+                let start = block_offsets[bi];
+                let end = block_offsets.get(bi + 1).copied().unwrap_or(code.len());
+                let mut last_kind: Option<char> = None;
+                let mut k = start;
+                while k < end {
+                    if let Some((s, _w)) = decode_store_reference(&code, k) {
+                        if s == slot {
+                            let op = code[k];
+                            last_kind = Some(match op {
+                                0x3B..=0x3E | 0x36 => 'I',
+                                0x3F..=0x42 | 0x37 => 'J',
+                                0x43..=0x46 | 0x38 => 'F',
+                                0x47..=0x4A | 0x39 => 'D',
+                                0x4B..=0x4E | 0x3A => 'A',
+                                _ => '?',
+                            });
+                        }
+                    }
+                    k += instruction_len(&code, k);
+                }
+                last_kind
+            };
+            for eh in &func.exception_handlers {
+                let bi_h = eh.handler_block as usize;
+                let Some(handler_block) = func.blocks.get(bi_h) else {
+                    continue;
+                };
+                let Terminator::Goto(after_bi) = &handler_block.terminator else {
+                    continue;
+                };
+                let after_idx = *after_bi as usize;
+                // Find try-end-like predecessor of after_idx (any block
+                // other than the handler that gotoes to after_idx).
+                let mut try_end_bi: Option<usize> = None;
+                for (ti, tblk) in func.blocks.iter().enumerate() {
+                    if ti == bi_h {
+                        continue;
+                    }
+                    if matches!(&tblk.terminator, Terminator::Goto(t) if *t as usize == after_idx) {
+                        try_end_bi = Some(ti);
+                        break;
+                    }
+                }
+                if let Some(v) = live_at_end.get_mut(bi_h) {
+                    for &s in &shared {
+                        // If both try-end and handler store same KIND to s,
+                        // the slot is alive at merge with a consistent
+                        // type — don't kill. Otherwise kill (catch-param
+                        // shape: handler writes ref while try wrote int).
+                        let h_kind = block_store_kind(bi_h, s);
+                        let t_kind = try_end_bi.and_then(|t| block_store_kind(t, s));
+                        let compatible = matches!((h_kind, t_kind), (Some(a), Some(b)) if a == b);
+                        if compatible {
+                            continue;
+                        }
+                        if (s as usize) < v.len() {
+                            v[s as usize] = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Collect ALL target offsets (inter-block + comparison-internal + peephole-introduced) ──
     // Each entry: (offset, is_cmp_target_index_or_none)
     enum TargetSource {
@@ -3903,6 +4230,36 @@ fn emit_method_body(
     }
     all_targets.sort_by_key(|&(off, _)| off);
     all_targets.dedup_by_key(|t| t.0);
+
+    // Compute bytecode ranges of each exception handler (from handler
+    // entry to the next instruction that ends the handler — for our
+    // emitted bytecode, the handler ends with athrow). Stores within
+    // these ranges are unreachable via the goto-fall-through path, so
+    // they shouldn't influence per-offset slot type inference at
+    // non-handler frames.
+    let handler_ranges: Vec<(usize, usize)> = func
+        .exception_handlers
+        .iter()
+        .filter_map(|eh| {
+            let hbi = eh.handler_block as usize;
+            let start = block_offsets.get(hbi).copied()?;
+            // Find handler end: walk forward from start to the first
+            // athrow/return instruction (inclusive).
+            let mut i = start;
+            while i < code.len() {
+                let op = code[i];
+                if matches!(op, 0xAC..=0xB1 | 0xBF) {
+                    return Some((start, i + 1));
+                }
+                let l = instruction_len(&code, i);
+                if l == 0 {
+                    break;
+                }
+                i += l;
+            }
+            Some((start, code.len()))
+        })
+        .collect();
 
     let mut stack_map_entries: Vec<u8> = Vec::new();
     let mut smt_count: u16 = 0;
@@ -3940,25 +4297,152 @@ fn emit_method_body(
 
         match source {
             TargetSource::Block(target_bi) => {
-                // Compute merged slot set from predecessors.
+                // Compute merged slot set from predecessors. After
+                // block-merging peepholes (inline-tail-match-block),
+                // multiple MIR blocks can alias the same bytecode
+                // offset; a predecessor goto targeting bi=B is also a
+                // predecessor of every other block at that offset.
+                let target_off = block_offsets[*target_bi];
+                let alias_bis: FxHashSet<usize> = block_offsets
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(bi, &off)| (off == target_off).then_some(bi))
+                    .collect();
+
+                // Identify the bi-set of MIR blocks that are real
+                // bytecode predecessors of target_off. We use this to
+                // supplement (not replace) the MIR-terminator-based
+                // predecessor list — peepholes can rewrite bytecode in
+                // ways that leave MIR terminators stale (fixture 179:
+                // bi=2's MIR says Branch(5,6) but its emitted bytecode
+                // branches to a different offset entirely). Walk all
+                // bytecode and record which MIR block owns each
+                // branch/fall-through into target_off.
+                let mir_block_of_instr = |off: usize| -> Option<usize> {
+                    // Pick the non-empty MIR block containing `off`.
+                    // For aliased zero-width blocks at the same start,
+                    // this finds the unique non-empty owner.
+                    block_offsets.iter().enumerate().find_map(|(bi, &start)| {
+                        let end = block_offsets.get(bi + 1).copied().unwrap_or(code.len());
+                        if start <= off && off < end && start < end {
+                            Some(bi)
+                        } else {
+                            None
+                        }
+                    })
+                };
+                let mut bytecode_pred_bis: FxHashSet<usize> = FxHashSet::default();
+                let mut k = 0;
+                while k < code.len() {
+                    let op = code[k];
+                    let len = instruction_len(&code, k);
+                    if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                        if k + 2 < code.len() {
+                            let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                            let tgt = (k as i32 + rel) as usize;
+                            if tgt == target_off {
+                                if let Some(bi) = mir_block_of_instr(k) {
+                                    bytecode_pred_bis.insert(bi);
+                                }
+                            }
+                            // Conditional branches: fall-through.
+                            if ((0x99..=0xA6).contains(&op) || matches!(op, 0xC6 | 0xC7))
+                                && k + 3 == target_off
+                            {
+                                if let Some(bi) = mir_block_of_instr(k) {
+                                    bytecode_pred_bis.insert(bi);
+                                }
+                            }
+                        }
+                    } else if !matches!(op, 0xAC..=0xB1 | 0xBF | 0xC8 | 0xC9) {
+                        // Non-terminating instruction — falls through.
+                        if k + len == target_off {
+                            if let Some(bi) = mir_block_of_instr(k) {
+                                bytecode_pred_bis.insert(bi);
+                            }
+                        }
+                    }
+                    if len == 0 {
+                        break;
+                    }
+                    k += len;
+                }
+
                 let mut merged = vec![true; max_slots];
                 let mut any_pred = false;
                 for (pi, pblk) in func.blocks.iter().enumerate() {
-                    let is_pred = match &pblk.terminator {
+                    let is_mir_pred = match &pblk.terminator {
                         Terminator::Branch {
                             then_block,
                             else_block,
                             ..
                         } => {
-                            *then_block as usize == *target_bi || *else_block as usize == *target_bi
+                            alias_bis.contains(&(*then_block as usize))
+                                || alias_bis.contains(&(*else_block as usize))
                         }
-                        Terminator::Goto(t) => *t as usize == *target_bi,
+                        Terminator::Goto(t) => alias_bis.contains(&(*t as usize)),
                         _ => false,
+                    };
+                    // Trust bytecode predecessors over MIR terminators
+                    // when both are computed. A MIR-pred without a
+                    // matching bytecode-pred is a stale terminator
+                    // (artifact of inline-tail-match-block et al.); a
+                    // bytecode-pred without a matching MIR-pred is a
+                    // peephole-introduced edge that should still merge.
+                    let is_pred = if !bytecode_pred_bis.is_empty() {
+                        bytecode_pred_bis.contains(&pi)
+                    } else {
+                        is_mir_pred
                     };
                     if is_pred {
                         any_pred = true;
                         for s in 0..max_slots {
                             merged[s] = merged[s] && live_at_end[pi][s];
+                        }
+                    }
+                }
+                // Exception handler blocks aren't reachable via normal
+                // terminators — they're entered via the JVM's exception
+                // dispatch from anywhere inside the protected region.
+                // Their entry locals state is the state at the BEGINNING
+                // of the try region (the live-IN of try-start block).
+                if is_handler.get(*target_bi).copied().unwrap_or(false) {
+                    for eh in &func.exception_handlers {
+                        if eh.handler_block as usize == *target_bi {
+                            let try_start_pi = eh.try_start_block as usize;
+                            // Live-IN of try-start = intersection of
+                            // live_at_end across try-start's predecessors.
+                            let mut ts_in = vec![true; max_slots];
+                            let mut any_ts_pred = false;
+                            for (pi, pblk) in func.blocks.iter().enumerate() {
+                                let is_p = match &pblk.terminator {
+                                    Terminator::Branch {
+                                        then_block,
+                                        else_block,
+                                        ..
+                                    } => {
+                                        *then_block as usize == try_start_pi
+                                            || *else_block as usize == try_start_pi
+                                    }
+                                    Terminator::Goto(t) => *t as usize == try_start_pi,
+                                    _ => false,
+                                };
+                                if is_p {
+                                    any_ts_pred = true;
+                                    for s in 0..max_slots {
+                                        ts_in[s] = ts_in[s] && live_at_end[pi][s];
+                                    }
+                                }
+                            }
+                            if !any_ts_pred {
+                                ts_in = vec![false; max_slots];
+                            }
+                            // OVERRIDE merged with ts_in — handler's
+                            // verifier state IS the try-start's entry
+                            // state, not whatever default fell through.
+                            merged = ts_in;
+                            any_pred = true;
+                            break;
                         }
                     }
                 }
@@ -3979,7 +4463,17 @@ fn emit_method_body(
                     while s < num_locals as usize {
                         let live = merged.get(s).copied().unwrap_or(false);
                         let mut entry_buf = Vec::new();
-                        write_slot_verif(&mut entry_buf, cp, s, live, &slot_to_local, func);
+                        write_slot_verif_with_code(
+                            &mut entry_buf,
+                            cp,
+                            s,
+                            live,
+                            &slot_to_local,
+                            func,
+                            &code,
+                            off,
+                            &handler_ranges,
+                        );
                         cur_locals_verif.push(entry_buf);
                         let is_wide = if live {
                             slot_to_local
@@ -4077,7 +4571,17 @@ fn emit_method_body(
                     while s < num_locals as usize {
                         let lv = live.get(s).copied().unwrap_or(false);
                         let mut entry_buf = Vec::new();
-                        write_slot_verif(&mut entry_buf, cp, s, lv, &slot_to_local, func);
+                        write_slot_verif_with_code(
+                            &mut entry_buf,
+                            cp,
+                            s,
+                            lv,
+                            &slot_to_local,
+                            func,
+                            &code,
+                            ct.offset,
+                            &handler_ranges,
+                        );
                         cur_locals_verif.push(entry_buf);
                         let is_wide = if lv {
                             slot_to_local
@@ -4493,6 +4997,7 @@ fn emit_stub_method(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
     access_flags: u16,
+    module: &MirModule,
 ) -> Vec<u8> {
     let descriptor = jvm_descriptor(func);
     let name_idx = cp.utf8(&func.name);
@@ -4574,7 +5079,7 @@ fn emit_stub_method(
     blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count (no StackMapTable needed for trivial bodies)
 
     // Append annotation attributes if present.
-    append_method_annotations(&mut blob, func, cp);
+    append_method_annotations(&mut blob, func, cp, module);
 
     blob
 }
@@ -4596,6 +5101,7 @@ fn emit_method(
             cp,
             code_attr_name_idx,
             ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
+            module,
         );
     }
     // Coroutine transform. If the MIR lowerer
@@ -18358,6 +18864,379 @@ fn peephole_stack_merge_returns(
 /// dead code, removed by a separate dead-code pass — or simply ignored, since
 /// a no-incoming-edges block won't get a StackMapTable frame after the
 /// `is_target` recompute).
+/// Inline a short tail-block that sits behind a forward `goto` from a
+/// conditional branch's "fall-through" arm. Pattern:
+///   A:     `if?? T1`            (conditional, 3 bytes)
+///   A+3:   `goto T2`             (unconditional, 3 bytes)
+///   ...
+///   T2:    `<3-byte body>`       (no internal branches)
+///   T2+3=T1:`goto T3`             (3 bytes; trailing goto of the body)
+///
+/// kotlinc inlines the body right after the conditional, threads the
+/// conditional past the trampoline, and drops both the body and the
+/// trailing goto. Matches fixtures 194 (loop-body `if (cond) match`),
+/// 139, 140 (loop-body `break`/`continue`).
+///
+/// Rewrite:
+///   A:     `if?? T3` (threaded)
+///   A+3:   `<body bytes>` (inlined, same size as the goto we replace)
+///   <drain [T2, T2+6) — 6 bytes>
+///
+/// Skipped if any external branch source/target lies inside
+/// [T2, T2+6) other than the two we're rewriting.
+#[allow(dead_code)]
+fn peephole_inline_tail_match_block(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+) {
+    loop {
+        let mut applied: Option<(usize, usize, usize, Vec<u8>, i32, usize)> = None;
+        // (A, T2, body_len, body_bytes, T3-rel-from-A, region_end)
+        let mut i = 0;
+        while i + 6 <= code.len() {
+            let op = code[i];
+            let is_cond_branch = (0x99..=0xA6).contains(&op) || matches!(op, 0xC6 | 0xC7);
+            if !is_cond_branch {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Conditional at A.
+            let a = i;
+            let rel_cond = i16::from_be_bytes([code[a + 1], code[a + 2]]) as i32;
+            let t1 = (a as i32 + rel_cond) as usize;
+            // Next instruction must be `goto T2`.
+            let goto_pos = a + 3;
+            if goto_pos + 3 > code.len() || code[goto_pos] != 0xA7 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let rel_goto = i16::from_be_bytes([code[goto_pos + 1], code[goto_pos + 2]]) as i32;
+            let t2 = (goto_pos as i32 + rel_goto) as usize;
+            // Body at T2 — a straight-line sequence of non-branch
+            // instructions ending with a `goto` (the trailing goto).
+            // Walk forward to find the first goto.
+            if t2 >= code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let mut body_end = t2;
+            let mut body_branch = false;
+            while body_end < code.len() {
+                let bop = code[body_end];
+                if bop == 0xA7 {
+                    break;
+                }
+                // Return / athrow — include the terminator in the body
+                // and stop. A trampoline `goto T3` should follow.
+                if matches!(bop, 0xAC..=0xB1 | 0xBF) {
+                    body_end += 1;
+                    break;
+                }
+                if (0x99..=0xA8).contains(&bop) || matches!(bop, 0xC6..=0xC9 | 0xAA | 0xAB) {
+                    body_branch = true;
+                    break;
+                }
+                let bl = instruction_len(code, body_end);
+                if bl == 0 {
+                    body_branch = true;
+                    break;
+                }
+                body_end += bl;
+            }
+            if body_branch || body_end >= code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Trampoline at body_end == T1 (either the trailing goto of
+            // a goto-terminated body, or a separate trampoline after a
+            // return-terminated body).
+            if body_end != t1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            if body_end + 3 > code.len() || code[body_end] != 0xA7 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let body_len = body_end - t2;
+            // Skip empty bodies — that's a different optimization.
+            if body_len == 0 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let rel_trail = i16::from_be_bytes([code[t1 + 1], code[t1 + 2]]) as i32;
+            let t3 = (t1 as i32 + rel_trail) as usize;
+            let region_end = t1 + 3; // t2 + body_len + 3 (trailing goto)
+                                     // No external branch source/target may lie inside
+                                     // [t2, region_end) — we're going to drain those bytes.
+            let mut external = false;
+            let mut k = 0;
+            while k < code.len() {
+                let kop = code[k];
+                let len = instruction_len(code, k);
+                if ((0x99..=0xA8).contains(&kop) || matches!(kop, 0xC6 | 0xC7))
+                    && k + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                    let src = k;
+                    let dst = (k as i32 + rel) as usize;
+                    let is_ours = src == a || src == goto_pos || src == t1;
+                    let src_in = src >= t2 && src < region_end;
+                    let dst_in = dst >= t2 && dst < region_end;
+                    if (src_in || dst_in) && !is_ours {
+                        external = true;
+                        break;
+                    }
+                }
+                k += len;
+            }
+            if external {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No cmp_target may sit inside [t2, region_end).
+            let cmp_conflict = cmp_targets
+                .iter()
+                .any(|t| t.offset >= t2 && t.offset < region_end);
+            if cmp_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // For body_len > 3, only safe if we can fit the body where
+            // the original `goto T2` was — and that requires bytecode
+            // shift (insert body_len bytes, drain body_len+3 bytes,
+            // net -3 bytes). For body_len == 3, no shift. We support
+            // both, but the byte-shift case needs to also update all
+            // intermediate branch rels between the goto and t2.
+            let body_bytes: Vec<u8> = code[t2..t2 + body_len].to_vec();
+            let rel_t3_from_a = t3 as i32 - a as i32;
+            applied = Some((a, t2, body_len, body_bytes, rel_t3_from_a, region_end));
+            break;
+        }
+        let Some((a, t2, body_len, body_bytes, rel_t3_from_a, region_end)) = applied else {
+            break;
+        };
+        let t3 = (a as i32 + rel_t3_from_a) as usize;
+        let _ = rel_t3_from_a;
+        // Update conditional at A to target T3 (post-rewrite offset of
+        // T3 may shift; compute after byte movements below).
+        // Approach: first do the byte-level rewrite:
+        //   1. Replace `goto T2` (3 bytes at a+3) with body_bytes
+        //      (body_len bytes).
+        //   2. Drain [region_end_post_insert, region_end_post_insert +
+        //      body_len + 3) -- the original body + trailing goto, now
+        //      shifted by body_len - 3.
+        //   3. Adjust all branch offsets accordingly.
+        // Net byte change: -6 (body_len + 3 drained, body_len - 3 added).
+        //
+        // For simplicity, do it as a SINGLE drain: drain [t2,
+        // region_end), and insert body_bytes at position a+3 (after
+        // replacing the 3-byte goto).
+        //
+        // Order: drain first (without the body), then insert. But we
+        // need to remember body_bytes contents (already cloned).
+        //
+        // Simpler still: replace, then drain, accounting for shift.
+
+        // Step 1: Replace `goto T2` (3 bytes) with body_bytes — this
+        // expands the bytecode by (body_len - 3) bytes. All offsets
+        // after a+6 shift by (body_len - 3).
+        let expand = body_len as i32 - 3;
+        // Splice in body_bytes at a+3, replacing the 3-byte goto.
+        code.splice(a + 3..a + 6, body_bytes.iter().copied());
+        // After expand, original t2 shifts to t2 + expand. Same for
+        // region_end.
+        let t2_shifted = (t2 as i32 + expand) as usize;
+        let region_end_shifted = (region_end as i32 + expand) as usize;
+        // Step 2: Drain [t2_shifted, region_end_shifted) — body_len + 3
+        // bytes.
+        // Adjust branches for the combined effect.
+        // Net offset change for byte at original offset X:
+        //   - X < a+3: unchanged.
+        //   - a+3 <= X < a+6: replaced (was 3-byte goto, now part of
+        //     body_len-byte body). We DON'T expect external branches
+        //     here.
+        //   - a+6 <= X < t2: shifts by +expand (from insert) then no
+        //     drain effect (since X < t2_shifted... actually X+expand
+        //     might be >= t2_shifted). Wait: X >= a+6 and X < t2.
+        //     After insert: X is at X+expand. Insert happens at a+3,
+        //     bytes after a+6 shift by expand. So new position of X
+        //     is X + expand. Now is X+expand < t2_shifted (= t2+expand)?
+        //     X < t2 → X+expand < t2+expand. Yes. So this range is
+        //     before drain.
+        //     Net: branch offset shifts (no change for branch+target
+        //     both in this range).
+        //   - t2 <= X < region_end: drained.
+        //   - X >= region_end: after both insert and drain. Insert
+        //     adds expand. Drain removes (body_len + 3). Net: expand -
+        //     (body_len + 3) = body_len - 3 - body_len - 3 = -6.
+        //     So this range shifts by -6 net.
+        //
+        // For branches, walk new code (post-insert, pre-drain) and
+        // compute new rel values.
+        // Actually let's reason in NEW post-everything positions.
+        //
+        // Mapping from OLD offset O to NEW offset O':
+        //   O < a+3      -> O' = O
+        //   a+3 <= O < a+6 -> these are the original goto; replaced;
+        //                     mapping makes sense only at endpoints.
+        //                     The goto is gone.
+        //   a+6 <= O < t2 -> O' = O + expand
+        //   t2 <= O < region_end -> drained; no mapping
+        //   O >= region_end -> O' = O + expand - (body_len + 3)
+        //                         = O + (body_len - 3) - body_len - 3
+        //                         = O - 6.
+
+        let map_old_to_new = |o: usize| -> Option<usize> {
+            if o < a + 3 {
+                Some(o)
+            } else if o < a + 6 {
+                None // the original goto bytes
+            } else if o < t2 {
+                Some((o as i32 + expand) as usize)
+            } else if o < region_end {
+                None // drained
+            } else {
+                // o >= region_end
+                Some(o - 6)
+            }
+        };
+
+        // First, do the drain in post-insert numbering: drain
+        // [t2_shifted, region_end_shifted).
+        code.drain(t2_shifted..region_end_shifted);
+
+        // Now adjust all branches. Walk the new code.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    // The branch at NEW offset j. Compute its OLD
+                    // offset to look up its OLD target's mapping.
+                    // OLD offset of the source = inverse of map.
+                    let new_src = j;
+                    let old_src = if new_src < a + 3 {
+                        new_src
+                    } else if new_src < a + 3 + body_len {
+                        // This is INSIDE the inlined body. The body
+                        // came from old positions [t2, t2 + body_len).
+                        // Don't adjust — we already copied the bytes
+                        // verbatim. But goto rels INSIDE body are
+                        // problematic. We rejected branch-containing
+                        // bodies, so no goto/branch should be here.
+                        new_src // shouldn't be a branch
+                    } else if new_src < a + 3 + body_len + (t2 - (a + 6)) {
+                        // In the [a+6, t2) old range, shifted to [a+3+body_len, ...).
+                        (new_src as i32 - expand) as usize
+                    } else {
+                        // Past the drain. Old offset was new + 6.
+                        new_src + 6
+                    };
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let old_dst = (old_src as i32 + rel) as usize;
+                    let is_ours_cond = old_src == a;
+                    let new_dst_opt = if is_ours_cond {
+                        // Conditional was rewritten to target T3.
+                        Some((t3 as i32) as usize) // need to map T3
+                    } else {
+                        map_old_to_new(old_dst)
+                    };
+                    if let Some(new_dst_raw) = new_dst_opt {
+                        // For ours_cond, new_dst_raw is OLD T3; map.
+                        let new_dst = if is_ours_cond {
+                            map_old_to_new(t3).unwrap_or(new_dst_raw)
+                        } else {
+                            new_dst_raw
+                        };
+                        let new_rel = new_dst as i32 - new_src as i32;
+                        if let Ok(b) = i16::try_from(new_rel) {
+                            let nb = b.to_be_bytes();
+                            code[j + 1] = nb[0];
+                            code[j + 2] = nb[1];
+                        }
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        // Adjust cmp_targets.
+        for ct in cmp_targets.iter_mut() {
+            if let Some(no) = map_old_to_new(ct.offset) {
+                ct.offset = no;
+            }
+            if let Some(ns) = map_old_to_new(ct.cmp_start) {
+                ct.cmp_start = ns;
+            }
+        }
+        // Post-drain new offset of where the drained region used to
+        // start. For block_offsets inside the drained range, clamp here
+        // so the block becomes empty.
+        let drained_to_new = (t2 as i32 + expand) as usize;
+        for b in block_offsets.iter_mut() {
+            if let Some(nb) = map_old_to_new(*b) {
+                *b = nb;
+            } else if *b >= a + 3 && *b < a + 6 {
+                // The old `goto T2` position — bytes were replaced with
+                // body. Set to a+3 (start of inlined body).
+                *b = a + 3;
+            } else if *b >= t2 && *b < region_end {
+                *b = drained_to_new;
+            }
+        }
+    }
+}
+
+/// Thread `cond X` where X is `goto Y` → `cond Y` directly. Limited to
+/// CONDITIONAL branches (and ifnull/ifnonnull) — unconditional gotos
+/// are left alone because kotlinc preserves some trampoline gotos and
+/// threading them drops parity.
+#[allow(dead_code, clippy::collapsible_if)]
+fn peephole_thread_cond_gotos(code: &mut [u8]) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            // Conditional branches: 0x99..=0xA6 (ifeq..if_acmpne) and 0xC6/0xC7 (ifnull/ifnonnull).
+            if (0x99..=0xA6).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let target = j as i32 + rel;
+                    if target >= 0
+                        && (target as usize) < code.len()
+                        && code[target as usize] == 0xA7
+                    {
+                        if (target as usize) + 2 < code.len() {
+                            let chain_rel = i16::from_be_bytes([
+                                code[(target as usize) + 1],
+                                code[(target as usize) + 2],
+                            ]) as i32;
+                            let final_target = target + chain_rel;
+                            if final_target != j as i32 && final_target != target {
+                                let new_rel = final_target - j as i32;
+                                if new_rel >= i16::MIN as i32 && new_rel <= i16::MAX as i32 {
+                                    let nb = (new_rel as i16).to_be_bytes();
+                                    code[j + 1] = nb[0];
+                                    code[j + 2] = nb[1];
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+    }
+}
+
 fn peephole_thread_gotos(code: &mut [u8]) {
     let mut changed = true;
     while changed {
@@ -18406,6 +19285,166 @@ fn peephole_thread_gotos(code: &mut [u8]) {
 /// emits it because each MIR block ends with an explicit terminator, including
 /// `Goto` to the next block. This pass removes such gotos and adjusts every
 /// branch instruction's relative offset, plus `cmp_targets` and `block_offsets`.
+/// Replace `goto T` (where T is a single-byte return / athrow) with
+/// the return instruction itself, draining the 2 trailing operand
+/// bytes. Subsequent peepholes can fold the resulting stack-merge
+/// patterns (stack_merge_returns) into the optimal form.
+fn peephole_goto_to_return(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+) {
+    loop {
+        let mut applied: Option<usize> = None;
+        let mut i = 0;
+        while i + 2 < code.len() {
+            let op = code[i];
+            if op == 0xA7 {
+                let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                let tgt = (i as i32 + rel) as usize;
+                if tgt < code.len() && matches!(code[tgt], 0xAC..=0xB1 | 0xBF) {
+                    let drain_end = i + 3;
+                    let cmp_conflict = cmp_targets.iter().any(|t| {
+                        (t.offset > i && t.offset < drain_end)
+                            || (t.cmp_start > i && t.cmp_start < drain_end)
+                    });
+                    let block_conflict = block_offsets.iter().any(|&b| b > i && b < drain_end);
+                    // The 3-byte goto becomes a 1-byte return; the 2
+                    // drained bytes shift everything past `i+3` down by
+                    // 2. The new instruction at the position formerly
+                    // at `i+3` (post-drain offset i+1) must not be a
+                    // branch target — otherwise the verifier expects an
+                    // SMT frame at that new offset which we don't have.
+                    // Restrict to gotos whose drop position is unreachable
+                    // (i.e. nothing branches into i+3 and i+3 is not a
+                    // block_offset).
+                    let drop_unreach = {
+                        let dpos = i + 3;
+                        if dpos >= code.len() {
+                            true
+                        } else {
+                            !block_offsets.contains(&dpos)
+                                && !cmp_targets.iter().any(|t| t.offset == dpos)
+                                && {
+                                    // Check no branch targets dpos.
+                                    let mut targets = false;
+                                    let mut k = 0;
+                                    while k < code.len() {
+                                        let op = code[k];
+                                        if ((0x99..=0xA8).contains(&op)
+                                            || matches!(op, 0xC6 | 0xC7))
+                                            && k + 2 < code.len()
+                                        {
+                                            let rel2 =
+                                                i16::from_be_bytes([code[k + 1], code[k + 2]])
+                                                    as i32;
+                                            let tg = (k as i32 + rel2) as usize;
+                                            if tg == dpos {
+                                                targets = true;
+                                                break;
+                                            }
+                                        }
+                                        k += instruction_len(code, k);
+                                    }
+                                    !targets
+                                }
+                        }
+                    };
+                    if !cmp_conflict && !block_conflict && drop_unreach {
+                        applied = Some(i);
+                        break;
+                    }
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        let Some(start) = applied else {
+            break;
+        };
+        // Replace opcode at `start` with the return at the goto target.
+        let rel = i16::from_be_bytes([code[start + 1], code[start + 2]]) as i32;
+        let tgt = (start as i32 + rel) as usize;
+        let return_op = code[tgt];
+        code[start] = return_op;
+        // Drain the 2 operand bytes after `start`.
+        let drain_start = start + 1;
+        let drain_size = 2;
+        // Adjust branch offsets.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel2 = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel2;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel2 - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel2 + drain_size as i32
+                    } else {
+                        rel2
+                    };
+                    if new_rel != rel2 {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel2 =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel2;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel2 - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel2 + drain_size as i32
+                    } else {
+                        rel2
+                    };
+                    if new_rel != rel2 {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_start + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_start + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_start + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_start + drain_size);
+    }
+}
+
 fn peephole_drop_redundant_gotos(
     code: &mut Vec<u8>,
     cmp_targets: &mut [CmpBranchTarget],
@@ -19738,6 +20777,614 @@ fn liveness_reuse_slots(
     max_used
 }
 
+/// Pack named-local slots so each named gets its own (lowest-available)
+/// slot but earlier expression-temps can share that slot when the named
+/// is dead at the temp's lifetime. Matches kotlinc's allocator on shapes
+/// like fixture 548 — `val x; <println(double())>; val greeting` — where
+/// greeting moves into the slot just vacated by the double() result temp.
+/// Returns the new max slot count if any move happened, 0 otherwise.
+fn try_compact_named_slots(
+    func: &MirFunction,
+    code: &mut [u8],
+    slots: &mut FxHashMap<u32, u8>,
+    initial_param_slots: u8,
+) -> u8 {
+    // Collect named locals' current JVM slots, paired with the MIR-local ID.
+    // Skip any whose `slots` map entry no longer matches the bytecode —
+    // peephole passes (e.g. constructor-chain fusion) can eliminate the
+    // backing store, leaving a stale slot for that MIR local while the
+    // slot itself is now held by an unrelated temp.
+    let mut named: Vec<(u32, u8, bool)> = Vec::new();
+    // Compute first store offset and the opcode-implied kind per slot.
+    let mut first_store: FxHashMap<u8, usize> = FxHashMap::default();
+    let mut first_store_kind: FxHashMap<u8, char> = FxHashMap::default();
+    let mut last_load: FxHashMap<u8, usize> = FxHashMap::default();
+    let mut i = 0;
+    while i < code.len() {
+        let len = instruction_len(code, i);
+        let op = if i < code.len() { code[i] } else { 0 };
+        if let Some((s, _w)) = decode_store_reference(code, i) {
+            if let std::collections::hash_map::Entry::Vacant(e) = first_store.entry(s) {
+                e.insert(i);
+                let kind = match op {
+                    // istore_X | istore
+                    0x3B..=0x3E | 0x36 => 'I',
+                    // lstore_X | lstore
+                    0x3F..=0x42 | 0x37 => 'J',
+                    // fstore_X | fstore
+                    0x43..=0x46 | 0x38 => 'F',
+                    // dstore_X | dstore
+                    0x47..=0x4A | 0x39 => 'D',
+                    // astore_X | astore
+                    0x4B..=0x4E | 0x3A => 'A',
+                    _ => '?',
+                };
+                first_store_kind.insert(s, kind);
+            }
+        }
+        if let Some((s, _w)) = decode_load_reference(code, i) {
+            last_load.insert(s, i);
+        }
+        i += len;
+    }
+    // Collect named-local kinds in MIR declaration order. Pair each with
+    // its actual slot by walking the bytecode's stores in order and
+    // matching kinds. This avoids trusting the `slots` map, which can
+    // go stale after liveness_reuse_slots (which rewrites bytecode but
+    // leaves the map unchanged).
+    let mut all_named: Vec<u32> = func.named_locals.iter().map(|l| l.0).collect();
+    // Treat destructuring receivers like named — kotlinc keeps their
+    // slot reserved while the val (x, y) pieces are being filled, so
+    // later vals shouldn't reuse the receiver's slot even after the
+    // last `componentN()` call.
+    for recv in destructuring_receivers(func) {
+        all_named.push(recv.0);
+    }
+    // Build the list of (mir_id, expected_kind, is_wide), in order.
+    let mut named_expectations: Vec<(u32, char, bool)> = Vec::new();
+    for &local_id in &all_named {
+        let ty = func.locals.get(local_id as usize);
+        let is_wide = matches!(ty, Some(Ty::Long | Ty::Double));
+        let expected_kind = match ty {
+            Some(Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool) => 'I',
+            Some(Ty::Long) => 'J',
+            Some(Ty::Float) => 'F',
+            Some(Ty::Double) => 'D',
+            _ => 'A',
+        };
+        named_expectations.push((local_id, expected_kind, is_wide));
+    }
+    if named_expectations.is_empty() {
+        return 0;
+    }
+    // Walk bytecode stores in offset order; assign each store to the
+    // first named expectation with matching kind that hasn't been
+    // assigned yet.
+    let mut store_list: Vec<(usize, u8, char)> = Vec::new();
+    let mut k = 0;
+    while k < code.len() {
+        if let Some((s, _w)) = decode_store_reference(code, k) {
+            let op = code[k];
+            let kind = match op {
+                0x3B..=0x3E | 0x36 => 'I',
+                0x3F..=0x42 | 0x37 => 'J',
+                0x43..=0x46 | 0x38 => 'F',
+                0x47..=0x4A | 0x39 => 'D',
+                0x4B..=0x4E | 0x3A => 'A',
+                _ => '?',
+            };
+            store_list.push((k, s, kind));
+        }
+        k += instruction_len(code, k);
+    }
+    // For each named expectation in order, find the FIRST store in
+    // store_list (that hasn't been claimed) with matching kind. That
+    // store's slot is the named local's actual slot.
+    let mut claimed: Vec<bool> = vec![false; store_list.len()];
+    for &(local_id, expected_kind, is_wide) in &named_expectations {
+        let mut found_slot: Option<u8> = None;
+        for (idx, &(_off, slot, kind)) in store_list.iter().enumerate() {
+            if claimed[idx] {
+                continue;
+            }
+            if kind == expected_kind {
+                claimed[idx] = true;
+                found_slot = Some(slot);
+                break;
+            }
+        }
+        if let Some(s) = found_slot {
+            named.push((local_id, s, is_wide));
+        }
+    }
+    if named.is_empty() {
+        return 0;
+    }
+
+    // Sort named by their current slot so the lowest stays where it is.
+    named.sort_by_key(|n| n.1);
+
+    let named_orig_slots: FxHashSet<u8> = named.iter().map(|n| n.1).collect();
+
+    // For each named, pick the lowest slot >= initial_param_slots that is
+    // not already assigned to another named AND is "free" (no non-named
+    // instruction touches it) during the named's lifetime.
+    let mut assignments: Vec<(u32, u8, u8, bool)> = Vec::new(); // (mir_id, old_slot, new_slot, is_wide)
+    let mut taken: FxHashSet<u8> = FxHashSet::default();
+    for (mir_id, old_slot, is_wide) in &named {
+        let need: u8 = if *is_wide { 2 } else { 1 };
+        // Use end-of-function as the lifetime end — matches kotlinc's
+        // LocalVariableTable scope where a `val` lives from its store
+        // until the end of its declared scope, not its last actual use.
+        // Using last_load would let unused vals share a slot with an
+        // immediately-following expression temp, which kotlinc doesn't do.
+        let life_start = first_store.get(old_slot).copied().unwrap_or(0);
+        let life_end = code.len();
+        let _ = last_load; // kept for potential future tighter analysis
+
+        let mut chosen = *old_slot;
+        for cand in initial_param_slots..=*old_slot {
+            // All slots in cand..cand+need must be free of OTHER named.
+            let conflict_named = (0..need).any(|d| taken.contains(&(cand + d)));
+            if conflict_named {
+                continue;
+            }
+            // For each candidate slot, check no non-named store/load
+            // during [life_start, life_end]. Stores/loads of THIS named's
+            // OWN slot (life_start..=life_end at cand == old_slot) are
+            // fine. Stores/loads of OTHER originally-named slots are
+            // ignored too (handled by the named-conflict check above).
+            let mut conflict_nonnamed = false;
+            for d in 0..need {
+                let cs = cand + d;
+                // Scan code in lifetime range; ignore offsets corresponding
+                // to this named's own ops (which we'll rewrite).
+                let mut k = 0;
+                while k < code.len() {
+                    let klen = instruction_len(code, k);
+                    if k >= life_start && k <= life_end {
+                        if let Some((s, _w)) = decode_slot_reference(code, k) {
+                            if s == cs && !named_orig_slots.contains(&s) {
+                                conflict_nonnamed = true;
+                                break;
+                            }
+                        }
+                    }
+                    k += klen;
+                }
+                if conflict_nonnamed {
+                    break;
+                }
+            }
+            if !conflict_nonnamed {
+                chosen = cand;
+                break;
+            }
+        }
+        for d in 0..need {
+            taken.insert(chosen + d);
+        }
+        assignments.push((*mir_id, *old_slot, chosen, *is_wide));
+    }
+
+    // Apply the remap.
+    let mut remap: FxHashMap<u8, u8> = FxHashMap::default();
+    for &(_mir_id, old_slot, new_slot, is_wide) in &assignments {
+        if old_slot != new_slot {
+            remap.insert(old_slot, new_slot);
+            if is_wide {
+                remap.insert(old_slot + 1, new_slot + 1);
+            }
+        }
+    }
+    if remap.is_empty() {
+        return 0;
+    }
+    let mut i = 0;
+    while i < code.len() {
+        rewrite_slot_in_place(code, i, &remap);
+        i += instruction_len(code, i);
+    }
+    // Update slots map for ALL MIR locals: every slot that's been remapped
+    // should reflect the new number.
+    for v in slots.values_mut() {
+        if let Some(&new) = remap.get(v) {
+            *v = new;
+        }
+    }
+
+    // Recompute max used slot.
+    let mut max_used = initial_param_slots;
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((s, w)) = decode_slot_reference(code, i) {
+            let used = s + if w { 2 } else { 1 };
+            if used > max_used {
+                max_used = used;
+            }
+        }
+        i += instruction_len(code, i);
+    }
+    max_used
+}
+
+/// Try-expression phi-temp slot reuse: when a `try { … } catch (…) { … }`
+/// is used as an expression, the try-end and handler both store their
+/// result to a synthetic phi-temp slot, and the after-block reads it
+/// (`xload N; xreturn`). kotlinc packs the phi-temp into a dead named
+/// slot (e.g. fixture 524: the `val result = a/b` int slot is freed
+/// after the string concat and the phi-temp moves there). After the
+/// rewrite, the original phi-temp slot becomes free for the catch-param
+/// reuse pass to pull the catch param down into.
+fn try_reuse_try_phi_temp_slots(
+    func: &MirFunction,
+    code: &mut [u8],
+    block_offsets: &[usize],
+    slots: &mut FxHashMap<u32, u8>,
+    max_locals: &mut u16,
+    named_slots: &FxHashSet<u8>,
+) {
+    for eh in &func.exception_handlers {
+        let bi_h = eh.handler_block as usize;
+        let Some(handler_block) = func.blocks.get(bi_h) else {
+            continue;
+        };
+        let after_bi = match &handler_block.terminator {
+            Terminator::Goto(t) => *t as usize,
+            _ => continue,
+        };
+        let Some(&after_off) = block_offsets.get(after_bi) else {
+            continue;
+        };
+        let after_end = block_offsets
+            .get(after_bi + 1)
+            .copied()
+            .unwrap_or(code.len());
+        if after_off >= code.len() || after_off >= after_end {
+            continue;
+        }
+        // After-block must start with `xload N; xreturn`.
+        let after_op = code[after_off];
+        let load_len = match after_op {
+            0x1A..=0x2D => 1,
+            0x15..=0x19 => 2,
+            _ => 0,
+        };
+        if load_len == 0 || after_off + load_len >= code.len() {
+            continue;
+        }
+        let ret_op = code[after_off + load_len];
+        if !matches!(ret_op, 0xAC..=0xB0) {
+            continue;
+        }
+        let phi_slot = match decode_load_reference(code, after_off) {
+            Some((s, _)) => s,
+            None => continue,
+        };
+        // Confirm the handler block contains an xstore of phi_slot.
+        let handler_start = block_offsets[bi_h];
+        let handler_end = block_offsets.get(bi_h + 1).copied().unwrap_or(code.len());
+        let mut handler_stores_phi = false;
+        let mut k = handler_start;
+        while k < handler_end {
+            if let Some((s, _w)) = decode_store_reference(code, k) {
+                if s == phi_slot {
+                    handler_stores_phi = true;
+                    break;
+                }
+            }
+            k += instruction_len(code, k);
+        }
+        if !handler_stores_phi {
+            continue;
+        }
+        // Find a try-end block: any block (other than handler) whose
+        // terminator is Goto(after_bi) and which stores phi_slot.
+        let mut try_end_stores_phi = false;
+        for (ti, tblk) in func.blocks.iter().enumerate() {
+            if ti == bi_h {
+                continue;
+            }
+            if !matches!(&tblk.terminator, Terminator::Goto(t) if *t as usize == after_bi) {
+                continue;
+            }
+            let ts = block_offsets[ti];
+            let te = block_offsets.get(ti + 1).copied().unwrap_or(code.len());
+            let mut k = ts;
+            while k < te {
+                if let Some((s, _w)) = decode_store_reference(code, k) {
+                    if s == phi_slot {
+                        try_end_stores_phi = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if try_end_stores_phi {
+                break;
+            }
+        }
+        if !try_end_stores_phi {
+            continue;
+        }
+        // Scan code: phi_slot must be used ONLY in handler region, the
+        // try-end-like store, and the after-block load. Otherwise some
+        // other code references it and we shouldn't move.
+        let phi_kind = {
+            let op = code[after_off];
+            match op {
+                0x1A..=0x1D | 0x15 => 'I',
+                0x1E..=0x21 | 0x16 => 'J',
+                0x22..=0x25 | 0x17 => 'F',
+                0x26..=0x29 | 0x18 => 'D',
+                0x2A..=0x2D | 0x19 => 'A',
+                _ => '?',
+            }
+        };
+        if phi_kind == '?' {
+            continue;
+        }
+        // Find earliest store of phi_slot in the bytecode (the try-end
+        // store) to use as `life_start` for the dead-named check.
+        let mut earliest_store: Option<usize> = None;
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_store_reference(code, i) {
+                if s == phi_slot {
+                    earliest_store = Some(earliest_store.map_or(i, |x| x.min(i)));
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        let Some(earliest_store) = earliest_store else {
+            continue;
+        };
+        // Find dead named slot M < phi_slot.
+        let mut last_load: FxHashMap<u8, usize> = FxHashMap::default();
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_load_reference(code, i) {
+                last_load.insert(s, i);
+            }
+            i += instruction_len(code, i);
+        }
+        let _ = phi_kind; // reserved for future kind-compat checking
+        let mut candidate: Option<u8> = None;
+        for s in 0..phi_slot {
+            if !named_slots.contains(&s) {
+                continue;
+            }
+            let last = last_load.get(&s).copied().unwrap_or(0);
+            if last >= earliest_store {
+                continue;
+            }
+            // Candidate must be dead (last_load < earliest_store) AND
+            // not referenced anywhere from earliest_store onward. The
+            // JVM lets a slot's type change after a store, so the phi
+            // (String) overwriting the named's int slot is fine.
+            let mut later_ref = false;
+            let mut k = earliest_store;
+            while k < code.len() {
+                if let Some((sl, _w)) = decode_slot_reference(code, k) {
+                    if sl == s {
+                        later_ref = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if later_ref {
+                continue;
+            }
+            candidate = Some(s);
+            break;
+        }
+        let Some(s_named) = candidate else { continue };
+        // Rewrite all references to phi_slot → s_named throughout code.
+        let mut remap: FxHashMap<u8, u8> = FxHashMap::default();
+        remap.insert(phi_slot, s_named);
+        let mut k = 0;
+        while k < code.len() {
+            rewrite_slot_in_place(code, k, &remap);
+            k += instruction_len(code, k);
+        }
+        // Update slots map: any MIR local at phi_slot should now point to s_named.
+        for v in slots.values_mut() {
+            if *v == phi_slot {
+                *v = s_named;
+            }
+        }
+        // After rewrite, phi_slot is unused. If it was the max, recompute.
+        let mut max_used = 0u8;
+        let mut k = 0;
+        while k < code.len() {
+            if let Some((s, w)) = decode_slot_reference(code, k) {
+                let used = s + if w { 2 } else { 1 };
+                if used > max_used {
+                    max_used = used;
+                }
+            }
+            k += instruction_len(code, k);
+        }
+        if (max_used as u16) < *max_locals {
+            *max_locals = max_used as u16;
+        }
+    }
+}
+
+/// Catch-param slot reuse: when a catch handler's exception param has been
+/// assigned a slot higher than a named local that is dead by handler entry,
+/// rewrite the param's slot references to reuse the dead named slot.
+/// Matches kotlinc's reuse of slot 0 across consecutive scopes.
+fn try_reuse_catch_param_slots(
+    func: &MirFunction,
+    code: &mut [u8],
+    block_offsets: &[usize],
+    slots: &mut FxHashMap<u32, u8>,
+    max_locals: &mut u16,
+    named_slots: &FxHashSet<u8>,
+) {
+    for eh in &func.exception_handlers {
+        let bi = eh.handler_block as usize;
+        let Some(block) = func.blocks.get(bi) else {
+            continue;
+        };
+        let Some(Stmt::Assign {
+            dest: catch_local,
+            value,
+        }) = block.stmts.first()
+        else {
+            continue;
+        };
+        if !matches!(value, Rvalue::Const(MirConst::Null)) {
+            continue;
+        }
+        let Some(&s_catch) = slots.get(&catch_local.0) else {
+            continue;
+        };
+        let Some(&handler_off) = block_offsets.get(bi) else {
+            continue;
+        };
+        let handler_end = block_offsets.get(bi + 1).copied().unwrap_or(code.len());
+
+        // Outside-handler use of s_catch disqualifies the rewrite.
+        let mut outside_use = false;
+        let mut i = 0;
+        while i < code.len() {
+            let len = instruction_len(code, i);
+            let in_handler = i >= handler_off && i < handler_end;
+            if !in_handler {
+                if let Some((s, _w)) = decode_slot_reference(code, i) {
+                    if s == s_catch {
+                        outside_use = true;
+                        break;
+                    }
+                }
+            }
+            i += len;
+        }
+        if outside_use {
+            continue;
+        }
+
+        // Find last load offset of every slot.
+        let mut last_load: FxHashMap<u8, usize> = FxHashMap::default();
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_load_reference(code, i) {
+                last_load.insert(s, i);
+            }
+            i += instruction_len(code, i);
+        }
+
+        // Choose lowest slot S < s_catch such that either S is a dead
+        // named slot, or S is fully unused after phi-temp rewriting
+        // freed it. Either way S must be free of any reference in the
+        // handler region.
+        let mut all_slot_refs: FxHashSet<u8> = FxHashSet::default();
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_slot_reference(code, i) {
+                all_slot_refs.insert(s);
+            }
+            i += instruction_len(code, i);
+        }
+        // Compute "last reference" per slot AND collect handler-region
+        // bounds so we can detect "this dead slot was a sibling catch
+        // param" — that's the only non-named dead-slot case we reuse
+        // for, matching kotlinc's multi-catch (510) layout while not
+        // over-packing fixtures like 547 where a temp's slot becomes
+        // dead but kotlinc preserves it for the catch param.
+        let mut last_ref: FxHashMap<u8, usize> = FxHashMap::default();
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_slot_reference(code, i) {
+                last_ref.insert(s, i);
+            }
+            i += instruction_len(code, i);
+        }
+        let sibling_handler_slots: FxHashSet<u8> = func
+            .exception_handlers
+            .iter()
+            .filter(|other| !std::ptr::eq(*other, eh))
+            .filter_map(|other| {
+                let bi = other.handler_block as usize;
+                let blk = func.blocks.get(bi)?;
+                let Stmt::Assign { dest, value } = blk.stmts.first()?;
+                if !matches!(value, Rvalue::Const(MirConst::Null)) {
+                    return None;
+                }
+                slots.get(&dest.0).copied()
+            })
+            .collect();
+        let mut candidate: Option<u8> = None;
+        for s in 0..s_catch {
+            let is_named = named_slots.contains(&s);
+            let is_unused = !all_slot_refs.contains(&s);
+            // Dead-sibling-catch reuse: only allow when the dead slot
+            // belonged to ANOTHER catch handler in the same try (e.g.
+            // 510 — catch1 stored slot 0; catch2 can reuse it).
+            let is_dead_sibling_catch = sibling_handler_slots.contains(&s)
+                && last_ref.get(&s).map(|&l| l < handler_off).unwrap_or(true);
+            if !is_named && !is_unused && !is_dead_sibling_catch {
+                continue;
+            }
+            if is_named {
+                let last = last_load.get(&s).copied().unwrap_or(0);
+                if last >= handler_off {
+                    continue;
+                }
+            }
+            // Verify s is not used inside the handler region.
+            let mut used_in_handler = false;
+            let mut j = handler_off;
+            while j < handler_end {
+                let len = instruction_len(code, j);
+                if let Some((sl, _w)) = decode_slot_reference(code, j) {
+                    if sl == s {
+                        used_in_handler = true;
+                        break;
+                    }
+                }
+                j += len;
+            }
+            if used_in_handler {
+                continue;
+            }
+            candidate = Some(s);
+            break;
+        }
+        let Some(s_named) = candidate else { continue };
+
+        // Rewrite handler region's slot references s_catch → s_named.
+        let mut remap: FxHashMap<u8, u8> = FxHashMap::default();
+        remap.insert(s_catch, s_named);
+        let mut j = handler_off;
+        while j < handler_end {
+            let len = instruction_len(code, j);
+            rewrite_slot_in_place(code, j, &remap);
+            j += len;
+        }
+
+        // Update slots map and possibly drop max_locals.
+        slots.insert(catch_local.0, s_named);
+        let mut s_catch_still_used = false;
+        let mut i = 0;
+        while i < code.len() {
+            if let Some((s, _w)) = decode_slot_reference(code, i) {
+                if s == s_catch {
+                    s_catch_still_used = true;
+                    break;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        if !s_catch_still_used && (s_catch as u16) + 1 == *max_locals {
+            *max_locals = s_catch as u16;
+        }
+    }
+}
+
 /// Decode a load instruction at `pos` returning the slot and whether it's wide.
 fn decode_load_reference(code: &[u8], pos: usize) -> Option<(u8, bool)> {
     if pos >= code.len() {
@@ -20334,6 +21981,45 @@ fn emit_compact_frame(
     }
 }
 
+/// Return true iff `slot` is loaded by some instruction in
+/// `code[from..]` before being unconditionally overwritten. Used to
+/// determine whether a slot is dead at an SMT frame offset. Treats any
+/// `xload <slot>` as a load and any `xstore <slot>` as overwriting.
+/// `iinc` reads-then-writes so counts as a load (keeps slot alive).
+///
+/// Approximation: ignores branches and treats bytecode as straight-
+/// line until first store or end. Correct for forward-only flows and
+/// over-approximates liveness for branches (treats slot as alive when
+/// in doubt — verifier-conservative).
+#[allow(dead_code)]
+fn slot_loaded_after(code: &[u8], from: usize, slot: u8) -> bool {
+    let mut i = from;
+    while i < code.len() {
+        if let Some((s, _w)) = decode_load_reference(code, i) {
+            if s == slot {
+                return true;
+            }
+        }
+        // iinc reads and writes — keeps the slot alive at `from`.
+        if code[i] == 0x84 && i + 1 < code.len() && code[i + 1] == slot {
+            return true;
+        }
+        // Pure store of the same slot — overwrites the value at `from`;
+        // any later load reads the new value, so `from`'s value is dead.
+        if let Some((s, _w)) = decode_store_reference(code, i) {
+            if s == slot && code[i] != 0x84 {
+                return false;
+            }
+        }
+        let len = instruction_len(code, i);
+        if len == 0 {
+            break;
+        }
+        i += len;
+    }
+    false
+}
+
 /// Scan bytecode from `start` to `end` for istore/astore instructions,
 /// marking the corresponding slots as live in `assigned`.
 fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned: &mut [bool]) {
@@ -20370,7 +22056,18 @@ fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned
             if matches!(inner, 0x36..=0x3A) && i + 3 < end {
                 let slot = u16::from_be_bytes([code[i + 2], code[i + 3]]) as usize;
                 record_store(slot);
+            } else if inner == 0x84 && i + 5 < end {
+                // wide iinc <slot:u16> <const:i16>
+                let slot = u16::from_be_bytes([code[i + 2], code[i + 3]]) as usize;
+                record_store(slot);
             }
+        } else if op == 0x84 && i + 1 < end {
+            // iinc <slot> <const> — reads and writes the slot, so it
+            // keeps the slot alive for SMT purposes. Without this, a
+            // back-edge block whose only mutation of a slot is via iinc
+            // would propagate "slot dead" to the loop header (fixture
+            // 179).
+            record_store(code[i + 1] as usize);
         }
         // Advance past this instruction using the canonical length table —
         // critical for multi-byte opcodes like invokedynamic (5 bytes) whose
@@ -20382,6 +22079,229 @@ fn scan_stores(code: &[u8], start: usize, end: usize, max_slots: usize, assigned
 }
 
 /// Write a StackMapTable verification_type_info for a single JVM slot.
+/// Variant of `write_slot_verif` that consults the bytecode at
+/// `frame_off` to decide the slot's verifier type — handles the case
+/// where a slot is reused across multiple MIR locals of different
+/// types (fixture 274: slot 1 holds `int length`, then `String
+/// toUpperCase`, then `String toLowerCase`, then `Bool isEmpty`).
+/// Falls back to `write_slot_verif`'s `slot_to_local`-based logic when
+/// no bytecode-derived type can be determined.
+#[allow(clippy::too_many_arguments)]
+fn write_slot_verif_with_code(
+    out: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    slot: usize,
+    live: bool,
+    slot_to_local: &[Option<u32>],
+    func: &MirFunction,
+    code: &[u8],
+    frame_off: usize,
+    handler_ranges: &[(usize, usize)],
+) {
+    // Prefer slot_to_local for the common case (single MIR local per
+    // slot). Use code-walk only when slot_to_local has no mapping,
+    // which indicates the slot is either shared across reused MIR
+    // locals or pure-peephole. That's where the per-offset type
+    // tracker pays off (fixture 274: slot 1 holds int/String/Bool at
+    // different SMT frames).
+    if slot == 0 && func.name == "main" && !func.params.is_empty() {
+        out.push(7);
+        let idx = cp.class("[Ljava/lang/String;");
+        out.write_u16::<BigEndian>(idx).unwrap();
+        return;
+    }
+    if !live {
+        out.push(0);
+        return;
+    }
+    // Compute the slot_to_local-derived type kind, if any.
+    let s2l_kind: Option<char> = slot_to_local
+        .get(slot)
+        .copied()
+        .flatten()
+        .and_then(|mir_id| match &func.locals[mir_id as usize] {
+            Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => Some('I'),
+            Ty::Long => Some('J'),
+            Ty::Float => Some('F'),
+            Ty::Double => Some('D'),
+            Ty::String | Ty::Class(_) | Ty::IntArray | Ty::Nullable(_) | Ty::Any => Some('A'),
+            _ => None,
+        });
+    // Compute the bytecode-walk-derived type kind at this frame offset.
+    // ONLY do this when slot_to_local has a mapping (we use the walk to
+    // detect type-mismatch indicating slot reuse). Walking when there's
+    // NO mapping risks reading stale stores from incompatible regions
+    // (fixtures 179, 267 — the slot is dead at this frame but a prior
+    // store in a different scope is still present in bytecode).
+    let walked = if s2l_kind.is_some() {
+        infer_slot_type_at(code, cp, slot as u8, frame_off, handler_ranges)
+    } else {
+        None
+    };
+    // If both agree on the primitive kind, defer to slot_to_local for
+    // the full encoding (preserves the reference-class name from the
+    // MIR type). If they DISAGREE, the slot is reused for a different
+    // value at this frame — trust the bytecode walk (fixture 274's
+    // slot 1: int / String / Bool).
+    if let (Some(s2l), Some((wk, cls_hint))) = (s2l_kind, walked.as_ref()) {
+        if s2l == *wk {
+            write_slot_verif(out, cp, slot, live, slot_to_local, func);
+            return;
+        }
+        // Disagreement — emit the bytecode-walk type.
+        match wk {
+            'I' => out.push(1),
+            'J' => out.push(4),
+            'F' => out.push(2),
+            'D' => out.push(3),
+            'A' => {
+                out.push(7);
+                let cn = cls_hint.as_deref().unwrap_or("java/lang/Object");
+                let idx = cp.class(cn);
+                out.write_u16::<BigEndian>(idx).unwrap();
+            }
+            _ => out.push(0),
+        }
+        return;
+    }
+    if s2l_kind.is_some() {
+        write_slot_verif(out, cp, slot, live, slot_to_local, func);
+        return;
+    }
+    if let Some((kind, cls_hint)) = walked {
+        match kind {
+            'I' => out.push(1),
+            'J' => out.push(4),
+            'F' => out.push(2),
+            'D' => out.push(3),
+            'A' => {
+                out.push(7);
+                let cn = cls_hint.as_deref().unwrap_or("java/lang/Object");
+                let idx = cp.class(cn);
+                out.write_u16::<BigEndian>(idx).unwrap();
+            }
+            _ => out.push(0),
+        }
+        return;
+    }
+    write_slot_verif(out, cp, slot, live, slot_to_local, func);
+}
+
+/// Scan backward from `off` for the most recent xstore to `slot`, and
+/// infer the JVM type kind. For `astore`, walks the value-producing
+/// instructions (`invokevirtual` / `invokestatic` / `invokeinterface` /
+/// `ldc` / `new` / `checkcast`) to determine the reference class via
+/// the constant pool's methodref descriptor lookup.
+fn infer_slot_type_at(
+    code: &[u8],
+    cp: &ConstantPool,
+    slot: u8,
+    off: usize,
+    handler_ranges: &[(usize, usize)],
+) -> Option<(char, Option<String>)> {
+    // Walk forward from 0 to `off`, tracking the latest xstore to slot
+    // that is NOT inside an exception-handler range. Stores inside
+    // handler code aren't reachable from the goto-fall-through path,
+    // so they don't determine the slot type at non-handler frames.
+    let in_handler =
+        |pos: usize| -> bool { handler_ranges.iter().any(|&(s, e)| pos >= s && pos < e) };
+    let mut last_store_pos: Option<usize> = None;
+    let mut i = 0;
+    while i < off && i < code.len() {
+        let len = instruction_len(code, i);
+        if let Some((s, _w)) = decode_store_reference(code, i) {
+            if s == slot && !in_handler(i) {
+                last_store_pos = Some(i);
+            }
+        }
+        i += len;
+    }
+    let store_pos = last_store_pos?;
+    let store_op = code[store_pos];
+    let kind = match store_op {
+        0x3B..=0x3E | 0x36 => 'I',
+        0x3F..=0x42 | 0x37 => 'J',
+        0x43..=0x46 | 0x38 => 'F',
+        0x47..=0x4A | 0x39 => 'D',
+        0x4B..=0x4E | 0x3A => 'A',
+        _ => return None,
+    };
+    if kind != 'A' {
+        return Some((kind, None));
+    }
+    // Astore — walk backward through the producing-instruction chain.
+    // Collect all instruction starts before store_pos in order.
+    let mut starts: Vec<usize> = Vec::new();
+    let mut k = 0;
+    while k < store_pos {
+        starts.push(k);
+        k += instruction_len(code, k);
+    }
+    // Walk backward through `starts`, skipping over "transparent"
+    // wrappers (dup, invokestatic that returns void).
+    while let Some(prev) = starts.pop() {
+        let op = code[prev];
+        match op {
+            0x59 => continue, // dup — preserves the value being stored
+            // ldc — operand is a Utf8 String constant typically.
+            0x12 => {
+                return Some(('A', Some("java/lang/String".to_string())));
+            }
+            // ldc_w / ldc2_w — ambiguous; default to None for ldc_w
+            // (class/string), ldc2_w doesn't store as A so unlikely.
+            0x13 | 0x14 => return Some(('A', None)),
+            // aconst_null
+            0x01 => return Some(('A', Some("java/lang/Object".to_string()))),
+            // new <class>, checkcast <class> — class index resolution
+            // not implemented; fall through to slot_to_local mapping.
+            0xBB | 0xC0 => return Some(('A', None)),
+            // invokevirtual / invokespecial / invokestatic / invokeinterface
+            0xB6..=0xB9 => {
+                if prev + 2 < code.len() {
+                    let mref_idx = u16::from_be_bytes([code[prev + 1], code[prev + 2]]);
+                    if let Some(desc) = cp.descriptor_at(mref_idx) {
+                        let return_ty = parse_return_type(desc);
+                        match return_ty.as_deref() {
+                            Some("V") => continue, // void — keep walking back
+                            Some(rt) => {
+                                if let Some(cls) = parse_ref_class_from_jvm_type(rt) {
+                                    return Some(('A', Some(cls)));
+                                }
+                                return Some(('A', None));
+                            }
+                            None => return Some(('A', None)),
+                        }
+                    }
+                }
+                return Some(('A', None));
+            }
+            // aload — slot's value came from another local. Don't try
+            // to chase further.
+            0x19 | 0x2A..=0x2D => return Some(('A', None)),
+            _ => return Some(('A', None)),
+        }
+    }
+    Some(('A', None))
+}
+
+/// Parse the return-type segment from a JVM method descriptor like
+/// `(II)Ljava/lang/String;` → returns `"Ljava/lang/String;"`.
+fn parse_return_type(desc: &str) -> Option<String> {
+    let close = desc.find(')')?;
+    Some(desc[close + 1..].to_string())
+}
+
+/// Extract the internal class name from a JVM type descriptor:
+/// `"Ljava/lang/String;"` → `"java/lang/String"`. Returns None for
+/// primitives or array types.
+fn parse_ref_class_from_jvm_type(ty: &str) -> Option<String> {
+    if ty.starts_with('L') && ty.ends_with(';') {
+        Some(ty[1..ty.len() - 1].to_string())
+    } else {
+        None
+    }
+}
+
 fn write_slot_verif(
     out: &mut Vec<u8>,
     cp: &mut ConstantPool,

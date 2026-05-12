@@ -801,6 +801,7 @@ mod tests {
             is_suspend_lambda: false,
             is_cross_file_stub: false,
             annotations: vec![],
+            has_type_params: false,
         }
     }
 

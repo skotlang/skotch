@@ -8,21 +8,19 @@ method        findFirst (I)I 0x0019
     0001 istore_1
     0002 iload_1
     0003 bipush 101
-    0005 if_icmpge 24
+    0005 if_icmpge 23
     0008 iload_1
     0009 iload_1
     0010 imul
     0011 iload_0
-    0012 if_icmple 28
-    0015 goto 26
-    0018 iinc 1 1
-    0021 goto 2
-    0024 iconst_m1
-    0025 ireturn
-    0026 iload_1
-    0027 ireturn
-    0028 goto 18
-    sub_attr  StackMapTable (10 bytes)
+    0012 if_icmple 17
+    0015 iload_1
+    0016 ireturn
+    0017 iinc 1 1
+    0020 goto 2
+    0023 iconst_m1
+    0024 ireturn
+    sub_attr  StackMapTable (8 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=3
     0000 iconst_0

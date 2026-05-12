@@ -78,6 +78,18 @@ fn discover_e2e_fixtures() -> Vec<String> {
 
 #[test]
 fn skotch_dex_compilation_and_dexdump_validation() {
+    // Run the body on a thread with a generous stack — the DEX
+    // backend recurses through MIR for every supported fixture and
+    // a few fixtures push past the default 2 MiB test-thread stack.
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run_e2e_dex_test)
+        .expect("spawning e2e_dex thread")
+        .join()
+        .expect("e2e_dex thread");
+}
+
+fn run_e2e_dex_test() {
     let dexdump = match locate_dexdump() {
         Some(p) => p,
         None => {

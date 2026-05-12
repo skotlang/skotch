@@ -3,37 +3,38 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=2 max_locals=2
+  code        max_stack=2 max_locals=1
     0000 ldc "before"
     0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0005 swap
     0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0009 ldc "in try"
-    0011 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0014 swap
-    0015 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0018 bipush 42
-    0020 istore_0
-    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0024 iload_0
-    0025 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0028 ldc "in finally"
-    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0033 swap
-    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0037 goto 52
-    0040 astore_1
-    0041 ldc "in finally"
-    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0046 swap
-    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0050 aload_1
-    0051 athrow
-    0052 ldc "after"
-    0054 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0057 swap
-    0058 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0061 return
+    0009 nop
+    0010 ldc "in try"
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 swap
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 bipush 42
+    0021 istore_0
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 iload_0
+    0026 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0029 ldc "in finally"
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 swap
+    0035 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0038 goto 53
+    0041 astore_0
+    0042 ldc "in finally"
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 swap
+    0048 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0051 aload_0
+    0052 athrow
+    0053 ldc "after"
+    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0058 swap
+    0059 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0062 return
     sub_attr  StackMapTable (10 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1

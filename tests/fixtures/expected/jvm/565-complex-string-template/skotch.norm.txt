@@ -13,7 +13,7 @@ method        greet (Ljava/lang/String;)Ljava/lang/String; 0x0019
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)
 method        main ()V 0x0019
-  code        max_stack=9 max_locals=9
+  code        max_stack=9 max_locals=7
     0000 iconst_5
     0001 anewarray Class(java/lang/Object)
     0004 astore_0
@@ -68,51 +68,51 @@ method        main ()V 0x0019
     0088 swap
     0089 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0092 bipush 10
-    0094 istore 7
-    0096 bipush 20
-    0098 istore 8
-    0100 iload 7
-    0102 iload 8
-    0104 iadd
-    0105 iload 7
-    0107 iload 8
-    0109 imul
-    0110 invokedynamic InvokeDynamic(makeConcatWithConstants:(II)Ljava/lang/String;)
-    0115 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0118 swap
-    0119 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0122 aload 6
-    0124 checkcast Class(java/lang/Iterable)
-    0127 ldc ", "
-    0129 checkcast Class(java/lang/CharSequence)
-    0132 aconst_null
+    0094 istore_1
+    0095 bipush 20
+    0097 istore_2
+    0098 iload_1
+    0099 iload_2
+    0100 iadd
+    0101 iload_1
+    0102 iload_2
+    0103 imul
+    0104 invokedynamic InvokeDynamic(makeConcatWithConstants:(II)Ljava/lang/String;)
+    0109 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0112 swap
+    0113 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0116 aload 6
+    0118 checkcast Class(java/lang/Iterable)
+    0121 ldc ", "
+    0123 checkcast Class(java/lang/CharSequence)
+    0126 aconst_null
+    0127 aconst_null
+    0128 iconst_0
+    0129 aconst_null
+    0130 aconst_null
+    0131 bipush 62
     0133 aconst_null
-    0134 iconst_0
-    0135 aconst_null
-    0136 aconst_null
-    0137 bipush 62
-    0139 aconst_null
-    0140 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
-    0143 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
-    0148 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0151 swap
-    0152 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0155 aload 6
-    0157 checkcast Class(java/lang/Iterable)
-    0160 invokestatic Method(kotlin/collections/CollectionsKt.reversed:(Ljava/lang/Iterable;)Ljava/util/List;)
-    0163 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/util/List;)Ljava/lang/String;)
-    0168 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0171 swap
-    0172 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0175 aload 6
-    0177 checkcast Class(java/lang/Iterable)
-    0180 iconst_3
-    0181 invokestatic Method(kotlin/collections/CollectionsKt.take:(Ljava/lang/Iterable;I)Ljava/util/List;)
-    0184 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/util/List;)Ljava/lang/String;)
-    0189 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0192 swap
-    0193 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0196 return
+    0134 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
+    0137 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0142 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0145 swap
+    0146 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0149 aload 6
+    0151 checkcast Class(java/lang/Iterable)
+    0154 invokestatic Method(kotlin/collections/CollectionsKt.reversed:(Ljava/lang/Iterable;)Ljava/util/List;)
+    0157 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/util/List;)Ljava/lang/String;)
+    0162 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0165 swap
+    0166 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0169 aload 6
+    0171 checkcast Class(java/lang/Iterable)
+    0174 iconst_3
+    0175 invokestatic Method(kotlin/collections/CollectionsKt.take:(Ljava/lang/Iterable;I)Ljava/util/List;)
+    0178 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/util/List;)Ljava/lang/String;)
+    0183 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0186 swap
+    0187 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0190 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

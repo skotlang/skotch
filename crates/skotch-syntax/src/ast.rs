@@ -412,11 +412,17 @@ pub enum Stmt {
         span: Span,
     },
     /// `try { body } catch (e: Type) { handler } finally { cleanup }`
+    ///
+    /// The `catch_*` fields hold the FIRST catch clause (if any).
+    /// `extra_catches` holds additional `catch` clauses in source order;
+    /// each entry is `(param, type, body)`. At runtime the JVM tries
+    /// each handler in source order.
     TryStmt {
         body: Block,
         catch_param: Option<Symbol>,
         catch_type: Option<Symbol>,
         catch_body: Option<Block>,
+        extra_catches: Vec<(Symbol, Symbol, Block)>,
         finally_body: Option<Block>,
         span: Span,
     },
@@ -511,11 +517,17 @@ pub enum Expr {
         span: Span,
     },
     /// `try { body } catch (e: Type) { handler } finally { cleanup }`
+    ///
+    /// The `catch_*` fields hold the FIRST catch clause (if any).
+    /// `extra_catches` holds additional `catch` clauses in source order;
+    /// each entry is `(param, type, body)`. At runtime the JVM tries
+    /// each handler in source order.
     Try {
         body: Box<Block>,
         catch_param: Option<Symbol>,
         catch_type: Option<Symbol>,
         catch_body: Option<Box<Block>>,
+        extra_catches: Vec<(Symbol, Symbol, Block)>,
         finally_body: Option<Box<Block>>,
         span: Span,
     },

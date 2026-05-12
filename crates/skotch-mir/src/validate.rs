@@ -579,6 +579,7 @@ mod tests {
             is_suspend_lambda: false,
             is_cross_file_stub: true,
             annotations: Vec::new(),
+            has_type_params: false,
         });
         let errors = validate_module(&m);
         assert!(errors.is_empty(), "Stub class should not cause errors");

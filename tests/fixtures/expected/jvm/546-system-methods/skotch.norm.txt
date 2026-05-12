@@ -43,7 +43,7 @@ method        main ()V 0x0019
     0069 iload_3
     0070 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0073 return
-    sub_attr  StackMapTable (23 bytes)
+    sub_attr  StackMapTable (21 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

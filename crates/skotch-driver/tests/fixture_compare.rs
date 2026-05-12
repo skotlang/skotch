@@ -49,6 +49,15 @@ fn discover_jvm_golden_fixtures() -> Vec<String> {
 
 #[test]
 fn skotch_self_consistent_with_committed_goldens() {
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run_skotch_self_consistent_with_committed_goldens)
+        .expect("spawning self_consistent thread")
+        .join()
+        .expect("self_consistent thread");
+}
+
+fn run_skotch_self_consistent_with_committed_goldens() {
     let fixtures = discover_jvm_golden_fixtures();
     let mut failures: Vec<String> = Vec::new();
 
