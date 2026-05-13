@@ -2456,13 +2456,23 @@ fn build_multi_module(
                 let mut mir_modules: Vec<MirModule> = Vec::new();
                 for (fid_idx, (_fid, ast, wrapper)) in parsed.iter().enumerate() {
                     let pre_errors = mod_diags.len();
-                    let mir = skotch_driver::compile_ast(
+                    let mut mir = skotch_driver::compile_ast(
                         ast,
                         wrapper,
                         &mut mod_interner,
                         &mut mod_diags,
                         Some(&combined_symbols),
                     );
+                    // Apply the Compose plugin transform (param injection
+                    // + call-site arg patching + ABI annotation marker)
+                    // before backend emission. Without this, multi-module
+                    // builds bypass the transform and every @Composable
+                    // call site gets stubbed by the JVM backend for
+                    // "StaticJava arg mismatch" — the JetChat regression
+                    // surfaced exactly this path.
+                    if module.project.is_compose || skotch_compose::has_composables(&mir) {
+                        skotch_compose::compose_transform(&mut mir);
+                    }
                     let file_classes = skotch_backend_jvm::compile_module(&mir, &mod_interner);
                     mir_modules.push(mir);
                     let new_errors = mod_diags

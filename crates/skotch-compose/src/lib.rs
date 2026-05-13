@@ -81,14 +81,22 @@ pub fn compose_transform(module: &mut MirModule) {
     // params), update ALL call sites in the module that call composable
     // functions via CallKind::Static. These calls were lowered before the
     // transform and have the original arg count — they need the extra args.
-    let composable_fid_set: std::collections::HashSet<u32> = module
+    //
+    // We record each composable function's POST-transform param count so
+    // call-site patching can fill the right number of missing slots
+    // (user defaults + $composer + $changed + optional $default mask). The
+    // simple "+2" approximation in the original transform fails for
+    // composables with default params, where the gap between caller args
+    // and callee params can be 3+ (e.g. `JetchatTheme { ... }` calls a 5-
+    // param signature with just 1 arg — 4 missing).
+    let composable_param_counts: std::collections::HashMap<u32, usize> = module
         .functions
         .iter()
         .enumerate()
         .filter(|(_, f)| is_composable(f))
-        .map(|(i, _)| i as u32)
+        .map(|(i, f)| (i as u32, f.params.len()))
         .collect();
-    patch_static_calls_to_composable(module, &composable_fid_set);
+    patch_static_calls_to_composable(module, &composable_param_counts);
 
     // Patch lambda classes that serve as @Composable content blocks.
     // The Compose runtime expects @Composable lambdas to implement
@@ -265,16 +273,16 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
 /// $changed placeholder to the args list.
 fn patch_static_calls_to_composable(
     module: &mut MirModule,
-    composable_fids: &std::collections::HashSet<u32>,
+    composable_param_counts: &std::collections::HashMap<u32, usize>,
 ) {
     // Patch calls in top-level functions.
     for func in &mut module.functions {
-        patch_calls_in_function(func, composable_fids);
+        patch_calls_in_function(func, composable_param_counts);
     }
     // Patch calls in class methods (including lambda invoke methods).
     for class in &mut module.classes {
         for method in &mut class.methods {
-            patch_calls_in_function(method, composable_fids);
+            patch_calls_in_function(method, composable_param_counts);
         }
     }
 }
@@ -282,7 +290,7 @@ fn patch_static_calls_to_composable(
 #[allow(clippy::collapsible_if)]
 fn patch_calls_in_function(
     func: &mut MirFunction,
-    composable_fids: &std::collections::HashSet<u32>,
+    composable_param_counts: &std::collections::HashMap<u32, usize>,
 ) {
     use skotch_mir::MirConst;
 
@@ -296,25 +304,22 @@ fn patch_calls_in_function(
                 Rvalue::Call {
                     kind: CallKind::Static(fid),
                     args,
-                } if composable_fids.contains(&fid.0) => {
-                    let last_is_int = args
-                        .last()
-                        .and_then(|a| func.locals.get(a.0 as usize))
-                        .is_some_and(|ty| matches!(ty, Ty::Int));
-                    !last_is_int
+                } if composable_param_counts.contains_key(&fid.0) => {
+                    let target_params = composable_param_counts[&fid.0];
+                    // Already has the right arg count → leave alone.
+                    args.len() < target_params
                 }
-                // StaticJava/VirtualJava where descriptor expects 2 more args
-                // than provided — these are composable calls to library/cross-file
-                // functions where the descriptor includes $composer/$changed but
-                // the call site doesn't pass them.
+                // StaticJava/VirtualJava where descriptor mentions Composer
+                // and arg count is below the descriptor's expected count.
+                // Lift the previous `+3` cap so callers like
+                // `JetchatTheme { ... }` (1 arg vs 5-param descriptor: 2 user
+                // defaults + content + $composer + $changed) get filled in.
                 Rvalue::Call {
                     kind: CallKind::StaticJava { descriptor, .. },
                     args,
                 } => {
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
-                    desc_params > args.len()
-                        && desc_params <= args.len() + 3
-                        && descriptor.contains("Composer;")
+                    desc_params > args.len() && descriptor.contains("Composer;")
                 }
                 Rvalue::Call {
                     kind: CallKind::VirtualJava { descriptor, .. },
@@ -323,9 +328,7 @@ fn patch_calls_in_function(
                     let desc_params = skotch_classinfo::count_descriptor_params_pub(descriptor);
                     // VirtualJava: args include receiver, desc doesn't
                     let call_params = if args.is_empty() { 0 } else { args.len() - 1 };
-                    desc_params > call_params
-                        && desc_params <= call_params + 3
-                        && descriptor.contains("Composer;")
+                    desc_params > call_params && descriptor.contains("Composer;")
                 }
                 _ => false,
             };
@@ -359,9 +362,13 @@ fn patch_calls_in_function(
                             dp.saturating_sub(cp)
                         }
                         Rvalue::Call {
-                            kind: CallKind::Static(_),
-                            ..
-                        } => 2,
+                            kind: CallKind::Static(fid),
+                            args,
+                        } => composable_param_counts
+                            .get(&fid.0)
+                            .copied()
+                            .unwrap_or(0)
+                            .saturating_sub(args.len()),
                         _ => 2,
                     };
                     if missing == 0 {
