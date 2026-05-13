@@ -2645,14 +2645,27 @@ fn extract_suspend_state_machine_with_cont(
             MStmt::Assign {
                 value: Rvalue::Call { args, .. },
                 ..
-            } => args.len() == mf.params.len()
-                && args.iter().zip(mf.params.iter()).all(|(a, p)| a == p),
+            } => {
+                args.len() == mf.params.len()
+                    && args.iter().zip(mf.params.iter()).all(|(a, p)| a == p)
+            }
             _ => false,
         };
-        let prior_stmts_trivial = (0..call_si as usize)
-            .all(|i| matches!(&block.stmts[i], MStmt::Assign { value: Rvalue::Const(_), .. }));
-        if is_only_stmt && returns_call_dest && args_forward_params
-            && prior_stmts_trivial && call_bi == 0 && mf.blocks.len() == 1
+        let prior_stmts_trivial = (0..call_si as usize).all(|i| {
+            matches!(
+                &block.stmts[i],
+                MStmt::Assign {
+                    value: Rvalue::Const(_),
+                    ..
+                }
+            )
+        });
+        if is_only_stmt
+            && returns_call_dest
+            && args_forward_params
+            && prior_stmts_trivial
+            && call_bi == 0
+            && mf.blocks.len() == 1
         {
             return SuspendSitesResult::Zero;
         }

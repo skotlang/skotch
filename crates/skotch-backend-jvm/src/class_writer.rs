@@ -1237,12 +1237,8 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         // lambda `<name>$lambda$0(I, Composer, I): Unit` that the
         // invokedynamic site in the main method references.
         if !func.is_inline && compose_group_key(func).is_some() {
-            let lambda_blob = emit_composable_restart_lambda(
-                func,
-                class_name,
-                &mut cp,
-                code_attr_name_idx,
-            );
+            let lambda_blob =
+                emit_composable_restart_lambda(func, class_name, &mut cp, code_attr_name_idx);
             method_blobs.push(lambda_blob);
         }
 
@@ -4818,9 +4814,9 @@ fn emit_method_body(
                                 let prim = desc.chars().nth(1).unwrap_or('I');
                                 let tag: u8 = match prim {
                                     'I' | 'B' | 'S' | 'C' | 'Z' => 1, // Integer
-                                    'J' => 4,                          // Long
-                                    'F' => 2,                          // Float
-                                    'D' => 3,                          // Double
+                                    'J' => 4,                         // Long
+                                    'F' => 2,                         // Float
+                                    'D' => 3,                         // Double
                                     _ => 1,
                                 };
                                 Some(vec![tag])
@@ -5996,11 +5992,8 @@ fn emit_composable_method(
         "shouldExecute",
         "(ZI)Z",
     );
-    let mr_skip_to_end = cp.interface_methodref(
-        "androidx/compose/runtime/Composer",
-        "skipToGroupEnd",
-        "()V",
-    );
+    let mr_skip_to_end =
+        cp.interface_methodref("androidx/compose/runtime/Composer", "skipToGroupEnd", "()V");
     let mr_end = cp.interface_methodref(
         "androidx/compose/runtime/Composer",
         "endRestartGroup",
@@ -6041,7 +6034,7 @@ fn emit_composable_method(
     // L0 target (offset relative to ifeq source)
     let l0_offset = code.len();
     code.push(0x03); // iconst_0
-    // L1 target
+                     // L1 target
     let l1_offset = code.len();
     emit_iload(&mut code, changed_slot);
     code.push(0x04); // iconst_1
@@ -6144,7 +6137,9 @@ fn emit_composable_method(
     code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table empty
     code_attr.write_u16::<BigEndian>(1).unwrap(); // 1 sub-attribute (SMT)
     code_attr.write_u16::<BigEndian>(smt_name_idx).unwrap();
-    code_attr.write_u32::<BigEndian>(smt_entries.len() as u32 + 2).unwrap();
+    code_attr
+        .write_u32::<BigEndian>(smt_entries.len() as u32 + 2)
+        .unwrap();
     code_attr
         .write_u16::<BigEndian>(count_smt_frames(&smt_entries))
         .unwrap();
@@ -6304,7 +6299,12 @@ fn register_compose_restart_indy(
     let lambda_mref = cp.methodref(class_name, lambda_name, &lambda_desc);
     let mh_impl = cp.method_handle(6, lambda_mref);
 
-    let bsm_idx = cp.bootstrap_method(skotch_backend_jvm_bsm(mh_metafactory, mt_sam, mh_impl, mt_inst));
+    let bsm_idx = cp.bootstrap_method(skotch_backend_jvm_bsm(
+        mh_metafactory,
+        mt_sam,
+        mh_impl,
+        mt_inst,
+    ));
 
     // Call-site name + descriptor. For lambda metafactory, the name is
     // the SAM method name ("invoke" for Function2) and the descriptor
@@ -6406,7 +6406,7 @@ fn build_composable_empty_smt(
     // L1: target of `goto` after the iconst_1 branch — stack has
     // [Composer, int] (the changed_nonzero bool, encoded as int).
     out.push(255); // full_frame
-    // delta
+                   // delta
     let delta1 = (l1_offset as i32) - prev - 1;
     out.write_u16::<BigEndian>(delta1.max(0) as u16).unwrap();
     // num locals = 2 (Composer, int)
@@ -6467,14 +6467,12 @@ fn count_smt_frames(smt_entries: &[u8]) -> u16 {
             255 => {
                 // full_frame: delta + locals + stack
                 i += 2;
-                let nl =
-                    u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
+                let nl = u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
                 i += 2;
                 for _ in 0..nl {
                     i += vti_len(&smt_entries[i..]);
                 }
-                let ns =
-                    u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
+                let ns = u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
                 i += 2;
                 for _ in 0..ns {
                     i += vti_len(&smt_entries[i..]);
@@ -14417,8 +14415,8 @@ fn compute_unused_locals(func: &MirFunction) -> FxHashSet<u32> {
     // local entirely. Recognize this so the local doesn't count as used,
     // making single-assignment `dest = Const(Null)` patterns eligible for
     // the standard dead-store skip (and not bloating max_locals by 1).
-    let suspend_unit_shortcut = func.is_suspend
-        && matches!(func.suspend_original_return_ty, Some(Ty::Unit));
+    let suspend_unit_shortcut =
+        func.is_suspend && matches!(func.suspend_original_return_ty, Some(Ty::Unit));
     for block in &func.blocks {
         for stmt in &block.stmts {
             let Stmt::Assign { dest, value } = stmt;
@@ -14434,8 +14432,8 @@ fn compute_unused_locals(func: &MirFunction) -> FxHashSet<u32> {
             }
             Terminator::ReturnValue(l) => {
                 let ty = &func.locals[l.0 as usize];
-                let uses_shortcut = suspend_unit_shortcut
-                    && matches!(ty, Ty::Any | Ty::Nullable(_));
+                let uses_shortcut =
+                    suspend_unit_shortcut && matches!(ty, Ty::Any | Ty::Nullable(_));
                 if !uses_shortcut {
                     *use_counts.entry(l.0).or_insert(0) += 1;
                 }
@@ -19950,11 +19948,11 @@ fn peephole_stack_merge_returns(
             // expression results in suspend bodies (fixture 595).
             let boxing_then_areturn = if return_op == 0xB8 // invokestatic
                 && return_pos + 3 < code.len()
-                && code[return_pos + 3] == 0xB0 // areturn
+                && code[return_pos + 3] == 0xB0
+            // areturn
             {
                 // Verify the methodref points at one of the Boxing helpers.
-                let mref_idx =
-                    u16::from_be_bytes([code[return_pos + 1], code[return_pos + 2]]);
+                let mref_idx = u16::from_be_bytes([code[return_pos + 1], code[return_pos + 2]]);
                 EMIT_CP.with(|cell| {
                     let cp_ptr = *cell.borrow();
                     if let Some(cp_raw) = cp_ptr {
