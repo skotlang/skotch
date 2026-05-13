@@ -1,21 +1,17 @@
 dex_version   035
-strings       26
-types         11
-methods       9
+strings       23
+types         8
+methods       8
 classes       1
 
 --- strings ---
-  "<init>"
   "I"
   "II"
+  "IL"
   "ILI"
   "LI"
-  "LInputKt$Lambda$0;"
-  "LInputKt$Lambda$1;"
   "LInputKt;"
-  "LL"
   "Ljava/io/PrintStream;"
-  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "Lkotlin/jvm/functions/Function1;"
@@ -28,17 +24,15 @@ classes       1
   "input.kt"
   "invoke"
   "main"
+  "main$lambda$0"
+  "main$lambda$1"
   "out"
   "println"
-  "valueOf"
 
 --- types ---
   I
-  LInputKt$Lambda$0;
-  LInputKt$Lambda$1;
   LInputKt;
   Ljava/io/PrintStream;
-  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/System;
   Lkotlin/jvm/functions/Function1;
@@ -46,21 +40,22 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>()V
-  LInputKt$Lambda$1;.<init>()V
   LInputKt;.apply(Ljava/lang/Object;I)I
   LInputKt;.double(I)I
+  LInputKt;.main$lambda$0(Ljava/lang/Object;)I
+  LInputKt;.main$lambda$1(Ljava/lang/Object;)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
-  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
-  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/functions/Function1;.invoke(I)Ljava/lang/Object;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=4 ins=2 outs=2 insns=9
+  method       apply(Ljava/lang/Object;I)I flags=0x0019 regs=3 ins=2 outs=2 insns=5
   method       double(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
-  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=32
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=22
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(Ljava/lang/Object;)I flags=0x0019 regs=2 ins=1 outs=1 insns=5
+  method       main$lambda$1(Ljava/lang/Object;)I flags=0x0019 regs=2 ins=1 outs=1 insns=5

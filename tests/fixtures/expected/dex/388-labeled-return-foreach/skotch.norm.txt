@@ -1,15 +1,14 @@
 dex_version   035
-strings       32
-types         16
-methods       10
+strings       34
+types         17
+methods       11
 classes       1
 
 --- strings ---
-  "<init>"
   "I"
+  "INSTANCE"
   "L"
   "LI"
-  "LInputKt$Lambda$0;"
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
@@ -20,7 +19,9 @@ classes       1
   "Ljava/lang/System;"
   "Ljava/util/Iterator;"
   "Ljava/util/List;"
+  "Lkotlin/Unit;"
   "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/functions/Function1;"
   "V"
   "VL"
   "Z"
@@ -33,6 +34,7 @@ classes       1
   "iterator"
   "listOf"
   "main"
+  "main$lambda$0"
   "next"
   "out"
   "println"
@@ -40,7 +42,6 @@ classes       1
 
 --- types ---
   I
-  LInputKt$Lambda$0;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Integer;
@@ -50,27 +51,31 @@ classes       1
   Ljava/lang/System;
   Ljava/util/Iterator;
   Ljava/util/List;
+  Lkotlin/Unit;
   Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/functions/Function1;
   V
   Z
   [Ljava/lang/Object;
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>()V
-  LInputKt$Lambda$0;.invoke(Ljava/lang/Object;)V
+  LInputKt;.main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
   Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
   Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
   Ljava/util/Iterator;.hasNext()Z
   Ljava/util/Iterator;.next()Ljava/lang/Object;
   Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=24 ins=0 outs=2 insns=68
+  method       main()V flags=0x0019 regs=24 ins=0 outs=2 insns=63
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=7 ins=1 outs=2 insns=19

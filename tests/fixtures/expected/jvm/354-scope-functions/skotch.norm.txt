@@ -6,57 +6,47 @@ method        main ()V 0x0019
   code        max_stack=2 max_locals=8
     0000 ldc "hello"
     0002 astore_0
-    0003 new Class(InputKt$Lambda$0)
-    0006 dup
-    0007 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0010 aload_0
-    0011 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0003 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0008 aload_0
+    0009 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0014 astore_1
     0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0018 aload_1
     0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0022 bipush 42
     0024 istore_2
-    0025 new Class(InputKt$Lambda$1)
-    0028 dup
-    0029 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0032 iload_2
-    0033 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0036 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0025 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0030 iload_2
+    0031 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0034 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0039 pop
     0040 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0043 iload_2
     0044 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0047 ldc "world"
     0049 astore_0
-    0050 new Class(InputKt$Lambda$2)
-    0053 dup
-    0054 invokespecial Method(InputKt$Lambda$2.<init>:()V)
-    0057 aload_0
-    0058 invokevirtual Method(InputKt$Lambda$2.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0050 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0055 aload_0
+    0056 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0061 astore 4
     0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0066 aload 4
     0068 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0071 bipush 10
     0073 istore_3
-    0074 new Class(InputKt$Lambda$3)
-    0077 dup
-    0078 invokespecial Method(InputKt$Lambda$3.<init>:()V)
-    0081 iload_3
-    0082 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0085 invokevirtual Method(InputKt$Lambda$3.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0074 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0079 iload_3
+    0080 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0083 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0088 pop
     0089 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0092 iload_3
     0093 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0096 ldc "kotlin"
     0098 astore_0
-    0099 new Class(InputKt$Lambda$4)
-    0102 dup
-    0103 invokespecial Method(InputKt$Lambda$4.<init>:()V)
-    0106 aload_0
-    0107 invokevirtual Method(InputKt$Lambda$4.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0099 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0104 aload_0
+    0105 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0110 astore 7
     0112 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0115 aload 7
@@ -66,4 +56,54 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    InnerClasses (42 bytes)
+method        main$lambda$0 (Ljava/lang/String;)Ljava/lang/String; 0x001A
+  code        max_stack=3 max_locals=1
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0010 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0013 dup
+    0014 ldc "toUpperCase(...)"
+    0016 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0019 areturn
+method        main$lambda$1 (I)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0016 areturn
+method        main$lambda$2 (Ljava/lang/String;)Ljava/lang/String; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0012 areturn
+method        main$lambda$3 (I)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0016 areturn
+method        main$lambda$4 (Ljava/lang/String;)Ljava/lang/String; 0x001A
+  code        max_stack=3 max_locals=1
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 getstatic Field(java/util/Locale.ROOT:Ljava/util/Locale;)
+    0010 invokevirtual Method(java/lang/String.toUpperCase:(Ljava/util/Locale;)Ljava/lang/String;)
+    0013 dup
+    0014 ldc "toUpperCase(...)"
+    0016 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0019 areturn
+class_attr    BootstrapMethods (70 bytes)

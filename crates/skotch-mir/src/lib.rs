@@ -309,8 +309,12 @@ pub enum CallKind {
         arity: u8,
         /// Static helper method name on `impl_class`.
         method_name: std::string::String,
-        /// Specialized impl method descriptor, e.g. `"(I)I"`.
+        /// Specialized impl method descriptor including captures and
+        /// user params, e.g. `"(II)I"` for `(capture_int, user_int) → int`.
         specialized_descriptor: std::string::String,
+        /// Instantiated SAM descriptor — user params only, ALL types
+        /// must be reference (Object subtype). E.g. `"(Integer)Integer"`.
+        instantiated_descriptor: std::string::String,
         /// Class containing the static helper method (typically the
         /// wrapper class, e.g. "InputKt").
         impl_class: std::string::String,

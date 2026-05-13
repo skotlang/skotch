@@ -45,23 +45,21 @@ method        main ()V 0x0019
     0054 aload_0
     0055 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0058 astore 6
-    0060 new Class(InputKt$Lambda$0)
-    0063 dup
-    0064 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0067 astore 7
-    0069 aload 6
-    0071 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0076 astore 8
-    0078 aload 8
-    0080 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0085 ifeq 105
-    0088 aload 8
-    0090 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0095 aload 7
-    0097 swap
-    0098 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0060 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0065 astore 7
+    0067 aload 6
+    0069 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0074 astore 8
+    0076 aload 8
+    0078 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0083 ifeq 105
+    0086 aload 8
+    0088 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0093 aload 7
+    0095 swap
+    0096 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
     0101 pop
-    0102 goto 78
+    0102 goto 76
     0105 ldc "done"
     0107 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0110 swap
@@ -72,4 +70,19 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    InnerClasses (10 bytes)
+method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 iconst_3
+    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0005 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
+    0008 ifeq 15
+    0011 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0014 areturn
+    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0018 aload_0
+    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0022 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0025 areturn
+    sub_attr  StackMapTable (3 bytes)
+class_attr    BootstrapMethods (12 bytes)

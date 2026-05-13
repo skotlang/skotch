@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=7
+  code        max_stack=3 max_locals=8
     0000 iconst_3
     0001 anewarray Class(java/lang/Object)
     0004 astore_0
@@ -31,31 +31,41 @@ method        main ()V 0x0019
     0032 aload_0
     0033 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
     0036 astore 4
-    0038 new Class(InputKt$Lambda$0)
-    0041 dup
-    0042 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0045 pop
-    0046 new Class(InputKt$Lambda$1)
-    0049 dup
-    0050 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0053 astore 5
-    0055 aload 4
-    0057 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
-    0062 astore 6
-    0064 aload 6
-    0066 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0071 ifeq 91
-    0074 aload 6
-    0076 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0081 aload 5
-    0083 swap
-    0084 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0087 pop
-    0088 goto 64
-    0091 return
-    sub_attr  StackMapTable (31 bytes)
+    0038 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0043 astore 5
+    0045 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0050 astore 6
+    0052 aload 4
+    0054 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0059 astore 7
+    0061 aload 7
+    0063 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0068 ifeq 90
+    0071 aload 7
+    0073 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0078 aload 6
+    0080 swap
+    0081 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0086 pop
+    0087 goto 61
+    0090 return
+    sub_attr  StackMapTable (34 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    InnerClasses (18 bytes)
+method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0003 aload_0
+    0004 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0007 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0010 areturn
+method        main$lambda$1 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0003 aload_0
+    0004 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0007 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0010 areturn
+class_attr    BootstrapMethods (22 bytes)

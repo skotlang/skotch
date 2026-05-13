@@ -4,30 +4,43 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=2
-    0000 new Class(InputKt$Lambda$0)
-    0003 dup
-    0004 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0007 astore_0
-    0008 aload_0
-    0009 bipush 7
-    0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0014 invokevirtual Method(InputKt$Lambda$0.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0020 swap
-    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0024 new Class(InputKt$Lambda$1)
-    0027 dup
-    0028 invokespecial Method(InputKt$Lambda$1.<init>:()V)
-    0031 astore_1
-    0032 aload_1
-    0033 ldc "World"
-    0035 invokevirtual Method(InputKt$Lambda$1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0041 swap
-    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0045 return
+    0000 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0005 astore_0
+    0006 aload_0
+    0007 bipush 7
+    0009 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0012 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0017 checkcast Class(java/lang/Number)
+    0020 invokevirtual Method(java/lang/Number.intValue:()I)
+    0023 istore_1
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 iload_1
+    0028 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0031 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0036 astore_1
+    0037 aload_1
+    0038 ldc "World"
+    0040 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 swap
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0052 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    InnerClasses (18 bytes)
+method        main$lambda$0 (I)I 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 iconst_3
+    0002 imul
+    0003 ireturn
+method        main$lambda$1 (Ljava/lang/String;)Ljava/lang/String; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "name"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0012 areturn
+class_attr    BootstrapMethods (28 bytes)

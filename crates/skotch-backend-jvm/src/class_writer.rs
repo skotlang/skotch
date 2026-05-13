@@ -12843,15 +12843,41 @@ fn walk_block(
                     class_name,
                     method_name,
                 } => {
-                    // Load receiver (first arg) then remaining args
-                    for a in args {
-                        load_local(code, stack, max_stack, slots, *a, &func.locals);
-                    }
                     let dest_ty = &func.locals[dest.0 as usize];
-                    let ret_desc = if method_name == "invoke"
+                    let is_function_invoke = method_name == "invoke"
                         && (class_name.contains("$Lambda$")
-                            || class_name.starts_with("kotlin/jvm/functions/Function"))
-                    {
+                            || class_name.starts_with("kotlin/jvm/functions/Function"));
+                    // Load receiver (first arg) then remaining args.
+                    // For FunctionN.invoke, box primitive args inline
+                    // so the descriptor matches `(Object^N)Object`
+                    // without needing MIR-level widening (which would
+                    // produce an extra astore/aload pair that
+                    // peephole-elides into a swap and breaks
+                    // receiver/arg load order).
+                    for (i, a) in args.iter().enumerate() {
+                        load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        if is_function_invoke && i > 0 {
+                            let ty = &func.locals[a.0 as usize];
+                            let box_info: Option<(&str, &str)> = match ty {
+                                Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                    Some(("java/lang/Integer", "(I)Ljava/lang/Integer;"))
+                                }
+                                Ty::Bool => Some(("java/lang/Boolean", "(Z)Ljava/lang/Boolean;")),
+                                Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/Long;")),
+                                Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/Float;")),
+                                Ty::Double => Some(("java/lang/Double", "(D)Ljava/lang/Double;")),
+                                _ => None,
+                            };
+                            if let Some((box_class, box_desc)) = box_info {
+                                let mref = cp.methodref(box_class, "valueOf", box_desc);
+                                code.push(0xB8); // invokestatic
+                                code.write_u16::<BigEndian>(mref).unwrap();
+                                let is_wide = matches!(ty, Ty::Long | Ty::Double);
+                                bump(stack, max_stack, if is_wide { -1 } else { 0 });
+                            }
+                        }
+                    }
+                    let ret_desc = if is_function_invoke {
                         // FunctionN.invoke always returns Object on JVM.
                         "Ljava/lang/Object;".to_string()
                     } else {
@@ -12860,8 +12886,17 @@ fn walk_block(
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for a in args.iter().skip(1) {
-                        let ty = &func.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_param_type_string(ty));
+                        if is_function_invoke {
+                            // FunctionN.invoke's signature is always
+                            // `(Object^N)Object` — force Object descriptors
+                            // regardless of the arg's MIR-level type so
+                            // the invokeinterface call matches the
+                            // interface's erased signature.
+                            descriptor.push_str("Ljava/lang/Object;");
+                        } else {
+                            let ty = &func.locals[a.0 as usize];
+                            descriptor.push_str(&jvm_param_type_string(ty));
+                        }
                     }
                     descriptor.push(')');
                     descriptor.push_str(&ret_desc);
@@ -12958,6 +12993,7 @@ fn walk_block(
                     arity,
                     method_name,
                     specialized_descriptor,
+                    instantiated_descriptor,
                     impl_class,
                 } => {
                     // Load captures (args[0..]) onto the stack — none
@@ -12984,7 +13020,10 @@ fn walk_block(
                     let impl_mref = cp.methodref(impl_class, method_name, specialized_descriptor);
                     let impl_mh = cp.method_handle(6, impl_mref); // REF_invokeStatic
                     let sam_mt = cp.method_type(&sam);
-                    let inst_mt = cp.method_type(specialized_descriptor);
+                    // `instantiatedMethodType` is the SAM's specialized
+                    // form — user-param types only, all boxed.
+                    let inst_desc = box_primitives_in_descriptor(instantiated_descriptor);
+                    let inst_mt = cp.method_type(&inst_desc);
                     let bootstrap_mref = cp.methodref(
                         "java/lang/invoke/LambdaMetafactory",
                         "metafactory",
@@ -13590,6 +13629,46 @@ fn load_local(
     };
     emit_typed_load(code, ty, slot);
     bump(stack, max_stack, width);
+}
+
+/// Convert a JVM method descriptor's primitive types to their boxed
+/// reference equivalents. Used to build the `instantiatedMethodType`
+/// of a LambdaMetafactory invocation, which requires every type to be
+/// a subtype of Object (primitives are rejected).
+///
+/// Example: `(I)I` → `(Ljava/lang/Integer;)Ljava/lang/Integer;`.
+fn box_primitives_in_descriptor(desc: &str) -> String {
+    let mut out = String::with_capacity(desc.len() + 16);
+    let mut chars = desc.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'I' => out.push_str("Ljava/lang/Integer;"),
+            'J' => out.push_str("Ljava/lang/Long;"),
+            'F' => out.push_str("Ljava/lang/Float;"),
+            'D' => out.push_str("Ljava/lang/Double;"),
+            'Z' => out.push_str("Ljava/lang/Boolean;"),
+            'B' => out.push_str("Ljava/lang/Byte;"),
+            'S' => out.push_str("Ljava/lang/Short;"),
+            'C' => out.push_str("Ljava/lang/Character;"),
+            'V' => out.push('V'),
+            'L' => {
+                out.push('L');
+                for sc in chars.by_ref() {
+                    out.push(sc);
+                    if sc == ';' {
+                        break;
+                    }
+                }
+            }
+            '[' => {
+                // Array descriptor — keep as-is.
+                out.push('[');
+                // Continue inspecting the element type next iteration.
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Emit an `invokedynamic makeConcatWithConstants:(<descriptor>)Ljava/lang/String;`
@@ -22583,6 +22662,11 @@ fn write_slot_verif(
                 Ty::Any => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class("java/lang/Object");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::Function { params, .. } => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class(&format!("kotlin/jvm/functions/Function{}", params.len()));
                     out.write_u16::<BigEndian>(idx).unwrap();
                 }
                 _ => out.push(1), // fallback to Integer

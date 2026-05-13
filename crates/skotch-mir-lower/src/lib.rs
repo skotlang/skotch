@@ -206,6 +206,46 @@ fn resolve_type_ref(tr: &skotch_syntax::TypeRef, interner: &Interner, module: &M
 }
 
 /// user-defined classes/enums in the module.
+/// Check whether `ty` represents a callable lambda — either a
+/// synthetic `<Outer>$Lambda$N` class generated for capturing lambdas
+/// or a `kotlin/jvm/functions/FunctionN` interface produced by the
+/// LambdaMetafactory-based lowering. Used to gate scope-function
+/// lowering, lambda invocation dispatch, and `$Lambda$`-specific
+/// checks throughout MIR-lower.
+fn is_lambda_or_function_ty(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Class(n)
+            if n.contains("$Lambda$")
+                || n.starts_with("kotlin/jvm/functions/Function")
+    ) || matches!(ty, Ty::Function { .. })
+}
+
+/// Look up a lambda's `invoke` return type. For synthetic `$Lambda$N`
+/// classes, finds the actual return on the class's `invoke` method.
+/// For `FunctionN` interface types, returns `Ty::Any` (the erased
+/// `Object` return). Caller fallback is `Ty::Any`.
+fn lambda_invoke_return_ty(ty: &Ty, module: &MirModule) -> Ty {
+    if let Ty::Class(n) = ty {
+        if n.starts_with("kotlin/jvm/functions/Function") {
+            return Ty::Any;
+        }
+        if n.contains("$Lambda$") {
+            return module
+                .classes
+                .iter()
+                .find(|c| &c.name == n)
+                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
+                .map(|m| m.return_ty.clone())
+                .unwrap_or(Ty::Any);
+        }
+    }
+    if let Ty::Function { ret, .. } = ty {
+        return (**ret).clone();
+    }
+    Ty::Any
+}
+
 fn resolve_type(name: &str, module: &MirModule) -> Ty {
     // Resolve type aliases before anything else.
     let resolved_name = if let Some(target) = module.type_aliases.get(name) {
@@ -2012,7 +2052,7 @@ fn emit_throw_new(fb: &mut FnBuilder, exception_class: &str, message: Option<Loc
         // If it's a lambda class, invoke it to get the String. Otherwise
         // use it directly.
         let msg_ty = fb.mf.locals[msg_local.0 as usize].clone();
-        let msg = if matches!(&msg_ty, Ty::Class(n) if n.contains("$Lambda$")) {
+        let msg = if is_lambda_or_function_ty(&msg_ty) {
             let result = fb.new_local(Ty::Any);
             fb.push_stmt(MStmt::Assign {
                 dest: result,
@@ -7090,26 +7130,16 @@ fn lower_expr(
                     // The single argument should be a lambda.
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$"))
-                        || matches!(lambda_ty, Ty::Any);
+                    let is_lambda =
+                        is_lambda_or_function_ty(&lambda_ty) || matches!(lambda_ty, Ty::Any);
                     if is_lambda {
                         // Invoke the lambda with the receiver as its argument.
-                        let invoke_class = if let Ty::Class(ref cn) = lambda_ty {
-                            cn.clone()
-                        } else {
-                            "java/lang/Object".to_string()
+                        let invoke_class = match &lambda_ty {
+                            Ty::Class(cn) => cn.clone(),
+                            Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                            _ => "java/lang/Object".to_string(),
                         };
-                        let invoke_ret = if let Ty::Class(ref cn) = lambda_ty {
-                            module
-                                .classes
-                                .iter()
-                                .find(|c| &c.name == cn)
-                                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
-                                .map(|m| m.return_ty.clone())
-                                .unwrap_or(Ty::Any)
-                        } else {
-                            Ty::Any
-                        };
+                        let invoke_ret = lambda_invoke_return_ty(&lambda_ty, module);
 
                         // Widen the receiver arg to Ty::Any for the erased
                         // invoke signature, and autobox primitives.
@@ -7182,26 +7212,16 @@ fn lower_expr(
                 if method_name_str == "use" && args.len() == 1 {
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    let is_lambda = matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$"))
-                        || matches!(lambda_ty, Ty::Any);
+                    let is_lambda =
+                        is_lambda_or_function_ty(&lambda_ty) || matches!(lambda_ty, Ty::Any);
                     if is_lambda {
                         // Invoke the lambda with the resource as argument.
-                        let invoke_class = if let Ty::Class(ref cn) = lambda_ty {
-                            cn.clone()
-                        } else {
-                            "java/lang/Object".to_string()
+                        let invoke_class = match &lambda_ty {
+                            Ty::Class(cn) => cn.clone(),
+                            Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                            _ => "java/lang/Object".to_string(),
                         };
-                        let invoke_ret = if let Ty::Class(ref cn) = lambda_ty {
-                            module
-                                .classes
-                                .iter()
-                                .find(|c| &c.name == cn)
-                                .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
-                                .map(|m| m.return_ty.clone())
-                                .unwrap_or(Ty::Any)
-                        } else {
-                            Ty::Any
-                        };
+                        let invoke_ret = lambda_invoke_return_ty(&lambda_ty, module);
 
                         // Check if the lambda takes a parameter (Function1)
                         // or is parameterless (Function0).
@@ -7300,11 +7320,11 @@ fn lower_expr(
                 {
                     let lambda_local = all_args[1]; // all_args = [receiver, lambda]
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
-                        let cn = if let Ty::Class(ref n) = lambda_ty {
-                            n.clone()
-                        } else {
-                            unreachable!()
+                    if is_lambda_or_function_ty(&lambda_ty) {
+                        let cn = match &lambda_ty {
+                            Ty::Class(n) => n.clone(),
+                            Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                            _ => unreachable!(),
                         };
                         // val iter = collection.iterator()
                         let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
@@ -8524,10 +8544,10 @@ fn lower_expr(
                         // Invoke as callable.invoke(receiver, args).
                         let callable_local = *callable_local;
                         let callable_ty = fb.mf.locals[callable_local.0 as usize].clone();
-                        let invoke_class = if let Ty::Class(ref cn) = callable_ty {
-                            cn.clone()
-                        } else {
-                            "java/lang/Object".to_string()
+                        let invoke_class = match &callable_ty {
+                            Ty::Class(cn) => cn.clone(),
+                            Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                            _ => "java/lang/Object".to_string(),
                         };
                         let recv_arg = {
                             let widened = fb.new_local(Ty::Any);
@@ -8638,13 +8658,13 @@ fn lower_expr(
                     // `sb.block()` where block: StringBuilder.() -> Unit.
                     let callable_local = *callable_local;
                     let callable_ty = fb.mf.locals[callable_local.0 as usize].clone();
-                    let is_callable = matches!(&callable_ty, Ty::Class(n) if n.contains("$Lambda$"))
+                    let is_callable = is_lambda_or_function_ty(&callable_ty)
                         || matches!(callable_ty, Ty::Any | Ty::Function { .. });
                     if is_callable {
-                        let invoke_class = if let Ty::Class(ref cn) = callable_ty {
-                            cn.clone()
-                        } else {
-                            "java/lang/Object".to_string()
+                        let invoke_class = match &callable_ty {
+                            Ty::Class(cn) => cn.clone(),
+                            Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                            _ => "java/lang/Object".to_string(),
                         };
                         // Widen receiver to Any for the erased invoke signature.
                         let recv_arg = {
@@ -10801,11 +10821,11 @@ fn lower_expr(
                 let count = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
-                    let cn = if let Ty::Class(ref n) = lambda_ty {
-                        n.clone()
-                    } else {
-                        unreachable!()
+                if is_lambda_or_function_ty(&lambda_ty) {
+                    let cn = match &lambda_ty {
+                        Ty::Class(n) => n.clone(),
+                        Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                        _ => unreachable!(),
                     };
                     // var i = 0; while (i < n) { lambda.invoke(i); i++ }
                     let i_local = fb.new_local(Ty::Int);
@@ -10885,19 +10905,13 @@ fn lower_expr(
                 let receiver = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if matches!(&lambda_ty, Ty::Class(n) if n.contains("$Lambda$")) {
-                    let cn = if let Ty::Class(ref n) = lambda_ty {
-                        n.clone()
-                    } else {
-                        unreachable!()
+                if is_lambda_or_function_ty(&lambda_ty) {
+                    let cn = match &lambda_ty {
+                        Ty::Class(n) => n.clone(),
+                        Ty::Function { params, .. } => stdlib_function_interface(params.len()),
+                        _ => unreachable!(),
                     };
-                    let ret = module
-                        .classes
-                        .iter()
-                        .find(|c| c.name == cn)
-                        .and_then(|c| c.methods.iter().find(|m| m.name == "invoke"))
-                        .map(|m| m.return_ty.clone())
-                        .unwrap_or(Ty::Any);
+                    let ret = lambda_invoke_return_ty(&lambda_ty, module);
                     // Widen receiver to Ty::Any for erased invoke signature.
                     let recv_arg = {
                         let recv_ty = fb.mf.locals[receiver.0 as usize].clone();
@@ -11092,83 +11106,16 @@ fn lower_expr(
                             return Some(raw_result);
                         }
 
-                        // Autobox each argument: primitive → wrapper Object.
+                        // Args: pass primitives directly. The JVM
+                        // backend force-boxes them inline at the call
+                        // site for FunctionN.invoke, matching kotlinc's
+                        // `aload-receiver; load-arg; valueOf; invokeinterface`
+                        // order (no swap). Reference args also pass
+                        // through unwidened — the call's descriptor is
+                        // already forced to `(Object^N)Object;`.
                         let mut boxed_args: Vec<LocalId> = vec![*local_id];
                         for &arg in &arg_locals {
-                            let arg_ty = fb.mf.locals[arg.0 as usize].clone();
-                            match arg_ty {
-                                Ty::Int => {
-                                    let boxed = fb.new_local(Ty::Any);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest: boxed,
-                                        value: Rvalue::Call {
-                                            kind: CallKind::StaticJava {
-                                                class_name: "java/lang/Integer".to_string(),
-                                                method_name: "valueOf".to_string(),
-                                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
-                                            },
-                                            args: vec![arg],
-                                        },
-                                    });
-                                    boxed_args.push(boxed);
-                                }
-                                Ty::Bool => {
-                                    let boxed = fb.new_local(Ty::Any);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest: boxed,
-                                        value: Rvalue::Call {
-                                            kind: CallKind::StaticJava {
-                                                class_name: "java/lang/Boolean".to_string(),
-                                                method_name: "valueOf".to_string(),
-                                                descriptor: "(Z)Ljava/lang/Boolean;".to_string(),
-                                            },
-                                            args: vec![arg],
-                                        },
-                                    });
-                                    boxed_args.push(boxed);
-                                }
-                                Ty::Long => {
-                                    let boxed = fb.new_local(Ty::Any);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest: boxed,
-                                        value: Rvalue::Call {
-                                            kind: CallKind::StaticJava {
-                                                class_name: "java/lang/Long".to_string(),
-                                                method_name: "valueOf".to_string(),
-                                                descriptor: "(J)Ljava/lang/Long;".to_string(),
-                                            },
-                                            args: vec![arg],
-                                        },
-                                    });
-                                    boxed_args.push(boxed);
-                                }
-                                Ty::Double => {
-                                    let boxed = fb.new_local(Ty::Any);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest: boxed,
-                                        value: Rvalue::Call {
-                                            kind: CallKind::StaticJava {
-                                                class_name: "java/lang/Double".to_string(),
-                                                method_name: "valueOf".to_string(),
-                                                descriptor: "(D)Ljava/lang/Double;".to_string(),
-                                            },
-                                            args: vec![arg],
-                                        },
-                                    });
-                                    boxed_args.push(boxed);
-                                }
-                                Ty::Any => boxed_args.push(arg),
-                                _ => {
-                                    // Reference type — widen to Ty::Any so the
-                                    // descriptor uses Ljava/lang/Object;.
-                                    let widened = fb.new_local(Ty::Any);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest: widened,
-                                        value: Rvalue::Local(arg),
-                                    });
-                                    boxed_args.push(widened);
-                                }
-                            }
+                            boxed_args.push(arg);
                         }
                         let iface_name = if let Ty::Class(ref cn) = local_ty {
                             cn.clone()
@@ -11201,16 +11148,28 @@ fn lower_expr(
                             Ty::Any
                         };
                         if matches!(fn_ret, Ty::Int) {
+                            // Kotlinc unboxes via `checkcast Number;
+                            // invokevirtual Number.intValue()I`. Use
+                            // the Number parent class (not Integer)
+                            // so the bytecode matches exactly.
+                            let casted = fb.new_local(Ty::Class("java/lang/Number".to_string()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: casted,
+                                value: Rvalue::CheckCast {
+                                    obj: raw_result,
+                                    target_class: "java/lang/Number".to_string(),
+                                },
+                            });
                             let unboxed = fb.new_local(Ty::Int);
                             fb.push_stmt(MStmt::Assign {
                                 dest: unboxed,
                                 value: Rvalue::Call {
                                     kind: CallKind::VirtualJava {
-                                        class_name: "java/lang/Integer".to_string(),
+                                        class_name: "java/lang/Number".to_string(),
                                         method_name: "intValue".to_string(),
                                         descriptor: "()I".to_string(),
                                     },
-                                    args: vec![raw_result],
+                                    args: vec![casted],
                                 },
                             });
                             return Some(unboxed);
@@ -14389,6 +14348,227 @@ fn lower_expr(
             let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
             let free_vars: Vec<(Symbol, LocalId, Ty)> =
                 collect_free_vars(body, &param_names, scope, fb, interner);
+
+            // ── Simple-case metafactory path ───────────────────────
+            // No-capture, non-suspend lambdas with all-reference param
+            // and return types lower to a static helper method on the
+            // wrapper class plus an `invokedynamic` LambdaMetafactory
+            // call producing a `kotlin/jvm/functions/FunctionN`
+            // instance. Matches kotlinc's emission shape.
+            //
+            // Both primitive and reference param/return types are
+            // handled: the helper's specialized descriptor preserves
+            // primitives (e.g. `(I)I`), and the JVM's LambdaMetafactory
+            // generates the box/unbox adapter automatically.
+            // For now: take the metafactory path only for no-capture
+            // lambdas. Capturing-lambda support requires the helper's
+            // implicit-return inference to be reliable for non-Unit
+            // and non-primitive results, which it isn't yet (fixture
+            // 363's `{ x -> { y -> x + y } }` body returns a Function1
+            // but our inference says Unit).
+            if free_vars.is_empty() && !is_suspend_lambda && !params.is_empty() {
+                let arity = params.len() as u8;
+                let outer_name = fb.mf.name.clone();
+                let helper_prefix = format!("{}$lambda$", outer_name);
+                let inner_idx = module
+                    .functions
+                    .iter()
+                    .filter(|f| f.name.starts_with(&helper_prefix))
+                    .count();
+                let helper_name = format!("{}{}", helper_prefix, inner_idx);
+                let lambda_idx = module.functions.len();
+                let mut helper_fb = FnBuilder::new(lambda_idx, helper_name.clone(), Ty::Any);
+                helper_fb.mf.is_private = true;
+                let mut helper_scope: Vec<(Symbol, LocalId)> = Vec::new();
+                // Capture params come first.
+                for (sym, _outer_lid, ty) in &free_vars {
+                    let pid = helper_fb.new_local(ty.clone());
+                    helper_fb.mf.params.push(pid);
+                    helper_scope.push((*sym, pid));
+                }
+                // Then user-declared params.
+                for p in params {
+                    let ty = resolve_type(interner.resolve(p.ty.name), module);
+                    let pid = helper_fb.new_local(ty);
+                    helper_fb.mf.params.push(pid);
+                    helper_scope.push((p.name, pid));
+                }
+                // Emit `Intrinsics.checkNotNullParameter(p, "p")` for
+                // each non-null reference USER param, matching kotlinc's
+                // null-safety preamble on lambda invoke methods.
+                // Skip captures — they're already validated at the outer
+                // function's checkNotNullParameter site.
+                let user_scope_start = free_vars.len();
+                for (sym, pid) in helper_scope.iter().skip(user_scope_start) {
+                    let pty = helper_fb.mf.locals[pid.0 as usize].clone();
+                    let is_nonnull_ref = matches!(&pty, Ty::String | Ty::Class(_));
+                    if !is_nonnull_ref {
+                        continue;
+                    }
+                    let name_str = interner.resolve(*sym).to_string();
+                    let name_local = helper_fb.new_local(Ty::String);
+                    let name_id = module.intern_string(&name_str);
+                    helper_fb.push_stmt(MStmt::Assign {
+                        dest: name_local,
+                        value: Rvalue::Const(MirConst::String(name_id)),
+                    });
+                    let unit_local = helper_fb.new_local(Ty::Unit);
+                    helper_fb.push_stmt(MStmt::Assign {
+                        dest: unit_local,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlin/jvm/internal/Intrinsics".to_string(),
+                                method_name: "checkNotNullParameter".to_string(),
+                                descriptor: "(Ljava/lang/Object;Ljava/lang/String;)V".to_string(),
+                            },
+                            args: vec![*pid, name_local],
+                        },
+                    });
+                }
+                for s in &body.stmts {
+                    lower_stmt(
+                        s,
+                        &mut helper_fb,
+                        &mut helper_scope,
+                        module,
+                        name_to_func,
+                        name_to_global,
+                        interner,
+                        diags,
+                        None,
+                    );
+                }
+                // For Unit-returning lambdas the helper must return
+                // `Lkotlin/Unit;` (not V) so the metafactory's bridge
+                // type-checks against the SAM's Object return. Replace
+                // any Return / ReturnValue(Unit) with an explicit
+                // `getstatic kotlin/Unit.INSTANCE; areturn` sequence.
+                let locals_snapshot = helper_fb.mf.locals.clone();
+                let mut body_returns_unit = true;
+                for block in &helper_fb.mf.blocks {
+                    match &block.terminator {
+                        Terminator::Return => {}
+                        Terminator::ReturnValue(l) if locals_snapshot[l.0 as usize] != Ty::Unit => {
+                            body_returns_unit = false;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                if body_returns_unit {
+                    let unit_cls = Ty::Class("kotlin/Unit".to_string());
+                    for bi in 0..helper_fb.mf.blocks.len() {
+                        let term = helper_fb.mf.blocks[bi].terminator.clone();
+                        match term {
+                            Terminator::Return => {
+                                let unit_local = helper_fb.new_local(unit_cls.clone());
+                                helper_fb.mf.blocks[bi].stmts.push(MStmt::Assign {
+                                    dest: unit_local,
+                                    value: Rvalue::GetStaticField {
+                                        class_name: "kotlin/Unit".to_string(),
+                                        field_name: "INSTANCE".to_string(),
+                                        descriptor: "Lkotlin/Unit;".to_string(),
+                                    },
+                                });
+                                helper_fb.mf.blocks[bi].terminator =
+                                    Terminator::ReturnValue(unit_local);
+                            }
+                            Terminator::ReturnValue(l)
+                                if locals_snapshot[l.0 as usize] == Ty::Unit =>
+                            {
+                                let unit_local = helper_fb.new_local(unit_cls.clone());
+                                helper_fb.mf.blocks[bi].stmts.push(MStmt::Assign {
+                                    dest: unit_local,
+                                    value: Rvalue::GetStaticField {
+                                        class_name: "kotlin/Unit".to_string(),
+                                        field_name: "INSTANCE".to_string(),
+                                        descriptor: "Lkotlin/Unit;".to_string(),
+                                    },
+                                });
+                                helper_fb.mf.blocks[bi].terminator =
+                                    Terminator::ReturnValue(unit_local);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                let helper_ret_ty = {
+                    let last_block = helper_fb.mf.blocks.last().unwrap();
+                    match &last_block.terminator {
+                        Terminator::ReturnValue(l) => helper_fb.mf.locals[l.0 as usize].clone(),
+                        Terminator::Return => Ty::Unit,
+                        _ => Ty::Any,
+                    }
+                };
+                // Allow both reference and primitive return types —
+                // the metafactory generates the box/unbox adapter.
+                let return_is_supported = !matches!(&helper_ret_ty, Ty::Error);
+                if return_is_supported {
+                    helper_fb.mf.return_ty = helper_ret_ty.clone();
+                    // The IMPL descriptor includes captures + user params.
+                    let mut spec_desc = String::from("(");
+                    for pid in helper_fb.mf.params.iter() {
+                        let pt = &helper_fb.mf.locals[pid.0 as usize];
+                        spec_desc.push_str(&jvm_type_string_for_ty(pt));
+                    }
+                    spec_desc.push(')');
+                    spec_desc.push_str(&jvm_type_string_for_ty(&helper_ret_ty));
+                    // The INSTANTIATED method-type is the SAM's specialized
+                    // form — user params ONLY (captures are excluded
+                    // because they're baked in by the metafactory).
+                    let mut inst_user_desc = String::from("(");
+                    for pid in helper_fb.mf.params.iter().skip(free_vars.len()) {
+                        let pt = &helper_fb.mf.locals[pid.0 as usize];
+                        inst_user_desc.push_str(&jvm_type_string_for_ty(pt));
+                    }
+                    inst_user_desc.push(')');
+                    inst_user_desc.push_str(&jvm_type_string_for_ty(&helper_ret_ty));
+                    let impl_class = module.wrapper_class.clone();
+
+                    // Capture user-param types BEFORE finish() so we can
+                    // type the lambda local accordingly.
+                    let user_param_tys: Vec<Ty> = helper_fb
+                        .mf
+                        .params
+                        .iter()
+                        .skip(free_vars.len())
+                        .map(|pid| helper_fb.mf.locals[pid.0 as usize].clone())
+                        .collect();
+                    module.add_function(helper_fb.finish());
+
+                    // Type the lambda local as `Ty::Function { ... }`
+                    // (not `Ty::Class`) so the existing invocation
+                    // dispatch can extract the specialized return type
+                    // and unbox primitives at the call site.
+                    let lambda_inst = fb.new_local(Ty::Function {
+                        params: user_param_tys,
+                        ret: Box::new(helper_ret_ty.clone()),
+                        is_suspend: false,
+                    });
+                    fb.push_stmt(MStmt::Assign {
+                        dest: lambda_inst,
+                        value: Rvalue::Call {
+                            kind: CallKind::LambdaMetafactory {
+                                arity,
+                                method_name: helper_name,
+                                specialized_descriptor: spec_desc,
+                                instantiated_descriptor: inst_user_desc,
+                                impl_class,
+                            },
+                            // Pass captured locals from the OUTER scope
+                            // as bootstrap args to the metafactory; the
+                            // metafactory bakes them into the Function
+                            // instance's invoke method.
+                            args: free_vars
+                                .iter()
+                                .map(|(_, outer_lid, _)| *outer_lid)
+                                .collect(),
+                        },
+                    });
+                    return Some(lambda_inst);
+                }
+                // Else: fall through to synthetic-class path.
+            }
 
             // Detect which captures need Ref boxing: any `var` declaration
             // that's captured needs boxing so mutations are visible across

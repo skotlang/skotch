@@ -44,25 +44,32 @@ method        main ()V 0x0019
     0049 aastore
     0050 aload_0
     0051 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0054 new Class(InputKt$Lambda$0)
-    0057 dup
-    0058 invokespecial Method(InputKt$Lambda$0.<init>:()V)
-    0061 astore_0
-    0062 iconst_0
-    0063 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0066 astore_1
-    0067 checkcast Class(java/lang/Iterable)
-    0070 aload_1
-    0071 aload_0
-    0072 checkcast Class(kotlin/jvm/functions/Function2)
-    0075 invokestatic Method(kotlin/collections/CollectionsKt.fold:(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;)
-    0078 astore 8
-    0080 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0083 aload 8
-    0085 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0088 return
+    0054 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0059 astore_0
+    0060 iconst_0
+    0061 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0064 astore_1
+    0065 checkcast Class(java/lang/Iterable)
+    0068 aload_1
+    0069 aload_0
+    0070 invokestatic Method(kotlin/collections/CollectionsKt.fold:(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;)
+    0073 astore 8
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 aload 8
+    0080 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0083 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-class_attr    InnerClasses (10 bytes)
+method        main$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 aload_1
+    0008 checkcast Class(java/lang/Integer)
+    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0014 iadd
+    0015 ireturn
+class_attr    BootstrapMethods (12 bytes)
