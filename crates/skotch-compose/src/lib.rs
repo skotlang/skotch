@@ -373,19 +373,23 @@ fn patch_calls_in_function(
                     // We fill ALL missing slots with null/0 placeholders.
                     let mut extra_ids: Vec<LocalId> = Vec::new();
                     for i in 0..missing {
-                        let is_last = i == missing - 1;
-                        let is_second_last = i == missing - 2;
-                        let is_third_last = i == missing - 3;
+                        // Compute "is the i-th appended slot the Nth from the
+                        // end" using checked_sub so missing < N doesn't wrap a
+                        // `usize` to `usize::MAX` and falsely match (this was a
+                        // real release-vs-debug discrepancy: release builds
+                        // wrapped silently while debug builds panicked under
+                        // overflow checks — caught by Ubuntu CI on fixture
+                        // 582-composable-nested where `missing` is 1 or 2).
+                        let is_last = missing.checked_sub(1) == Some(i);
+                        let is_second_last = missing.checked_sub(2) == Some(i);
+                        let is_third_last = missing.checked_sub(3) == Some(i);
                         let ty = if is_second_last {
                             // $composer position (second from end if missing>=2)
                             Ty::Class("androidx/compose/runtime/Composer".to_string())
+                        } else if is_last || is_third_last {
+                            Ty::Int // $changed or $default
                         } else {
-                            // All other positions: Int for $changed/$default, Any for user defaults
-                            if is_last || is_third_last {
-                                Ty::Int // $changed or $default
-                            } else {
-                                Ty::Any // user default placeholder (null)
-                            }
+                            Ty::Any // user default placeholder (null)
                         };
                         let id = LocalId(func.locals.len() as u32);
                         func.locals.push(ty);

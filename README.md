@@ -120,6 +120,188 @@ emitters are stable.
 
 ## Architecture
 
+### How `skotch build` turns a project into bytecode
+
+End-to-end view of what happens when you run `skotch build` on a Gradle-style
+project. Source files travel through the front-end (lex → parse → resolve →
+typecheck → MIR lower) into a single shared IR — `MirModule` — which every
+backend reads. The `salsa` incremental layer wraps the front-end so unchanged
+files skip recompilation; `rayon` parallelizes per-file work in Phase 2 and
+per-module work in Phase 3.
+
+```mermaid
+%%{init: {'theme': 'default', 'flowchart': {'curve': 'linear', 'htmlLabels': true}}}%%
+flowchart TB
+    classDef entry      fill:#fce7f3,stroke:#be185d,color:#831843
+    classDef frontend   fill:#dbeafe,stroke:#1e40af,color:#1e3a8a
+    classDef ir         fill:#fef3c7,stroke:#a16207,color:#713f12
+    classDef transform  fill:#fde68a,stroke:#a16207,color:#713f12
+    classDef backend    fill:#dcfce7,stroke:#15803d,color:#14532d
+    classDef package    fill:#e0e7ff,stroke:#4338ca,color:#312e81
+    classDef incr       fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+    classDef external   fill:#f3f4f6,stroke:#374151,color:#111827,stroke-dasharray:5 3
+
+    %% ── CLI entry points
+    subgraph CLI["skotch-cli"]
+        direction LR
+        EmitCmd["emit <file.kt><br/>--target jvm|dex|klib|llvm|native"]:::entry
+        BuildCmd["build<br/>(reads build.gradle.kts)"]:::entry
+        RunCmd["run <file.kts><br/>(REPL-driven)"]:::entry
+        ReplCmd["repl"]:::entry
+        LspCmd["lsp"]:::entry
+    end
+
+    %% ── Project setup phase (only for `build`)
+    subgraph ProjSetup["Project setup &middot; skotch-build &middot; skotch-buildscript"]
+        direction TB
+        ParseSettings["parse_settings.gradle.kts<br/>→ included modules,<br/>rootProject.name"]:::frontend
+        ParseBuild["parse_buildfile_with_catalog<br/>→ ProjectModel<br/>(deps, sourceSets, repos,<br/>plugins, &commat;Composable flag)"]:::frontend
+        ResolveDeps["resolve_external_deps<br/>(Maven Central, Google, custom)<br/>→ dep JARs"]:::frontend
+        ManifestParse["AndroidManifest.xml<br/>(if Android)"]:::frontend
+    end
+
+    %% ── Incremental layer
+    subgraph Incr["Incremental cache &middot; skotch-db"]
+        direction TB
+        Salsa["salsa Database<br/>(query graph)"]:::incr
+        Blake3["blake3 content hashes<br/>per source file"]:::incr
+        Gather["Level 1:<br/>gather_exports(file) → FileExports<br/><i>memoized per-file</i>"]:::incr
+        Aggregate["Aggregate: merge FileExports<br/>→ SymbolTableInput"]:::incr
+        CompileQuery["Level 2:<br/>compile_with_context(file, table)<br/>→ CompileResult<br/><i>memoized per (file, table)</i>"]:::incr
+    end
+
+    %% ── Front-end pipeline (per source file)
+    subgraph FrontEnd["Front-end &middot; per &period;kt file"]
+        direction TB
+        Lex["lex<br/>skotch-lexer"]:::frontend
+        Parse["parse<br/>skotch-parser → AST"]:::frontend
+        Resolve["resolve_file<br/>skotch-resolve<br/>(imports, name binding,<br/>package symbol table)"]:::frontend
+        TypeCk["type_check<br/>skotch-typeck<br/>(inference, smart casts,<br/>generic erasure)"]:::frontend
+        Lower["lower_file<br/>skotch-mir-lower<br/>(AST → MIR)"]:::frontend
+    end
+
+    %% ── MIR (the narrow waist)
+    subgraph IRWaist["MIR &mdash; the narrow waist &middot; skotch-mir"]
+        direction TB
+        MirModule["MirModule<br/>• MirFunction (with blocks,<br/>&nbsp;&nbsp;terminators, suspend-state-machine,<br/>&nbsp;&nbsp;param defaults)<br/>• MirClass (fields, methods,<br/>&nbsp;&nbsp;singleton/companion markers)<br/>• Constants, string pool<br/>• Per-module wrapper class (FooKt)"]:::ir
+    end
+
+    %% ── MIR-to-MIR transforms
+    subgraph MirTransforms["MIR → MIR plugin passes"]
+        direction TB
+        ComposeXform["skotch-compose::compose_transform<br/>• Inject &dollar;composer / &dollar;changed params<br/>• Patch call sites to forward them<br/>• Mark with &dollar;ComposeKey annotation<br/>• Bump Function0 → Function2 for<br/>&nbsp;&nbsp;&commat;Composable lambdas"]:::transform
+        SuspendXform["Suspend state-machine extraction<br/>(in mir-lower)<br/>• Recognize suspend calls<br/>• Spill liveness analysis<br/>• Build SuspendStateMachine marker"]:::transform
+    end
+
+    %% ── Backends
+    subgraph Backends["Pluggable backends &middot; skotch-backend-*"]
+        direction TB
+        BackJvm["skotch-backend-jvm<br/>compile_module → Vec&lt;(name, &period;class bytes)&gt;<br/>• ConstantPool + StackMapTable<br/>• 30+ peephole passes<br/>• Special emitters:<br/>&nbsp;&nbsp;- emit_suspend_state_machine_method<br/>&nbsp;&nbsp;- emit_composable_method +<br/>&nbsp;&nbsp;&nbsp;&nbsp;emit_composable_restart_lambda<br/>&nbsp;&nbsp;- emit_stub_method (fallback)"]:::backend
+        BackDex["skotch-backend-dex<br/>(MIR → DEX directly,<br/>or via d8 on &period;class output)"]:::backend
+        BackKlib["skotch-backend-klib<br/>(MIR + manifest archive,<br/>shared waist for Native/LLVM)"]:::backend
+        BackLlvm["skotch-backend-llvm<br/>(reads klib → textual<br/>LLVM IR)"]:::backend
+        BackWasm["skotch-backend-wasm<br/><i>(early)</i>"]:::backend
+    end
+
+    %% ── Normalizers (used by fixture tests, not the runtime path)
+    subgraph Norm["Normalizers &middot; for fixture parity tests"]
+        direction LR
+        NormClass["skotch-classfile-norm<br/>&period;class → canonical text"]:::external
+        NormDex["skotch-dex-norm<br/>&period;dex → canonical text"]:::external
+        NormLlvm["skotch-llvm-norm<br/>&period;ll → canonical text"]:::external
+    end
+
+    %% ── Packaging (downstream of backends)
+    subgraph Pkg["Packaging &middot; skotch-jar / skotch-apk / skotch-axml / skotch-sign"]
+        direction TB
+        PackJar["skotch-jar::write_jar<br/>or write_fat_jar"]:::package
+        PackAxml["skotch-axml<br/>(binary AndroidManifest)"]:::package
+        DepDex["d8 on resolved dep JARs<br/>→ deps&period;dex"]:::external
+        AppDex["MIR → app classes → app DEX<br/>(skotch-backend-dex or d8)"]:::backend
+        PackApk["skotch-apk::build_apk<br/>(classes&period;dex + res + manifest)"]:::package
+        PackSign["skotch-sign::sign_apk_v2<br/>(RSA + APK Signing Block)"]:::package
+    end
+
+    %% ── External tools that may be invoked (never for emitters,
+    %% only for fixture goldens, DEX/native link steps).
+    subgraph Ext["External tools &middot; only when needed"]
+        direction LR
+        Clang["clang<br/><i>(LLVM IR → native binary,<br/>the only runtime exception)</i>"]:::external
+        D8tool["d8<br/><i>(dep DEX, optional app DEX)</i>"]:::external
+        Kotlinc["kotlinc + compose-compiler-plugin<br/><i>(fixture golden generation only)</i>"]:::external
+    end
+
+    %% ── Edges: CLI → project setup or direct emit
+    EmitCmd ---|"single file"| FrontEnd
+    BuildCmd --> ProjSetup
+    RunCmd --> FrontEnd
+    ReplCmd --> FrontEnd
+    LspCmd ---|"open files"| Incr
+
+    %% ── Project setup wiring
+    ProjSetup --> Incr
+    ProjSetup -.->|"&period;jar deps"| Backends
+
+    %% ── Incremental layer queries front-end (per file)
+    Salsa --> Gather
+    Gather --> Aggregate
+    Aggregate --> CompileQuery
+    CompileQuery --> FrontEnd
+    Blake3 -.->|"invalidate on<br/>content change"| Salsa
+
+    %% ── Front-end produces MIR
+    Lex --> Parse --> Resolve --> TypeCk --> Lower --> MirModule
+
+    %% ── MIR passes through plugin transforms
+    MirModule --> ComposeXform
+    SuspendXform -.->|"baked into<br/>mir-lower output"| MirModule
+    ComposeXform --> BackJvm
+    MirModule --> BackJvm
+    MirModule --> BackKlib
+    BackKlib --> BackLlvm
+    BackKlib -.-> BackDex
+    MirModule --> BackDex
+    MirModule -.-> BackWasm
+
+    %% ── Backends to packaging
+    BackJvm -->|"&period;class files"| PackJar
+    BackJvm -->|"&period;class files"| AppDex
+    AppDex --> PackApk
+    DepDex --> PackApk
+    PackAxml --> PackApk
+    ManifestParse --> PackAxml
+    PackApk --> PackSign
+
+    %% ── Native link path
+    BackLlvm -.->|"&period;ll text"| Clang
+    Clang -.->|"native binary"| Pkg
+
+    %% ── Normalizers consume backend output for goldens
+    BackJvm -.->|"fixture test path"| NormClass
+    BackDex -.->|"fixture test path"| NormDex
+    BackLlvm -.->|"fixture test path"| NormLlvm
+    Kotlinc -.->|"reference output"| NormClass
+```
+
+### What's incremental about it
+
+The salsa database holds the inputs (`blake3` hashes of each source file plus
+the `SymbolTableInput` aggregate) and the queries (`gather_exports`,
+`compile_with_context`). When you edit a file:
+
+1. **Body-only edits**: `gather_exports` for the edited file returns the same
+   `FileExports` (signatures unchanged), so the `SymbolTableInput` doesn't
+   change. `compile_with_context` is re-invoked only for the edited file;
+   every other file uses its cached `CompileResult`. Validated by the
+   `salsa_incremental_body_change_skips_dependents` test.
+2. **Signature edits**: `FileExports` for the edited file differs, the
+   `SymbolTableInput` aggregate hash changes, and salsa invalidates
+   `compile_with_context` for every file that consumes the table — they all
+   get recompiled with the new signatures visible.
+
+This is the same shape Gradle's incremental compile uses, but driven by the
+salsa query graph instead of a custom dependency tracker.
+
 ### Multi-file compilation pipeline
 
 The build pipeline uses a **two-phase "Gather then Lower"** architecture
