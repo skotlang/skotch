@@ -1,0 +1,14 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        div (DDLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=4 max_locals=5
+    0000 dload_0
+    0001 dload_2
+    0002 ddiv
+    0003 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxDouble:(D)Ljava/lang/Double;)
+    0006 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (11 bytes)

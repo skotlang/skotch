@@ -1,0 +1,4 @@
+name   = "958-composable-inline-empty-noargs-v2"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable, no params, empty body — alt name."

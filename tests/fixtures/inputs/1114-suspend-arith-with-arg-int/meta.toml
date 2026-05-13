@@ -1,0 +1,4 @@
+name   = "1114-suspend-arith-with-arg-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

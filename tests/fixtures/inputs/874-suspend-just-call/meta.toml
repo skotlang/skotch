@@ -1,0 +1,4 @@
+name   = "874-suspend-just-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

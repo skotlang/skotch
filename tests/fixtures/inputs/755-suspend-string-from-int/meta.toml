@@ -1,0 +1,4 @@
+name   = "755-suspend-string-from-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

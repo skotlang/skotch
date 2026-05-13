@@ -1,0 +1,4 @@
+name   = "1099-composable-inline-mix-3"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 3 mixed params, empty body."

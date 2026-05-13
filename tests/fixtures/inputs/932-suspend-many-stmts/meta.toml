@@ -1,0 +1,4 @@
+name   = "932-suspend-many-stmts"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

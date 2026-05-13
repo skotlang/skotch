@@ -506,6 +506,11 @@ pub static JVM_INTERFACES: &[&str] = &[
     "java/io/Closeable",
     "kotlinx/coroutines/Deferred",
     "kotlinx/coroutines/Job",
+    "androidx/compose/runtime/Composer",
+    "androidx/compose/runtime/ScopeUpdateScope",
+    "androidx/compose/runtime/RecomposeScope",
+    "androidx/compose/runtime/MutableState",
+    "androidx/compose/runtime/State",
 ];
 
 /// Check if a class name requires `invokeinterface` dispatch.

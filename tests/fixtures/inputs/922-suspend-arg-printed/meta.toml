@@ -1,0 +1,4 @@
+name   = "922-suspend-arg-printed"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

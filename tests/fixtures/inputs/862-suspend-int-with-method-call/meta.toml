@@ -1,0 +1,4 @@
+name   = "862-suspend-int-with-method-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

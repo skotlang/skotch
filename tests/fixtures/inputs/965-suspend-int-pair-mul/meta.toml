@@ -1,0 +1,4 @@
+name   = "965-suspend-int-pair-mul"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

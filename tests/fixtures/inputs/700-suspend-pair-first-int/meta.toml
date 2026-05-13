@@ -1,0 +1,4 @@
+name   = "700-suspend-pair-first-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

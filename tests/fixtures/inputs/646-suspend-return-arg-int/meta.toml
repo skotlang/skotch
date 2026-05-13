@@ -1,0 +1,4 @@
+name   = "646-suspend-return-arg-int"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

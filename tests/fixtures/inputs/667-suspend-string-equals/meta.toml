@@ -1,0 +1,4 @@
+name   = "667-suspend-string-equals"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

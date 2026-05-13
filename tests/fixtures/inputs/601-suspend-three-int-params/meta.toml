@@ -1,0 +1,4 @@
+name   = "601-suspend-three-int-params"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

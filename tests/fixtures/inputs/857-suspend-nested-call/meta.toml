@@ -1,0 +1,4 @@
+name   = "857-suspend-nested-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

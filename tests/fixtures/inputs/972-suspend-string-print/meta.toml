@@ -1,0 +1,4 @@
+name   = "972-suspend-string-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

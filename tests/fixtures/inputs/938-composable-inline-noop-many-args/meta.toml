@@ -1,0 +1,4 @@
+name   = "938-composable-inline-noop-many-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with six primitive args + no body."

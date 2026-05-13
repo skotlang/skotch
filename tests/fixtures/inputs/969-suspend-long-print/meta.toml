@@ -1,0 +1,4 @@
+name   = "969-suspend-long-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

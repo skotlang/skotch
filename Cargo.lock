@@ -2341,6 +2341,7 @@ dependencies = [
  "skotch-backend-llvm",
  "skotch-classfile-norm",
  "skotch-classinfo",
+ "skotch-compose",
  "skotch-dex-norm",
  "skotch-diagnostics",
  "skotch-intern",
@@ -3405,6 +3406,7 @@ dependencies = [
  "skotch-llvm-norm",
  "walkdir",
  "which",
+ "zip",
 ]
 
 [[package]]

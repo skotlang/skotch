@@ -1,0 +1,4 @@
+name   = "827-suspend-int-shift-no-op"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

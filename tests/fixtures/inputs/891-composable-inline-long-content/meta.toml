@@ -1,0 +1,4 @@
+name   = "891-composable-inline-long-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Long id + content."

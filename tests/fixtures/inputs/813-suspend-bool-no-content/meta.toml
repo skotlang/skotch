@@ -1,0 +1,4 @@
+name   = "813-suspend-bool-no-content"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

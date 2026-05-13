@@ -1,0 +1,4 @@
+name   = "706-suspend-int-cube"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

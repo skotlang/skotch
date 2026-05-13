@@ -1,0 +1,4 @@
+name   = "808-composable-inline-mixed-1"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with String + content lambda (callback pattern)."

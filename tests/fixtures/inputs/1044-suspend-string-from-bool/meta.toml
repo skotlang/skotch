@@ -1,0 +1,4 @@
+name   = "1044-suspend-string-from-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

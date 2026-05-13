@@ -1,0 +1,4 @@
+name   = "848-suspend-int-cond-min"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

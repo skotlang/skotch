@@ -1,0 +1,1 @@
+suspend fun calc(x: Int): Int = (x + 1) * (x + 2) + (x + 3)

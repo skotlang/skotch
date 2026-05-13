@@ -1,0 +1,4 @@
+name   = "929-composable-inline-empty-bool"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable single Boolean param empty body."

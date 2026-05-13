@@ -1,0 +1,4 @@
+name   = "589-suspend-int-from-int-param"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend Int with Int param — no boxing, just return param."

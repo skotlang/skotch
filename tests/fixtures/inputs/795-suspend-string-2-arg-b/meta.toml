@@ -1,0 +1,4 @@
+name   = "795-suspend-string-2-arg-b"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

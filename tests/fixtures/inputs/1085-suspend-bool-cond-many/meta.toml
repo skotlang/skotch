@@ -1,0 +1,4 @@
+name   = "1085-suspend-bool-cond-many"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

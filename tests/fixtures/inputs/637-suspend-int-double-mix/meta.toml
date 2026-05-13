@@ -1,0 +1,4 @@
+name   = "637-suspend-int-double-mix"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

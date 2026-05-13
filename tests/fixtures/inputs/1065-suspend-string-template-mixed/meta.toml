@@ -1,0 +1,4 @@
+name   = "1065-suspend-string-template-mixed"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "921-composable-inline-int-two-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: Int + 2 String params."

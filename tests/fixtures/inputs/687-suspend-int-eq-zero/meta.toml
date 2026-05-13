@@ -1,0 +1,4 @@
+name   = "687-suspend-int-eq-zero"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "846-suspend-bool-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

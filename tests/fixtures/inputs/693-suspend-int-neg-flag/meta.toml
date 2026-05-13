@@ -1,0 +1,4 @@
+name   = "693-suspend-int-neg-flag"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

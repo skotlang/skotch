@@ -1,0 +1,4 @@
+name   = "940-suspend-arith-paren"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

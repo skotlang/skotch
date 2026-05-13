@@ -1,0 +1,4 @@
+name   = "592-suspend-no-body"
+status = "supported"
+features = ["suspend"]
+reason = "Empty suspend function — `Unit` return inferred, body is empty."

@@ -1,0 +1,4 @@
+name   = "580-composable-empty"
+status = "supported"
+features = ["compose", "Composable"]
+reason = "Empty @Composable function — exercises the compose-plugin transform: $composer/$changed params, startRestartGroup/endRestartGroup, restart-scope lambda."

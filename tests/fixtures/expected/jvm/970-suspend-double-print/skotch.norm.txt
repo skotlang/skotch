@@ -1,0 +1,14 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        show (DLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0003 dload_0
+    0004 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0007 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0010 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)

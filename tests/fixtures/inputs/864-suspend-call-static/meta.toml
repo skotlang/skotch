@@ -1,0 +1,4 @@
+name   = "864-suspend-call-static"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

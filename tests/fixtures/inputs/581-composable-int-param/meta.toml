@@ -1,0 +1,4 @@
+name   = "581-composable-int-param"
+status = "supported"
+features = ["compose", "Composable"]
+reason = "@Composable with Int param — exercises $changed bitmask threading for arg-stability tracking."

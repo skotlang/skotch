@@ -1,0 +1,4 @@
+name   = "1016-suspend-string-arg-print-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

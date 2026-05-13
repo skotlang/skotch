@@ -1,0 +1,4 @@
+name   = "908-suspend-mult-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

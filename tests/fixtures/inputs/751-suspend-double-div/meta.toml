@@ -1,0 +1,4 @@
+name   = "751-suspend-double-div"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

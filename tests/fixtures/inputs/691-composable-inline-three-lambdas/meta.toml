@@ -1,0 +1,4 @@
+name   = "691-composable-inline-three-lambdas"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with three lambdas."

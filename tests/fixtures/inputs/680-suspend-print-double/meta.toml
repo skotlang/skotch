@@ -1,0 +1,4 @@
+name   = "680-suspend-print-double"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

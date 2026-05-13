@@ -1,0 +1,4 @@
+name   = "590-suspend-int-sum-params"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend Int with two Int params — adds without suspension, then autoboxes."

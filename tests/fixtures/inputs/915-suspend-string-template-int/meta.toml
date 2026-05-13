@@ -1,0 +1,4 @@
+name   = "915-suspend-string-template-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

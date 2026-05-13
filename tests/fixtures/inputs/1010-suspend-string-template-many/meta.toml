@@ -1,0 +1,4 @@
+name   = "1010-suspend-string-template-many"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

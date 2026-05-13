@@ -1,0 +1,4 @@
+name   = "594-suspend-chain-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Two trivial suspend functions in same file — verifies suspend descriptor generation for multiple defs."

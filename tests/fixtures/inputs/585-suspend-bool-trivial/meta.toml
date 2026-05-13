@@ -1,0 +1,4 @@
+name   = "585-suspend-bool-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Boolean return — exercises boxBoolean autoboxing."

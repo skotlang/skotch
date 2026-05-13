@@ -1,0 +1,4 @@
+name   = "951-suspend-cond-arg-call-2"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

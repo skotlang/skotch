@@ -1,0 +1,4 @@
+name   = "1036-suspend-bool-mult-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

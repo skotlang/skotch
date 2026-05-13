@@ -1,0 +1,4 @@
+name   = "1070-composable-inline-empty-six"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 6 Int params, empty."

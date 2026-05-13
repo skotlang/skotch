@@ -1,0 +1,4 @@
+name   = "663-composable-inline-empty-body"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable that ignores its content param."

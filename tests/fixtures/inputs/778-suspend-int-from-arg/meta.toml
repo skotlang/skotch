@@ -1,0 +1,4 @@
+name   = "778-suspend-int-from-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

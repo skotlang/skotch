@@ -1,0 +1,4 @@
+name   = "615-suspend-int-max"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

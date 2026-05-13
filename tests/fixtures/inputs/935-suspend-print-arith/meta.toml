@@ -1,0 +1,4 @@
+name   = "935-suspend-print-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

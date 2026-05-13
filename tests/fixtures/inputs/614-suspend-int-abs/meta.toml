@@ -1,0 +1,4 @@
+name   = "614-suspend-int-abs"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

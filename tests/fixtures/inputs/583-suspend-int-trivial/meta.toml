@@ -1,0 +1,4 @@
+name   = "583-suspend-int-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Int return — no suspension points, just descriptor + autoboxed return."

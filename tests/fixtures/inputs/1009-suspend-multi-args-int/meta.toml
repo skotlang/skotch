@@ -1,0 +1,4 @@
+name   = "1009-suspend-multi-args-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

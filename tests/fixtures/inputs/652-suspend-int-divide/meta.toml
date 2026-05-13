@@ -1,0 +1,4 @@
+name   = "652-suspend-int-divide"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

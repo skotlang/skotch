@@ -1,0 +1,4 @@
+name   = "861-composable-inline-mixed-2"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with mixed String + Int + content."

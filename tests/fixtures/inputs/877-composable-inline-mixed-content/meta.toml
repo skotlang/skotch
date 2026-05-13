@@ -1,0 +1,4 @@
+name   = "877-composable-inline-mixed-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Int id + content lambda."

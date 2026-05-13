@@ -1,0 +1,4 @@
+name   = "660-composable-inline-2int-2lambda"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable with mixed int+lambda params."

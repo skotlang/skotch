@@ -1,0 +1,4 @@
+name   = "1048-suspend-int-mul-multi"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

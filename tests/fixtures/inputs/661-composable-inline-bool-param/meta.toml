@@ -1,0 +1,4 @@
+name   = "661-composable-inline-bool-param"
+status = "supported"
+features = ["compose", "Composable", "inline"]
+reason = "Inline @Composable with Bool param and conditional body — exercises is_unused_local fixpoint for aliased dead temps."

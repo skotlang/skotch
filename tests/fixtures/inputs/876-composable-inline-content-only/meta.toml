@@ -1,0 +1,4 @@
+name   = "876-composable-inline-content-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with single content lambda."

@@ -1,0 +1,4 @@
+name   = "600-suspend-string-from-int"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

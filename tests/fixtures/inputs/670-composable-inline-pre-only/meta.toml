@@ -1,0 +1,4 @@
+name   = "670-composable-inline-pre-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable, just runs pre lambda."

@@ -1,0 +1,4 @@
+name   = "732-suspend-noop-noparams"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

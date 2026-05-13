@@ -1,0 +1,4 @@
+name   = "941-suspend-arith-mult-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

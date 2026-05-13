@@ -1,0 +1,4 @@
+name   = "765-suspend-multiple-returns"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

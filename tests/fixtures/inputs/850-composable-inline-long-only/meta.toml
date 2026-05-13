@@ -1,0 +1,4 @@
+name   = "850-composable-inline-long-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with single Long param."

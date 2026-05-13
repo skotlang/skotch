@@ -1,0 +1,4 @@
+name   = "928-suspend-int-bigarith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

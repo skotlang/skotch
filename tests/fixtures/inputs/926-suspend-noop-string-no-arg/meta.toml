@@ -1,0 +1,4 @@
+name   = "926-suspend-noop-string-no-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

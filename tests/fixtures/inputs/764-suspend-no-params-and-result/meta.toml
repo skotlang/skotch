@@ -1,0 +1,4 @@
+name   = "764-suspend-no-params-and-result"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "923-suspend-fixed-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "672-suspend-pair-second"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

@@ -1,0 +1,4 @@
+name   = "671-suspend-int-mod-2"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

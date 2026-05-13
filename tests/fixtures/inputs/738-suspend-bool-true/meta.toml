@@ -1,0 +1,4 @@
+name   = "738-suspend-bool-true"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

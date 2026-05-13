@@ -1,0 +1,1 @@
+suspend fun empty(): String = ""

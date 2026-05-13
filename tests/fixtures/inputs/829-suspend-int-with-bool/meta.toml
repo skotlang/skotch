@@ -1,0 +1,4 @@
+name   = "829-suspend-int-with-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

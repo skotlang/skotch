@@ -1,0 +1,4 @@
+name   = "726-composable-inline-int-bool-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with mixed primitive args + content."

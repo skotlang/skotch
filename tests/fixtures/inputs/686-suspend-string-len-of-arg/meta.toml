@@ -1,0 +1,4 @@
+name   = "686-suspend-string-len-of-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

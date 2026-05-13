@@ -1,0 +1,4 @@
+name   = "970-suspend-double-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

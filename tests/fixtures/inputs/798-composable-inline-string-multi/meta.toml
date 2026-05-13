@@ -1,0 +1,4 @@
+name   = "798-composable-inline-string-multi"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with three String params and empty body."

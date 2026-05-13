@@ -1,0 +1,4 @@
+name   = "989-suspend-float-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

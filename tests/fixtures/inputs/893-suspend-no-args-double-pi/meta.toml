@@ -1,0 +1,4 @@
+name   = "893-suspend-no-args-double-pi"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

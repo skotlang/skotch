@@ -1,0 +1,4 @@
+name   = "1102-suspend-noop-arg-long"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

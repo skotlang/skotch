@@ -1,0 +1,4 @@
+name   = "1064-composable-inline-mixed-bool"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with mixed types + conditional content."

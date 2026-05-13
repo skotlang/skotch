@@ -1,0 +1,4 @@
+name   = "584-suspend-long-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Long return — exercises boxLong autoboxing."

@@ -1,0 +1,4 @@
+name   = "797-composable-inline-six-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with five Int + content."

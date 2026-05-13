@@ -1,0 +1,4 @@
+name   = "954-suspend-int-arg-2-templates"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

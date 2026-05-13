@@ -1,0 +1,4 @@
+name   = "800-suspend-int-with-int-default"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

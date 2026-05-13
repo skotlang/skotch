@@ -1,0 +1,4 @@
+name   = "955-suspend-int-many-stmts"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

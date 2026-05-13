@@ -1,0 +1,4 @@
+name   = "924-suspend-many-prints"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

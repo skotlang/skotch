@@ -1,0 +1,4 @@
+name   = "985-suspend-double-pair-sub"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

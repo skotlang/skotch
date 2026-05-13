@@ -1,0 +1,4 @@
+name   = "901-composable-inline-empty-bool-int"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with bool + int."

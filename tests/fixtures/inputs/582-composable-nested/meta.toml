@@ -1,0 +1,4 @@
+name   = "582-composable-nested"
+status = "supported"
+features = ["compose", "Composable"]
+reason = "Composable calling composable — exercises $composer threading and call-site argument insertion."

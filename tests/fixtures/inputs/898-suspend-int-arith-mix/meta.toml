@@ -1,0 +1,4 @@
+name   = "898-suspend-int-arith-mix"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

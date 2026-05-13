@@ -1,0 +1,4 @@
+name   = "684-suspend-class-prop"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

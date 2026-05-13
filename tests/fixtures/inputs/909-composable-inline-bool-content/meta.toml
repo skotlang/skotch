@@ -1,0 +1,4 @@
+name   = "909-composable-inline-bool-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: bool + content with conditional call."

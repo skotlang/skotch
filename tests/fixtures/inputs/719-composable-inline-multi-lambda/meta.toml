@@ -1,0 +1,4 @@
+name   = "719-composable-inline-multi-lambda"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with three lambda content blocks."

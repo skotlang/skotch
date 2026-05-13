@@ -1,0 +1,4 @@
+name   = "668-suspend-bool-fromInt"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

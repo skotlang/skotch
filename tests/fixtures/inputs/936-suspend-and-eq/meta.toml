@@ -1,0 +1,4 @@
+name   = "936-suspend-and-eq"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "860-composable-inline-many-strings"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with 3 String params."

@@ -1,0 +1,4 @@
+name   = "1024-suspend-call-noarg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

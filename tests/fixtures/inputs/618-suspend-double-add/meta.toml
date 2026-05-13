@@ -1,0 +1,4 @@
+name   = "618-suspend-double-add"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

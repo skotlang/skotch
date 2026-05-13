@@ -1,0 +1,4 @@
+name   = "588-suspend-double-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Double return — exercises boxDouble autoboxing for wide-slot type."

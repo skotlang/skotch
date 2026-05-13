@@ -1,0 +1,4 @@
+name   = "664-composable-inline-noop-int"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable with only an Int param."

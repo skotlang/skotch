@@ -1,0 +1,4 @@
+name   = "822-suspend-long-arg-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

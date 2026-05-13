@@ -1,0 +1,4 @@
+name   = "759-composable-inline-many-types"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with many primitive types + content."

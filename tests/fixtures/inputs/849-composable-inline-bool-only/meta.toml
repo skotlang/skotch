@@ -1,0 +1,4 @@
+name   = "849-composable-inline-bool-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with single Boolean param."

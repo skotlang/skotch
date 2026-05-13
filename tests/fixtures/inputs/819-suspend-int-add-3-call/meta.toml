@@ -1,0 +1,4 @@
+name   = "819-suspend-int-add-3-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

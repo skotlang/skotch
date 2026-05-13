@@ -1,0 +1,4 @@
+name   = "887-suspend-no-args-double-zero"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

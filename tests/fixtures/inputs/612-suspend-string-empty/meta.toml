@@ -1,0 +1,4 @@
+name   = "612-suspend-string-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

@@ -1,0 +1,4 @@
+name   = "698-composable-inline-mixed-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with mixed primitive + reference args + content."

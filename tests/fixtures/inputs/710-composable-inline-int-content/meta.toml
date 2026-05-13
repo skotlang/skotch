@@ -1,0 +1,4 @@
+name   = "710-composable-inline-int-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with leading Int + content."

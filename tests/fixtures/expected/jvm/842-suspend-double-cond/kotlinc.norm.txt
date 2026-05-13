@@ -1,0 +1,17 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 iload_0
+    0001 ifeq 8
+    0004 dconst_1
+    0005 goto 11
+    0008 ldc2_w double(2)
+    0011 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxDouble:(D)Ljava/lang/Double;)
+    0014 areturn
+    sub_attr  StackMapTable (5 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)

@@ -1,0 +1,4 @@
+name   = "717-composable-inline-empty-with-3args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable, three primitive args, no body."

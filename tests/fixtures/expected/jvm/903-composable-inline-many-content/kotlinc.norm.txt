@@ -1,0 +1,36 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        Multi (Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V 0x0019
+  code        max_stack=2 max_locals=7
+    0000 aload_0
+    0001 ldc "content1"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "content2"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_2
+    0013 ldc "content3"
+    0015 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0018 aload_3
+    0019 ldc "content4"
+    0021 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0024 iconst_0
+    0025 istore 6
+    0027 aload_0
+    0028 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0033 pop
+    0034 aload_1
+    0035 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0040 pop
+    0041 aload_2
+    0042 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0047 pop
+    0048 aload_3
+    0049 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0054 pop
+    0055 return
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (33 bytes)

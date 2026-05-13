@@ -1,0 +1,4 @@
+name   = "1072-composable-inline-pair-int"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with 2 Int params."

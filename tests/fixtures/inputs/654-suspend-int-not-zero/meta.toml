@@ -1,0 +1,4 @@
+name   = "654-suspend-int-not-zero"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

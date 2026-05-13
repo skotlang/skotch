@@ -1,0 +1,4 @@
+name   = "863-suspend-string-with-method-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "587-suspend-unit-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend Unit — descriptor uses Continuation<? super Unit>, body returns Unit.INSTANCE."

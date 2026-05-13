@@ -1,0 +1,4 @@
+name   = "595-suspend-if-expr"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with if-expression body — verifies branch+autoboxing pattern."

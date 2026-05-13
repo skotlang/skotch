@@ -1,0 +1,4 @@
+name   = "610-suspend-long-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

@@ -1,0 +1,4 @@
+name   = "957-composable-inline-content-noop"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable receives content but doesn't invoke it."

@@ -1,0 +1,4 @@
+name   = "658-suspend-int-elvis"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

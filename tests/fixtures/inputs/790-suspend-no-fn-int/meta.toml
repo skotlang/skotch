@@ -1,0 +1,4 @@
+name   = "790-suspend-no-fn-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

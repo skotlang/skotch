@@ -1,0 +1,4 @@
+name   = "852-suspend-double-multiple"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

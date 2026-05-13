@@ -1,0 +1,4 @@
+name   = "1035-suspend-string-conditional-prefix"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

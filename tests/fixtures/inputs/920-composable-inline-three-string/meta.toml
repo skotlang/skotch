@@ -1,0 +1,4 @@
+name   = "920-composable-inline-three-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 3 String params."

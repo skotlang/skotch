@@ -1,0 +1,4 @@
+name   = "608-suspend-string-prefix"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

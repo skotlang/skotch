@@ -1,0 +1,4 @@
+name   = "630-suspend-int-tostring"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

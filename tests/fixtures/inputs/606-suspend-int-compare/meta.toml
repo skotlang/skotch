@@ -1,0 +1,4 @@
+name   = "606-suspend-int-compare"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

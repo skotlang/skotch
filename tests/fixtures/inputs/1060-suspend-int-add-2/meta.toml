@@ -1,0 +1,4 @@
+name   = "1060-suspend-int-add-2"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

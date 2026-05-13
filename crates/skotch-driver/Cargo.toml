@@ -15,6 +15,7 @@ skotch-resolve        = { workspace = true }
 skotch-typeck         = { workspace = true }
 skotch-mir            = { workspace = true }
 skotch-mir-lower      = { workspace = true }
+skotch-compose        = { workspace = true }
 skotch-backend-jvm    = { workspace = true }
 skotch-backend-dex    = { workspace = true }
 skotch-backend-llvm   = { workspace = true }

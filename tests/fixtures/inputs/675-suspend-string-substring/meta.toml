@@ -1,0 +1,4 @@
+name   = "675-suspend-string-substring"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

@@ -1,0 +1,11 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        N (IIILandroidx/compose/runtime/Composer;I)V 0x0019
+  code        max_stack=1 max_locals=6
+    0000 iconst_0
+    0001 istore 5
+    0003 return
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (15 bytes)

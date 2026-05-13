@@ -1,0 +1,4 @@
+name   = "931-suspend-string-concat-fn"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

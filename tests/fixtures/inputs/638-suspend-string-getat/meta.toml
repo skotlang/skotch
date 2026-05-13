@@ -1,0 +1,4 @@
+name   = "638-suspend-string-getat"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

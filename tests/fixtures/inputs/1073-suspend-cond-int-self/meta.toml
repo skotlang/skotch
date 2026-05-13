@@ -1,0 +1,4 @@
+name   = "1073-suspend-cond-int-self"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

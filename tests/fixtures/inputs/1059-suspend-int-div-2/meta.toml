@@ -1,0 +1,4 @@
+name   = "1059-suspend-int-div-2"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

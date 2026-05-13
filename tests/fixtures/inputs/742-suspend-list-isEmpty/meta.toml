@@ -1,0 +1,4 @@
+name   = "742-suspend-list-isEmpty"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "1063-composable-inline-many-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 7 Int params, empty body."

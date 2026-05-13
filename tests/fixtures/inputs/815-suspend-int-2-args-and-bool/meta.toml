@@ -1,0 +1,4 @@
+name   = "815-suspend-int-2-args-and-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

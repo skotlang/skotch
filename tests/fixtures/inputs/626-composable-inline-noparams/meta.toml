@@ -1,0 +1,4 @@
+name   = "626-composable-inline-noparams"
+status = "supported"
+features = ["compose", "Composable", "inline"]
+reason = "Inline @Composable with no params or body."

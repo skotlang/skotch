@@ -1,0 +1,4 @@
+name   = "636-suspend-multi-arg-3str"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

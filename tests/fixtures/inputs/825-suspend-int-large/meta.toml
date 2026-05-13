@@ -1,0 +1,4 @@
+name   = "825-suspend-int-large"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "872-suspend-string-len-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

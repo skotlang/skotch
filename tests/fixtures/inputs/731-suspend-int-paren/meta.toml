@@ -1,0 +1,4 @@
+name   = "731-suspend-int-paren"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

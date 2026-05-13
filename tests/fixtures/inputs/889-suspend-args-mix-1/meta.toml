@@ -1,0 +1,4 @@
+name   = "889-suspend-args-mix-1"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

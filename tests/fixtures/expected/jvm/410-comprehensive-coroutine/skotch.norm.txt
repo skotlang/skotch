@@ -3,20 +3,20 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        doubleAfterDelay (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
-  code        max_stack=16 max_locals=32
+  code        max_stack=4 max_locals=8
     0000 aload_1
     0001 instanceof Class(InputKt$doubleAfterDelay$1)
     0004 ifeq 40
     0007 aload_1
     0008 checkcast Class(InputKt$doubleAfterDelay$1)
-    0011 astore 9
-    0013 aload 9
+    0011 astore 6
+    0013 aload 6
     0015 getfield Field(InputKt$doubleAfterDelay$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
     0021 ifeq 40
-    0024 aload 9
-    0026 aload 9
+    0024 aload 6
+    0026 aload 6
     0028 getfield Field(InputKt$doubleAfterDelay$1.label:I)
     0031 ldc int(-2147483648)
     0033 isub
@@ -26,59 +26,55 @@ method        doubleAfterDelay (ILkotlin/coroutines/Continuation;)Ljava/lang/Obj
     0043 dup
     0044 aload_1
     0045 invokespecial Method(InputKt$doubleAfterDelay$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 9
-    0050 aload 9
+    0048 astore 6
+    0050 aload 6
     0052 getfield Field(InputKt$doubleAfterDelay$1.result:Ljava/lang/Object;)
-    0055 astore 8
+    0055 astore 5
     0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 10
-    0062 aload 9
+    0060 astore 7
+    0062 aload 6
     0064 getfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0067 tableswitch default=162 low=0 high=1 0=88 1=125
-    0088 aload 8
+    0067 tableswitch default=153 low=0 high=1 0=88 1=123
+    0088 aload 5
     0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
     0093 ldc2_w long(10)
-    0096 lstore_2
-    0097 lload_2
-    0098 aload 9
-    0100 iload 0
-    0102 putfield Field(InputKt$doubleAfterDelay$1.I$0:I)
-    0105 aload 9
-    0107 iconst_1
-    0108 putfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0111 aload 9
-    0113 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0116 dup
-    0117 aload 10
-    0119 if_acmpne 139
-    0122 aload 10
-    0124 areturn
-    0125 aload 9
-    0127 getfield Field(InputKt$doubleAfterDelay$1.I$0:I)
-    0130 istore 0
-    0132 aload 8
-    0134 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0137 aload 8
-    0139 pop
-    0140 aconst_null
-    0141 astore 4
-    0143 iconst_2
-    0144 istore 5
-    0146 iload_0
-    0147 iload 5
-    0149 imul
-    0150 istore 6
-    0152 iload 6
-    0154 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
-    0157 astore 7
-    0159 aload 7
-    0161 areturn
-    0162 new Class(java/lang/IllegalStateException)
-    0165 dup
-    0166 ldc "call to 'resume' before 'invoke' with coroutine"
-    0168 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0171 athrow
-    sub_attr  StackMapTable (56 bytes)
+    0096 aload 6
+    0098 iload 0
+    0100 putfield Field(InputKt$doubleAfterDelay$1.I$0:I)
+    0103 aload 6
+    0105 iconst_1
+    0106 putfield Field(InputKt$doubleAfterDelay$1.label:I)
+    0109 aload 6
+    0111 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0114 dup
+    0115 aload 7
+    0117 if_acmpne 137
+    0120 aload 7
+    0122 areturn
+    0123 aload 6
+    0125 getfield Field(InputKt$doubleAfterDelay$1.I$0:I)
+    0128 istore 0
+    0130 aload 5
+    0132 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0135 aload 5
+    0137 pop
+    0138 aconst_null
+    0139 astore_2
+    0140 iload_0
+    0141 iconst_2
+    0142 imul
+    0143 istore_3
+    0144 iload_3
+    0145 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0148 astore 4
+    0150 aload 4
+    0152 areturn
+    0153 new Class(java/lang/IllegalStateException)
+    0156 dup
+    0157 ldc "call to 'resume' before 'invoke' with coroutine"
+    0159 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0162 athrow
+    sub_attr  StackMapTable (50 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

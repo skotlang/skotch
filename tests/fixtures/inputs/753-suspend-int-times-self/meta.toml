@@ -1,0 +1,4 @@
+name   = "753-suspend-int-times-self"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

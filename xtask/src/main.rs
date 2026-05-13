@@ -335,14 +335,46 @@ fn gen_one_jvm(
     if let Some(kc) = kotlinc {
         println!("[kotlinc]{}", f.dir_name);
         let tmp = tempdir(&f.dir_name)?;
-        let status = Command::new(kc)
-            .arg(&f.input)
+        let source =
+            std::fs::read_to_string(&f.input).with_context(|| format!("reading {:?}", f.input))?;
+        let uses_compose = source.contains("@Composable");
+        let mut cmd = Command::new(kc);
+        cmd.arg(&f.input)
             .arg("-d")
             .arg(&tmp)
             .arg("-jvm-target")
-            .arg("17")
+            .arg("17");
+        let compose_aux = if uses_compose {
+            match locate_compose_assets(kc) {
+                Some(assets) => {
+                    cmd.arg(format!("-Xplugin={}", assets.plugin_jar.display()));
+                    cmd.arg("-cp").arg(&assets.runtime_classpath);
+                    // Disable the runtime trace-event prologue so the
+                    // emitted bytecode is the smaller "production" form
+                    // — easier for skotch's transform to match
+                    // byte-for-byte. Production Compose builds typically
+                    // ship with traceMarkersEnabled=false anyway.
+                    cmd.arg("-P").arg(
+                        "plugin:androidx.compose.compiler.plugins.kotlin:traceMarkersEnabled=false",
+                    );
+                    Some(assets)
+                }
+                None => {
+                    eprintln!(
+                        "  compose-compiler-plugin or runtime not found in ~/.gradle/caches; \
+                         skipping kotlinc reference for {}",
+                        f.dir_name
+                    );
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+        let status = cmd
             .status()
             .with_context(|| format!("running kotlinc on {}", f.dir_name))?;
+        let _ = compose_aux;
         if !status.success() {
             eprintln!("  kotlinc failed; skipping reference for {}", f.dir_name);
         } else {
@@ -865,6 +897,88 @@ fn locate_kotlin_stdlib(kotlinc: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+struct ComposeAssets {
+    plugin_jar: PathBuf,
+    /// Single classpath string with all Compose runtime JARs joined by `:`.
+    runtime_classpath: String,
+}
+
+/// Locate the Compose compiler plugin JAR and a runtime classpath for
+/// kotlinc. We require the *non-embeddable* plugin variant — the
+/// `-embeddable.jar` form bundles its own shaded com.intellij/PsiElement
+/// which conflicts with kotlinc's own preloader classpath. The plugin
+/// is downloaded from Maven Central on first use and cached.
+fn locate_compose_assets(kotlinc: &Path) -> Option<ComposeAssets> {
+    // Pick a Compose plugin version compatible with the installed
+    // kotlinc. Hard-coded for now — bump when bumping kotlinc.
+    const COMPOSE_PLUGIN_VERSION: &str = "2.3.21";
+
+    let cache_dir = std::env::temp_dir().join("skotch-compose-cache");
+    std::fs::create_dir_all(&cache_dir).ok();
+
+    // Plugin (non-embeddable). Maven path:
+    //   org.jetbrains.kotlin:kotlin-compose-compiler-plugin:<ver>
+    let plugin_path = cache_dir.join(format!(
+        "kotlin-compose-compiler-plugin-{}.jar",
+        COMPOSE_PLUGIN_VERSION
+    ));
+    if !plugin_path.exists() {
+        let url = format!(
+            "https://repo1.maven.org/maven2/org/jetbrains/kotlin/\
+             kotlin-compose-compiler-plugin/{v}/\
+             kotlin-compose-compiler-plugin-{v}.jar",
+            v = COMPOSE_PLUGIN_VERSION
+        );
+        let status = Command::new("curl")
+            .arg("-fsSL")
+            .arg("-o")
+            .arg(&plugin_path)
+            .arg(&url)
+            .status()
+            .ok()?;
+        if !status.success() {
+            let _ = std::fs::remove_file(&plugin_path);
+            return None;
+        }
+    }
+
+    // Compose runtime: extract androidx.compose.runtime's classes.jar
+    // from the matching `runtime.aar` in the user's Gradle cache. We
+    // pick the newest version available locally.
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let gradle_cache = home
+        .join(".gradle")
+        .join("caches")
+        .join("modules-2")
+        .join("files-2.1");
+    let runtime_dir = gradle_cache
+        .join("androidx.compose.runtime")
+        .join("runtime-android");
+    let runtime_aar = walkdir::WalkDir::new(&runtime_dir)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy() == "runtime.aar")
+        .max_by_key(|e| e.path().to_path_buf())?;
+    let runtime_classes = cache_dir.join("compose-runtime-classes.jar");
+    if !runtime_classes.exists() {
+        let aar_bytes = std::fs::read(runtime_aar.path()).ok()?;
+        let mut zip_arch = zip::ZipArchive::new(std::io::Cursor::new(aar_bytes)).ok()?;
+        let mut classes_entry = zip_arch.by_name("classes.jar").ok()?;
+        let mut out = Vec::new();
+        std::io::copy(&mut classes_entry, &mut out).ok()?;
+        std::fs::write(&runtime_classes, out).ok()?;
+    }
+
+    // The kotlin-stdlib is on the kotlinc PATH already, so we don't
+    // need to add it here — only the Compose runtime classes.
+    let _ = kotlinc;
+
+    Some(ComposeAssets {
+        plugin_jar: plugin_path,
+        runtime_classpath: runtime_classes.display().to_string(),
+    })
 }
 
 fn tempdir(label: &str) -> Result<PathBuf> {

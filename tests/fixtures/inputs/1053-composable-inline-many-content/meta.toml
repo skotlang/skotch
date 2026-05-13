@@ -1,0 +1,4 @@
+name   = "1053-composable-inline-many-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with 5 content lambdas."

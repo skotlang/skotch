@@ -1,0 +1,4 @@
+name   = "611-suspend-double-mul"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

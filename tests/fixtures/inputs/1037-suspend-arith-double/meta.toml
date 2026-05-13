@@ -1,0 +1,4 @@
+name   = "1037-suspend-arith-double"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

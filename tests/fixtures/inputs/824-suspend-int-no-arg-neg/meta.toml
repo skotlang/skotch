@@ -1,0 +1,4 @@
+name   = "824-suspend-int-no-arg-neg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

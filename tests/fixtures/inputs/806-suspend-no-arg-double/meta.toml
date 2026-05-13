@@ -1,0 +1,4 @@
+name   = "806-suspend-no-arg-double"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

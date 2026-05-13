@@ -1,0 +1,4 @@
+name   = "854-suspend-int-conditional-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

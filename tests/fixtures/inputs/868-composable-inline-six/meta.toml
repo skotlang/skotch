@@ -1,0 +1,4 @@
+name   = "868-composable-inline-six"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with five primitives + content."

@@ -1,0 +1,4 @@
+name   = "993-composable-inline-pair-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 2 content lambdas."

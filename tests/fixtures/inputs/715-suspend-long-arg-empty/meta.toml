@@ -1,0 +1,4 @@
+name   = "715-suspend-long-arg-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Wide-slot Long param, empty Unit body."

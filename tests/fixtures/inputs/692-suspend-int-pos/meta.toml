@@ -1,0 +1,4 @@
+name   = "692-suspend-int-pos"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

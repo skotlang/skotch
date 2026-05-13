@@ -1,0 +1,4 @@
+name   = "767-composable-inline-conditional-2"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with conditional content."

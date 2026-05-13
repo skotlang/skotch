@@ -1,0 +1,4 @@
+name   = "934-suspend-four-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

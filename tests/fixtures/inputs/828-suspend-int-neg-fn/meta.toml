@@ -1,0 +1,4 @@
+name   = "828-suspend-int-neg-fn"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

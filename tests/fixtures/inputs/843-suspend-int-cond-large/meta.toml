@@ -1,0 +1,4 @@
+name   = "843-suspend-int-cond-large"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

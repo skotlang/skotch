@@ -1,0 +1,4 @@
+name   = "733-suspend-return-int-const"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

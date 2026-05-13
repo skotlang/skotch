@@ -1,0 +1,4 @@
+name   = "937-suspend-and-ne"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

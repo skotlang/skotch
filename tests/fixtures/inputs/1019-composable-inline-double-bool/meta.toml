@@ -1,0 +1,4 @@
+name   = "1019-composable-inline-double-bool"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: Double + Boolean."

@@ -1,0 +1,4 @@
+name   = "632-suspend-string-tolower"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

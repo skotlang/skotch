@@ -1,0 +1,4 @@
+name   = "1020-composable-inline-int-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable single Int param."

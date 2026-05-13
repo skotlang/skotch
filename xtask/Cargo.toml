@@ -24,4 +24,5 @@ skotch-llvm-norm      = { workspace = true }
 clap                = { workspace = true }
 which               = { workspace = true }
 walkdir             = { workspace = true }
+zip                 = { workspace = true }
 anyhow              = { workspace = true }

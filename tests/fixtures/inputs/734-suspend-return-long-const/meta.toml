@@ -1,0 +1,4 @@
+name   = "734-suspend-return-long-const"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

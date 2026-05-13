@@ -1,0 +1,4 @@
+name   = "649-suspend-int-times-2"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

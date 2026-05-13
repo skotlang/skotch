@@ -1,0 +1,4 @@
+name   = "768-composable-noninline-empty"
+status = "supported"
+features = ["compose"]
+reason = "Non-inline @Composable with no body — exercises full skip+restart-scope transform."

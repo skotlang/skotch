@@ -1,0 +1,4 @@
+name   = "681-suspend-print-string-template"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

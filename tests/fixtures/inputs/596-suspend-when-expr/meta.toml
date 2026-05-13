@@ -1,0 +1,4 @@
+name   = "596-suspend-when-expr"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with when-expression body — branch tree without suspension."

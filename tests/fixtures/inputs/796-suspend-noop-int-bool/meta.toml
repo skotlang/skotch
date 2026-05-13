@@ -1,0 +1,4 @@
+name   = "796-suspend-noop-int-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -475,13 +475,36 @@ fn lower_annotations(
                     }
                 })
                 .collect();
+            // Default to Runtime, but flip to Binary for annotations
+            // declared with @Retention(AnnotationRetention.BINARY) by
+            // common stdlib / Compose / Kotlin types. kotlinc emits
+            // these via RuntimeInvisibleAnnotations; matching the
+            // retention keeps the attribute placement byte-identical.
+            let retention = if is_binary_retention_annotation(&descriptor) {
+                skotch_mir::AnnotationRetention::Binary
+            } else {
+                skotch_mir::AnnotationRetention::Runtime
+            };
             skotch_mir::MirAnnotation {
                 descriptor,
                 args,
-                retention: skotch_mir::AnnotationRetention::Runtime,
+                retention,
             }
         })
         .collect()
+}
+
+fn is_binary_retention_annotation(descriptor: &str) -> bool {
+    // Common @Composable / Kotlin compiler-plugin annotations whose
+    // canonical declaration uses `@Retention(AnnotationRetention.BINARY)`.
+    matches!(
+        descriptor,
+        "Landroidx/compose/runtime/Composable;"
+            | "Landroidx/compose/runtime/ReadOnlyComposable;"
+            | "Landroidx/compose/runtime/Stable;"
+            | "Landroidx/compose/runtime/Immutable;"
+            | "Landroidx/compose/runtime/NonRestartableComposable;"
+    )
 }
 
 /// Look up a Kotlin extension function compiled as a static method in
@@ -2589,6 +2612,50 @@ fn extract_suspend_state_machine_with_cont(
     }
     if sites_raw.is_empty() {
         return SuspendSitesResult::Zero;
+    }
+
+    // Tail-call optimization: a suspend fn whose body is a single
+    // suspend call returned directly (no other instructions, no
+    // arg-loading temps between the call and the return) gets emitted
+    // as a plain `aload $completion; invokestatic …; areturn` — no
+    // state machine needed because no suspension boundary needs to
+    // restore local state. kotlinc applies this to bodies like
+    // `suspend fun caller() = x()`.
+    if sites_raw.len() == 1 {
+        let (call_bi, call_si, _, _) = sites_raw[0];
+        let block = &mf.blocks[call_bi as usize];
+        // Identify the call's destination local.
+        let call_dest = match &block.stmts[call_si as usize] {
+            MStmt::Assign { dest, .. } => *dest,
+        };
+        // Check that the call is the last (only) statement and the
+        // terminator is `ReturnValue(call_dest)`.
+        let is_only_stmt = block.stmts.len() == (call_si as usize + 1);
+        let returns_call_dest = matches!(
+            &block.terminator,
+            Terminator::ReturnValue(l) if *l == call_dest
+        );
+        // The call's args must all be forwarded from the outer fn's
+        // params in the same order. That is, the call's i-th arg must
+        // be the outer fn's i-th param (where the last param is
+        // $completion). This covers `caller() = x()` AND
+        // `caller(a, b) = x(a, b)` — both compile to a straight
+        // load-args-and-call shape with no state machine.
+        let args_forward_params = match &block.stmts[call_si as usize] {
+            MStmt::Assign {
+                value: Rvalue::Call { args, .. },
+                ..
+            } => args.len() == mf.params.len()
+                && args.iter().zip(mf.params.iter()).all(|(a, p)| a == p),
+            _ => false,
+        };
+        let prior_stmts_trivial = (0..call_si as usize)
+            .all(|i| matches!(&block.stmts[i], MStmt::Assign { value: Rvalue::Const(_), .. }));
+        if is_only_stmt && returns_call_dest && args_forward_params
+            && prior_stmts_trivial && call_bi == 0 && mf.blocks.len() == 1
+        {
+            return SuspendSitesResult::Zero;
+        }
     }
 
     // Compute the outer function's user param types (everything

@@ -1,0 +1,4 @@
+name   = "1071-composable-inline-empty-five-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 5 String params, empty."

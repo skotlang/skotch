@@ -1,0 +1,4 @@
+name   = "593-suspend-mixed-args"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Int + String params, returns Int — verifies mixed-type param descriptor."

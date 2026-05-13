@@ -1,0 +1,4 @@
+name   = "777-suspend-no-arg-string"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

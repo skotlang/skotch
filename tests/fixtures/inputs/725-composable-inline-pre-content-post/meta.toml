@@ -1,0 +1,4 @@
+name   = "725-composable-inline-pre-content-post"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with three lambdas in body."

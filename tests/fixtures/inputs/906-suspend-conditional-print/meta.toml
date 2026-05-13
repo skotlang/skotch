@@ -1,0 +1,4 @@
+name   = "906-suspend-conditional-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

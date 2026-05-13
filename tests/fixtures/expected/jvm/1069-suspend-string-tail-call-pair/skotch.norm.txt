@@ -1,0 +1,19 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        a (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=1 max_locals=1
+    0000 ldc "A"
+    0002 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        b (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=1 max_locals=1
+    0000 aload_0
+    0001 invokestatic Method(InputKt.a:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0004 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

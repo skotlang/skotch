@@ -1,0 +1,4 @@
+name   = "980-composable-inline-many-mixed"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with 5 mixed primitives + String."

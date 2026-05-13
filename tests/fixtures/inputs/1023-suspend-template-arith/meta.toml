@@ -1,0 +1,4 @@
+name   = "1023-suspend-template-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

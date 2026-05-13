@@ -1,0 +1,4 @@
+name   = "775-suspend-three-suspend"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

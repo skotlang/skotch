@@ -1,0 +1,4 @@
+name   = "946-suspend-string-template-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

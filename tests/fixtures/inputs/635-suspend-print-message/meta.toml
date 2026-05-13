@@ -1,0 +1,4 @@
+name   = "635-suspend-print-message"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend Unit with println — exercises Unit shortcut for ReturnValue."

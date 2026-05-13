@@ -1,0 +1,4 @@
+name   = "807-suspend-double-from-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

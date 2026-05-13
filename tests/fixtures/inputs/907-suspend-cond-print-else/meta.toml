@@ -1,0 +1,4 @@
+name   = "907-suspend-cond-print-else"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

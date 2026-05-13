@@ -1,0 +1,4 @@
+name   = "890-composable-inline-content-double"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with two Double + content."

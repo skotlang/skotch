@@ -1,0 +1,4 @@
+name   = "645-suspend-class-member"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

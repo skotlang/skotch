@@ -1,0 +1,4 @@
+name   = "801-suspend-empty-double-default"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

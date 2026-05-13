@@ -1,0 +1,4 @@
+name   = "628-composable-inline-int-param"
+status = "supported"
+features = ["compose", "Composable", "inline"]
+reason = "Inline @Composable taking Int + lambda — exercises mixed primitive/lambda params."

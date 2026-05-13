@@ -1,0 +1,4 @@
+name   = "992-composable-inline-mixed-3"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 3 Int params, empty body."

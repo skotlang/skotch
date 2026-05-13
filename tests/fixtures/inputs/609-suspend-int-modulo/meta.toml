@@ -1,0 +1,4 @@
+name   = "609-suspend-int-modulo"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

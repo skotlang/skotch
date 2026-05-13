@@ -1,0 +1,4 @@
+name   = "745-suspend-empty-return"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

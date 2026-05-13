@@ -21,20 +21,20 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        sumWithScope (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
-  code        max_stack=16 max_locals=32
+  code        max_stack=3 max_locals=7
     0000 aload_0
     0001 instanceof Class(InputKt$sumWithScope$1)
     0004 ifeq 40
     0007 aload_0
     0008 checkcast Class(InputKt$sumWithScope$1)
-    0011 astore 6
-    0013 aload 6
+    0011 astore 5
+    0013 aload 5
     0015 getfield Field(InputKt$sumWithScope$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
     0021 ifeq 40
-    0024 aload 6
-    0026 aload 6
+    0024 aload 5
+    0026 aload 5
     0028 getfield Field(InputKt$sumWithScope$1.label:I)
     0031 ldc int(-2147483648)
     0033 isub
@@ -44,51 +44,49 @@ method        sumWithScope (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 
     0043 dup
     0044 aload_0
     0045 invokespecial Method(InputKt$sumWithScope$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 6
-    0050 aload 6
+    0048 astore 5
+    0050 aload 5
     0052 getfield Field(InputKt$sumWithScope$1.result:Ljava/lang/Object;)
-    0055 astore 5
+    0055 astore 4
     0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 7
-    0062 aload 6
+    0060 astore 6
+    0062 aload 5
     0064 getfield Field(InputKt$sumWithScope$1.label:I)
-    0067 tableswitch default=145 low=0 high=1 0=88 1=130
-    0088 aload 5
+    0067 tableswitch default=141 low=0 high=1 0=88 1=128
+    0088 aload 4
     0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
     0093 new Class(InputKt$Lambda$0)
     0096 astore_1
-    0097 aconst_null
-    0098 astore_2
-    0099 aload_1
-    0100 aload_2
-    0101 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0104 aload_1
-    0105 checkcast Class(kotlin/jvm/functions/Function2)
-    0108 astore_3
-    0109 aload_3
-    0110 aload 6
-    0112 iconst_1
-    0113 putfield Field(InputKt$sumWithScope$1.label:I)
-    0116 aload 6
-    0118 invokestatic Method(kotlinx/coroutines/CoroutineScopeKt.coroutineScope:(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0121 dup
-    0122 aload 7
-    0124 if_acmpne 137
-    0127 aload 7
-    0129 areturn
-    0130 aload 5
-    0132 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0135 aload 5
-    0137 checkcast Class(java/lang/Object)
-    0140 astore 4
-    0142 aload 4
-    0144 areturn
-    0145 new Class(java/lang/IllegalStateException)
-    0148 dup
-    0149 ldc "call to 'resume' before 'invoke' with coroutine"
-    0151 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0154 athrow
-    sub_attr  StackMapTable (50 bytes)
+    0097 aload_1
+    0098 aconst_null
+    0099 invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0102 aload_1
+    0103 checkcast Class(kotlin/jvm/functions/Function2)
+    0106 astore_2
+    0107 aload_2
+    0108 aload 5
+    0110 iconst_1
+    0111 putfield Field(InputKt$sumWithScope$1.label:I)
+    0114 aload 5
+    0116 invokestatic Method(kotlinx/coroutines/CoroutineScopeKt.coroutineScope:(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0119 dup
+    0120 aload 6
+    0122 if_acmpne 135
+    0125 aload 6
+    0127 areturn
+    0128 aload 4
+    0130 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0133 aload 4
+    0135 checkcast Class(java/lang/Object)
+    0138 astore_3
+    0139 aload_3
+    0140 areturn
+    0141 new Class(java/lang/IllegalStateException)
+    0144 dup
+    0145 ldc "call to 'resume' before 'invoke' with coroutine"
+    0147 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0150 athrow
+    sub_attr  StackMapTable (48 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

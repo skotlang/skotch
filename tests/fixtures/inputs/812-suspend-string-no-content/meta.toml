@@ -1,0 +1,4 @@
+name   = "812-suspend-string-no-content"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

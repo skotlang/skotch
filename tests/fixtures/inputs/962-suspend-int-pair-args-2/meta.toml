@@ -1,0 +1,4 @@
+name   = "962-suspend-int-pair-args-2"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

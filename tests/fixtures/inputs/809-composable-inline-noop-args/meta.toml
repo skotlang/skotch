@@ -1,0 +1,4 @@
+name   = "809-composable-inline-noop-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with two Int params and empty body."

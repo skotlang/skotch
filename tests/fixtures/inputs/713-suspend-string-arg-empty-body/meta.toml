@@ -1,0 +1,4 @@
+name   = "713-suspend-string-arg-empty-body"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

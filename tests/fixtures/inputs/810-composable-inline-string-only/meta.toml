@@ -1,0 +1,4 @@
+name   = "810-composable-inline-string-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable taking just a String."

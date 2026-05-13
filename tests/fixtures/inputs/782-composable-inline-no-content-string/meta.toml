@@ -1,0 +1,4 @@
+name   = "782-composable-inline-no-content-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable single String param empty body."

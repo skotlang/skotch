@@ -1,0 +1,4 @@
+name   = "945-suspend-int-equality-zero"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

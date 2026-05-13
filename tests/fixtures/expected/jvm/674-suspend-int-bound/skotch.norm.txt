@@ -1,0 +1,28 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        clip (IIILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=2 max_locals=5
+    0000 iload_0
+    0001 iload_1
+    0002 if_icmpge 9
+    0005 iload_1
+    0006 goto 17
+    0009 iload_0
+    0010 iload_2
+    0011 if_icmple 27
+    0014 goto 21
+    0017 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0020 areturn
+    0021 iload_2
+    0022 istore 4
+    0024 goto 30
+    0027 iload_0
+    0028 istore 4
+    0030 iload 4
+    0032 goto 17
+    sub_attr  StackMapTable (11 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)

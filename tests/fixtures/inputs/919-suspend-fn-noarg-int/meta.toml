@@ -1,0 +1,4 @@
+name   = "919-suspend-fn-noarg-int"
+status = "supported"
+features = ["suspend"]
+reason = "Suspend tail-call forwarding — caller forwards to another suspend fn directly."

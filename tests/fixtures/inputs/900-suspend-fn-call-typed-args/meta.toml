@@ -1,0 +1,4 @@
+name   = "900-suspend-fn-call-typed-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

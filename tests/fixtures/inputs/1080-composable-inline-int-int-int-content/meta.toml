@@ -1,0 +1,4 @@
+name   = "1080-composable-inline-int-int-int-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with 3 Int + content."

@@ -1,0 +1,4 @@
+name   = "1095-suspend-tail-call-three-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

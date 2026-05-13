@@ -1,0 +1,4 @@
+name   = "669-composable-inline-with-return"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable with type param."

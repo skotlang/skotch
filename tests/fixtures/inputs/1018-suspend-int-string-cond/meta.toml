@@ -1,0 +1,4 @@
+name   = "1018-suspend-int-string-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

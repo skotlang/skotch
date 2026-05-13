@@ -1,0 +1,4 @@
+name   = "662-composable-inline-string-param"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable with String param + content."

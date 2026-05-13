@@ -1,0 +1,4 @@
+name   = "627-composable-inline-two-lambdas"
+status = "supported"
+features = ["compose", "Composable", "inline"]
+reason = "Inline @Composable taking two lambda content blocks."

@@ -1,0 +1,4 @@
+name   = "1056-suspend-cmp-string"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

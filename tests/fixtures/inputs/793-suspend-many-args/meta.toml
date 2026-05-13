@@ -1,0 +1,4 @@
+name   = "793-suspend-many-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

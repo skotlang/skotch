@@ -1,0 +1,4 @@
+name   = "816-suspend-int-min-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

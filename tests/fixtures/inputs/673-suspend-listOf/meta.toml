@@ -1,0 +1,4 @@
+name   = "673-suspend-listOf"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

@@ -1,0 +1,4 @@
+name   = "911-composable-inline-float-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Float only."

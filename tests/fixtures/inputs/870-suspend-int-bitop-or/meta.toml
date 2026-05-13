@@ -1,0 +1,4 @@
+name   = "870-suspend-int-bitop-or"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

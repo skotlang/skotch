@@ -1,0 +1,4 @@
+name   = "855-suspend-string-conditional-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

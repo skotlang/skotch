@@ -1,0 +1,4 @@
+name   = "902-composable-inline-empty-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with just String param."

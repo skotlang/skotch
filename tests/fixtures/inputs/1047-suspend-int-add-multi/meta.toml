@@ -1,0 +1,4 @@
+name   = "1047-suspend-int-add-multi"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

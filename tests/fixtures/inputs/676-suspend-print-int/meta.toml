@@ -1,0 +1,4 @@
+name   = "676-suspend-print-int"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

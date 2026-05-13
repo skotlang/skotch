@@ -1,0 +1,4 @@
+name   = "623-suspend-noop-then-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Single suspension with empty string tail."

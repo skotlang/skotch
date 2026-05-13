@@ -1,0 +1,4 @@
+name   = "716-composable-inline-empty-with-2args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable, two args, no body."

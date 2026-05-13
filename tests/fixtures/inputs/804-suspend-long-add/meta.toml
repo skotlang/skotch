@@ -1,0 +1,4 @@
+name   = "804-suspend-long-add"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

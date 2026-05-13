@@ -1,0 +1,4 @@
+name   = "865-suspend-multi-stmt"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

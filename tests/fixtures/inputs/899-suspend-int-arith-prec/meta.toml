@@ -1,0 +1,4 @@
+name   = "899-suspend-int-arith-prec"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

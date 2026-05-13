@@ -1,0 +1,4 @@
+name   = "633-suspend-double-tostring"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

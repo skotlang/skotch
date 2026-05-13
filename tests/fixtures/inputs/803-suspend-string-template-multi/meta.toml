@@ -1,0 +1,4 @@
+name   = "803-suspend-string-template-multi"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

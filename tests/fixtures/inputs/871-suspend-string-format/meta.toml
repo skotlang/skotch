@@ -1,0 +1,4 @@
+name   = "871-suspend-string-format"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "644-suspend-string-concat-r"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

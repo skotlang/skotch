@@ -1,0 +1,4 @@
+name   = "1031-suspend-double-arith-paren"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

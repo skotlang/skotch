@@ -1,0 +1,4 @@
+name   = "1077-suspend-print-multi-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

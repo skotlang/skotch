@@ -1,0 +1,4 @@
+name   = "1078-suspend-int-mod-pair"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

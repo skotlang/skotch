@@ -1,0 +1,4 @@
+name   = "591-suspend-string-template"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with string template — verifies invokedynamic makeConcatWithConstants in suspend body."

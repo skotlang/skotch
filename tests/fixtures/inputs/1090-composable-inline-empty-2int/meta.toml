@@ -1,0 +1,4 @@
+name   = "1090-composable-inline-empty-2int"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 2 Int, empty body."

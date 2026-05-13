@@ -1,0 +1,4 @@
+name   = "904-suspend-int-args-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

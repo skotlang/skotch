@@ -1,0 +1,4 @@
+name   = "805-suspend-int-bool-mix"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with conditional Int result — exercises peephole_stack_merge_returns through boxing."

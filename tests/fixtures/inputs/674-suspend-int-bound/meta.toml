@@ -1,0 +1,4 @@
+name   = "674-suspend-int-bound"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

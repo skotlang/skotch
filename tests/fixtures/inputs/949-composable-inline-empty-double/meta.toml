@@ -1,0 +1,4 @@
+name   = "949-composable-inline-empty-double"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable single Double param."

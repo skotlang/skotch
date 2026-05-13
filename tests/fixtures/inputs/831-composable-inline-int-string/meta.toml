@@ -1,0 +1,4 @@
+name   = "831-composable-inline-int-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Int + String."

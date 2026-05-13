@@ -1,0 +1,4 @@
+name   = "756-suspend-string-from-long"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

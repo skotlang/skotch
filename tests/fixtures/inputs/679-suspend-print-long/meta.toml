@@ -1,0 +1,4 @@
+name   = "679-suspend-print-long"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

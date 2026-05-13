@@ -1,0 +1,4 @@
+name   = "939-composable-inline-three-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with three content blocks."

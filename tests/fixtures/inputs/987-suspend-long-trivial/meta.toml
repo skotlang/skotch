@@ -1,0 +1,4 @@
+name   = "987-suspend-long-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

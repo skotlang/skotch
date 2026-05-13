@@ -29,17 +29,22 @@
 //! It only affects functions annotated with `@Composable` (detected via
 //! `MirFunction.annotations`).
 
-use skotch_mir::{
-    CallKind, FuncId, LocalId, MirAnnotation, MirFunction, MirModule, Rvalue, Stmt as MStmt,
-    Terminator,
-};
+use skotch_mir::{CallKind, FuncId, LocalId, MirFunction, MirModule, Rvalue, Stmt as MStmt};
 use skotch_types::Ty;
 
-/// Group key counter for generating unique compose group IDs.
-static GROUP_KEY_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
-
-fn next_group_key() -> i32 {
-    GROUP_KEY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as i32
+/// Compute a stable group key for a composable function. kotlinc uses a
+/// Murmur3-style hash of the function's source location ("`<name>
+/// (<file>:<line>)`"); we don't have line info at this layer, so we
+/// stabilize on a simpler FNV-1a hash of the function name. That keeps
+/// the emitted bytecode deterministic across runs without depending on
+/// the order fixtures are generated in.
+fn group_key_for(name: &str) -> i32 {
+    let mut h: u32 = 0x811C9DC5;
+    for b in name.as_bytes() {
+        h ^= *b as u32;
+        h = h.wrapping_mul(0x01000193);
+    }
+    h as i32
 }
 
 /// Apply the Compose transform to all `@Composable` functions in a module.
@@ -438,7 +443,7 @@ fn is_composable(func: &MirFunction) -> bool {
 /// Injects `$composer` and `$changed` parameters, wraps body in
 /// `startRestartGroup` / `endRestartGroup` calls.
 fn transform_composable_function(func: &mut MirFunction) {
-    let group_key = next_group_key();
+    let group_key = group_key_for(&func.name);
 
     // 1. Inject $composer parameter (Composer type).
     let composer_local = LocalId(func.locals.len() as u32);
@@ -453,77 +458,32 @@ fn transform_composable_function(func: &mut MirFunction) {
     func.params.push(changed_local);
     func.param_names.push("$changed".to_string());
 
-    // 3. Mark with compose metadata for the backend.
-    func.annotations.push(MirAnnotation {
-        descriptor: "Lskotch/compose/ComposableTransformed;".to_string(),
+    // kotlinc skips the restart-group wrapper for `inline` composable
+    // functions — they're inlined at every call site so wrapping with
+    // start/endRestartGroup would be dead code at the call site after
+    // inlining. The $composer / $changed params still get injected
+    // above for ABI compatibility; only the body wrap is elided.
+    if func.is_inline {
+        return;
+    }
+
+    // For non-inline composables, the JVM backend (skotch-backend-jvm)
+    // handles ALL of the start/skip-check/body/end/restart-scope
+    // emission as a single specialized path, bypassing MIR for the
+    // wrapper bytecode. We store the group key as an annotation
+    // marker the backend reads. Skip optimization, end-restart-group
+    // dance, and the synthetic restart lambda are all emitted at the
+    // bytecode level — far simpler than expressing them in MIR
+    // (which would need new BitAnd/BitOr binops + CFG nodes).
+    use skotch_mir::AnnotationRetention;
+    func.annotations.push(skotch_mir::MirAnnotation {
+        descriptor: "Lskotch/compose/$ComposeKey;".to_string(),
         args: vec![skotch_mir::MirAnnotationArg {
-            name: "groupKey".to_string(),
+            name: "value".to_string(),
             value: skotch_mir::MirAnnotationValue::Int(group_key),
         }],
-        retention: skotch_mir::AnnotationRetention::Runtime,
+        retention: AnnotationRetention::Source,
     });
-
-    // 4. Prepend startRestartGroup call at the beginning of the function.
-    //    In a full implementation, this would rewrite the CFG to wrap the
-    //    entire body. For now, we inject a marker call at the entry block.
-    if !func.blocks.is_empty() {
-        let key_local = LocalId(func.locals.len() as u32);
-        func.locals.push(Ty::Int);
-
-        let group_result = LocalId(func.locals.len() as u32);
-        func.locals
-            .push(Ty::Class("androidx/compose/runtime/Composer".to_string()));
-
-        let stmts = vec![
-            // val $key = <group_key>
-            MStmt::Assign {
-                dest: key_local,
-                value: Rvalue::Const(skotch_mir::MirConst::Int(group_key)),
-            },
-            // val $group = $composer.startRestartGroup($key)
-            MStmt::Assign {
-                dest: group_result,
-                value: Rvalue::Call {
-                    kind: CallKind::VirtualJava {
-                        class_name: "androidx/compose/runtime/Composer".to_string(),
-                        method_name: "startRestartGroup".to_string(),
-                        descriptor: "(I)Landroidx/compose/runtime/Composer;".to_string(),
-                    },
-                    args: vec![composer_local, key_local],
-                },
-            },
-        ];
-
-        // Prepend to the first block.
-        let mut new_stmts = stmts;
-        new_stmts.append(&mut func.blocks[0].stmts);
-        func.blocks[0].stmts = new_stmts;
-    }
-
-    // 5. Append endRestartGroup before each return.
-    //    Find all blocks with Return/ReturnValue terminators and inject
-    //    endRestartGroup call before them.
-    for block in &mut func.blocks {
-        if matches!(
-            block.terminator,
-            Terminator::Return | Terminator::ReturnValue(_)
-        ) {
-            let end_result = LocalId(func.locals.len() as u32);
-            func.locals.push(Ty::Unit);
-
-            block.stmts.push(MStmt::Assign {
-                dest: end_result,
-                value: Rvalue::Call {
-                    kind: CallKind::VirtualJava {
-                        class_name: "androidx/compose/runtime/Composer".to_string(),
-                        method_name: "endRestartGroup".to_string(),
-                        descriptor: "()V".to_string(),
-                    },
-                    args: vec![composer_local],
-                },
-            });
-        }
-    }
 }
 
 /// Check if a module contains any `@Composable` functions.
@@ -751,25 +711,16 @@ mod tests {
     }
 
     #[test]
-    fn transform_adds_start_restart_group() {
-        let mut func = make_composable_function();
-        let stmts_before = func.blocks[0].stmts.len();
-        transform_composable_function(&mut func);
-        // Should have injected startRestartGroup stmts
-        assert!(func.blocks[0].stmts.len() > stmts_before);
-    }
-
-    #[test]
-    fn transform_adds_end_restart_group() {
+    fn transform_marks_with_compose_key_annotation() {
         let mut func = make_composable_function();
         transform_composable_function(&mut func);
-        // The return block should have endRestartGroup
-        let return_block = func
-            .blocks
+        // Non-inline composables get marked with a $ComposeKey
+        // annotation carrying the deterministic group key — the JVM
+        // backend reads this to emit the canonical Compose dispatcher.
+        assert!(func
+            .annotations
             .iter()
-            .find(|b| matches!(b.terminator, Terminator::Return))
-            .unwrap();
-        assert!(!return_block.stmts.is_empty());
+            .any(|a| a.descriptor == "Lskotch/compose/$ComposeKey;"));
     }
 
     #[test]

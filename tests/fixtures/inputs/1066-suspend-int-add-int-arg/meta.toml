@@ -1,0 +1,4 @@
+name   = "1066-suspend-int-add-int-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "665-composable-inline-noop-string"
+status = "supported"
+features = ["compose"]
+reason = "Inline @Composable with only a String param."

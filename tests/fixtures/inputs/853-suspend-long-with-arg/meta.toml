@@ -1,0 +1,4 @@
+name   = "853-suspend-long-with-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

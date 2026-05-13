@@ -1,0 +1,4 @@
+name   = "913-suspend-int-divide-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

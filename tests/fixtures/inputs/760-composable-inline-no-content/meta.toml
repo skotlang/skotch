@@ -1,0 +1,4 @@
+name   = "760-composable-inline-no-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with multiple non-lambda params and empty body."

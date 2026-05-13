@@ -1,0 +1,4 @@
+name   = "1091-suspend-tail-call-int-arg"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

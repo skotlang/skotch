@@ -1,0 +1,4 @@
+name   = "730-suspend-int-plus-times"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

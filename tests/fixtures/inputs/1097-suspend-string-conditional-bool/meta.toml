@@ -1,0 +1,4 @@
+name   = "1097-suspend-string-conditional-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "704-suspend-int-times-3"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

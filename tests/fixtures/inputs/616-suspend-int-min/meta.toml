@@ -1,0 +1,4 @@
+name   = "616-suspend-int-min"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "873-suspend-fn-bool"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

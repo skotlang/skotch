@@ -1,0 +1,4 @@
+name   = "943-suspend-int-double-mix"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

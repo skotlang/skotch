@@ -1,0 +1,1 @@
+suspend fun sub(a: Int, b: Int): Int = a - b

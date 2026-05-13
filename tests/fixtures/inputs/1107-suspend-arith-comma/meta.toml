@@ -1,0 +1,4 @@
+name   = "1107-suspend-arith-comma"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "1075-suspend-string-cmp-with-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

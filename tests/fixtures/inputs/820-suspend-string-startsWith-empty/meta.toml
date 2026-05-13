@@ -1,0 +1,4 @@
+name   = "820-suspend-string-startsWith-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

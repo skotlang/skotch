@@ -1,0 +1,4 @@
+name   = "847-suspend-string-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

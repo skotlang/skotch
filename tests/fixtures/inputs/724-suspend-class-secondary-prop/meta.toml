@@ -1,0 +1,4 @@
+name   = "724-suspend-class-secondary-prop"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

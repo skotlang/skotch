@@ -1,0 +1,4 @@
+name   = "1042-suspend-trivial-noarg-1"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

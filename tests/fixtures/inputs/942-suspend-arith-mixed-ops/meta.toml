@@ -1,0 +1,4 @@
+name   = "942-suspend-arith-mixed-ops"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "944-suspend-template-double"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

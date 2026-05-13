@@ -1,0 +1,4 @@
+name   = "851-suspend-float-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

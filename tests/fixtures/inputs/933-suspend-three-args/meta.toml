@@ -1,0 +1,4 @@
+name   = "933-suspend-three-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

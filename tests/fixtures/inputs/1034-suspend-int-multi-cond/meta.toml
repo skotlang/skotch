@@ -1,0 +1,4 @@
+name   = "1034-suspend-int-multi-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "781-composable-inline-no-content-lambda"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable single Int param empty body."

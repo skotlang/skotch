@@ -1,0 +1,4 @@
+name   = "727-composable-inline-double-content"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Double arg + content (tests wide param slots)."

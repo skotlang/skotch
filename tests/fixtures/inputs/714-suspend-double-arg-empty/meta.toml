@@ -1,0 +1,4 @@
+name   = "714-suspend-double-arg-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Wide-slot Double param, empty Unit body."

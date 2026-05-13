@@ -1,0 +1,4 @@
+name   = "968-suspend-int-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

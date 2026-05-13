@@ -1,0 +1,4 @@
+name   = "802-suspend-empty-string-default"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

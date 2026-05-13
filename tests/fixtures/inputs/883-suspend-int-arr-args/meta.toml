@@ -1,0 +1,4 @@
+name   = "883-suspend-int-arr-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "780-suspend-printf-int"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

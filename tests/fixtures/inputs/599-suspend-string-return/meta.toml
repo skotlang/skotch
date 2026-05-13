@@ -1,0 +1,4 @@
+name   = "599-suspend-string-return"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

@@ -1,0 +1,4 @@
+name   = "1081-composable-inline-empty-4-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: 4 mixed args, empty body."

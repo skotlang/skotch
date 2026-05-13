@@ -1,0 +1,4 @@
+name   = "791-suspend-string-build"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

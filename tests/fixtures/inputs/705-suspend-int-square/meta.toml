@@ -1,0 +1,4 @@
+name   = "705-suspend-int-square"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

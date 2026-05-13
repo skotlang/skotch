@@ -1,0 +1,4 @@
+name   = "1120-composable-inline-noop-string-long"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: String + Long, empty body."

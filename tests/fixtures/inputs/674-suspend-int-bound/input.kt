@@ -1,0 +1,1 @@
+suspend fun clip(x: Int, lo: Int, hi: Int): Int = if (x < lo) lo else if (x > hi) hi else x

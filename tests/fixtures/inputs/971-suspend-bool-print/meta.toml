@@ -1,0 +1,4 @@
+name   = "971-suspend-bool-print"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

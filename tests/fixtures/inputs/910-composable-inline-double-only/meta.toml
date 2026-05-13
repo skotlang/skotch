@@ -1,0 +1,4 @@
+name   = "910-composable-inline-double-only"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with Double only."

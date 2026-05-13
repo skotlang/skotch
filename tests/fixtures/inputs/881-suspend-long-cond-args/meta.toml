@@ -1,0 +1,4 @@
+name   = "881-suspend-long-cond-args"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

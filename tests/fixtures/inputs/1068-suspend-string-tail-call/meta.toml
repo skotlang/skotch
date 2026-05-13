@@ -1,0 +1,4 @@
+name   = "1068-suspend-string-tail-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

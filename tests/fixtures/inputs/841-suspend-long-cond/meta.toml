@@ -1,0 +1,4 @@
+name   = "841-suspend-long-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Long-typed if-expression body — exercises wide-type peephole_stack_merge_returns_wide."

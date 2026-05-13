@@ -1,0 +1,4 @@
+name   = "1006-suspend-arith-add-mul"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

@@ -1,0 +1,4 @@
+name   = "930-suspend-no-args-pi-d"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

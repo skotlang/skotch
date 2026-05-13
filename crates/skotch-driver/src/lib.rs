@@ -164,7 +164,7 @@ fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
     let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
 
     let wrapper = wrapper_class_for(&opts.input);
-    let mir = lower_file(
+    let mut mir = lower_file(
         &ast,
         &resolved,
         &typed,
@@ -173,6 +173,10 @@ fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
         &wrapper,
         None,
     );
+
+    if skotch_compose::has_composables(&mir) {
+        skotch_compose::compose_transform(&mut mir);
+    }
 
     if diags.has_errors() {
         if print_diags {

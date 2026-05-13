@@ -1,0 +1,4 @@
+name   = "821-suspend-double-arg-trivial"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

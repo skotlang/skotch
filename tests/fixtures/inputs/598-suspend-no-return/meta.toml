@@ -1,0 +1,4 @@
+name   = "598-suspend-no-return"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend variant."

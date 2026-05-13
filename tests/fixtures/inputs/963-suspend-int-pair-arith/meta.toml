@@ -1,0 +1,4 @@
+name   = "963-suspend-int-pair-arith"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

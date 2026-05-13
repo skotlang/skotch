@@ -1,0 +1,4 @@
+name   = "1111-composable-inline-mixed-many"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable with many mixed types."

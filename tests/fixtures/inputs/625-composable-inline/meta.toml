@@ -1,0 +1,4 @@
+name   = "625-composable-inline"
+status = "supported"
+features = ["compose", "Composable", "inline"]
+reason = "Inline @Composable function — skip startRestartGroup/endRestartGroup wrapper (kotlinc inlines at call sites)."

@@ -1,0 +1,4 @@
+name   = "826-suspend-long-large"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

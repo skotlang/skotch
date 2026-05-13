@@ -1,0 +1,4 @@
+name   = "917-suspend-string-eq-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

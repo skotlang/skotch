@@ -1,0 +1,4 @@
+name   = "774-suspend-fn-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

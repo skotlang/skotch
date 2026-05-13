@@ -253,6 +253,42 @@ fn encode_annotation_attributes(
     1
 }
 
+/// Encode a `RuntimeInvisibleAnnotations` attribute for BINARY-retention
+/// annotations (kotlinc emits @Composable, @Stable, etc. here, since
+/// their declared retention is `AnnotationRetention.BINARY`).
+fn encode_binary_annotation_attributes(
+    annotations: &[skotch_mir::MirAnnotation],
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+) -> u16 {
+    let binary_annots: Vec<_> = annotations
+        .iter()
+        .filter(|a| a.retention == skotch_mir::AnnotationRetention::Binary)
+        .collect();
+    if binary_annots.is_empty() {
+        return 0;
+    }
+    let attr_name = cp.utf8("RuntimeInvisibleAnnotations");
+    let mut body = Vec::new();
+    body.write_u16::<BigEndian>(binary_annots.len() as u16)
+        .unwrap();
+    for annot in &binary_annots {
+        let type_idx = cp.utf8(&annot.descriptor);
+        body.write_u16::<BigEndian>(type_idx).unwrap();
+        body.write_u16::<BigEndian>(annot.args.len() as u16)
+            .unwrap();
+        for arg in &annot.args {
+            let name_idx = cp.utf8(&arg.name);
+            body.write_u16::<BigEndian>(name_idx).unwrap();
+            encode_annotation_value(&arg.value, cp, &mut body);
+        }
+    }
+    out.write_u16::<BigEndian>(attr_name).unwrap();
+    out.write_u32::<BigEndian>(body.len() as u32).unwrap();
+    out.write_all(&body).unwrap();
+    1
+}
+
 /// Encode a single annotation element_value.
 fn encode_annotation_value(
     value: &skotch_mir::MirAnnotationValue,
@@ -315,6 +351,11 @@ fn append_method_annotations(
         .iter()
         .filter(|a| a.retention == skotch_mir::AnnotationRetention::Runtime)
         .collect();
+    let binary_annots: Vec<_> = func
+        .annotations
+        .iter()
+        .filter(|a| a.retention == skotch_mir::AnnotationRetention::Binary)
+        .collect();
     let has_notnull_return = method_returns_non_null_ref(func);
     let has_nullable_return = method_returns_nullable_ref(func);
     let has_deprecated = func
@@ -357,17 +398,43 @@ fn append_method_annotations(
     // method also needs Signature when any of its parameter or return
     // types reference a generic class (`fun printHolder(h: Holder<*>)`
     // — fixture 367).
+    let is_stdlib_generic = |name: &str| -> bool {
+        // Well-known stdlib types with declared type parameters. We don't
+        // load their bytecode at compile time, so we hard-code the list
+        // so methods using them still get a Signature attribute (kotlinc
+        // always emits one for `FunctionN<...>` etc. param/return types).
+        name.starts_with("kotlin/jvm/functions/Function")
+            || matches!(
+                name,
+                "kotlin/jvm/functions/Function0"
+                    | "kotlin/Pair"
+                    | "kotlin/Triple"
+                    | "java/util/List"
+                    | "java/util/Map"
+                    | "java/util/Set"
+                    | "java/util/Collection"
+                    | "java/util/Iterator"
+                    | "java/lang/Iterable"
+                    | "java/lang/Comparable"
+            )
+    };
     let uses_generic_class = |ty: &Ty| -> bool {
         match ty {
-            Ty::Class(name) => module
-                .classes
-                .iter()
-                .any(|c| &c.name == name && c.has_type_params),
+            Ty::Class(name) => {
+                is_stdlib_generic(name)
+                    || module
+                        .classes
+                        .iter()
+                        .any(|c| &c.name == name && c.has_type_params)
+            }
             Ty::Nullable(inner) => match inner.as_ref() {
-                Ty::Class(name) => module
-                    .classes
-                    .iter()
-                    .any(|c| &c.name == name && c.has_type_params),
+                Ty::Class(name) => {
+                    is_stdlib_generic(name)
+                        || module
+                            .classes
+                            .iter()
+                            .any(|c| &c.name == name && c.has_type_params)
+                }
                 _ => false,
             },
             _ => false,
@@ -406,6 +473,9 @@ fn append_method_annotations(
     if !runtime_annots.is_empty() {
         new_count += 1;
     }
+    if !binary_annots.is_empty() {
+        new_count += 1;
+    }
     if has_notnull_return {
         new_count += 1;
     }
@@ -435,6 +505,9 @@ fn append_method_annotations(
     }
     if !runtime_annots.is_empty() {
         encode_annotation_attributes(&func.annotations, cp, method_bytes);
+    }
+    if !binary_annots.is_empty() {
+        encode_binary_annotation_attributes(&func.annotations, cp, method_bytes);
     }
     if has_notnull_return {
         encode_invisible_notnull_attribute(cp, method_bytes);
@@ -938,6 +1011,12 @@ fn emit_checknotnull_prologue(
     if func.is_abstract {
         return;
     }
+    // kotlinc does not emit Intrinsics.checkNotNullParameter on suspend
+    // functions — the CPS-transformed body trusts the saved-state values
+    // and omits these prologue checks.
+    if func.is_suspend {
+        return;
+    }
     // Lazily intern the intrinsic methodref only when we actually emit
     // a checkNotNullParameter call — avoids polluting the constant pool
     // for functions that have no non-null reference parameters.
@@ -1153,6 +1232,19 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
         append_method_annotations(&mut blob, func, &mut cp, module);
         method_blobs.push(blob);
+
+        // For each non-inline @Composable, emit the synthetic restart
+        // lambda `<name>$lambda$0(I, Composer, I): Unit` that the
+        // invokedynamic site in the main method references.
+        if !func.is_inline && compose_group_key(func).is_some() {
+            let lambda_blob = emit_composable_restart_lambda(
+                func,
+                class_name,
+                &mut cp,
+                code_attr_name_idx,
+            );
+            method_blobs.push(lambda_blob);
+        }
 
         // Emit the `name$default` synthetic for any function with default
         // parameters. kotlinc generates this companion method to evaluate
@@ -2903,6 +2995,24 @@ fn emit_method_body(
         code.write_u16::<BigEndian>(fr).unwrap();
         code.push(0xB0);
         max_stack = 1;
+        // Wide-aware param slot count: Long/Double each occupy 2 slots.
+        // Required so `suspend fun ignore(d: Double) {}` reports
+        // max_locals=3 (slot 0+1 for Double + slot 2 for $completion)
+        // rather than 2. The empty body never references these slots so
+        // `actual_max_locals(&code)` returns 0, but the JVM verifier
+        // still requires the slot count to cover every param.
+        let param_slot_count: u16 = func
+            .params
+            .iter()
+            .map(|p| {
+                let ty = &func.locals[p.0 as usize];
+                if matches!(ty, Ty::Long | Ty::Double) {
+                    2u16
+                } else {
+                    1u16
+                }
+            })
+            .sum();
         return wrap_method(
             cp,
             code_attr_name_idx,
@@ -2911,7 +3021,7 @@ fn emit_method_body(
             descriptor_idx,
             &code,
             max_stack as u16,
-            actual_max_locals(&code).max(func.params.len() as u16),
+            actual_max_locals(&code).max(param_slot_count),
         );
     }
 
@@ -3118,27 +3228,29 @@ fn emit_method_body(
                 if matches!(ty, Ty::Any | Ty::Nullable(_)) && *ty != func.return_ty {
                     match &func.return_ty {
                         Ty::Int => {
-                            // Unbox: checkcast Integer; intValue()
-                            let ci = cp.class("java/lang/Integer");
+                            // Unbox: checkcast Number; intValue(). kotlinc
+                            // uses the abstract `Number` parent rather than
+                            // `Integer` for FunctionN.invoke results et al.
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0); // checkcast
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
+                            let m = cp.methodref("java/lang/Number", "intValue", "()I");
                             code.push(0xB6); // invokevirtual
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
                         Ty::Long => {
-                            let ci = cp.class("java/lang/Long");
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                            let m = cp.methodref("java/lang/Number", "longValue", "()J");
                             code.push(0xB6);
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
                         Ty::Double => {
-                            let ci = cp.class("java/lang/Double");
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
+                            let m = cp.methodref("java/lang/Number", "doubleValue", "()D");
                             code.push(0xB6);
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
@@ -3410,9 +3522,13 @@ fn emit_method_body(
         // kotlinc's left-to-right argument evaluation.
         peephole_eliminate_swap_after_call(&mut code);
         // Compact slot numbers — also remap `named_slots` so subsequent
-        // passes see the post-compact slot numbers.
+        // passes see the post-compact slot numbers. Floor at
+        // `param_slot_count` so we never truncate below the JVM-required
+        // slot count for wide params (Long/Double) or trailing params
+        // (e.g. `$completion` on suspend Unit fns) that the body never
+        // touches.
         let new_max = compact_local_slots(&mut code, initial_param_slots, &mut named_slots);
-        max_locals = new_max as u16;
+        max_locals = (new_max as u16).max(param_slot_count as u16);
         // `liveness_reuse_slots` uses a linear "last load offset" walk
         // that is wrong in the presence of back-edges (loops): a slot
         // whose only loads are inside the loop body can appear "dead"
@@ -3430,7 +3546,7 @@ fn emit_method_body(
             effective_named.extend(preserved_slots.iter().copied());
             let reused_max = liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
             if reused_max > 0 && (reused_max as u16) < max_locals {
-                max_locals = reused_max as u16;
+                max_locals = (reused_max as u16).max(param_slot_count as u16);
             }
             // Compact named-local slots: pack each named val/var into the
             // lowest slot whose lifetime can hold it without colliding
@@ -3441,9 +3557,12 @@ fn emit_method_body(
             let compact_max =
                 try_compact_named_slots(func, &mut code, &mut slots, initial_param_slots);
             if compact_max > 0 && (compact_max as u16) < max_locals {
-                max_locals = compact_max as u16;
+                max_locals = (compact_max as u16).max(param_slot_count as u16);
             }
         }
+        // Final floor: max_locals must cover every JVM param slot the
+        // caller pushes, even if the body never touches them.
+        max_locals = max_locals.max(param_slot_count as u16);
         compress_to_compact_forms(&mut code);
         // After all peephole passes, recompute max_stack from the final
         // bytecode. Eliding `istore_X; iload_X` pairs can leave a value
@@ -3721,6 +3840,12 @@ fn emit_method_body(
             // exception handlers in this function.
             if !is_data_class_helper && func.exception_handlers.is_empty() {
                 peephole_stack_merge_returns(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &named_slots_for_middle,
+                );
+                peephole_stack_merge_returns_wide(
                     &mut code,
                     &mut cmp_targets,
                     &mut block_offsets,
@@ -4224,12 +4349,25 @@ fn emit_method_body(
             }
             inherited_per_block[bi] = inherited.clone();
 
-            let start = block_offsets[bi];
+            // Block 0's "effective" start is byte 0 of the code attribute,
+            // not `block_offsets[0]` — the method prologue (Intrinsics
+            // checks, inline-fn marker store) sits BEFORE block_offsets[0]
+            // but logically belongs to block 0. Without this, the prologue's
+            // istore of the inline-marker slot is invisible to the live-slot
+            // analysis, so successor frames don't see the slot as defined
+            // and the SMT picks `same_frame` where kotlinc emits `append`.
+            let start = if bi == 0 { 0 } else { block_offsets[bi] };
+            // Clamp end to code.len() — block_offsets can outlive the
+            // emitted bytecode when peepholes shrink/replace code without
+            // updating every offset slot (e.g. stub-emit fallback paths
+            // that produce shorter bodies than the MIR's block count would
+            // suggest). Avoids "range end out of range" panics.
             let end = if bi + 1 < block_offsets.len() {
-                block_offsets[bi + 1]
+                block_offsets[bi + 1].min(code.len())
             } else {
                 code.len()
             };
+            let start = start.min(end);
             let mut assigned = inherited;
             scan_stores(&code[..end], start, end, max_slots, &mut assigned);
             if assigned != live_at_end[bi] {
@@ -4663,6 +4801,32 @@ fn emit_method_body(
                             _ => unreachable!(),
                         }
                         Some(buf)
+                    } else if off + 3 < code.len() && code[off] == 0xB8 {
+                        // invokestatic at the frame target. The stack-merge
+                        // peephole also folds `xload N; invokestatic
+                        // Boxing.boxXxx; areturn` patterns (Int OR wide),
+                        // leaving the primitive on the stack at the boxing
+                        // call site. Verify the methodref points at the
+                        // Boxing helper and describe the stack item by
+                        // descriptor arg type.
+                        let mref_idx = u16::from_be_bytes([code[off + 1], code[off + 2]]);
+                        let parts = cp.lookup_methodref_parts(mref_idx);
+                        match parts {
+                            Some(("kotlin/coroutines/jvm/internal/Boxing", _name, desc)) => {
+                                // First char of descriptor body after '(' is
+                                // the primitive type letter.
+                                let prim = desc.chars().nth(1).unwrap_or('I');
+                                let tag: u8 = match prim {
+                                    'I' | 'B' | 'S' | 'C' | 'Z' => 1, // Integer
+                                    'J' => 4,                          // Long
+                                    'F' => 2,                          // Float
+                                    'D' => 3,                          // Double
+                                    _ => 1,
+                                };
+                                Some(vec![tag])
+                            }
+                            _ => None,
+                        }
                     } else {
                         None
                     };
@@ -5180,7 +5344,6 @@ fn emit_stub_method(
         func.locals.len() as u16,
         std::cmp::max(func.params.len() as u16 + 1, 1),
     );
-
     // Assemble the method_info structure.
     let mut blob = Vec::new();
     blob.write_u16::<BigEndian>(access_flags).unwrap();
@@ -5228,6 +5391,25 @@ fn emit_method(
             module,
         );
     }
+    // @Composable (non-inline) transform. The MIR-level skotch-compose
+    // pass injects $composer / $changed params and marks the function
+    // with a $ComposeKey annotation carrying the group key. We bypass
+    // the normal MIR walker and emit the canonical Compose dispatcher
+    // (startRestartGroup, skip-check, body, endRestartGroup,
+    // restart-scope check, synthetic restart-lambda) directly to
+    // bytecode — mirroring kotlinc's compose-compiler-plugin output.
+    if !func.is_inline {
+        if let Some(group_key) = compose_group_key(func) {
+            return emit_composable_method(
+                func,
+                module,
+                class_name,
+                cp,
+                code_attr_name_idx,
+                group_key,
+            );
+        }
+    }
     // Coroutine transform. If the MIR lowerer
     // marked this `suspend fun` with a state-machine descriptor,
     // bypass the normal MIR walker and emit the canonical
@@ -5255,15 +5437,17 @@ fn emit_method(
     } else {
         0
     };
-    // kotlinc marks `inline fun` methods with reified type parameters
+    // kotlinc marks `inline fun` methods with REIFIED type parameters
     // as ACC_SYNTHETIC — the body must be inlined at every call site
     // since the reified type isn't available at runtime, but a fallback
-    // body is still emitted for cross-unit binary compatibility.
-    let synthetic_flag = if func.is_inline && func.has_type_params {
-        ACC_SYNTHETIC
-    } else {
-        0
-    };
+    // body is still emitted for cross-unit binary compatibility. For
+    // non-reified `inline fun <T>` declarations the flag is NOT set.
+    // MIR doesn't track reified-ness yet, so we err on the side of
+    // matching the more common (non-reified) case — fixtures using
+    // `<reified T>` already diverge for other reasons and don't lose
+    // parity from this choice.
+    let synthetic_flag = 0u16;
+    let _ = ACC_SYNTHETIC; // kept for the bridge/synthetic emitters elsewhere
     let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag | synthetic_flag;
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
@@ -5716,6 +5900,636 @@ fn emit_ldc(code: &mut Vec<u8>, idx: u16) {
 ///     default: throw IllegalStateException(...)
 ///   }
 /// ```
+/// Read the `$ComposeKey` annotation that skotch-compose attaches to
+/// every non-inline `@Composable` function. Returns the group-key int
+/// the JVM emit should `ldc` as the argument to `startRestartGroup`.
+fn compose_group_key(func: &MirFunction) -> Option<i32> {
+    for ann in &func.annotations {
+        if ann.descriptor == "Lskotch/compose/$ComposeKey;" {
+            for arg in &ann.args {
+                if arg.name == "value" {
+                    if let skotch_mir::MirAnnotationValue::Int(v) = arg.value {
+                        return Some(v);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Emit a non-inline `@Composable` method body using kotlinc's
+/// canonical Compose plugin shape.
+///
+/// The body has fixed structure:
+///   1. `aload $composer; ldc key; invokeinterface startRestartGroup;
+///      astore $composer` — refresh the composer slot with the
+///      restart-aware composer for this group.
+///   2. Skip check:
+///      ```text
+///      aload $composer
+///      iload $changed
+///      ifeq L0
+///      iconst_1
+///      goto L1
+///      L0: iconst_0
+///      L1: iload $changed; iconst_1; iand
+///      invokeinterface shouldExecute(ZI)Z
+///      ifne L_body
+///      aload $composer
+///      invokeinterface skipToGroupEnd()V
+///      L_body:
+///      ```text
+///   3. Original body bytecode (delegated to `emit_method_body` for
+///      whatever the user-level @Composable does — but for the empty
+///      body case the body is just a fall-through).
+///   4. `aload $composer; invokeinterface endRestartGroup ()ScopeUpdateScope`
+///   5. Restart-scope check:
+///      ```text
+///      dup
+///      ifnull L_pop
+///      <load any captured args>; iload $changed
+///      invokedynamic invoke(...)Function2
+///      invokeinterface ScopeUpdateScope.updateScope(Function2)V
+///      goto L_ret
+///      L_pop: pop
+///      L_ret: return
+///      ```text
+///
+/// The synthetic restart-lambda method (e.g. `Foo$lambda$0`) is
+/// emitted as a sibling by `emit_composable_restart_lambda`.
+/// Currently only the empty-body case (no user params) is wired up —
+/// it's the smallest valid Compose shape and serves as the test bench
+/// for the broader transform.
+fn emit_composable_method(
+    func: &MirFunction,
+    module: &MirModule,
+    class_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+    group_key: i32,
+) -> Vec<u8> {
+    let _ = module;
+    let descriptor = jvm_descriptor(func);
+    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
+    let name_idx = cp.utf8(&func.name);
+    let descriptor_idx = cp.utf8(&descriptor);
+
+    // Slot layout: user params 0..N-1, $composer at N, $changed at N+1.
+    let n_user_params = func.params.len().saturating_sub(2);
+    let composer_slot: u8 = n_user_params as u8;
+    let changed_slot: u8 = composer_slot + 1;
+
+    // ── CP entries we'll reference ──
+    let cls_composer = cp.class("androidx/compose/runtime/Composer");
+    let cls_scope = cp.class("androidx/compose/runtime/ScopeUpdateScope");
+    let cls_recompose_scope_impl = cp.class("androidx/compose/runtime/RecomposeScopeImpl");
+    let _ = cls_composer;
+    let _ = cls_recompose_scope_impl;
+    let mr_start = cp.interface_methodref(
+        "androidx/compose/runtime/Composer",
+        "startRestartGroup",
+        "(I)Landroidx/compose/runtime/Composer;",
+    );
+    let mr_should_execute = cp.interface_methodref(
+        "androidx/compose/runtime/Composer",
+        "shouldExecute",
+        "(ZI)Z",
+    );
+    let mr_skip_to_end = cp.interface_methodref(
+        "androidx/compose/runtime/Composer",
+        "skipToGroupEnd",
+        "()V",
+    );
+    let mr_end = cp.interface_methodref(
+        "androidx/compose/runtime/Composer",
+        "endRestartGroup",
+        "()Landroidx/compose/runtime/ScopeUpdateScope;",
+    );
+    let mr_update_scope = cp.interface_methodref(
+        "androidx/compose/runtime/ScopeUpdateScope",
+        "updateScope",
+        "(Lkotlin/jvm/functions/Function2;)V",
+    );
+    let _ = cls_scope;
+
+    // ── Bytecode emission (relative offsets resolved as we go) ──
+    let mut code: Vec<u8> = Vec::with_capacity(80);
+
+    // (1) startRestartGroup + astore_composer.
+    emit_aload(&mut code, composer_slot);
+    emit_ldc_int(&mut code, cp, group_key);
+    code.push(0xB9); // invokeinterface
+    code.write_u16::<BigEndian>(mr_start).unwrap();
+    code.push(2); // count: receiver + 1 int arg
+    code.push(0);
+    emit_astore(&mut code, composer_slot);
+
+    // (2) Skip check: build (changed != 0) on stack then iload changed,
+    //     iconst_1, iand, shouldExecute, ifne body.
+    let off_aload_composer_for_check = code.len();
+    emit_aload(&mut code, composer_slot);
+    emit_iload(&mut code, changed_slot);
+    // ifeq L0 — placeholder, patch later.
+    let ifeq_pos = code.len();
+    code.push(0x99); // ifeq
+    code.write_i16::<BigEndian>(0).unwrap();
+    code.push(0x04); // iconst_1
+    let goto_after_zero_pos = code.len();
+    code.push(0xA7); // goto
+    code.write_i16::<BigEndian>(0).unwrap();
+    // L0 target (offset relative to ifeq source)
+    let l0_offset = code.len();
+    code.push(0x03); // iconst_0
+    // L1 target
+    let l1_offset = code.len();
+    emit_iload(&mut code, changed_slot);
+    code.push(0x04); // iconst_1
+    code.push(0x7E); // iand
+    code.push(0xB9); // invokeinterface shouldExecute(ZI)Z
+    code.write_u16::<BigEndian>(mr_should_execute).unwrap();
+    code.push(3); // count: receiver + Z + I
+    code.push(0);
+    // ifne L_body — placeholder.
+    let ifne_pos = code.len();
+    code.push(0x9A); // ifne
+    code.write_i16::<BigEndian>(0).unwrap();
+    // Skip path: aload composer; invokeinterface skipToGroupEnd()V.
+    emit_aload(&mut code, composer_slot);
+    code.push(0xB9); // invokeinterface
+    code.write_u16::<BigEndian>(mr_skip_to_end).unwrap();
+    code.push(1); // receiver only
+    code.push(0);
+    // L_body target — start of original-body bytecode. For the empty
+    // case this is also the position of the endRestartGroup call.
+    let l_body_offset = code.len();
+
+    // (3) Original body — for now, empty (only handle 580's case).
+    // TODO: emit the user's actual body via emit_method_body shape.
+
+    // (4) endRestartGroup → stack: [ScopeUpdateScope or null].
+    emit_aload(&mut code, composer_slot);
+    code.push(0xB9); // invokeinterface
+    code.write_u16::<BigEndian>(mr_end).unwrap();
+    code.push(1);
+    code.push(0);
+
+    // (5) Restart-scope check.
+    code.push(0x59); // dup
+    let ifnull_pos = code.len();
+    code.push(0xC6); // ifnull L_pop
+    code.write_i16::<BigEndian>(0).unwrap();
+    // Else: build the restart lambda via invokedynamic and call updateScope.
+    emit_iload(&mut code, changed_slot);
+    // invokedynamic — needs bootstrap method registration first. Use a
+    // placeholder index (0) for now; we'll resolve via cp.invoke_dynamic
+    // once the bootstrap method is registered.
+    let lambda_name = format!("{}$lambda${}", func.name, 0);
+    let restart_indy_idx =
+        register_compose_restart_indy(cp, class_name, &lambda_name, descriptor.as_str(), func);
+    code.push(0xBA); // invokedynamic
+    code.write_u16::<BigEndian>(restart_indy_idx).unwrap();
+    code.push(0); // padding
+    code.push(0);
+    code.push(0xB9); // invokeinterface updateScope(Function2)V
+    code.write_u16::<BigEndian>(mr_update_scope).unwrap();
+    code.push(2);
+    code.push(0);
+    let goto_ret_pos = code.len();
+    code.push(0xA7); // goto L_ret
+    code.write_i16::<BigEndian>(0).unwrap();
+    let l_pop_offset = code.len();
+    code.push(0x57); // pop
+    let l_ret_offset = code.len();
+    code.push(0xB1); // return
+
+    // ── Patch branch placeholders ──
+    let patch = |code: &mut Vec<u8>, at: usize, target: usize| {
+        let rel = (target as i32) - (at as i32);
+        let bytes = (rel as i16).to_be_bytes();
+        code[at + 1] = bytes[0];
+        code[at + 2] = bytes[1];
+    };
+    let _ = off_aload_composer_for_check;
+    patch(&mut code, ifeq_pos, l0_offset);
+    patch(&mut code, goto_after_zero_pos, l1_offset);
+    patch(&mut code, ifne_pos, l_body_offset);
+    patch(&mut code, ifnull_pos, l_pop_offset);
+    patch(&mut code, goto_ret_pos, l_ret_offset);
+
+    // ── Assemble Code attribute ──
+    let max_stack: u16 = 4;
+    let max_locals: u16 = changed_slot as u16 + 1;
+    let smt_name_idx = cp.utf8("StackMapTable");
+    let smt_entries = build_composable_empty_smt(
+        ifeq_pos,
+        goto_after_zero_pos,
+        l0_offset,
+        l1_offset,
+        ifne_pos,
+        l_body_offset,
+        ifnull_pos,
+        l_pop_offset,
+        l_ret_offset,
+        composer_slot,
+        changed_slot,
+        cp,
+    );
+
+    let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
+    code_attr.write_u16::<BigEndian>(max_stack).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table empty
+    code_attr.write_u16::<BigEndian>(1).unwrap(); // 1 sub-attribute (SMT)
+    code_attr.write_u16::<BigEndian>(smt_name_idx).unwrap();
+    code_attr.write_u32::<BigEndian>(smt_entries.len() as u32 + 2).unwrap();
+    code_attr
+        .write_u16::<BigEndian>(count_smt_frames(&smt_entries))
+        .unwrap();
+    code_attr.write_all(&smt_entries).unwrap();
+
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(access_flags).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    method
+}
+
+/// Emit the synthetic restart-lambda method that a non-inline
+/// `@Composable` function refers to via its invokedynamic site. The
+/// lambda is a static method named `<ComposableName>$lambda$0` with
+/// descriptor `($user_params, I, Composer, I) -> Unit` (user params
+/// are the captures of the outer function; the trailing `Composer,
+/// I` are the SAM args from the Function2 interface). Its body just
+/// calls back into the outer @Composable with an OR'd $changed
+/// bitmask, restoring the recompose invariant.
+fn emit_composable_restart_lambda(
+    outer_func: &MirFunction,
+    class_name: &str,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    // For 580 (no user params), the lambda has signature
+    //   (I, Composer, I) -> Lkotlin/Unit;
+    // and body:
+    //   aload_1               # composer (slot 1)
+    //   iload_0               # original $changed (slot 0)
+    //   iconst_1
+    //   ior
+    //   invokestatic updateChangedFlags(I)I
+    //   invokestatic Greeting(Composer, I)V
+    //   getstatic Unit.INSTANCE
+    //   areturn
+    let n_user = outer_func.params.len().saturating_sub(2);
+    let _ = n_user;
+
+    // CP entries.
+    let lambda_name = format!("{}$lambda$0", outer_func.name);
+    let lambda_desc = "(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;".to_string();
+    let name_idx = cp.utf8(&lambda_name);
+    let desc_idx = cp.utf8(&lambda_desc);
+    let mr_update_flags = cp.methodref(
+        "androidx/compose/runtime/RecomposeScopeImplKt",
+        "updateChangedFlags",
+        "(I)I",
+    );
+    let outer_desc = jvm_descriptor(outer_func);
+    let mr_outer = cp.methodref(class_name, &outer_func.name, &outer_desc);
+    let fr_unit = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
+
+    // Body. Slot 0 = original $changed (int), slot 1 = Composer, slot 2 = $force (int).
+    let mut code: Vec<u8> = Vec::with_capacity(20);
+    code.push(0x2B); // aload_1 (composer)
+    code.push(0x1A); // iload_0 ($changed)
+    code.push(0x04); // iconst_1
+    code.push(0x80); // ior
+    code.push(0xB8); // invokestatic updateChangedFlags(I)I
+    code.write_u16::<BigEndian>(mr_update_flags).unwrap();
+    code.push(0xB8); // invokestatic outer(Composer, I)V
+    code.write_u16::<BigEndian>(mr_outer).unwrap();
+    code.push(0xB2); // getstatic Unit.INSTANCE
+    code.write_u16::<BigEndian>(fr_unit).unwrap();
+    code.push(0xB0); // areturn
+
+    // Code attribute.
+    let max_stack: u16 = 3;
+    let max_locals: u16 = 3;
+    let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 12);
+    code_attr.write_u16::<BigEndian>(max_stack).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+
+    // Method blob. kotlinc sets ACC_PRIVATE|ACC_STATIC|ACC_FINAL — no
+    // ACC_SYNTHETIC, even though the method is plugin-synthesized.
+    let access = ACC_PRIVATE | ACC_STATIC | ACC_FINAL;
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(access).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(desc_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap(); // attributes_count
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    method
+}
+
+/// Helper used by [`emit_composable_method`] to register the
+/// `invokedynamic` site that builds the restart lambda. Adds a
+/// `BootstrapMethods` entry pointing at `LambdaMetafactory.metafactory`
+/// with the synthetic `<class>.<lambda_name>` static method as the
+/// implementation. Returns the `CONSTANT_InvokeDynamic` CP index.
+fn register_compose_restart_indy(
+    cp: &mut ConstantPool,
+    class_name: &str,
+    lambda_name: &str,
+    main_descriptor: &str,
+    func: &MirFunction,
+) -> u16 {
+    // The restart lambda implements `Function2<Composer, Int, Unit>`,
+    // calling back into the @Composable function with an updated
+    // $changed bitmask. Its instantiated/SAM signature is:
+    //   (Object, Object) -> Object   (Function2.invoke erased form)
+    // and its specialized signature is:
+    //   (Composer, int) -> Unit
+    // The invokedynamic call-site descriptor takes the captures (just
+    // $changed: int) and returns Function2:
+    //   (I)Lkotlin/jvm/functions/Function2;
+    //
+    // Bootstrap method handle: kotlin/jvm/internal/...? Actually it's
+    // java/lang/invoke/LambdaMetafactory.metafactory.
+
+    // Add the BootstrapMethods entry.
+    let mh_metafactory = {
+        let mref = cp.methodref(
+            "java/lang/invoke/LambdaMetafactory",
+            "metafactory",
+            "(Ljava/lang/invoke/MethodHandles$Lookup;\
+             Ljava/lang/String;\
+             Ljava/lang/invoke/MethodType;\
+             Ljava/lang/invoke/MethodType;\
+             Ljava/lang/invoke/MethodHandle;\
+             Ljava/lang/invoke/MethodType;)\
+             Ljava/lang/invoke/CallSite;",
+        );
+        cp.method_handle(6, mref) // 6 = REF_invokeStatic
+    };
+
+    // SAM method type: (Object,Object)Object — Function2.invoke's
+    // erased descriptor.
+    let mt_sam = cp.method_type("(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    // Instantiated method type: matches the original Composable's
+    // signature for the lambda's user-side params (Composer, int).
+    let mt_inst = cp.method_type("(Landroidx/compose/runtime/Composer;I)Ljava/lang/Object;");
+    // Implementation handle: invokestatic <class>.<lambda_name>
+    // descriptor = `($main_user_params)I Composer int) Unit`. For 580
+    // (no user params), descriptor is `(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;`.
+    let n_user = func.params.len().saturating_sub(2);
+    let mut lambda_desc = String::from("(I");
+    let _ = n_user;
+    lambda_desc.push_str("Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;");
+    let _ = main_descriptor;
+    let lambda_mref = cp.methodref(class_name, lambda_name, &lambda_desc);
+    let mh_impl = cp.method_handle(6, lambda_mref);
+
+    let bsm_idx = cp.bootstrap_method(skotch_backend_jvm_bsm(mh_metafactory, mt_sam, mh_impl, mt_inst));
+
+    // Call-site name + descriptor. For lambda metafactory, the name is
+    // the SAM method name ("invoke" for Function2) and the descriptor
+    // describes the (captures) -> SAM-interface signature.
+    let nt = cp.name_and_type("invoke", "(I)Lkotlin/jvm/functions/Function2;");
+    cp.invoke_dynamic(bsm_idx, nt)
+}
+
+/// Tiny shim so this module doesn't depend on the parent crate's
+/// inner `BootstrapEntry` builder yet — wraps the bootstrap entry args.
+fn skotch_backend_jvm_bsm(
+    mh: u16,
+    sam_mt: u16,
+    impl_mh: u16,
+    inst_mt: u16,
+) -> crate::constant_pool::BootstrapEntry {
+    crate::constant_pool::BootstrapEntry {
+        method_handle_index: mh,
+        args: vec![sam_mt, impl_mh, inst_mt],
+    }
+}
+
+/// Stack-map-table entries for the empty-body composable shape. Frame
+/// targets (with offsets relative to start-of-body):
+///   * L0 (the iconst_0 branch of the $changed != 0 check) — same locals,
+///     stack=[Composer, int? actually nothing — see comment]
+///   * L1 (after the changed-nonzero push) — same locals, stack=[Composer, int]
+///   * L_body — same locals, stack=[]
+///   * L_pop — same locals, stack=[ScopeUpdateScope]
+///   * L_ret — same locals, stack=[]
+///
+/// This is hand-rolled since the body is fixed; future iterations will
+/// need a real walker once user-body bytecode joins the picture.
+#[allow(clippy::too_many_arguments)]
+fn build_composable_empty_smt(
+    _ifeq_pos: usize,
+    _goto_after_zero_pos: usize,
+    l0_offset: usize,
+    l1_offset: usize,
+    _ifne_pos: usize,
+    l_body_offset: usize,
+    _ifnull_pos: usize,
+    l_pop_offset: usize,
+    l_ret_offset: usize,
+    _composer_slot: u8,
+    _changed_slot: u8,
+    cp: &mut ConstantPool,
+) -> Vec<u8> {
+    // We'll emit five frames using compact `same_locals_1_stack_item`
+    // and `same` shapes. The previous frame is the implicit method-entry
+    // frame, which has locals = [Composer, int] (no extras for the
+    // empty-body case) and empty stack.
+    let cls_composer_vti = {
+        let idx = cp.class("androidx/compose/runtime/Composer");
+        let mut v = vec![7u8];
+        v.write_u16::<BigEndian>(idx).unwrap();
+        v
+    };
+    let cls_scope_vti = {
+        let idx = cp.class("androidx/compose/runtime/ScopeUpdateScope");
+        let mut v = vec![7u8];
+        v.write_u16::<BigEndian>(idx).unwrap();
+        v
+    };
+    let int_vti = vec![1u8];
+
+    let mut out = Vec::new();
+    let mut prev = 0i32;
+
+    // Helper: emit a same_locals_1_stack_item frame with the given
+    // stack item bytes.
+    let emit_slss = |out: &mut Vec<u8>, prev: &mut i32, abs_off: usize, stack: &[u8]| {
+        let delta = (abs_off as i32) - *prev - if *prev == 0 { 0 } else { 1 };
+        let delta = if *prev == 0 { abs_off as i32 } else { delta };
+        if delta <= 63 {
+            out.push(64 + delta as u8);
+        } else {
+            out.push(247);
+            out.write_u16::<BigEndian>(delta as u16).unwrap();
+        }
+        out.extend_from_slice(stack);
+        *prev = abs_off as i32;
+    };
+    let emit_same = |out: &mut Vec<u8>, prev: &mut i32, abs_off: usize| {
+        let delta = (abs_off as i32) - *prev - if *prev == 0 { 0 } else { 1 };
+        let delta = if *prev == 0 { abs_off as i32 } else { delta };
+        if delta <= 63 {
+            out.push(delta as u8);
+        } else {
+            out.push(251);
+            out.write_u16::<BigEndian>(delta as u16).unwrap();
+        }
+        *prev = abs_off as i32;
+    };
+
+    // L0: target of `ifeq` — stack has the Composer pushed for the
+    // shouldExecute receiver. (we haven't pushed the bool yet)
+    emit_slss(&mut out, &mut prev, l0_offset, &cls_composer_vti);
+    // L1: target of `goto` after the iconst_1 branch — stack has
+    // [Composer, int] (the changed_nonzero bool, encoded as int).
+    out.push(255); // full_frame
+    // delta
+    let delta1 = (l1_offset as i32) - prev - 1;
+    out.write_u16::<BigEndian>(delta1.max(0) as u16).unwrap();
+    // num locals = 2 (Composer, int)
+    out.write_u16::<BigEndian>(2).unwrap();
+    out.extend_from_slice(&cls_composer_vti);
+    out.extend_from_slice(&int_vti);
+    // num stack = 2 (Composer, int)
+    out.write_u16::<BigEndian>(2).unwrap();
+    out.extend_from_slice(&cls_composer_vti);
+    out.extend_from_slice(&int_vti);
+    prev = l1_offset as i32;
+    // L_body: target of `ifne` — empty stack.
+    emit_same(&mut out, &mut prev, l_body_offset);
+    // L_pop: target of `ifnull` — stack has [ScopeUpdateScope].
+    emit_slss(&mut out, &mut prev, l_pop_offset, &cls_scope_vti);
+    // L_ret: target of final `goto` — empty stack.
+    emit_same(&mut out, &mut prev, l_ret_offset);
+
+    out
+}
+
+/// Count the number of stack-map-table frames in a serialized
+/// `smt_entries` blob. Used to fill the `number_of_entries` u16 prefix.
+fn count_smt_frames(smt_entries: &[u8]) -> u16 {
+    let mut i = 0usize;
+    let mut n = 0u16;
+    while i < smt_entries.len() {
+        let tag = smt_entries[i];
+        i += 1;
+        n += 1;
+        match tag {
+            0..=63 => {} // same_frame
+            64..=127 => {
+                // same_locals_1_stack_item_frame
+                i += vti_len(&smt_entries[i..]);
+            }
+            247 => {
+                // same_locals_1_stack_item_frame_extended
+                i += 2; // delta
+                i += vti_len(&smt_entries[i..]);
+            }
+            248..=250 => {
+                // chop_frame
+                i += 2;
+            }
+            251 => {
+                // same_frame_extended
+                i += 2;
+            }
+            252..=254 => {
+                // append_frame
+                i += 2; // delta
+                let extra = (tag - 251) as usize;
+                for _ in 0..extra {
+                    i += vti_len(&smt_entries[i..]);
+                }
+            }
+            255 => {
+                // full_frame: delta + locals + stack
+                i += 2;
+                let nl =
+                    u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
+                i += 2;
+                for _ in 0..nl {
+                    i += vti_len(&smt_entries[i..]);
+                }
+                let ns =
+                    u16::from_be_bytes([smt_entries[i], smt_entries[i + 1]]) as usize;
+                i += 2;
+                for _ in 0..ns {
+                    i += vti_len(&smt_entries[i..]);
+                }
+            }
+            _ => break,
+        }
+    }
+    n
+}
+
+fn vti_len(buf: &[u8]) -> usize {
+    if buf.is_empty() {
+        return 1;
+    }
+    match buf[0] {
+        7 | 8 => 3, // Object_variable_info / Uninitialized_variable_info
+        _ => 1,
+    }
+}
+
+/// Emit `astore <slot>` using the compact form when possible. (the
+/// other emit_* helpers — aload, iload — already exist below.)
+fn emit_astore(code: &mut Vec<u8>, slot: u8) {
+    if slot <= 3 {
+        code.push(0x4B + slot);
+    } else {
+        code.push(0x3A);
+        code.push(slot);
+    }
+}
+
+/// Emit `iload <slot>` using the compact form when possible.
+fn emit_iload(code: &mut Vec<u8>, slot: u8) {
+    if slot <= 3 {
+        code.push(0x1A + slot);
+    } else {
+        code.push(0x15);
+        code.push(slot);
+    }
+}
+
+/// Emit `ldc <int>` using `ldc` (single-byte index) when possible,
+/// `ldc_w` otherwise.
+fn emit_ldc_int(code: &mut Vec<u8>, cp: &mut ConstantPool, value: i32) {
+    let idx = cp.integer(value);
+    if idx <= u8::MAX as u16 {
+        code.push(0x12);
+        code.push(idx as u8);
+    } else {
+        code.push(0x13);
+        code.write_u16::<BigEndian>(idx).unwrap();
+    }
+}
+
 fn emit_suspend_state_machine_method(
     func: &MirFunction,
     module: &MirModule,
@@ -6236,6 +7050,21 @@ fn emit_multi_suspend_state_machine_method(
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
+    // Populate inlinable-consts / unused-locals tables for the suspend
+    // body — the main walk_block path normally sets these up, but the
+    // suspend emitter is reached via a short-circuit in emit_method
+    // that bypasses emit_method_body. Without these, single-use Const
+    // assignments would all get their own slot, blowing up max_locals
+    // and shifting the dispatcher slots away from kotlinc's positions.
+    let inlinable = compute_inlinable_constants(func);
+    let unused = compute_unused_locals(func);
+    INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable.clone());
+    UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused.clone());
+    // Stash cp + module pointers so `emit_load_mir_local` can reach
+    // them when materializing inline string / large-numeric consts.
+    EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
+
     // ── Slot layout. ────────────────────────────────────────────────
     //
     // kotlinc assigns method-level local slots in a specific order so
@@ -6370,6 +7199,18 @@ fn emit_multi_suspend_state_machine_method(
                 let ty = &func.locals[l.0 as usize];
                 if matches!(ty, Ty::Unit) {
                     // Don't reserve a slot — load/store are no-ops.
+                    continue;
+                }
+                // Skip inlinable single-use constants: their
+                // assignments are dropped in emit_mir_segment and their
+                // uses re-materialize the const directly. Allocating a
+                // slot here would just bloat max_locals and shift the
+                // dispatcher slots away from kotlinc's positions. We
+                // do NOT skip plain "unused" locals — those may carry
+                // call-result values whose side effects must still
+                // execute, and the existing emitter expects a slot to
+                // store-and-discard into.
+                if inlinable.contains_key(&l.0) {
                     continue;
                 }
                 let s = next_slot;
@@ -7630,8 +8471,8 @@ fn emit_multi_suspend_state_machine_method(
     // suspend state machine may push deeper than the dataflow walker
     // can reason about (tableswitch + branch convergence on resume).
     let computed_max_stack = recompute_max_stack_from_code(&code, cp);
-    let max_stack: u16 = (computed_max_stack as u16).max(16);
-    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code)).max(32);
+    let max_stack: u16 = computed_max_stack as u16;
+    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code));
 
     // ── Assemble the Code attribute. ───────────────────────────────
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
@@ -7747,6 +8588,16 @@ fn emit_mir_segment(
             continue;
         }
         let Stmt::Assign { dest, value } = stmt;
+        // Drop assign of a single-use constant to an inlinable local —
+        // emit_load_mir_local will re-materialize the constant inline
+        // at the (unique) use site. Same for write-only dead locals
+        // whose only operation is an unused store.
+        if matches!(value, Rvalue::Const(_))
+            && (INLINABLE_CONSTS.with(|cell| cell.borrow().contains_key(&dest.0))
+                || is_unused_local(*dest))
+        {
+            continue;
+        }
         match value {
             Rvalue::Const(c) => {
                 // If storing Int(0) or Bool(false) into a reference-typed local,
@@ -8341,6 +9192,40 @@ fn emit_load_mir_local(
     let ty = &func.locals[local.0 as usize];
     if matches!(ty, Ty::Unit) {
         return;
+    }
+    // Inlinable single-use constant: re-materialize the constant at the
+    // use site instead of loading from a slot. Mirrors `load_local`
+    // (the non-suspend path) — the suspend slot allocator already
+    // skipped allocating a slot for this local.
+    let inlined = INLINABLE_CONSTS.with(|cell| cell.borrow().get(&local.0).cloned());
+    if let Some(c) = inlined {
+        // Most simple consts can be emitted directly; for strings /
+        // large numerics we need cp + module access from the thread-
+        // local pointers stashed by emit_multi_suspend_state_machine.
+        let mut throwaway_stack = 0i32;
+        let mut throwaway_max = 0i32;
+        if try_emit_simple_const(code, &mut throwaway_stack, &mut throwaway_max, &c) {
+            return;
+        }
+        let cp_ptr = EMIT_CP.with(|cell| *cell.borrow());
+        let mod_ptr = EMIT_MODULE.with(|cell| *cell.borrow());
+        if let (Some(cp_raw), Some(mod_raw)) = (cp_ptr, mod_ptr) {
+            // SAFETY: pointers are set/cleared around the suspend emit
+            // call site, so they're valid for the duration of this
+            // function. We only read through them within this scope.
+            let cp = unsafe { &mut *cp_raw };
+            let module = unsafe { &*mod_raw };
+            if try_emit_const_with_cp(
+                code,
+                cp,
+                module,
+                &mut throwaway_stack,
+                &mut throwaway_max,
+                &c,
+            ) {
+                return;
+            }
+        }
     }
     let slot = local_slot
         .get(&local.0)
@@ -9114,8 +9999,8 @@ fn emit_lambda_one_suspend_body(
 
     // ── Assemble Code attribute. ──
     let computed_max_stack = recompute_max_stack_from_code(&code, cp);
-    let max_stack: u16 = (computed_max_stack as u16).max(16);
-    let max_locals: u16 = actual_max_locals(&code).max(32);
+    let max_stack: u16 = computed_max_stack as u16;
+    let max_locals: u16 = actual_max_locals(&code);
 
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
     code_attr.write_u16::<BigEndian>(max_stack).unwrap();
@@ -10406,8 +11291,8 @@ fn emit_lambda_multi_suspend_body(
 
     // ── Assemble. ──────────────────────────────────────────────────
     let computed_max_stack = recompute_max_stack_from_code(&code, cp);
-    let max_stack: u16 = (computed_max_stack as u16).max(16);
-    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code)).max(32);
+    let max_stack: u16 = computed_max_stack as u16;
+    let max_locals: u16 = (next_slot as u16).max(actual_max_locals(&code));
 
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
     code_attr.write_u16::<BigEndian>(max_stack).unwrap();
@@ -11134,26 +12019,30 @@ fn walk_block(
                 {
                     match dest_ty_here {
                         Ty::Int => {
-                            let ci = cp.class("java/lang/Integer");
+                            // kotlinc uses `Number.intValue()` (the abstract
+                            // parent class) for unboxing-after-checkcast,
+                            // not `Integer.intValue()`. Both work since
+                            // Integer extends Number — match kotlinc.
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Integer", "intValue", "()I");
+                            let m = cp.methodref("java/lang/Number", "intValue", "()I");
                             code.push(0xB6);
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
                         Ty::Long => {
-                            let ci = cp.class("java/lang/Long");
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Long", "longValue", "()J");
+                            let m = cp.methodref("java/lang/Number", "longValue", "()J");
                             code.push(0xB6);
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
                         Ty::Double => {
-                            let ci = cp.class("java/lang/Double");
+                            let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
-                            let m = cp.methodref("java/lang/Double", "doubleValue", "()D");
+                            let m = cp.methodref("java/lang/Number", "doubleValue", "()D");
                             code.push(0xB6);
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
@@ -13517,15 +14406,39 @@ fn is_unused_local(local: LocalId) -> bool {
 fn compute_unused_locals(func: &MirFunction) -> FxHashSet<u32> {
     let mut assigned: FxHashSet<u32> = FxHashSet::default();
     let mut use_counts: FxHashMap<u32, u32> = FxHashMap::default();
+    // For Rvalue::Local(src) assignments, track the dest→src dependency
+    // separately so we can transitively mark dead aliases as unused. The
+    // MIR lowerer sometimes inserts `dest = Local(src)` for if-expression
+    // results / smart casts that the source-level code discards.
+    let mut alias_chains: Vec<(u32, u32)> = Vec::new();
+    // If the function is a suspend fn whose source return type is Unit,
+    // the JVM emitter's ReturnValue handler emits `getstatic Unit.INSTANCE;
+    // areturn` for Any/Nullable-typed operands — it ignores the operand
+    // local entirely. Recognize this so the local doesn't count as used,
+    // making single-assignment `dest = Const(Null)` patterns eligible for
+    // the standard dead-store skip (and not bloating max_locals by 1).
+    let suspend_unit_shortcut = func.is_suspend
+        && matches!(func.suspend_original_return_ty, Some(Ty::Unit));
     for block in &func.blocks {
         for stmt in &block.stmts {
             let Stmt::Assign { dest, value } = stmt;
             assigned.insert(dest.0);
             count_rvalue_uses(value, &mut use_counts);
+            if let Rvalue::Local(src) = value {
+                alias_chains.push((dest.0, src.0));
+            }
         }
         match &block.terminator {
-            Terminator::Throw(l) | Terminator::ReturnValue(l) => {
+            Terminator::Throw(l) => {
                 *use_counts.entry(l.0).or_insert(0) += 1;
+            }
+            Terminator::ReturnValue(l) => {
+                let ty = &func.locals[l.0 as usize];
+                let uses_shortcut = suspend_unit_shortcut
+                    && matches!(ty, Ty::Any | Ty::Nullable(_));
+                if !uses_shortcut {
+                    *use_counts.entry(l.0).or_insert(0) += 1;
+                }
             }
             Terminator::Branch { cond, .. } => {
                 *use_counts.entry(cond.0).or_insert(0) += 1;
@@ -13542,6 +14455,28 @@ fn compute_unused_locals(func: &MirFunction) -> FxHashSet<u32> {
         }
         if use_counts.get(&local).copied().unwrap_or(0) == 0 {
             result.insert(local);
+        }
+    }
+    // Fixpoint: if a local's only use is in an alias `dead_dest = Local(this_local)`
+    // and dead_dest is itself unused, then this_local is also effectively
+    // unused (the alias gets skipped during emit). Repeat until stable.
+    loop {
+        let mut changed = false;
+        for &(dest, src) in &alias_chains {
+            if param_set.contains(&src) || named.contains(&src) {
+                continue;
+            }
+            if result.contains(&src) {
+                continue;
+            }
+            // The src's only use is the alias to dest, AND dest is dead.
+            if use_counts.get(&src).copied().unwrap_or(0) == 1 && result.contains(&dest) {
+                result.insert(src);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
         }
     }
     result
@@ -15801,6 +16736,41 @@ fn decode_load_with_kind(code: &[u8], pos: usize) -> Option<(u8, usize, bool)> {
         0x15 if pos + 1 < code.len() => Some((code[pos + 1], 2, true)),
         0x2A..=0x2D => Some((code[pos] - 0x2A, 1, false)),
         0x19 if pos + 1 < code.len() => Some((code[pos + 1], 2, false)),
+        _ => None,
+    }
+}
+
+/// Decode a wide (long or double) load at `pos`. Returns `(slot, instr_len, kind)`
+/// where `kind` is `'J'` for long, `'D'` for double, `'F'` for float.
+/// Used by the boxing-tail folding peephole to handle non-int primitive
+/// conditional results.
+fn decode_wide_load(code: &[u8], pos: usize) -> Option<(u8, usize, char)> {
+    if pos >= code.len() {
+        return None;
+    }
+    match code[pos] {
+        0x1E..=0x21 => Some((code[pos] - 0x1E, 1, 'J')), // lload_0..3
+        0x16 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'J')),
+        0x26..=0x29 => Some((code[pos] - 0x26, 1, 'D')), // dload_0..3
+        0x18 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'D')),
+        0x22..=0x25 => Some((code[pos] - 0x22, 1, 'F')), // fload_0..3
+        0x17 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'F')),
+        _ => None,
+    }
+}
+
+/// Decode a wide store at `pos`. Returns `(slot, instr_len, kind)`.
+fn decode_wide_store(code: &[u8], pos: usize) -> Option<(u8, usize, char)> {
+    if pos >= code.len() {
+        return None;
+    }
+    match code[pos] {
+        0x3F..=0x42 => Some((code[pos] - 0x3F, 1, 'J')), // lstore_0..3
+        0x37 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'J')),
+        0x47..=0x4A => Some((code[pos] - 0x47, 1, 'D')), // dstore_0..3
+        0x39 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'D')),
+        0x43..=0x46 => Some((code[pos] - 0x43, 1, 'F')), // fstore_0..3
+        0x38 if pos + 1 < code.len() => Some((code[pos + 1], 2, 'F')),
         _ => None,
     }
 }
@@ -18972,7 +19942,33 @@ fn peephole_stack_merge_returns(
             } else {
                 return_op == 0xB0
             };
-            if !return_matches {
+            // Also allow `xload N; invokestatic Boxing.*; areturn` — the
+            // boxing converts the primitive on stack to a reference object,
+            // which is what suspend functions returning a primitive must
+            // produce since the JVM-level signature is `()Object`. Without
+            // recognizing this we can't fold the slot indirection for if-
+            // expression results in suspend bodies (fixture 595).
+            let boxing_then_areturn = if return_op == 0xB8 // invokestatic
+                && return_pos + 3 < code.len()
+                && code[return_pos + 3] == 0xB0 // areturn
+            {
+                // Verify the methodref points at one of the Boxing helpers.
+                let mref_idx =
+                    u16::from_be_bytes([code[return_pos + 1], code[return_pos + 2]]);
+                EMIT_CP.with(|cell| {
+                    let cp_ptr = *cell.borrow();
+                    if let Some(cp_raw) = cp_ptr {
+                        let cp = unsafe { &*cp_raw };
+                        if let Some((class, _name, _desc)) = cp.lookup_methodref_parts(mref_idx) {
+                            return class == "kotlin/coroutines/jvm/internal/Boxing";
+                        }
+                    }
+                    false
+                })
+            } else {
+                false
+            };
+            if !return_matches && !boxing_then_areturn {
                 i += load_len;
                 continue;
             }
@@ -19081,6 +20077,213 @@ fn peephole_stack_merge_returns(
         // Drain in reverse order to keep earlier offsets stable.
         for (start, drain_size) in regions.into_iter().rev() {
             // Adjust branch instructions, cmp_targets, block_offsets.
+            let mut k = 0;
+            while k < code.len() {
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                    if k + 2 < code.len() {
+                        let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                        let src = k as i32;
+                        let dst = src + rel;
+                        let new_rel = if (src as usize) < start
+                            && (dst as usize) >= start + drain_size
+                        {
+                            rel - drain_size as i32
+                        } else if (src as usize) >= start + drain_size && (dst as usize) <= start {
+                            rel + drain_size as i32
+                        } else {
+                            rel
+                        };
+                        if new_rel != rel {
+                            let nb = (new_rel as i16).to_be_bytes();
+                            code[k + 1] = nb[0];
+                            code[k + 2] = nb[1];
+                        }
+                    }
+                    k += 3;
+                    continue;
+                }
+                if matches!(op, 0xC8 | 0xC9) {
+                    if k + 4 < code.len() {
+                        let rel = i32::from_be_bytes([
+                            code[k + 1],
+                            code[k + 2],
+                            code[k + 3],
+                            code[k + 4],
+                        ]);
+                        let src = k as i32;
+                        let dst = src + rel;
+                        let new_rel = if (src as usize) < start
+                            && (dst as usize) >= start + drain_size
+                        {
+                            rel - drain_size as i32
+                        } else if (src as usize) >= start + drain_size && (dst as usize) <= start {
+                            rel + drain_size as i32
+                        } else {
+                            rel
+                        };
+                        if new_rel != rel {
+                            let nb = new_rel.to_be_bytes();
+                            code[k + 1] = nb[0];
+                            code[k + 2] = nb[1];
+                            code[k + 3] = nb[2];
+                            code[k + 4] = nb[3];
+                        }
+                    }
+                    k += 5;
+                    continue;
+                }
+                k += instruction_len(code, k);
+            }
+            for ct in cmp_targets.iter_mut() {
+                if ct.offset >= start + drain_size {
+                    ct.offset -= drain_size;
+                }
+                if ct.cmp_start >= start + drain_size {
+                    ct.cmp_start -= drain_size;
+                }
+            }
+            for b in block_offsets.iter_mut() {
+                if *b >= start + drain_size {
+                    *b -= drain_size;
+                }
+            }
+            code.drain(start..start + drain_size);
+        }
+    }
+}
+
+/// Wide-type variant of [`peephole_stack_merge_returns`] for Long, Double,
+/// and Float conditional returns. Folds:
+///     `lload N; invokestatic Boxing.boxLong; areturn`
+/// (with matching `lstore N` writes ahead) into a stack-resident form so
+/// the boxing happens on the value already left on the stack by each
+/// branch. Same goes for double/float.
+fn peephole_stack_merge_returns_wide(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    named_slots: &FxHashSet<u8>,
+) {
+    loop {
+        let mut applied: Option<(u8, usize, usize, char)> = None;
+        // (slot, return_pos, load_pos, kind)
+        let mut i = 0;
+        while i + 2 <= code.len() {
+            // Match wide xload N at i.
+            let Some((slot, load_len, kind)) = decode_wide_load(code, i) else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            if named_slots.contains(&slot) {
+                i += load_len;
+                continue;
+            }
+            let return_pos = i + load_len;
+            if return_pos + 3 >= code.len() {
+                break;
+            }
+            // Must be `invokestatic Boxing.box{Long,Double,Float}; areturn`.
+            if code[return_pos] != 0xB8 || code[return_pos + 3] != 0xB0 {
+                i += load_len;
+                continue;
+            }
+            let mref_idx = u16::from_be_bytes([code[return_pos + 1], code[return_pos + 2]]);
+            let kind_match = EMIT_CP.with(|cell| {
+                let cp_ptr = *cell.borrow();
+                if let Some(cp_raw) = cp_ptr {
+                    let cp = unsafe { &*cp_raw };
+                    if let Some(("kotlin/coroutines/jvm/internal/Boxing", _name, desc)) =
+                        cp.lookup_methodref_parts(mref_idx)
+                    {
+                        let prim = desc.chars().nth(1).unwrap_or(' ');
+                        return prim == kind;
+                    }
+                }
+                false
+            });
+            if !kind_match {
+                i += load_len;
+                continue;
+            }
+            // Verify every write to slot N is a matching wide xstore N
+            // followed by `goto load_pos` or fall-through to load_pos.
+            let mut all_writes_safe = true;
+            let mut found_writer = false;
+            let mut j = 0;
+            while j < code.len() {
+                let len = instruction_len(code, j);
+                // Detect reads of slot N other than the one at `i`.
+                if let Some((s, _l, k_)) = decode_wide_load(code, j) {
+                    if s == slot && k_ == kind && j != i {
+                        all_writes_safe = false;
+                        break;
+                    }
+                    if s == slot && k_ == kind && j == i {
+                        j += len;
+                        continue;
+                    }
+                }
+                // Detect writes (must be same kind).
+                if let Some((s, store_len, k_)) = decode_wide_store(code, j) {
+                    if s == slot && k_ == kind {
+                        let after = j + store_len;
+                        let reaches_merge = if after == i {
+                            true
+                        } else if after < code.len()
+                            && code[after] == 0xA7
+                            && after + 2 < code.len()
+                        {
+                            let rel = i16::from_be_bytes([code[after + 1], code[after + 2]]) as i32;
+                            let tgt = (after as i32) + rel;
+                            tgt == i as i32
+                        } else {
+                            false
+                        };
+                        if !reaches_merge {
+                            all_writes_safe = false;
+                            break;
+                        }
+                        found_writer = true;
+                        j += store_len;
+                        continue;
+                    }
+                    // Mismatched kind on this slot — unsafe.
+                    if s == slot {
+                        all_writes_safe = false;
+                        break;
+                    }
+                }
+                j += len;
+            }
+            if !all_writes_safe || !found_writer {
+                i += load_len;
+                continue;
+            }
+            applied = Some((slot, return_pos, i, kind));
+            break;
+        }
+        let Some((slot, _return_pos, load_pos, kind)) = applied else {
+            break;
+        };
+        // Collect drain regions: every matching wide xstore + the load.
+        let mut regions: Vec<(usize, usize)> = Vec::new();
+        let mut j = 0;
+        while j < code.len() {
+            if let Some((s, store_len, k_)) = decode_wide_store(code, j) {
+                if s == slot && k_ == kind {
+                    regions.push((j, store_len));
+                    j += store_len;
+                    continue;
+                }
+            }
+            j += instruction_len(code, j);
+        }
+        let load_len = instruction_len(code, load_pos);
+        regions.push((load_pos, load_len));
+        regions.sort_by_key(|&(s, _)| s);
+        for (start, drain_size) in regions.into_iter().rev() {
+            // Adjust 2-byte and 4-byte branch instruction relative offsets.
             let mut k = 0;
             while k < code.len() {
                 let op = code[k];

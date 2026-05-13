@@ -1,0 +1,4 @@
+name   = "586-suspend-string-with-param"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with String param/return — verifies no Intrinsics.checkNotNullParameter emitted for suspend params."

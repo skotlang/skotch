@@ -1,0 +1,4 @@
+name   = "776-suspend-int-with-double-param"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

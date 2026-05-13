@@ -1,0 +1,4 @@
+name   = "947-suspend-let-call"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."

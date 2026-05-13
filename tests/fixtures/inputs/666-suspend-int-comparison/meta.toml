@@ -1,0 +1,4 @@
+name   = "666-suspend-int-comparison"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial variant."

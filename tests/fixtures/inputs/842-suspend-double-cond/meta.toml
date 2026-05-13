@@ -1,0 +1,4 @@
+name   = "842-suspend-double-cond"
+status = "supported"
+features = ["suspend"]
+reason = "Trivial suspend with Double-typed if-expression body — exercises wide-type peephole_stack_merge_returns_wide."

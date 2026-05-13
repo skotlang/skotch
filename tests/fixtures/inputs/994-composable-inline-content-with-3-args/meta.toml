@@ -1,0 +1,4 @@
+name   = "994-composable-inline-content-with-3-args"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable: Int + String + Boolean + content."

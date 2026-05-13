@@ -1,0 +1,4 @@
+name   = "697-composable-inline-string-arg"
+status = "supported"
+features = ["compose"]
+reason = "Inline composable taking String label + content."

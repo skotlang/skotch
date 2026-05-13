@@ -1,0 +1,4 @@
+name   = "884-suspend-no-args-string-empty"
+status = "supported"
+features = ["suspend"]
+reason = "Variant."
