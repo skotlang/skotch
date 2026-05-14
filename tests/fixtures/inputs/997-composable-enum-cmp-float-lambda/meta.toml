@@ -1,0 +1,4 @@
+name   = "997-composable-enum-cmp-float-lambda"
+status = "unsupported"
+features = ["compose", "Composable", "lambda", "enum"]
+reason = "Like 996 but the lambda returns Float — JetChat's JumpToBottom returns Dp (value class wrapping Float). Tests whether float return through a lambda inside @Composable triggers truncated bytecode."

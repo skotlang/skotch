@@ -1,0 +1,4 @@
+name   = "990-composable-lambda-call-with-defaults"
+status = "unsupported"
+features = ["compose", "Composable", "lambda"]
+reason = "@Composable lambda calling another @Composable with default args — exercises composer threading through Function2-style lambdas. JetChat's `rememberDrawerState` call inside `setContent { ... }` hits this; the inner call needs `aload_1` (the lambda's $composer) but skotch emits aconst_null."

@@ -425,6 +425,7 @@ fn build_android(
     let contents = skotch_apk::ApkContents {
         manifest_xml: axml_bytes,
         classes_dex: dex_bytes,
+        extra_dexes: Vec::new(),
         resources_arsc: None, // TODO: generate resources.arsc binary table
         res_files,
     };
@@ -487,13 +488,15 @@ fn find_latest_tool(build_tools: &Path, name: &str) -> Option<PathBuf> {
     versions.last().map(|p| p.join(name))
 }
 
-/// Compile .class files to DEX using Android SDK's d8 tool.
+/// Compile .class files to DEX using Android SDK's d8 tool. Returns one or
+/// more DEX blobs — the first is `classes.dex`, the rest become
+/// `classes2.dex`, `classes3.dex`, etc.
 fn compile_classes_with_d8(
     d8: &Path,
     classes: &[(String, Vec<u8>)],
     build_dir: &Path,
     dep_jars: &[PathBuf],
-) -> Result<Vec<u8>> {
+) -> Result<Vec<Vec<u8>>> {
     let android_jar = find_android_jar();
 
     // If we have dep JARs, compile them separately first, then compile
@@ -577,28 +580,39 @@ fn compile_classes_with_d8(
             .filter(|p| p.exists())
             .collect();
         if !deps_dexes.is_empty() {
-            // Merge by running d8 on all DEX files.
+            // Merge by running d8 on all DEX files. App DEX is passed first
+            // so app classes (including the launcher activity) preferentially
+            // end up in classes.dex — d8 packs by encounter order until full.
+            // Note: `--main-dex-list` is rejected by d8 for `--min-api ≥ 22`
+            // (multi-DEX is automatic on Lollipop+); rely on app-first
+            // ordering instead.
             let merge_dir = build_dir.join("d8-merged");
             std::fs::create_dir_all(&merge_dir)?;
             let mut cmd = std::process::Command::new(d8);
             cmd.arg("--output").arg(&merge_dir);
             cmd.arg("--min-api").arg("24");
-            for dex in &deps_dexes {
-                cmd.arg(dex);
-            }
-            // Write app DEX to a temp file.
             let app_dex_path = build_dir.join("d8-app-classes.dex");
             std::fs::write(&app_dex_path, &app_dex)?;
             cmd.arg(&app_dex_path);
+            for dex in &deps_dexes {
+                cmd.arg(dex);
+            }
             let output = cmd.output()?;
-            // Collect all merged DEX files into a single blob.
-            // The APK will need all of them (classes.dex, classes2.dex, ...).
+            // Collect all merged DEX files in numeric order.
             let merged = merge_dir.join("classes.dex");
             if merged.exists() {
-                // For multi-DEX APKs, we'll return just classes.dex and
-                // handle additional DEX files in the APK assembly.
-                // Store the merge dir path for the caller.
-                return Ok(std::fs::read(&merged)?);
+                let mut out: Vec<Vec<u8>> = Vec::new();
+                out.push(std::fs::read(&merged)?);
+                let mut i = 2usize;
+                loop {
+                    let p = merge_dir.join(format!("classes{i}.dex"));
+                    if !p.exists() {
+                        break;
+                    }
+                    out.push(std::fs::read(&p)?);
+                    i += 1;
+                }
+                return Ok(out);
             }
             // Merge failed — just use the app DEX (deps won't be included).
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -608,10 +622,16 @@ fn compile_classes_with_d8(
             );
         }
 
-        return Ok(app_dex);
+        return Ok(vec![app_dex]);
     }
 
-    compile_app_classes_with_d8(d8, classes, build_dir, &[], &android_jar)
+    Ok(vec![compile_app_classes_with_d8(
+        d8,
+        classes,
+        build_dir,
+        &[],
+        &android_jar,
+    )?])
 }
 
 fn compile_app_classes_with_d8(
@@ -621,15 +641,26 @@ fn compile_app_classes_with_d8(
     classpath_jars: &[PathBuf],
     android_jar: &Option<PathBuf>,
 ) -> Result<Vec<u8>> {
-    // Write .class files to a temp directory.
+    // Write .class files to a temp directory. Also mirror them to
+    // `d8-input-original/` so the iterative-exclusion stubbing doesn't
+    // destroy the originals (needed for post-mortem debugging when a class
+    // gets stubbed/excluded — e.g., why d8 rejected the launcher activity).
     let classes_dir = build_dir.join("d8-input");
+    let originals_dir = build_dir.join("d8-input-original");
+    let _ = std::fs::remove_dir_all(&originals_dir);
     std::fs::create_dir_all(&classes_dir)?;
+    std::fs::create_dir_all(&originals_dir)?;
     for (name, bytes) in classes {
         let path = classes_dir.join(format!("{name}.class"));
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).ok();
         }
         std::fs::write(&path, bytes)?;
+        let orig = originals_dir.join(format!("{name}.class"));
+        if let Some(parent) = orig.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        let _ = std::fs::write(&orig, bytes);
     }
     // Collect all .class file paths.
     let mut class_files: Vec<PathBuf> = walkdir::WalkDir::new(&classes_dir)
@@ -697,6 +728,19 @@ fn compile_app_classes_with_d8(
             }
         });
         if let Some(ref bad) = bad_file {
+            // Log first occurrence of d8's rejection reason for this file —
+            // helps diagnose which bytecode pattern is being rejected.
+            if !excluded.iter().any(|e| e == bad) {
+                let reason = stderr
+                    .lines()
+                    .find(|l| l.contains("Error in") && l.contains(bad.to_string_lossy().as_ref()))
+                    .map(|l| l.trim())
+                    .unwrap_or("")
+                    .chars()
+                    .take(280)
+                    .collect::<String>();
+                eprintln!("  d8 reject reason for {}: {}", bad.display(), reason);
+            }
             eprintln!("  d8 attempt {}: excluding {}", attempt + 1, bad.display());
             let times_tried = excluded.iter().filter(|e| *e == bad).count();
             if times_tried == 0 {
@@ -2183,6 +2227,63 @@ fn count_elements(elem: &skotch_axml::Element) -> usize {
     1 + elem.children.iter().map(count_elements).sum::<usize>()
 }
 
+/// Generate `R` and `R$<type>` class bytes for a library AAR by parsing
+/// its `R.txt` (resource id list) and its `AndroidManifest.xml`
+/// (package name). Returns `(jvm_class_name, bytes)` pairs ready to be
+/// fed to d8. Returns an empty vec if either file is missing or the
+/// package can't be determined.
+fn generate_r_classes_from_aar(aar_path: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+    let file = std::fs::File::open(aar_path)
+        .with_context(|| format!("opening AAR {}", aar_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("reading AAR {}", aar_path.display()))?;
+
+    // Read R.txt — line-based, may be absent for AARs without resources.
+    let r_txt = {
+        let mut entry = match archive.by_name("R.txt") {
+            Ok(e) => e,
+            Err(_) => return Ok(Vec::new()),
+        };
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut entry, &mut s).ok();
+        s
+    };
+    if r_txt.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Read AndroidManifest.xml to find the library's package name.
+    let manifest_xml = {
+        let mut entry = match archive.by_name("AndroidManifest.xml") {
+            Ok(e) => e,
+            Err(_) => return Ok(Vec::new()),
+        };
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut entry, &mut s).ok();
+        s
+    };
+    let package = extract_aar_package(&manifest_xml);
+    let package = match package {
+        Some(p) => p,
+        None => return Ok(Vec::new()),
+    };
+
+    let table = crate::r_class::parse_r_txt(&r_txt);
+    if table.entries.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(crate::r_class::generate_r_class(&package, &table))
+}
+
+/// Extract `package="..."` from an AAR's AndroidManifest.xml (always text).
+fn extract_aar_package(xml: &str) -> Option<String> {
+    let needle = "package=\"";
+    let start = xml.find(needle)? + needle.len();
+    let rest = &xml[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
 fn build_manifest_from_project(project: &ProjectModel) -> skotch_axml::Element {
     let package = project
         .namespace
@@ -2314,6 +2415,35 @@ fn build_multi_module(
             .map(|i| modules[i].name.as_str())
             .collect();
         anyhow::bail!("circular module dependencies detected: {:?}", cyclic);
+    }
+
+    // Pre-load dependency JARs (Maven artifacts) into the classinfo
+    // registry so the MIR lowerer can resolve external method signatures
+    // — e.g. `AppCompatActivity.onSupportNavigateUp(): Boolean`. Without
+    // this, super calls and method overrides for SDK classes default to
+    // `()V` return types, breaking `||` chains and any code that consumes
+    // the result. The single-module pipeline does this in `build_project`
+    // around line 117; the multi-module pipeline previously skipped it.
+    for module in &modules {
+        if let Ok(dep_jars) = resolve_external_deps(&module.project, root_dir) {
+            if !dep_jars.is_empty() {
+                let sep = if cfg!(windows) { ";" } else { ":" };
+                let mut cp = std::env::var("CLASSPATH").unwrap_or_default();
+                for jar in &dep_jars {
+                    if !cp.is_empty() {
+                        cp.push_str(sep);
+                    }
+                    cp.push_str(&jar.to_string_lossy());
+                }
+                std::env::set_var("CLASSPATH", &cp);
+                skotch_mir_lower::preload_registry_jars(&dep_jars);
+                eprintln!(
+                    "  {} dependency JARs loaded for compilation",
+                    dep_jars.len()
+                );
+                break;
+            }
+        }
     }
 
     // ── Step 3: Compile in dependency order with cross-module visibility ─
@@ -2614,6 +2744,14 @@ fn build_multi_module(
 
     // Package based on detected target.
     if target == BuildTarget::Android {
+        // (Was: delegate to `assemble_android` here — produces a valid
+        // resources.arsc but doubles total compile time because
+        // assemble_android re-runs all of the source compilation. Need
+        // to refactor: extract the aapt2 compile+link step as a helper
+        // that takes pre-compiled classes, then call that from here.
+        // Until then, the build_multi_module path emits no
+        // resources.arsc and the launcher activity crashes on the first
+        // `R.layout.X` lookup.)
         // For Android, merge all classes into a single MIR module and build APK.
         let mut module = MirModule::default();
         for (file_module, _, _) in std::iter::empty::<&(MirModule, bool, String)>() {
@@ -2681,6 +2819,63 @@ fn build_multi_module(
                 });
             }
         }
+        // Inject `android:versionCode` / `android:versionName` on the
+        // `<manifest>` element when missing. Source AndroidManifest.xml
+        // files typically don't carry these — gradle injects them from
+        // `defaultConfig { versionCode N; versionName "X" }`. Without
+        // them, `dumpsys package` reports `versionCode=0` and on Android
+        // 14+ `am start` can return `START_CLASS_NOT_FOUND` (-92) even
+        // though the activity is registered and its class is loadable.
+        let android_ns = "http://schemas.android.com/apk/res/android".to_string();
+        if !manifest_elem
+            .attributes
+            .iter()
+            .any(|a| a.name == "versionCode")
+        {
+            manifest_elem.attributes.push(skotch_axml::Attribute {
+                namespace: Some(android_ns.clone()),
+                name: "versionCode".to_string(),
+                resource_id: Some(0x0101_021B),
+                value: skotch_axml::AttributeValue::Integer(
+                    project.version_code.unwrap_or(1) as i32
+                ),
+            });
+        }
+        if !manifest_elem
+            .attributes
+            .iter()
+            .any(|a| a.name == "versionName")
+        {
+            manifest_elem.attributes.push(skotch_axml::Attribute {
+                namespace: Some(android_ns.clone()),
+                name: "versionName".to_string(),
+                resource_id: Some(0x0101_021C),
+                value: skotch_axml::AttributeValue::String(
+                    project
+                        .version_name
+                        .clone()
+                        .unwrap_or_else(|| "1.0".to_string()),
+                ),
+            });
+        }
+        // Inject `android:debuggable="true"` on `<application>` for
+        // skotch-produced APKs — gradle adds this for debug builds via
+        // BuildType.debuggable=true and the reference APK has it. Some
+        // Android 14+ paths reject activity launches from non-debuggable
+        // packages that lack expected signing metadata, manifesting as
+        // `START_CLASS_NOT_FOUND`.
+        for child in &mut manifest_elem.children {
+            if child.name == "application"
+                && !child.attributes.iter().any(|a| a.name == "debuggable")
+            {
+                child.attributes.push(skotch_axml::Attribute {
+                    namespace: Some(android_ns.clone()),
+                    name: "debuggable".to_string(),
+                    resource_id: Some(0x0101_000F),
+                    value: skotch_axml::AttributeValue::Boolean(true),
+                });
+            }
+        }
         // Inject <uses-sdk> if not present (source manifests typically don't have it).
         let has_uses_sdk = manifest_elem.children.iter().any(|c| c.name == "uses-sdk");
         if !has_uses_sdk {
@@ -2737,14 +2932,56 @@ fn build_multi_module(
         if !dep_jars.is_empty() {
             eprintln!("  {} dependencies resolved for DEX", dep_jars.len());
         }
+        // Generate R$type classes for each library AAR. Library .jar files
+        // ship without an R class (gradle/aapt2 emits per-app at build
+        // time from the merged resource table). Without these, classes
+        // like `androidx.appcompat.R$drawable` fail to load at runtime
+        // — `AppCompatDelegateImpl.<init>` triggers a
+        // `NoClassDefFoundError` and the launcher activity crashes
+        // before `onCreate` even runs.
+        //
+        // The generated R classes have all id fields set to placeholder
+        // values that don't match the actual baked-in resource ids, so
+        // runtime resource lookups won't resolve to the right bitmap or
+        // string. That's accepted for now — the goal here is just to
+        // keep class loading going so we can chase the next blocker.
+        let mut r_class_count = 0usize;
+        // Dedup AARs to the highest version of each artifact — gradle
+        // resolves to the newest, and the runtime classes embedded in the
+        // matching .jar reference the newer R fields. Picking an older
+        // R.txt produces a class with the wrong field set, which then
+        // crashes the app at `<clinit>` with `NoSuchFieldError`. The
+        // same dedup logic that d8 uses on the JAR list is applied here.
+        let deduped = dedup_dep_jars(&dep_jars);
+        for jar in &deduped {
+            let aar = jar.with_extension("aar");
+            if !aar.exists() {
+                continue;
+            }
+            let r_classes = match generate_r_classes_from_aar(&aar) {
+                Ok(classes) => classes,
+                Err(_) => continue,
+            };
+            for (name, bytes) in r_classes {
+                all_classes.push((name, bytes));
+                r_class_count += 1;
+            }
+        }
+        if r_class_count > 0 {
+            eprintln!("  R classes generated for AARs: {}", r_class_count);
+        }
         // Convert .class files to DEX using Android SDK's d8 if available.
         // d8 produces optimized DEX from JVM bytecode — much better than
         // our MIR→DEX path for real apps.
-        let dex_bytes = if let Ok(d8_path) = find_d8() {
+        let dex_blobs: Vec<Vec<u8>> = if let Ok(d8_path) = find_d8() {
             match compile_classes_with_d8(&d8_path, &all_classes, &build_dir, &dep_jars) {
-                Ok(dex) => {
-                    eprintln!("  DEX compiled with d8 ({} bytes)", dex.len());
-                    dex
+                Ok(dexes) => {
+                    eprintln!(
+                        "  DEX compiled with d8 ({} files, {} bytes total)",
+                        dexes.len(),
+                        dexes.iter().map(|d| d.len()).sum::<usize>()
+                    );
+                    dexes
                 }
                 Err(e) => {
                     eprintln!("  d8 failed: {e}, falling back to MIR→DEX");
@@ -2758,7 +2995,7 @@ fn build_multi_module(
                     if project.is_compose || skotch_compose::has_composables(&combined_module) {
                         skotch_compose::compose_transform(&mut combined_module);
                     }
-                    skotch_backend_dex::compile_module(&combined_module)
+                    vec![skotch_backend_dex::compile_module(&combined_module)]
                 }
             }
         } else {
@@ -2772,7 +3009,7 @@ fn build_multi_module(
             if project.is_compose || skotch_compose::has_composables(&combined_module) {
                 skotch_compose::compose_transform(&mut combined_module);
             }
-            skotch_backend_dex::compile_module(&combined_module)
+            vec![skotch_backend_dex::compile_module(&combined_module)]
         };
         // Collect resource files from app module.
         let res_dir = app_dir.join("src/main/res");
@@ -2844,9 +3081,17 @@ fn build_multi_module(
                 .map(|v| v.len())
                 .sum::<usize>()
         );
-        // resources.arsc disabled — Android rejects our binary format.
-        // The resource table structure needs proper alignment and encoding.
-        // APKs install without resources.arsc but @string/@drawable refs won't resolve.
+        // resources.arsc is still disabled — our in-tree generator
+        // produces a structurally invalid table (aapt2 reports "corrupt
+        // resource table: chunk's data extends past the end of the
+        // document"), and Android silently falls back to no resources
+        // even when the file is present. The real fix is wiring the
+        // existing aapt2-link path (used by `assemble_android`) into
+        // `build_multi_module` so resources are properly compiled — left
+        // for a follow-up iteration. Without resources.arsc, runtime
+        // resource lookups (`R.layout.X`, etc.) fail with
+        // `Resources$NotFoundException`, which is currently jetchat's
+        // first onCreate crash.
         #[allow(clippy::overly_complex_bool_expr)]
         let resources_arsc: Option<Vec<u8>> = if !resource_table.entries.is_empty() && false {
             let arsc = crate::r_class::generate_resources_arsc(pkg, &resource_table, &res_values);
@@ -2856,9 +3101,13 @@ fn build_multi_module(
             None
         };
 
+        let mut dex_iter = dex_blobs.into_iter();
+        let primary_dex = dex_iter.next().unwrap_or_default();
+        let extra_dexes: Vec<Vec<u8>> = dex_iter.collect();
         let contents = skotch_apk::ApkContents {
             manifest_xml: axml_bytes,
-            classes_dex: dex_bytes,
+            classes_dex: primary_dex,
+            extra_dexes,
             resources_arsc,
             res_files,
         };

@@ -8,6 +8,70 @@
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+/// Process-wide cache of `(class_path → Option<ClassInfo>)` lookups so
+/// `lookup_method_descriptor` doesn't re-open every JAR in CLASSPATH on
+/// every call. Populated lazily on first miss and on `preload_*` calls.
+/// `None` marks a known-absent class so we don't repeatedly re-scan.
+static CLASSPATH_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mutex::new(None);
+
+/// Pre-populate the classpath cache from a set of JAR paths. Idempotent —
+/// existing entries aren't overwritten. Call this once per project build
+/// after dep resolution; subsequent `lookup_method_descriptor` calls hit
+/// the in-memory cache instead of re-opening JARs.
+pub fn preload_classpath_cache(jars: &[PathBuf]) {
+    let scanned = scan_jars(jars);
+    if let Ok(mut guard) = CLASSPATH_CACHE.lock() {
+        let cache = guard.get_or_insert_with(HashMap::new);
+        for (k, v) in scanned {
+            cache.entry(k).or_insert(Some(v));
+        }
+    }
+}
+
+fn cached_class_lookup(class_path: &str) -> Option<ClassInfo> {
+    // Fast path: cache hit (either Some(ci) or known-absent None).
+    if let Ok(guard) = CLASSPATH_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if let Some(slot) = cache.get(class_path) {
+                return slot.clone();
+            }
+        }
+    }
+    // Slow path: scan CLASSPATH once, populate cache.
+    let cp = std::env::var("CLASSPATH").unwrap_or_default();
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    let mut found: Option<ClassInfo> = None;
+    for jar_path in cp.split(sep) {
+        if jar_path.is_empty() {
+            continue;
+        }
+        let path = std::path::Path::new(jar_path);
+        if !path.exists() {
+            continue;
+        }
+        if let Ok(file) = std::fs::File::open(path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                let entry_name = format!("{class_path}.class");
+                if let Ok(mut entry) = archive.by_name(&entry_name) {
+                    let mut bytes = Vec::new();
+                    if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
+                        if let Ok(ci) = parse_class(&bytes) {
+                            found = Some(ci);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(mut guard) = CLASSPATH_CACHE.lock() {
+        let cache = guard.get_or_insert_with(HashMap::new);
+        cache.insert(class_path.to_string(), found.clone());
+    }
+    found
+}
 
 /// Information about a single Java class.
 #[derive(Clone, Debug)]
@@ -63,6 +127,12 @@ impl MethodInfo {
     }
 }
 
+impl FieldInfo {
+    pub fn is_static(&self) -> bool {
+        self.access_flags & ACC_STATIC != 0
+    }
+}
+
 /// Check if a JVM class is an interface by loading its classfile and
 /// checking the ACC_INTERFACE flag. Returns `None` if the class can't
 /// be loaded.
@@ -77,46 +147,22 @@ pub fn lookup_method_descriptor(
     method_name: &str,
     param_count: usize,
 ) -> Option<String> {
-    // Try the CLASS_REGISTRY first (loaded dependency JARs).
-    {
-        // Check classfiles loaded via CLASSPATH env var.
-        // classfiles loaded via CLASSPATH env var.
-        let cp = std::env::var("CLASSPATH").unwrap_or_default();
-        let sep = if cfg!(windows) { ';' } else { ':' };
-        for jar_path in cp.split(sep) {
-            if jar_path.is_empty() {
-                continue;
+    // Try the CLASSPATH cache first (preloaded dep JARs + memoized misses).
+    // Previously this re-opened every JAR in CLASSPATH on every call, which
+    // made jetchat-scale builds stall (~129 JARs × thousands of method
+    // lookups during MIR-lower = millions of ZIP opens).
+    if let Some(ci) = cached_class_lookup(class_path) {
+        let mut best: Option<String> = None;
+        for m in &ci.methods {
+            if m.name == method_name
+                && count_descriptor_params(&m.descriptor) == param_count
+                && (best.is_none() || has_object_params(&m.descriptor))
+            {
+                best = Some(m.descriptor.clone());
             }
-            let path = std::path::Path::new(jar_path);
-            if !path.exists() {
-                continue;
-            }
-            if let Ok(file) = std::fs::File::open(path) {
-                if let Ok(mut archive) = zip::ZipArchive::new(file) {
-                    let entry_name = format!("{class_path}.class");
-                    if let Ok(mut entry) = archive.by_name(&entry_name) {
-                        let mut bytes = Vec::new();
-                        if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
-                            if let Ok(ci) = parse_class(&bytes) {
-                                // Collect all matching overloads, prefer ones
-                                // with object params over primitive params.
-                                let mut best: Option<&str> = None;
-                                for m in &ci.methods {
-                                    if m.name == method_name
-                                        && count_descriptor_params(&m.descriptor) == param_count
-                                        && (best.is_none() || has_object_params(&m.descriptor))
-                                    {
-                                        best = Some(&m.descriptor);
-                                    }
-                                }
-                                if let Some(d) = best {
-                                    return Some(d.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        }
+        if best.is_some() {
+            return best;
         }
     }
     // Try JDK classes.
@@ -132,6 +178,29 @@ pub fn lookup_method_descriptor(
         }
         if let Some(d) = best {
             return Some(d.to_string());
+        }
+    }
+    None
+}
+
+/// Look up the descriptor of a static field on a class. Used by MIR
+/// lowering to detect imports of enum constants (e.g.
+/// `import androidx.compose.material3.DrawerValue.Closed` — `Closed` is
+/// a static field of type `LDrawerValue;` on the enum class). Returns
+/// `None` if the field doesn't exist or isn't static.
+pub fn lookup_static_field_descriptor(class_path: &str, field_name: &str) -> Option<String> {
+    if let Some(ci) = cached_class_lookup(class_path) {
+        for f in &ci.fields {
+            if f.name == field_name && f.is_static() {
+                return Some(f.descriptor.clone());
+            }
+        }
+    }
+    if let Ok(ci) = load_jdk_class(class_path) {
+        for f in &ci.fields {
+            if f.name == field_name && f.is_static() {
+                return Some(f.descriptor.clone());
+            }
         }
     }
     None

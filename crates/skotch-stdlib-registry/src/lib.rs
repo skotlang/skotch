@@ -101,7 +101,17 @@ pub static STDLIB_EXTENSIONS: &[StdlibExtension] = &[
     StdlibExtension { receiver: "", method: "fold", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "fold", descriptor: "(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;", return_ty: || Ty::Any },
     StdlibExtension { receiver: "", method: "any", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "any", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z", return_ty: || Ty::Bool },
     StdlibExtension { receiver: "", method: "all", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "all", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z", return_ty: || Ty::Bool },
+    // `none` has both a 0-predicate (just receiver) and 1-predicate (with
+    // lambda) overload — keep both so callers using either form resolve.
+    // List order matters only for `lookup_stdlib_extension`; the
+    // arity-aware variant `lookup_stdlib_extension_arity` picks the right one.
+    StdlibExtension { receiver: "", method: "none", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "none", descriptor: "(Ljava/lang/Iterable;)Z", return_ty: || Ty::Bool },
     StdlibExtension { receiver: "", method: "none", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "none", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z", return_ty: || Ty::Bool },
+    // Sequence variants — `MessageFormatter.kt` calls `tokens.none()` on a
+    // `Sequence<MatchResult>`. Without this entry the Iterable overload was
+    // chosen, producing the wrong call descriptor.
+    StdlibExtension { receiver: "Sequence", method: "none", facade_class: "kotlin/sequences/SequencesKt", jvm_method: "none", descriptor: "(Lkotlin/sequences/Sequence;)Z", return_ty: || Ty::Bool },
+    StdlibExtension { receiver: "Sequence", method: "none", facade_class: "kotlin/sequences/SequencesKt", jvm_method: "none", descriptor: "(Lkotlin/sequences/Sequence;Lkotlin/jvm/functions/Function1;)Z", return_ty: || Ty::Bool },
     StdlibExtension { receiver: "List", method: "first", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "first", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },
     StdlibExtension { receiver: "List", method: "last", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "last", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },
     StdlibExtension { receiver: "List", method: "firstOrNull", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "firstOrNull", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },
@@ -137,6 +147,49 @@ pub fn lookup_stdlib_extension(
     STDLIB_EXTENSIONS
         .iter()
         .find(|e| e.method == method && (e.receiver.is_empty() || receiver_ty.contains(e.receiver)))
+}
+
+/// Same as `lookup_stdlib_extension` but disambiguates by the number of
+/// arguments at the call site (receiver included). Used for overloads
+/// like `none()` vs `none(predicate)` and `joinToString()` variants where
+/// the wrong arity selection produces a "desc expects N, got M" error.
+pub fn lookup_stdlib_extension_arity(
+    receiver_ty: &str,
+    method: &str,
+    arg_count: usize,
+) -> Option<&'static StdlibExtension> {
+    STDLIB_EXTENSIONS.iter().find(|e| {
+        e.method == method
+            && (e.receiver.is_empty() || receiver_ty.contains(e.receiver))
+            && count_descriptor_params(e.descriptor) == arg_count
+    })
+}
+
+/// Count `(...)R` parameter slots in a JVM method descriptor. Inline-only
+/// so we don't pull skotch-classinfo into this crate's deps.
+fn count_descriptor_params(desc: &str) -> usize {
+    let inside = match desc.strip_prefix('(').and_then(|s| s.split_once(')')) {
+        Some((p, _)) => p,
+        None => return 0,
+    };
+    let mut count = 0;
+    let mut chars = inside.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            'L' => {
+                for cc in chars.by_ref() {
+                    if cc == ';' {
+                        break;
+                    }
+                }
+                count += 1;
+            }
+            '[' => continue,
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => count += 1,
+            _ => continue,
+        }
+    }
+    count
 }
 
 // ─── 2. Annotation descriptors ──────────────────────────────────────────────

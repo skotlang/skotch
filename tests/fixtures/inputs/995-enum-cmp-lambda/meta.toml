@@ -1,0 +1,4 @@
+name   = "995-enum-cmp-lambda"
+status = "unsupported"
+features = ["lambda", "enum"]
+reason = "`it == EnumConstant` inside a lambda body — JetChat's JumpToBottom$lambda$0 hits a broken bytecode shape (swap; if_acmpne; both branches to same offset; iload of nonexistent slot). Narrows that bug to a fixture for kotlinc comparison."

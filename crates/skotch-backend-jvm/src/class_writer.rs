@@ -6285,9 +6285,14 @@ fn register_compose_restart_indy(
     // SAM method type: (Object,Object)Object — Function2.invoke's
     // erased descriptor.
     let mt_sam = cp.method_type("(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-    // Instantiated method type: matches the original Composable's
-    // signature for the lambda's user-side params (Composer, int).
-    let mt_inst = cp.method_type("(Landroidx/compose/runtime/Composer;I)Ljava/lang/Object;");
+    // Instantiated method type: Function2<Composer, Int, Unit>.invoke with
+    // type parameters substituted. Because Function2's type parameters
+    // erase to Object, the Int substitution must be boxed (java.lang.Integer)
+    // and the Unit substitution stays as kotlin/Unit. d8 rejects primitive
+    // int or java/lang/Object here ("Enforced and erased signatures are
+    // inconsistent").
+    let mt_inst =
+        cp.method_type("(Landroidx/compose/runtime/Composer;Ljava/lang/Integer;)Lkotlin/Unit;");
     // Implementation handle: invokestatic <class>.<lambda_name>
     // descriptor = `($main_user_params)I Composer int) Unit`. For 580
     // (no user params), descriptor is `(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;`.
@@ -8817,10 +8822,13 @@ fn emit_mir_segment(
                             "i2d" => 0x87,
                             "i2l" => 0x85,
                             "i2c" => 0x92,
+                            "i2f" => 0x86,
                             "l2i" => 0x88,
                             "l2d" => 0x8A,
+                            "l2f" => 0x89,
                             "d2i" => 0x8E,
                             "d2l" => 0x8F,
+                            "d2f" => 0x90,
                             _ => 0x00,
                         };
                         if opcode != 0x00 {
@@ -13354,19 +13362,24 @@ fn walk_block(
                             "i2d" => 0x87,
                             "i2l" => 0x85,
                             "i2c" => 0x92,
+                            "i2f" => 0x86,
                             "l2i" => 0x88,
                             "l2d" => 0x8A,
+                            "l2f" => 0x89,
                             "d2i" => 0x8E,
                             "d2l" => 0x8F,
+                            "d2f" => 0x90,
                             _ => 0x00, // nop
                         };
                         if opcode != 0x00 {
                             code.push(opcode);
                         }
                         // Stack effect: wide→narrow = -1, narrow→wide = +1, same = 0
+                        // (Float and Int both occupy 1 slot.)
                         let effect = match method_name.as_str() {
-                            "i2d" | "i2l" => 1,          // int(1) → double/long(2)
-                            "d2i" | "d2l" | "l2i" => -1, // double/long(2) → int(1)
+                            "i2d" | "i2l" => 1,                          // int(1) → double/long(2)
+                            "d2i" | "d2l" | "l2i" | "d2f" | "l2f" => -1, // wide(2) → narrow(1)
+                            // i2f, l2i (already listed), d2f handled above, etc. → 0 net
                             _ => 0,
                         };
                         bump(stack, max_stack, effect);

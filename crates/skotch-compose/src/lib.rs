@@ -89,23 +89,37 @@ pub fn compose_transform(module: &mut MirModule) {
     // composables with default params, where the gap between caller args
     // and callee params can be 3+ (e.g. `JetchatTheme { ... }` calls a 5-
     // param signature with just 1 arg — 4 missing).
-    let composable_param_counts: std::collections::HashMap<u32, usize> = module
+    let composable_param_types: std::collections::HashMap<u32, Vec<Ty>> = module
         .functions
         .iter()
         .enumerate()
         .filter(|(_, f)| is_composable(f))
-        .map(|(i, f)| (i as u32, f.params.len()))
+        .map(|(i, f)| {
+            // params hold local IDs; resolve to the function's local types.
+            let tys: Vec<Ty> = f
+                .params
+                .iter()
+                .map(|lid| f.locals.get(lid.0 as usize).cloned().unwrap_or(Ty::Any))
+                .collect();
+            (i as u32, tys)
+        })
         .collect();
-    patch_static_calls_to_composable(module, &composable_param_counts);
-
-    // Patch lambda classes that serve as @Composable content blocks.
-    // The Compose runtime expects @Composable lambdas to implement
-    // Function2<Composer, Int, Unit> (or Function3 for lambdas with
-    // one user parameter, etc.) instead of the plain FunctionN.
-    // We detect lambda classes whose invoke method has @Composable
-    // annotation OR whose interface is Function0 and they're used
-    // in a composable context — and bump their arity by 2.
+    // Patch lambda classes that serve as @Composable content blocks
+    // FIRST — this adds `$composer: Composer` and `$changed: Int` to
+    // each lambda's `invoke` method's params. The subsequent call-site
+    // patching relies on the enclosing function/method already having
+    // a `Composer` param to thread through; without this ordering, calls
+    // inside a `@Composable` lambda body (e.g. `rememberDrawerState`)
+    // get a placeholder `null` for the `$composer` argument, which then
+    // throws NPE inside the Compose runtime as soon as the composition
+    // executes. The Compose runtime expects @Composable lambdas to
+    // implement Function2<Composer, Int, Unit> (or Function3 for
+    // lambdas with one user parameter, etc.) instead of the plain
+    // FunctionN; we detect lambda classes whose invoke method has the
+    // @Composable annotation OR whose interface is Function0 and
+    // they're used in a composable context — and bump their arity by 2.
     patch_composable_lambda_interfaces(module);
+    patch_static_calls_to_composable(module, &composable_param_types);
 }
 
 /// Patch lambda classes to implement the correct FunctionN interface
@@ -120,13 +134,12 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
         .map(|f| f.name.clone())
         .collect();
 
-    // Bump ALL Function0 lambda classes to Function2 in Compose projects.
-    // The Compose runtime expects @Composable lambdas as Function2.
-    // Non-composable lambdas that get bumped will have their invoke body
-    // emitted as a stub by the JVM backend (the arity mismatch detection
-    // handles this). The key composable lambda (setContent block) gets
-    // the correct Function2 interface and its body executes normally
-    // since the extra $composer/$changed params sit in unused JVM slots.
+    // Bump Function0 lambda classes to Function2 only when the lambda's
+    // invoke body actually makes composable calls (descriptor contains
+    // `Composer;`). Non-composable Function0 lambdas (e.g. the calculation
+    // block passed to `remember { ... }`) must STAY Function0 — bumping
+    // them breaks call-site casts like `checkcast Function0` that the
+    // surrounding code performs before invoking.
     for class in &mut module.classes {
         if !class.name.contains("$Lambda$") {
             continue;
@@ -136,6 +149,31 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
             .iter()
             .any(|i| i == "kotlin/jvm/functions/Function0");
         if !has_function0 {
+            continue;
+        }
+        // Detect composable-ness by scanning the invoke body for
+        // Composer-mentioning call descriptors.
+        let invoke_has_composer_call = class
+            .methods
+            .iter()
+            .filter(|m| m.name == "invoke")
+            .flat_map(|m| m.blocks.iter())
+            .flat_map(|b| b.stmts.iter())
+            .any(|stmt| {
+                let MStmt::Assign { value, .. } = stmt;
+                match value {
+                    Rvalue::Call {
+                        kind: CallKind::StaticJava { descriptor, .. },
+                        ..
+                    }
+                    | Rvalue::Call {
+                        kind: CallKind::VirtualJava { descriptor, .. },
+                        ..
+                    } => descriptor.contains("Composer;"),
+                    _ => false,
+                }
+            });
+        if !invoke_has_composer_call {
             continue;
         }
         for iface in &mut class.interfaces {
@@ -169,12 +207,12 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                 method.params.push(changed_id);
                 method.param_names.push("$changed".to_string());
 
-                // Note: thread_composer_args is intentionally NOT called here.
-                // The MIR lowering and compose arg patching already place
-                // the correct $composer/$changed values in composable call
-                // args. Calling thread_composer_args would create duplicates
-                // by replacing user-default null placeholders with $composer.
-                let _ = (composer_id, changed_id);
+                // Thread the new composer/changed params through composable
+                // call sites inside the body. MIR lowering ran before these
+                // params existed, so those calls got null/0 placeholders at
+                // the Composer / $changed positions. Use the descriptor to
+                // locate the right slots and rewrite the placeholders.
+                thread_composer_args(method, composer_id, changed_id);
             }
         }
     }
@@ -182,30 +220,21 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
 
 /// Replace null $composer and zero $changed placeholders in composable
 /// function calls with references to the actual lambda invoke params.
-/// NOTE: Currently disabled — the MIR lowering and compose arg patching
-/// already handle placing the correct $composer/$changed values.
-#[allow(dead_code, clippy::needless_range_loop)]
+/// Uses the call's JVM descriptor to find the exact Composer position
+/// (and the adjacent $changed slot), then rewrites those args if they
+/// hold the placeholder constants emitted by MIR lowering.
 fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed_local: LocalId) {
     use skotch_mir::MirConst;
-    // First, find which locals hold Const(Null) that are used as
-    // $composer args, and which hold Const(Int(0)) for $changed args.
-    // The pattern from arg padding is:
-    //   Assign { dest: X, value: Const(Null) }     ← $composer placeholder
-    //   Assign { dest: Y, value: Const(Int(0)) }   ← $changed placeholder
-    //   Assign { dest: Z, value: Call { kind: StaticJava { ... }, args: [..., X, Y] } }
-    //
-    // Replace X→composer_local and Y→changed_local in the Call args.
 
-    // Collect locals that are assigned Const(Null) with Ty::Any.
+    // Locals that hold a literal Const(Null) — these are the placeholders
+    // emitted by the MIR lowering for the $composer slot.
     let null_locals: std::collections::HashSet<u32> = func
         .blocks
         .iter()
         .flat_map(|b| b.stmts.iter())
         .filter_map(|stmt| {
             let MStmt::Assign { dest, value } = stmt;
-            if matches!(value, Rvalue::Const(MirConst::Null))
-                && matches!(func.locals.get(dest.0 as usize), Some(Ty::Any))
-            {
+            if matches!(value, Rvalue::Const(MirConst::Null)) {
                 Some(dest.0)
             } else {
                 None
@@ -213,7 +242,7 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
         })
         .collect();
 
-    // Collect locals assigned Const(Int(0)).
+    // Locals assigned Const(Int(0)) — placeholders for $changed.
     let zero_locals: std::collections::HashSet<u32> = func
         .blocks
         .iter()
@@ -228,36 +257,42 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
         })
         .collect();
 
-    // In StaticJava calls, replace null/$zero args that appear in the
-    // last 2 positions with the real $composer/$changed locals.
     for block in &mut func.blocks {
         for stmt in &mut block.stmts {
             let MStmt::Assign { value, .. } = stmt;
-            if let Rvalue::Call {
-                kind: CallKind::StaticJava { descriptor, .. },
-                args,
-            } = value
-            {
-                let n = args.len();
-                if n >= 2 {
-                    let desc_has_composer = descriptor.contains("Composer;")
-                        || descriptor.contains("Ljava/lang/Object;I)");
-                    if desc_has_composer {
-                        // Replace null-placeholder args with real $composer,
-                        // and zero-placeholder args with real $changed.
-                        // Skip args that are ALREADY the real param locals
-                        // (the MIR lowering may have placed them already).
-                        for i in 0..n {
-                            if args[i] == composer_local || args[i] == changed_local {
-                                continue; // already the real param
-                            }
-                            if null_locals.contains(&args[i].0) {
-                                args[i] = composer_local;
-                            } else if zero_locals.contains(&args[i].0) {
-                                args[i] = changed_local;
-                            }
-                        }
-                    }
+            let (descriptor, args, is_virtual): (&str, &mut Vec<LocalId>, bool) = match value {
+                Rvalue::Call {
+                    kind: CallKind::StaticJava { descriptor, .. },
+                    args,
+                } => (descriptor.as_str(), args, false),
+                Rvalue::Call {
+                    kind: CallKind::VirtualJava { descriptor, .. },
+                    args,
+                } => (descriptor.as_str(), args, true),
+                _ => continue,
+            };
+            if !descriptor.contains("Composer;") {
+                continue;
+            }
+            let composer_pos = match find_composer_pos_in_descriptor(descriptor) {
+                Some(p) => p,
+                None => continue,
+            };
+            // For VirtualJava, args[0] is the receiver — descriptor params
+            // start at args[1]. Map descriptor-relative position to args
+            // index.
+            let arg_offset = if is_virtual { 1 } else { 0 };
+            let composer_arg_idx = composer_pos + arg_offset;
+            let changed_arg_idx = composer_arg_idx + 1;
+
+            if let Some(slot) = args.get_mut(composer_arg_idx) {
+                if *slot != composer_local && null_locals.contains(&slot.0) {
+                    *slot = composer_local;
+                }
+            }
+            if let Some(slot) = args.get_mut(changed_arg_idx) {
+                if *slot != changed_local && zero_locals.contains(&slot.0) {
+                    *slot = changed_local;
                 }
             }
         }
@@ -273,16 +308,16 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
 /// $changed placeholder to the args list.
 fn patch_static_calls_to_composable(
     module: &mut MirModule,
-    composable_param_counts: &std::collections::HashMap<u32, usize>,
+    composable_param_types: &std::collections::HashMap<u32, Vec<Ty>>,
 ) {
     // Patch calls in top-level functions.
     for func in &mut module.functions {
-        patch_calls_in_function(func, composable_param_counts);
+        patch_calls_in_function(func, composable_param_types);
     }
     // Patch calls in class methods (including lambda invoke methods).
     for class in &mut module.classes {
         for method in &mut class.methods {
-            patch_calls_in_function(method, composable_param_counts);
+            patch_calls_in_function(method, composable_param_types);
         }
     }
 }
@@ -290,7 +325,7 @@ fn patch_static_calls_to_composable(
 #[allow(clippy::collapsible_if)]
 fn patch_calls_in_function(
     func: &mut MirFunction,
-    composable_param_counts: &std::collections::HashMap<u32, usize>,
+    composable_param_types: &std::collections::HashMap<u32, Vec<Ty>>,
 ) {
     use skotch_mir::MirConst;
 
@@ -304,8 +339,8 @@ fn patch_calls_in_function(
                 Rvalue::Call {
                     kind: CallKind::Static(fid),
                     args,
-                } if composable_param_counts.contains_key(&fid.0) => {
-                    let target_params = composable_param_counts[&fid.0];
+                } if composable_param_types.contains_key(&fid.0) => {
+                    let target_params = composable_param_types[&fid.0].len();
                     // Already has the right arg count → leave alone.
                     args.len() < target_params
                 }
@@ -344,14 +379,49 @@ fn patch_calls_in_function(
                     _ => false,
                 };
                 if !already_patched {
-                    // Compute how many args are missing.
-                    let missing = match value {
+                    // Compute how many args are missing, where the target's
+                    // param list says the missing slots live (target_tys), AND
+                    // if we have a JVM descriptor available, parse it to find
+                    // the exact position of the Composer parameter — this is
+                    // critical because the positional heuristic below assumes
+                    // a `(...defaults, $composer, $changed)` tail but real
+                    // composables with a `$default` mask emit
+                    // `(...defaults, $composer, $changed, $default)`, putting
+                    // the Composer at a different relative position. Without
+                    // this descriptor probe, calls to compose-runtime
+                    // functions like `rememberDrawerState` (5-param shape
+                    // with `$default`) get the Composer arg placed in the
+                    // `$changed` slot, leaving `$composer` as a null
+                    // placeholder and crashing the runtime at the first
+                    // `sourceInformationMarkerStart` call.
+                    let (missing, target_tys, composer_pos): (
+                        usize,
+                        Option<&Vec<Ty>>,
+                        Option<usize>,
+                    ) = match value {
                         Rvalue::Call {
-                            kind: CallKind::StaticJava { descriptor, .. },
+                            kind:
+                                CallKind::StaticJava {
+                                    descriptor,
+                                    class_name,
+                                    method_name,
+                                },
                             args,
                         } => {
                             let dp = skotch_classinfo::count_descriptor_params_pub(descriptor);
-                            dp.saturating_sub(args.len())
+                            let missing = dp.saturating_sub(args.len());
+                            let abs_pos = find_composer_pos_in_descriptor(descriptor);
+                            let rel_pos = abs_pos
+                                .and_then(|p| p.checked_sub(args.len()))
+                                .filter(|&p| p < missing);
+                            if method_name == "rememberDrawerState" {
+                                eprintln!(
+                                        "DEBUG StaticJava patch: {}.{} desc={} args.len={} dp={} missing={} abs_pos={:?} rel_pos={:?}",
+                                        class_name, method_name, descriptor, args.len(), dp,
+                                        missing, abs_pos, rel_pos
+                                    );
+                            }
+                            (missing, None, rel_pos)
                         }
                         Rvalue::Call {
                             kind: CallKind::VirtualJava { descriptor, .. },
@@ -359,47 +429,98 @@ fn patch_calls_in_function(
                         } => {
                             let dp = skotch_classinfo::count_descriptor_params_pub(descriptor);
                             let cp = if args.is_empty() { 0 } else { args.len() - 1 };
-                            dp.saturating_sub(cp)
+                            let missing = dp.saturating_sub(cp);
+                            let abs_pos = find_composer_pos_in_descriptor(descriptor);
+                            let rel_pos = abs_pos
+                                .and_then(|p| p.checked_sub(cp))
+                                .filter(|&p| p < missing);
+                            (missing, None, rel_pos)
                         }
                         Rvalue::Call {
                             kind: CallKind::Static(fid),
                             args,
-                        } => composable_param_counts
-                            .get(&fid.0)
-                            .copied()
-                            .unwrap_or(0)
-                            .saturating_sub(args.len()),
-                        _ => 2,
+                        } => {
+                            let tys = composable_param_types.get(&fid.0);
+                            let total = tys.map(|v| v.len()).unwrap_or(0);
+                            (total.saturating_sub(args.len()), tys, None)
+                        }
+                        _ => (2, None, None),
                     };
                     if missing == 0 {
                         continue;
                     }
-                    // Add exactly `missing` args. For composable functions with
-                    // default params, the pattern may be:
+                    let provided_count = match value {
+                        Rvalue::Call { args, .. } => args.len(),
+                        _ => 0,
+                    };
+                    // Add exactly `missing` args. For composable functions
+                    // with default params, the pattern is:
                     //   user_defaults... + $composer + $changed [+ $default_mask]
-                    // We fill ALL missing slots with null/0 placeholders.
+                    // When we know the target's full param types (Static
+                    // calls into known composables), use the actual type at
+                    // index `provided_count + i` so user-default placeholders
+                    // get the right `Ty` (Object/Any/Class) rather than Int.
+                    // Otherwise, fall back to positional heuristics.
+                    //
+                    // For the `$composer` slot specifically, REUSE the
+                    // enclosing function's existing Composer parameter
+                    // instead of creating a fresh null local. Otherwise
+                    // every call from inside a `@Composable` lambda to
+                    // another `@Composable` receives `null` as its
+                    // composer — which throws NPE inside the Compose
+                    // runtime (e.g. `Composer.sourceInformationMarkerStart`
+                    // on null in `rememberDrawerState`). This is the
+                    // single biggest reason composable-heavy apps like
+                    // JetChat crash mid-composition.
+                    let enclosing_composer: Option<LocalId> =
+                        func.params.iter().copied().find(|p| {
+                            matches!(
+                                func.locals.get(p.0 as usize),
+                                Some(Ty::Class(c)) if c == "androidx/compose/runtime/Composer"
+                            )
+                        });
                     let mut extra_ids: Vec<LocalId> = Vec::new();
                     for i in 0..missing {
-                        // Compute "is the i-th appended slot the Nth from the
-                        // end" using checked_sub so missing < N doesn't wrap a
-                        // `usize` to `usize::MAX` and falsely match (this was a
-                        // real release-vs-debug discrepancy: release builds
-                        // wrapped silently while debug builds panicked under
-                        // overflow checks — caught by Ubuntu CI on fixture
-                        // 582-composable-nested where `missing` is 1 or 2).
-                        let is_last = missing.checked_sub(1) == Some(i);
-                        let is_second_last = missing.checked_sub(2) == Some(i);
-                        let is_third_last = missing.checked_sub(3) == Some(i);
-                        let ty = if is_second_last {
-                            // $composer position (second from end if missing>=2)
+                        let ty = if let Some(tys) = target_tys {
+                            tys.get(provided_count + i).cloned().unwrap_or(Ty::Any)
+                        } else if Some(i) == composer_pos {
+                            // Descriptor said position i is the Composer
+                            // — use that authoritative answer.
                             Ty::Class("androidx/compose/runtime/Composer".to_string())
-                        } else if is_last || is_third_last {
-                            Ty::Int // $changed or $default
                         } else {
-                            Ty::Any // user default placeholder (null)
+                            // Heuristic: $composer is second-from-last,
+                            // $changed (and optional $default) are Int.
+                            let is_last = missing.checked_sub(1) == Some(i);
+                            let is_second_last = missing.checked_sub(2) == Some(i);
+                            let is_third_last = missing.checked_sub(3) == Some(i);
+                            if is_second_last && composer_pos.is_none() {
+                                Ty::Class("androidx/compose/runtime/Composer".to_string())
+                            } else if is_last || is_second_last || is_third_last {
+                                // With a `$default` present (composer_pos
+                                // known), the last 1–3 positions are all
+                                // Int (`$changed` and possibly `$default`).
+                                Ty::Int
+                            } else {
+                                Ty::Any
+                            }
                         };
-                        let id = LocalId(func.locals.len() as u32);
-                        func.locals.push(ty);
+                        let is_composer_slot = matches!(
+                            &ty,
+                            Ty::Class(c) if c == "androidx/compose/runtime/Composer"
+                        );
+                        let id = if is_composer_slot {
+                            if let Some(existing) = enclosing_composer {
+                                existing
+                            } else {
+                                let id = LocalId(func.locals.len() as u32);
+                                func.locals.push(ty);
+                                id
+                            }
+                        } else {
+                            let id = LocalId(func.locals.len() as u32);
+                            func.locals.push(ty);
+                            id
+                        };
                         extra_ids.push(id);
                     }
                     patches.push((si, extra_ids));
@@ -407,10 +528,29 @@ fn patch_calls_in_function(
             }
         }
         // Apply patches in reverse order to maintain statement indices.
+        // Cache the enclosing Composer param so the per-call loop can
+        // distinguish "freshly-allocated placeholder local" (needs a
+        // null/0 initializer) from "reused enclosing-function $composer
+        // param" (must NOT be reassigned — overwriting the param with
+        // null is exactly the bug that made `rememberDrawerState` and
+        // every other inner @Composable call receive a null Composer
+        // at runtime).
+        let enclosing_composer_for_apply: Option<LocalId> = func.params.iter().copied().find(|p| {
+            matches!(
+                func.locals.get(p.0 as usize),
+                Some(Ty::Class(c)) if c == "androidx/compose/runtime/Composer"
+            )
+        });
         for (si, extra_ids) in patches.into_iter().rev() {
             // Insert assignment statements for all extra args before the call.
             let mut insert_count = 0;
             for (i, &id) in extra_ids.iter().enumerate() {
+                // Skip emitting an init for the reused enclosing Composer
+                // param — overwriting it with null defeats the entire
+                // fix above.
+                if Some(id) == enclosing_composer_for_apply {
+                    continue;
+                }
                 let is_composer = i + 2 == extra_ids.len() && extra_ids.len() >= 2;
                 let val = if is_composer {
                     Rvalue::Const(MirConst::Null) // $composer = null
@@ -440,6 +580,42 @@ fn patch_calls_in_function(
             }
         }
     }
+}
+
+/// Parse a JVM method descriptor and return the 0-based index of the
+/// `Landroidx/compose/runtime/Composer;` parameter, if any. Returns
+/// `None` if the descriptor doesn't contain a Composer param. Used by
+/// the @Composable arg-patching to place the `$composer` arg at the
+/// right position when target type info isn't available (StaticJava /
+/// VirtualJava call kinds) — the simple "second-from-last" heuristic
+/// places it wrong when a `$default` mask is also present (e.g. the
+/// 5-param `rememberDrawerState(DrawerValue, Function1, Composer, I, I)`
+/// pattern that's everywhere in Compose Material).
+fn find_composer_pos_in_descriptor(desc: &str) -> Option<usize> {
+    let inside = desc.strip_prefix('(').and_then(|s| s.split_once(')'))?.0;
+    let mut idx = 0usize;
+    let mut chars = inside.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            'L' => {
+                let mut name = String::new();
+                for cc in chars.by_ref() {
+                    if cc == ';' {
+                        break;
+                    }
+                    name.push(cc);
+                }
+                if name == "androidx/compose/runtime/Composer" {
+                    return Some(idx);
+                }
+                idx += 1;
+            }
+            '[' => continue,
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => idx += 1,
+            _ => continue,
+        }
+    }
+    None
 }
 
 /// Check if a function has the `@Composable` annotation.

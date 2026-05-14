@@ -1,0 +1,4 @@
+name = "999-int-dp-extension"
+status = "unsupported"
+features = ["compose"]
+reason = "Int.dp extension property returning Dp value class — JetChat uses this in animateDp lambdas. Tests if extension property lowers correctly."

@@ -23,6 +23,10 @@ pub struct ApkContents {
     pub manifest_xml: Vec<u8>,
     /// DEX bytecode (from `skotch-backend-dex`).
     pub classes_dex: Vec<u8>,
+    /// Additional DEX files for multi-DEX APKs (classes2.dex, classes3.dex, …).
+    /// Each entry is the raw bytes of one DEX; they are written as
+    /// classes2.dex, classes3.dex, … in that order.
+    pub extra_dexes: Vec<Vec<u8>>,
     /// Compiled resource table. `None` for minimal APKs with no resources.
     pub resources_arsc: Option<Vec<u8>>,
     /// Additional resource files: `(path_in_apk, data)`.
@@ -56,6 +60,12 @@ pub fn assemble_unsigned_apk(contents: &ApkContents) -> std::io::Result<Vec<u8>>
     // 2. classes.dex (STORED, aligned)
     zip.start_file("classes.dex", stored)?;
     zip.write_all(&contents.classes_dex)?;
+
+    // 2b. classes2.dex, classes3.dex, … for multi-DEX APKs.
+    for (i, dex) in contents.extra_dexes.iter().enumerate() {
+        zip.start_file(format!("classes{}.dex", i + 2), stored)?;
+        zip.write_all(dex)?;
+    }
 
     // 3. resources.arsc (STORED, aligned) if present
     if let Some(arsc) = &contents.resources_arsc {
@@ -127,6 +137,7 @@ mod tests {
         let contents = ApkContents {
             manifest_xml: vec![0x03, 0x00, 0x08, 0x00], // minimal header
             classes_dex: vec![0x64, 0x65, 0x78, 0x0A],  // "dex\n" magic
+            extra_dexes: vec![],
             resources_arsc: None,
             res_files: vec![],
         };
@@ -142,6 +153,7 @@ mod tests {
         let contents = ApkContents {
             manifest_xml: b"manifest-data".to_vec(),
             classes_dex: b"dex-data".to_vec(),
+            extra_dexes: vec![],
             resources_arsc: Some(b"arsc-data".to_vec()),
             res_files: vec![("res/values/strings.xml".into(), b"<resources/>".to_vec())],
         };

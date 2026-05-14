@@ -1,0 +1,4 @@
+name   = "991-composable-lambda-with-capture"
+status = "unsupported"
+features = ["compose", "Composable", "lambda"]
+reason = "@Composable lambda that captures a field and calls another @Composable. JetChat's NavActivityKt$Lambda$21 captures viewModel then calls rememberDrawerState — the captured-field load reorders MIR locals and breaks the composer threading patched in by skotch-compose."

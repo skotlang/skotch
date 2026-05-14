@@ -166,16 +166,23 @@ fn parse_element(src: &mut &str, ids: &HashMap<&str, u32>) -> Option<Element> {
 
         // Determine typed value — resolve Android enum/flag constants.
         let value = if value_str.starts_with("@") {
-            // Resource references like @mipmap/ic_launcher need resolved R IDs.
-            // Since we don't have a fully compiled R class, strip resource
-            // references by using a placeholder string. This allows the manifest
-            // to be installed without a valid resources.arsc.
-            AttributeValue::String(
-                value_str
-                    .strip_prefix("@string/")
-                    .unwrap_or(&value_str)
-                    .to_string(),
-            )
+            // Resource references like `@style/Theme.X`, `@mipmap/ic_launcher`,
+            // `@drawable/...`, etc. require resolved R IDs that we don't
+            // produce yet (no compiled resources.arsc). Storing them as
+            // literal strings makes Android's PackageManager parser silently
+            // *reject the entire enclosing element* (e.g. `<activity>` gets
+            // dropped from the resolver, then `am start` returns
+            // `START_CLASS_NOT_FOUND` even though the activity class is in
+            // the DEX). Skip such attributes entirely; the affected
+            // element falls back to defaults at install time.
+            // Exception: `@string/X` is mostly safe to flatten to a literal
+            // since most consumers tolerate raw text labels.
+            if let Some(rest) = value_str.strip_prefix("@string/") {
+                AttributeValue::String(rest.to_string())
+            } else {
+                // Unknown resource reference — skip this attribute entirely.
+                continue;
+            }
         } else if value_str == "true" {
             AttributeValue::Boolean(true)
         } else if value_str == "false" {
@@ -266,11 +273,28 @@ fn parse_element(src: &mut &str, ids: &HashMap<&str, u32>) -> Option<Element> {
     // Filter out elements that reference unresolved resources
     // (like <meta-data android:resource="@xml/...">) to prevent
     // install failures. Keep only essential elements.
+    //
+    // With the unresolved-`@`-ref skipping above, a `<meta-data>` whose
+    // only payload was `android:resource="@xml/..."` lands here with
+    // just an `android:name=...` attribute. Drop those — they're
+    // half-built and confuse Android's parser, which can in turn cause
+    // the enclosing `<receiver>` / `<provider>` to be dropped from the
+    // resolver tables and the launcher activity to come back as
+    // `START_CLASS_NOT_FOUND` even though it's unrelated.
     let children = children
         .into_iter()
         .filter(|child| {
-            // Keep meta-data only if it doesn't have unresolved @resource refs.
             if child.name == "meta-data" {
+                // Drop if missing both `value` and `resource` payload.
+                let has_payload = child
+                    .attributes
+                    .iter()
+                    .any(|a| a.name == "value" || a.name == "resource");
+                if !has_payload {
+                    return false;
+                }
+                // Drop if `resource` is still a literal `@`-prefixed
+                // string (i.e. we never resolved it to a real R id).
                 return child.attributes.iter().all(|a| {
                     if a.name == "resource" {
                         !matches!(&a.value, AttributeValue::String(s) if s.starts_with('@'))
@@ -626,7 +650,16 @@ impl Encoder {
             .unwrap_or(-1);
         let name_idx = self.string_map[&elem.name];
 
-        let attr_count = elem.attributes.len() as u16;
+        // Android's package parser expects attributes sorted by resource ID
+        // ascending, with non-resource-id attributes last. Build a sorted view
+        // without mutating the source element.
+        let mut sorted_attrs: Vec<&Attribute> = elem.attributes.iter().collect();
+        sorted_attrs.sort_by_key(|a| match a.resource_id {
+            Some(id) => (0u8, id),
+            None => (1u8, u32::MAX),
+        });
+
+        let attr_count = sorted_attrs.len() as u16;
         let chunk_size: u32 = 36 + attr_count as u32 * 20;
 
         out.write_u16::<LittleEndian>(0x0102).unwrap(); // type: element start
@@ -643,7 +676,7 @@ impl Encoder {
         out.write_u16::<LittleEndian>(0).unwrap(); // class index
         out.write_u16::<LittleEndian>(0).unwrap(); // style index
 
-        for attr in &elem.attributes {
+        for attr in &sorted_attrs {
             let attr_ns = attr
                 .namespace
                 .as_ref()

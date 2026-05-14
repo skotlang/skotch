@@ -84,12 +84,23 @@ pub fn read_pem_key(key_pem: &Path, cert_pem: &Path) -> Result<KeyEntry> {
 }
 
 /// Sign an APK with a debug key (self-signed, for development).
-/// Reads the unsigned APK, signs with v2 scheme, writes to output_path.
-/// If signing fails (e.g. no RSA support in this build), copies unsigned.
+///
+/// Skotch's own in-tree v2 signing (`sign_apk_v2`) is still incomplete (no
+/// debug-key generation; no PKCS#12 reader). Until that lands, fall back
+/// to invoking the Android SDK's `apksigner` against `~/.android/debug.keystore`
+/// so `adb install` actually works. Discovers `apksigner` in this order:
+///   1. `$APKSIGNER` env var (exact path)
+///   2. `$ANDROID_HOME/build-tools/<version>/apksigner` (latest by lexical sort)
+///   3. `$ANDROID_SDK_ROOT/build-tools/<version>/apksigner`
+///   4. `apksigner` on PATH
+///
+/// If none of those are found, we copy the unsigned APK (legacy behavior)
+/// and emit a warning — the resulting APK won't install, but the build
+/// pipeline still produces output for inspection.
 pub fn sign_apk_debug(unsigned_path: &Path, output_path: &Path) -> Result<()> {
-    // For debug builds, just copy the unsigned APK.
-    // Full v2 signing requires RSA key generation which adds complexity.
-    // The APK is still installable on devices with USB debugging enabled.
+    use std::process::Command;
+
+    // First, copy the unsigned APK to output_path. apksigner edits in place.
     std::fs::copy(unsigned_path, output_path).with_context(|| {
         format!(
             "copying {} to {}",
@@ -97,7 +108,120 @@ pub fn sign_apk_debug(unsigned_path: &Path, output_path: &Path) -> Result<()> {
             output_path.display()
         )
     })?;
+
+    let apksigner = match find_apksigner() {
+        Some(p) => p,
+        None => {
+            eprintln!(
+                "WARNING: apksigner not found — APK at {} is UNSIGNED and will fail to install. \
+                 Set $APKSIGNER, $ANDROID_HOME, or $ANDROID_SDK_ROOT.",
+                output_path.display()
+            );
+            return Ok(());
+        }
+    };
+
+    let keystore = match find_debug_keystore() {
+        Some(p) => p,
+        None => {
+            eprintln!(
+                "WARNING: debug keystore not found at ~/.android/debug.keystore — APK at {} is UNSIGNED.",
+                output_path.display()
+            );
+            return Ok(());
+        }
+    };
+
+    let status = Command::new(&apksigner)
+        .args(["sign", "--ks"])
+        .arg(&keystore)
+        .args([
+            "--ks-pass",
+            "pass:android",
+            "--ks-key-alias",
+            "androiddebugkey",
+            "--key-pass",
+            "pass:android",
+            "-v",
+            "--v1-signing-enabled",
+            "true",
+            "--v2-signing-enabled",
+            "true",
+            "--v3-signing-enabled",
+            "true",
+        ])
+        .arg(output_path)
+        .status()
+        .with_context(|| format!("running {}", apksigner.display()))?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "apksigner failed with exit code {:?} on {}",
+            status.code(),
+            output_path.display()
+        );
+    }
     Ok(())
+}
+
+fn find_apksigner() -> Option<std::path::PathBuf> {
+    if let Ok(p) = std::env::var("APKSIGNER") {
+        let path = std::path::PathBuf::from(p);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    for env_var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(sdk) = std::env::var(env_var) {
+            let bt = std::path::PathBuf::from(&sdk).join("build-tools");
+            if let Ok(entries) = std::fs::read_dir(&bt) {
+                let mut versions: Vec<_> = entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_dir())
+                    .collect();
+                versions.sort();
+                versions.reverse();
+                for v in versions {
+                    let candidate = v.join("apksigner");
+                    if candidate.exists() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: ~/Library/Android/sdk/build-tools/<v>/apksigner (macOS default
+    // location used by Android Studio).
+    if let Some(home) = std::env::var_os("HOME") {
+        let bt = std::path::PathBuf::from(home).join("Library/Android/sdk/build-tools");
+        if let Ok(entries) = std::fs::read_dir(&bt) {
+            let mut versions: Vec<_> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
+            versions.sort();
+            versions.reverse();
+            for v in versions {
+                let candidate = v.join("apksigner");
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_debug_keystore() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let path = std::path::PathBuf::from(home).join(".android/debug.keystore");
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Generate the complete APK Signing Block for APK Signature Scheme v2.

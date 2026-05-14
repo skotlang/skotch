@@ -1,0 +1,4 @@
+name   = "996-composable-enum-cmp-lambda"
+status = "unsupported"
+features = ["compose", "Composable", "lambda", "enum"]
+reason = "Same `it == EnumConstant` lambda pattern as 995, but wrapped in @Composable Box(). Tests whether the compose transform corrupts the lambda body — JetChat's JumpToBottom hits this and d8 rejects."

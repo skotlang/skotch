@@ -50,6 +50,40 @@ fn type_id_for(res_type: &str) -> u8 {
     }
 }
 
+/// Parse an AAR's `R.txt` file and build a `ResourceTable`. Each line has
+/// the shape `<int|int[]> <type> <name> <hex_id>`, e.g.:
+///   ```text
+///   int drawable abc_action_bar_back_indicator 0x0
+///   int string status_bar_notification_info_overflow 0x7f110100
+///   ```
+/// Library AARs ship `R.txt` with all `0x0` placeholder ids — the real
+/// values get assigned at app-merge time by aapt2. We don't run aapt2's
+/// resource link step, so we synthesize unique-within-library ids: type
+/// id from `type_id_for` × 0x10000, entry id sequential within type, all
+/// under package id 0x7f. That's enough for `Class.forName(...R$type)`
+/// to find the field; runtime resource lookups still won't resolve to
+/// the real bitmap/string, but the static init no longer NPEs which
+/// unblocks Activity creation.
+pub fn parse_r_txt(content: &str) -> ResourceTable {
+    let mut table = ResourceTable::default();
+    for line in content.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        // `int <type> <name> <id>` — skip styleable arrays for now.
+        if parts.len() < 4 || parts[0] != "int" {
+            continue;
+        }
+        let res_type = parts[1].to_string();
+        let name = parts[2].to_string();
+        table
+            .entries
+            .entry(res_type)
+            .or_default()
+            .push(ResourceEntry { name, id: 0 });
+    }
+    assign_resource_ids(&mut table);
+    table
+}
+
 /// Scan a `res/` directory and build the resource table.
 ///
 /// Discovers resources from directory structure:
