@@ -161,18 +161,36 @@ pub enum ExternalClassKind {
 /// Map an AST `TypeRef` name to a JVM type descriptor character/string.
 /// When `param_position` is true, `Unit` maps to `Lkotlin/Unit;` (not `V`,
 /// which is only valid as a return-type descriptor).
-fn type_ref_to_descriptor(tr: &TypeRef, interner: &Interner) -> String {
-    type_ref_to_descriptor_inner(tr, interner, false)
+fn type_ref_to_descriptor(
+    tr: &TypeRef,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+) -> String {
+    type_ref_to_descriptor_inner(tr, interner, false, imports)
 }
 
-fn type_ref_to_param_descriptor(tr: &TypeRef, interner: &Interner) -> String {
-    type_ref_to_descriptor_inner(tr, interner, true)
+fn type_ref_to_param_descriptor(
+    tr: &TypeRef,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+) -> String {
+    type_ref_to_descriptor_inner(tr, interner, true, imports)
 }
 
-fn type_ref_to_descriptor_inner(tr: &TypeRef, interner: &Interner, param_position: bool) -> String {
+fn type_ref_to_descriptor_inner(
+    tr: &TypeRef,
+    interner: &Interner,
+    param_position: bool,
+    imports: &FxHashMap<String, String>,
+) -> String {
     // Function types: (P1, P2, ...) -> R  →  Lkotlin/jvm/functions/FunctionN;
+    // `@Composable` bumps arity by 2 (Composer + Int $changed); `suspend`
+    // bumps arity by 1 (Continuation). Without these bumps, cross-file
+    // callers see the wrong Function shape in the descriptor and
+    // checkcast the lambda to the wrong interface at runtime.
     if tr.func_params.is_some() {
-        let arity = tr.func_params.as_ref().map_or(0, |v| v.len());
+        let base = tr.func_params.as_ref().map_or(0, |v| v.len());
+        let arity = base + if tr.is_composable { 2 } else { 0 } + if tr.is_suspend { 1 } else { 0 };
         return format!("Lkotlin/jvm/functions/Function{arity};");
     }
     let name = interner.resolve(tr.name);
@@ -196,7 +214,66 @@ fn type_ref_to_descriptor_inner(tr: &TypeRef, interner: &Interner, param_positio
         "DoubleArray" => "[D".to_string(),
         "BooleanArray" => "[Z".to_string(),
         "ByteArray" => "[B".to_string(),
-        _ => "Ljava/lang/Object;".to_string(),
+        _ => {
+            // Resolve user-class types via the file's import map. Without
+            // this, every non-builtin class falls back to
+            // `Ljava/lang/Object;` and cross-file callers emit descriptors
+            // that don't match the producer's `L<package>/Class;` —
+            // resulting in `NoSuchMethodError` at runtime even though
+            // both sides "have" the method. (E.g. JetChat's
+            // `JetchatDrawer(DrawerState, ...)` produced
+            // `Object` callers vs `DrawerState` declaration.)
+            if let Some(fq) = imports.get(name) {
+                format!("L{fq};")
+            } else {
+                "Ljava/lang/Object;".to_string()
+            }
+        }
+    }
+}
+
+/// Best-effort return-type inference for expression-body methods
+/// declared without an explicit `return_ty`. Used by gather_declarations
+/// so cross-file callers see the right return type (`Boolean` for
+/// `fun isMe() = userId == meProfile.userId`, not `Unit`). The full
+/// typeck pass already handles inference on the producer side, but at
+/// gather_declarations time only the AST is available, and falling back
+/// to `Unit` breaks call-site descriptors — e.g. JetChat's
+/// `userData.isMe()` was lowered as `()V`, leaving nothing on the stack
+/// for the next composable arg and triggering d8 stack-map rejects.
+fn infer_body_return_ty(body: &skotch_syntax::Block, interner: &Interner) -> Ty {
+    use skotch_syntax::{BinOp, Expr, Stmt};
+    let last_expr = body.stmts.iter().rev().find_map(|s| match s {
+        Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => Some(e),
+        _ => None,
+    });
+    let expr = match last_expr {
+        Some(e) => e,
+        None => return Ty::Unit,
+    };
+    match expr {
+        Expr::Binary { op, .. } => match op {
+            BinOp::Eq
+            | BinOp::NotEq
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::LtEq
+            | BinOp::GtEq
+            | BinOp::And
+            | BinOp::Or => Ty::Bool,
+            _ => Ty::Any,
+        },
+        Expr::BoolLit(_, _) => Ty::Bool,
+        Expr::IntLit(_, _) => Ty::Int,
+        Expr::LongLit(_, _) => Ty::Long,
+        Expr::DoubleLit(_, _) => Ty::Double,
+        Expr::FloatLit(_, _) => Ty::Float,
+        Expr::StringLit(_, _) | Expr::StringTemplate(_, _) => Ty::String,
+        Expr::CharLit(_, _) => Ty::Char,
+        _ => {
+            let _ = interner;
+            Ty::Any
+        }
     }
 }
 
@@ -217,17 +294,18 @@ fn build_descriptor(
     return_ty: Option<&TypeRef>,
     receiver_ty: Option<&TypeRef>,
     interner: &Interner,
+    imports: &FxHashMap<String, String>,
 ) -> String {
     let mut desc = String::from("(");
     if let Some(recv) = receiver_ty {
-        desc.push_str(&type_ref_to_param_descriptor(recv, interner));
+        desc.push_str(&type_ref_to_param_descriptor(recv, interner, imports));
     }
     for p in params {
-        desc.push_str(&type_ref_to_param_descriptor(&p.ty, interner));
+        desc.push_str(&type_ref_to_param_descriptor(&p.ty, interner, imports));
     }
     desc.push(')');
     if let Some(ret) = return_ty {
-        desc.push_str(&type_ref_to_descriptor(ret, interner));
+        desc.push_str(&type_ref_to_descriptor(ret, interner, imports));
     } else {
         desc.push('V');
     }
@@ -258,6 +336,50 @@ pub fn gather_declarations(
         };
         let fq_wrapper = format!("{pkg_prefix}{wrapper_class}");
 
+        // Per-file simple-name → FQ JVM-name map for class references in
+        // declarations of this file. Cross-file callers see descriptors
+        // emitted here; if `DrawerState` isn't resolved we fall back to
+        // `Object` and the descriptor doesn't match the producer.
+        let mut file_imports: FxHashMap<String, String> = FxHashMap::default();
+        for imp in &ast.imports {
+            if imp.is_wildcard {
+                continue;
+            }
+            let segments: Vec<&str> = imp.path.iter().map(|s| interner.resolve(*s)).collect();
+            if segments.is_empty() {
+                continue;
+            }
+            let fq = segments.join("/");
+            // The alias (if any) wins; otherwise the last segment is the
+            // simple name. Skip empty names.
+            let simple = if let Some(a) = imp.alias {
+                interner.resolve(a).to_string()
+            } else {
+                segments.last().unwrap_or(&"").to_string()
+            };
+            if !simple.is_empty() {
+                file_imports.insert(simple, fq);
+            }
+        }
+        // Add same-package classes declared in any of the files passed in,
+        // so a declaration in this file can reference a class declared
+        // beside it without an explicit import.
+        for (_, other_ast, _other_wrapper) in files {
+            if other_ast.package.as_ref().map(|p| &p.path) != ast.package.as_ref().map(|p| &p.path)
+            {
+                continue;
+            }
+            for d in &other_ast.decls {
+                if let Decl::Class(c) = d {
+                    let simple = interner.resolve(c.name).to_string();
+                    file_imports
+                        .entry(simple.clone())
+                        .or_insert_with(|| format!("{pkg_prefix}{simple}"));
+                }
+            }
+        }
+        let imports = &file_imports;
+
         for decl in &ast.decls {
             match decl {
                 Decl::Fun(f) => {
@@ -271,6 +393,7 @@ pub fn gather_declarations(
                         f.return_ty.as_ref(),
                         f.receiver_ty.as_ref(),
                         interner,
+                        imports,
                     );
                     // @Composable functions get $composer/$changed params added
                     // by the compose transform. Include them in the descriptor
@@ -365,7 +488,7 @@ pub fn gather_declarations(
                                 .return_ty
                                 .as_ref()
                                 .map(|tr| type_ref_to_ty(tr, interner))
-                                .unwrap_or(Ty::Unit);
+                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
                         .collect();
@@ -402,7 +525,7 @@ pub fn gather_declarations(
                                 .return_ty
                                 .as_ref()
                                 .map(|tr| type_ref_to_ty(tr, interner))
-                                .unwrap_or(Ty::Unit);
+                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
                         .collect();
@@ -450,7 +573,7 @@ pub fn gather_declarations(
                                 .return_ty
                                 .as_ref()
                                 .map(|tr| type_ref_to_ty(tr, interner))
-                                .unwrap_or(Ty::Unit);
+                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
                         .collect();

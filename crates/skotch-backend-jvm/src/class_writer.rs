@@ -3138,10 +3138,23 @@ fn emit_method_body(
                 // emit `return` (void) — the JVM verifier rejects it. Push
                 // a default value and use the typed return instruction.
                 // Lambda invoke methods must return Object even when the
-                // Kotlin return type is Unit.
+                // Kotlin return type is Unit — EXCEPT for the typed
+                // composable invoke (after Function0→Function2 bump), whose
+                // descriptor is `(Composer, int)V`. That method's params
+                // include a Composer slot, distinguishing it from the
+                // bridge invoke(Object, Object)Object.
+                let is_composable_typed_invoke = func.name == "invoke"
+                    && class_name.contains("$Lambda$")
+                    && func.params.iter().any(|p| {
+                        matches!(
+                            func.locals.get(p.0 as usize),
+                            Some(Ty::Class(c)) if c == "androidx/compose/runtime/Composer"
+                        )
+                    });
                 let effective_ty = if func.name == "invoke"
                     && class_name.contains("$Lambda$")
                     && func.return_ty == Ty::Unit
+                    && !is_composable_typed_invoke
                 {
                     &Ty::Any // JVM invoke returns Object
                 } else {
@@ -6073,10 +6086,23 @@ fn emit_composable_method(
     code.push(0xC6); // ifnull L_pop
     code.write_i16::<BigEndian>(0).unwrap();
     // Else: build the restart lambda via invokedynamic and call updateScope.
+    // Push captures in order: user params first, then $changed. The
+    // bootstrap descriptor at `register_compose_restart_indy` matches
+    // this layout. Without the user-param captures, the synthesized
+    // restart lambda can't reconstruct the outer call's full arg list
+    // and d8 rejects the class (instruction-index-N stack-map error).
+    let n_user_for_captures = func.params.len().saturating_sub(2);
+    // Per-slot load: aload for reference types, iload for booleans/ints,
+    // lload/fload/dload for wider primitives. Using aload for an int
+    // slot makes d8 reject the class with "Expected object at local
+    // index N, but was primitive int" (JetChat's `messageFormatter`
+    // captures `primary: Boolean` and was triggering this).
+    for slot_idx in 0..n_user_for_captures {
+        let pid = func.params[slot_idx];
+        let ty = &func.locals[pid.0 as usize];
+        emit_typed_load(&mut code, ty, slot_idx as u8);
+    }
     emit_iload(&mut code, changed_slot);
-    // invokedynamic — needs bootstrap method registration first. Use a
-    // placeholder index (0) for now; we'll resolve via cp.invoke_dynamic
-    // once the bootstrap method is registered.
     let lambda_name = format!("{}$lambda${}", func.name, 0);
     let restart_indy_idx =
         register_compose_restart_indy(cp, class_name, &lambda_name, descriptor.as_str(), func);
@@ -6111,9 +6137,25 @@ fn emit_composable_method(
     patch(&mut code, goto_ret_pos, l_ret_offset);
 
     // ── Assemble Code attribute ──
-    let max_stack: u16 = 4;
+    // For multi-arg @Composables, the stack peak is bounded by the
+    // restart-scope invokedynamic site: we push n_user user-param
+    // captures + the iload($changed) before the indy, so the peak is
+    // at least n_user + 1 (plus the Composer for the ScopeUpdateScope
+    // receiver). Use n_user + 2 to leave headroom for the dup before
+    // the ifnull branch and the rest of the boilerplate.
+    let n_user = func.params.len().saturating_sub(2);
+    let max_stack: u16 = (n_user as u16 + 4).max(4);
     let max_locals: u16 = changed_slot as u16 + 1;
     let smt_name_idx = cp.utf8("StackMapTable");
+    // Build the method-entry verification-type-info list — one VTI per
+    // method param slot. The compose transform appends Composer + Int
+    // after the user params, so the last two entries are always
+    // Composer + int.
+    let mut method_locals: Vec<Vec<u8>> = Vec::new();
+    for &p in &func.params {
+        let ty = &func.locals[p.0 as usize];
+        method_locals.push(vti_for_ty(ty, cp));
+    }
     let smt_entries = build_composable_empty_smt(
         ifeq_pos,
         goto_after_zero_pos,
@@ -6127,6 +6169,7 @@ fn emit_composable_method(
         composer_slot,
         changed_slot,
         cp,
+        &method_locals,
     );
 
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 64);
@@ -6172,23 +6215,26 @@ fn emit_composable_restart_lambda(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
-    // For 580 (no user params), the lambda has signature
-    //   (I, Composer, I) -> Lkotlin/Unit;
-    // and body:
-    //   aload_1               # composer (slot 1)
-    //   iload_0               # original $changed (slot 0)
-    //   iconst_1
-    //   ior
-    //   invokestatic updateChangedFlags(I)I
-    //   invokestatic Greeting(Composer, I)V
-    //   getstatic Unit.INSTANCE
-    //   areturn
-    let n_user = outer_func.params.len().saturating_sub(2);
-    let _ = n_user;
+    // Lambda descriptor: `($user_params..., I, Composer, I) -> Unit`.
+    // The first N-2 slots are captures (the outer @Composable's user
+    // params); slot N-2 = original `$changed`; slot N-1 = Composer;
+    // slot N = `$force`. Without including the user params, the body
+    // can't reconstruct the outer call's full arg list and d8
+    // rejects the class. (`outer_func.params` already has $composer +
+    // $changed appended by the compose transform, so the user params
+    // are everything except the last two.)
+    let n_total = outer_func.params.len();
+    let n_user = n_total.saturating_sub(2);
 
-    // CP entries.
+    // Build the lambda descriptor with the user-param captures up front.
+    let mut lambda_desc = String::from("(");
+    for &p in outer_func.params.iter().take(n_user) {
+        let ty = &outer_func.locals[p.0 as usize];
+        lambda_desc.push_str(&jvm_param_type_string(ty));
+    }
+    lambda_desc.push_str("ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;");
+
     let lambda_name = format!("{}$lambda$0", outer_func.name);
-    let lambda_desc = "(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;".to_string();
     let name_idx = cp.utf8(&lambda_name);
     let desc_idx = cp.utf8(&lambda_desc);
     let mr_update_flags = cp.methodref(
@@ -6200,23 +6246,46 @@ fn emit_composable_restart_lambda(
     let mr_outer = cp.methodref(class_name, &outer_func.name, &outer_desc);
     let fr_unit = cp.fieldref("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;");
 
-    // Body. Slot 0 = original $changed (int), slot 1 = Composer, slot 2 = $force (int).
-    let mut code: Vec<u8> = Vec::with_capacity(20);
-    code.push(0x2B); // aload_1 (composer)
-    code.push(0x1A); // iload_0 ($changed)
+    // Slot layout:
+    //   0 .. n_user-1     captured user params (each 1 wide — refs)
+    //   n_user            original `$changed` (int)
+    //   n_user + 1        Composer
+    //   n_user + 2        `$force` (int, unused)
+    // (We assume all user params are reference-typed at the MIR
+    //  level — composables don't take Long/Double param slots in
+    //  practice, and the compose transform doesn't widen them.)
+    let mut code: Vec<u8> = Vec::with_capacity(20 + 2 * n_user);
+    // Push each captured user param, in order. Use the right load
+    // instruction per slot type — primitives need `iload`/`lload`/etc.,
+    // not `aload`. (Matches the per-slot load already in the outer
+    // composable's invokedynamic capture push.)
+    for slot in 0..n_user {
+        let pid = outer_func.params[slot];
+        let ty = &outer_func.locals[pid.0 as usize];
+        emit_typed_load(&mut code, ty, slot as u8);
+    }
+    // Push composer (slot n_user + 1).
+    emit_aload(&mut code, (n_user + 1) as u8);
+    // Compute updated $changed: iload <slot n_user>; iconst_1; ior;
+    // invokestatic updateChangedFlags(I)I.
+    emit_iload(&mut code, n_user as u8);
     code.push(0x04); // iconst_1
     code.push(0x80); // ior
     code.push(0xB8); // invokestatic updateChangedFlags(I)I
     code.write_u16::<BigEndian>(mr_update_flags).unwrap();
-    code.push(0xB8); // invokestatic outer(Composer, I)V
+    // Invoke outer with (user_params..., composer, updated_changed).
+    code.push(0xB8);
     code.write_u16::<BigEndian>(mr_outer).unwrap();
     code.push(0xB2); // getstatic Unit.INSTANCE
     code.write_u16::<BigEndian>(fr_unit).unwrap();
     code.push(0xB0); // areturn
 
-    // Code attribute.
-    let max_stack: u16 = 3;
-    let max_locals: u16 = 3;
+    // Peak stack: n_user user-param pushes + composer + iload + iconst_1
+    // = n_user + 3. After ior we drop to n_user + 2; updateChangedFlags
+    // leaves the int on the stack; the final invokestatic pops all
+    // n_user + 2 args.
+    let max_stack: u16 = (n_user as u16) + 3;
+    let max_locals: u16 = (n_user as u16) + 3;
     let mut code_attr: Vec<u8> = Vec::with_capacity(code.len() + 12);
     code_attr.write_u16::<BigEndian>(max_stack).unwrap();
     code_attr.write_u16::<BigEndian>(max_locals).unwrap();
@@ -6225,8 +6294,6 @@ fn emit_composable_restart_lambda(
     code_attr.write_u16::<BigEndian>(0).unwrap(); // exception table
     code_attr.write_u16::<BigEndian>(0).unwrap(); // attributes_count
 
-    // Method blob. kotlinc sets ACC_PRIVATE|ACC_STATIC|ACC_FINAL — no
-    // ACC_SYNTHETIC, even though the method is plugin-synthesized.
     let access = ACC_PRIVATE | ACC_STATIC | ACC_FINAL;
     let mut method: Vec<u8> = Vec::new();
     method.write_u16::<BigEndian>(access).unwrap();
@@ -6293,13 +6360,22 @@ fn register_compose_restart_indy(
     // inconsistent").
     let mt_inst =
         cp.method_type("(Landroidx/compose/runtime/Composer;Ljava/lang/Integer;)Lkotlin/Unit;");
-    // Implementation handle: invokestatic <class>.<lambda_name>
-    // descriptor = `($main_user_params)I Composer int) Unit`. For 580
-    // (no user params), descriptor is `(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;`.
+    // Implementation handle: invokestatic <class>.<lambda_name>.
+    // Descriptor includes captures (the outer @Composable's user
+    // params) up front, then the SAM extra args. For a 5-user-param
+    // @Composable, the descriptor is
+    // `(P0..P4, I, Composer, I) -> Unit`.
     let n_user = func.params.len().saturating_sub(2);
-    let mut lambda_desc = String::from("(I");
-    let _ = n_user;
-    lambda_desc.push_str("Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;");
+    let mut lambda_desc = String::from("(");
+    let mut callsite_capture_desc = String::from("(");
+    for &p in func.params.iter().take(n_user) {
+        let ty = &func.locals[p.0 as usize];
+        let s = jvm_param_type_string(ty);
+        lambda_desc.push_str(&s);
+        callsite_capture_desc.push_str(&s);
+    }
+    lambda_desc.push_str("ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;");
+    callsite_capture_desc.push_str("I)Lkotlin/jvm/functions/Function2;");
     let _ = main_descriptor;
     let lambda_mref = cp.methodref(class_name, lambda_name, &lambda_desc);
     let mh_impl = cp.method_handle(6, lambda_mref);
@@ -6311,10 +6387,10 @@ fn register_compose_restart_indy(
         mt_inst,
     ));
 
-    // Call-site name + descriptor. For lambda metafactory, the name is
-    // the SAM method name ("invoke" for Function2) and the descriptor
-    // describes the (captures) -> SAM-interface signature.
-    let nt = cp.name_and_type("invoke", "(I)Lkotlin/jvm/functions/Function2;");
+    // Call-site descriptor: the captures (user params + $changed) →
+    // Function2. The outer @Composable body must push these onto the
+    // stack before the `invokedynamic`.
+    let nt = cp.name_and_type("invoke", &callsite_capture_desc);
     cp.invoke_dynamic(bsm_idx, nt)
 }
 
@@ -6343,6 +6419,46 @@ fn skotch_backend_jvm_bsm(
 ///
 /// This is hand-rolled since the body is fixed; future iterations will
 /// need a real walker once user-body bytecode joins the picture.
+/// Encode a `Ty` as a JVM verification-type-info (VTI) byte sequence —
+/// the format expected by `full_frame` entries in `StackMapTable`. Used
+/// by the @Composable body emitter to describe every method-entry
+/// local in the L1 frame (which is reached via `goto` after a slot-
+/// setting branch).
+fn vti_for_ty(ty: &Ty, cp: &mut ConstantPool) -> Vec<u8> {
+    match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => vec![1u8], // Integer_variable_info
+        Ty::Float => vec![2u8],
+        Ty::Long => vec![4u8],
+        Ty::Double => vec![3u8],
+        Ty::Class(name) => {
+            let idx = cp.class(name);
+            let mut v = vec![7u8];
+            v.write_u16::<BigEndian>(idx).unwrap();
+            v
+        }
+        Ty::Function {
+            params,
+            is_composable,
+            is_suspend,
+            ..
+        } => {
+            let n =
+                params.len() + if *is_composable { 2 } else { 0 } + if *is_suspend { 1 } else { 0 };
+            let name = format!("kotlin/jvm/functions/Function{};", n);
+            let idx = cp.class(name.trim_end_matches(';'));
+            let mut v = vec![7u8];
+            v.write_u16::<BigEndian>(idx).unwrap();
+            v
+        }
+        _ => {
+            let idx = cp.class("java/lang/Object");
+            let mut v = vec![7u8];
+            v.write_u16::<BigEndian>(idx).unwrap();
+            v
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_composable_empty_smt(
     _ifeq_pos: usize,
@@ -6357,11 +6473,17 @@ fn build_composable_empty_smt(
     _composer_slot: u8,
     _changed_slot: u8,
     cp: &mut ConstantPool,
+    method_locals: &[Vec<u8>],
 ) -> Vec<u8> {
-    // We'll emit five frames using compact `same_locals_1_stack_item`
-    // and `same` shapes. The previous frame is the implicit method-entry
-    // frame, which has locals = [Composer, int] (no extras for the
-    // empty-body case) and empty stack.
+    // `method_locals` is the verification-type-info encoding for each
+    // method-entry local in order (user params + Composer + int). For
+    // a no-user-param @Composable, it's `[Composer, int]`. For
+    // JetchatDrawer (5 user params), it's `[DrawerState, String,
+    // Function1, Function1, Function2, Composer, int]`.
+    //
+    // The L1 full_frame must report ALL method-entry locals; the
+    // previous code hard-coded only `[Composer, int]` and d8 rejected
+    // multi-arg @Composable classes with a stack-map mismatch.
     let cls_composer_vti = {
         let idx = cp.class("androidx/compose/runtime/Composer");
         let mut v = vec![7u8];
@@ -6409,15 +6531,15 @@ fn build_composable_empty_smt(
     // shouldExecute receiver. (we haven't pushed the bool yet)
     emit_slss(&mut out, &mut prev, l0_offset, &cls_composer_vti);
     // L1: target of `goto` after the iconst_1 branch — stack has
-    // [Composer, int] (the changed_nonzero bool, encoded as int).
+    // [Composer, int]. Locals: all method-entry locals.
     out.push(255); // full_frame
-                   // delta
     let delta1 = (l1_offset as i32) - prev - 1;
     out.write_u16::<BigEndian>(delta1.max(0) as u16).unwrap();
-    // num locals = 2 (Composer, int)
-    out.write_u16::<BigEndian>(2).unwrap();
-    out.extend_from_slice(&cls_composer_vti);
-    out.extend_from_slice(&int_vti);
+    out.write_u16::<BigEndian>(method_locals.len() as u16)
+        .unwrap();
+    for vti in method_locals {
+        out.extend_from_slice(vti);
+    }
     // num stack = 2 (Composer, int)
     out.write_u16::<BigEndian>(2).unwrap();
     out.extend_from_slice(&cls_composer_vti);
@@ -11883,6 +12005,23 @@ fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
 fn jvm_type_string(ty: &Ty) -> String {
     match ty {
         Ty::Class(name) => format!("L{name};"),
+        // Function types: `(N) -> R` → `Function{N}`. `@Composable
+        // () -> R` → `Function{N+2}` (Composer + Int). `suspend`
+        // adds +1 for the Continuation. Without preserving these
+        // arity bumps, a function whose param is declared
+        // `content: @Composable () -> Unit` ends up with
+        // `Function0` in its JVM descriptor and the call site fails
+        // a `checkcast Function2` (or the inverse) at runtime.
+        Ty::Function {
+            params,
+            is_composable,
+            is_suspend,
+            ..
+        } => {
+            let n =
+                params.len() + if *is_composable { 2 } else { 0 } + if *is_suspend { 1 } else { 0 };
+            format!("Lkotlin/jvm/functions/Function{};", n)
+        }
         // Nullable reference types use the inner reference's descriptor —
         // kotlinc emits `String?` as `Ljava/lang/String;`, `Foo?` as `LFoo;`
         // — the JVM allows `null` for any reference type. Nullable primitives
@@ -11899,6 +12038,17 @@ fn jvm_type_string(ty: &Ty) -> String {
             Ty::Byte => "Ljava/lang/Byte;".to_string(),
             Ty::Short => "Ljava/lang/Short;".to_string(),
             Ty::Char => "Ljava/lang/Character;".to_string(),
+            Ty::Function {
+                params,
+                is_composable,
+                is_suspend,
+                ..
+            } => {
+                let n = params.len()
+                    + if *is_composable { 2 } else { 0 }
+                    + if *is_suspend { 1 } else { 0 };
+                format!("Lkotlin/jvm/functions/Function{};", n)
+            }
             _ => "Ljava/lang/Object;".to_string(),
         },
         Ty::Nothing => "Ljava/lang/Void;".to_string(),

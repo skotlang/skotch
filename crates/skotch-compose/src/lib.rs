@@ -29,7 +29,9 @@
 //! It only affects functions annotated with `@Composable` (detected via
 //! `MirFunction.annotations`).
 
-use skotch_mir::{CallKind, FuncId, LocalId, MirFunction, MirModule, Rvalue, Stmt as MStmt};
+use skotch_mir::{
+    CallKind, FuncId, LocalId, MirConst, MirFunction, MirModule, Rvalue, Stmt as MStmt,
+};
 use skotch_types::Ty;
 
 /// Compute a stable group key for a composable function. kotlinc uses a
@@ -206,6 +208,34 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                 method.locals.push(Ty::Int);
                 method.params.push(changed_id);
                 method.param_names.push("$changed".to_string());
+
+                // The composable lambda's invoke returns Unit (void) — the
+                // bridge invoke(Object, Object)Object handles wrapping
+                // void into a kotlin/Unit.INSTANCE return. The MIR lowerer
+                // sized the method as Function0.invoke():Object so update
+                // the return_ty here. Body terminators that return null
+                // are rewritten to plain returns below.
+                method.return_ty = Ty::Unit;
+
+                // Rewrite any `ReturnValue(local)` terminators where the
+                // local is a Const(Null) into a plain `Return` so the body
+                // matches the now-void signature.
+                let null_locals: std::collections::HashSet<u32> = method
+                    .blocks
+                    .iter()
+                    .flat_map(|b| b.stmts.iter())
+                    .filter_map(|stmt| {
+                        let MStmt::Assign { dest, value } = stmt;
+                        matches!(value, Rvalue::Const(MirConst::Null)).then_some(dest.0)
+                    })
+                    .collect();
+                for block in &mut method.blocks {
+                    if let skotch_mir::Terminator::ReturnValue(lid) = &block.terminator {
+                        if null_locals.contains(&lid.0) {
+                            block.terminator = skotch_mir::Terminator::Return;
+                        }
+                    }
+                }
 
                 // Thread the new composer/changed params through composable
                 // call sites inside the body. MIR lowering ran before these
@@ -487,18 +517,32 @@ fn patch_calls_in_function(
                             // Descriptor said position i is the Composer
                             // — use that authoritative answer.
                             Ty::Class("androidx/compose/runtime/Composer".to_string())
+                        } else if let Some(cp) = composer_pos {
+                            // Descriptor-driven: slots before the Composer
+                            // are user-default reference args (Modifier,
+                            // Function1, etc. — emit null). Slot cp+1 is
+                            // `$changed` Int. Slot cp+2 (if present) is
+                            // the `$default` mask Int. Without this,
+                            // user-default slots like the leading
+                            // `Modifier` of `DividerItem()` get filled
+                            // with `Int(0)` and the JVM verifier rejects
+                            // `iconst_0; checkcast Modifier`.
+                            if i < cp {
+                                Ty::Any
+                            } else if i == cp + 1 || i == cp + 2 {
+                                Ty::Int
+                            } else {
+                                Ty::Any
+                            }
                         } else {
-                            // Heuristic: $composer is second-from-last,
-                            // $changed (and optional $default) are Int.
+                            // No composer position from descriptor — fall
+                            // back to the simple "last is $changed, rest
+                            // are object" shape.
                             let is_last = missing.checked_sub(1) == Some(i);
                             let is_second_last = missing.checked_sub(2) == Some(i);
-                            let is_third_last = missing.checked_sub(3) == Some(i);
-                            if is_second_last && composer_pos.is_none() {
+                            if is_second_last {
                                 Ty::Class("androidx/compose/runtime/Composer".to_string())
-                            } else if is_last || is_second_last || is_third_last {
-                                // With a `$default` present (composer_pos
-                                // known), the last 1–3 positions are all
-                                // Int (`$changed` and possibly `$default`).
+                            } else if is_last {
                                 Ty::Int
                             } else {
                                 Ty::Any

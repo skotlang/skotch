@@ -345,6 +345,12 @@ pub struct TypeRef {
     /// `suspend () -> String`.  Non-function TypeRefs always have
     /// this set to `false`.
     pub is_suspend: bool,
+    /// True when this function type carries an `@Composable` annotation
+    /// in source, e.g. `content: @Composable () -> Unit`. On the JVM
+    /// the arity is bumped by +2 for the implicit `Composer` and
+    /// `Int` ($changed) parameters. Non-function TypeRefs always have
+    /// this set to `false`.
+    pub is_composable: bool,
     /// True for extension function types: `StringBuilder.() -> Unit`.
     /// The first element of `func_params` is the receiver type.
     pub has_receiver: bool,

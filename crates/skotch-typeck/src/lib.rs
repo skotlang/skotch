@@ -494,6 +494,7 @@ impl<'a> TypeChecker<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                is_composable: false,
                 has_receiver: false,
                 span: tr.span,
             });
@@ -501,6 +502,7 @@ impl<'a> TypeChecker<'a> {
                 params,
                 ret: Box::new(ret),
                 is_suspend: tr.is_suspend,
+                is_composable: tr.is_composable,
             };
         }
         let raw_name = self.interner.resolve(tr.name).to_string();
@@ -1190,6 +1192,7 @@ impl<'a> TypeChecker<'a> {
                     params: param_tys,
                     ret: Box::new(ret),
                     is_suspend: false,
+                    is_composable: false,
                 }
             }
 

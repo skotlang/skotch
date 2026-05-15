@@ -1642,6 +1642,7 @@ impl<'a> Parser<'a> {
                     func_params: None,
                     type_args: Vec::new(),
                     is_suspend: false,
+                    is_composable: false,
                     has_receiver: false,
                     span: recv_span,
                 });
@@ -1764,6 +1765,7 @@ impl<'a> Parser<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                is_composable: false,
                 has_receiver: false,
                 span: name_span,
             }
@@ -1790,18 +1792,33 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let span = self.peek_span();
 
-        // Skip annotations on types: `@Composable () -> Unit`
+        // Scan annotations on types: `@Composable () -> Unit`.
         // Compose uses annotations on function types extensively.
+        // Track whether `@Composable` (qualified or not) appears so the
+        // resulting TypeRef carries `is_composable = true`. The JVM
+        // descriptor for a `@Composable () -> R` function-type param
+        // is `Function2<Composer, Int, R>`, not `Function0<R>`, and
+        // without this the surrounding `@Composable` function gets
+        // emitted with the wrong descriptor (e.g. `JetchatDrawer(...
+        // Function0, Composer, I)V` instead of `(...Function2,
+        // Composer, I)V` — Compose runtime then ClassCastExceptions
+        // the trailing content lambda).
+        let mut saw_composable = false;
         while self.peek_kind() == TokenKind::At {
             self.bump(); // consume '@'
                          // Skip annotation name (possibly qualified: @a.b.Composable)
+            let mut last_name: Option<String> = None;
             while self.peek_kind() == TokenKind::Ident || self.peek_kind().is_keyword() {
+                last_name = Some(self.lexeme_str(self.pos).to_string());
                 self.bump();
                 if self.peek_kind() == TokenKind::Dot {
                     self.bump();
                 } else {
                     break;
                 }
+            }
+            if last_name.as_deref() == Some("Composable") {
+                saw_composable = true;
             }
             // Skip annotation arguments if present, but NOT if the `(`
             // starts a function type `() -> Unit`. Detect by checking if
@@ -1861,6 +1878,7 @@ impl<'a> Parser<'a> {
                     func_params: Some(param_types),
                     type_args: Vec::new(),
                     is_suspend: is_suspend_type,
+                    is_composable: saw_composable,
                     has_receiver: false,
                     span: span.merge(end),
                 };
@@ -1928,6 +1946,7 @@ impl<'a> Parser<'a> {
                 func_params: None,
                 type_args: Vec::new(),
                 is_suspend: false,
+                is_composable: false,
                 has_receiver: false,
                 span,
             };
@@ -1939,6 +1958,7 @@ impl<'a> Parser<'a> {
                 func_params: Some(all_params),
                 type_args: Vec::new(),
                 is_suspend: false,
+                is_composable: saw_composable,
                 has_receiver: true,
                 span: span.merge(end),
             };
@@ -1963,6 +1983,7 @@ impl<'a> Parser<'a> {
                         func_params: None,
                         type_args: Vec::new(),
                         is_suspend: false,
+                        is_composable: false,
                         has_receiver: false,
                         span: star_span,
                     });
@@ -1997,6 +2018,7 @@ impl<'a> Parser<'a> {
             func_params: None,
             type_args,
             is_suspend: false,
+            is_composable: false,
             has_receiver: false,
             span: span.merge(end),
         }
@@ -2106,6 +2128,7 @@ impl<'a> Parser<'a> {
             func_params: None,
             type_args: Vec::new(),
             is_suspend: false,
+            is_composable: false,
             has_receiver: false,
             span: recv_span,
         };
@@ -3475,6 +3498,7 @@ impl<'a> Parser<'a> {
                                     func_params: None,
                                     type_args: Vec::new(),
                                     is_suspend: false,
+                                    is_composable: false,
                                     has_receiver: false,
                                     span: fn_span,
                                 },
@@ -3637,6 +3661,7 @@ impl<'a> Parser<'a> {
                     func_params: None,
                     type_args: Vec::new(),
                     is_suspend: false,
+                    is_composable: false,
                     has_receiver: false,
                     span: fn_span,
                 };
@@ -4110,6 +4135,7 @@ impl<'a> Parser<'a> {
                         func_params: None,
                         type_args: Vec::new(),
                         is_suspend: false,
+                        is_composable: false,
                         has_receiver: false,
                         span: start,
                     },
