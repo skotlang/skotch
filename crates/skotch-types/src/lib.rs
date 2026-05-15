@@ -83,6 +83,12 @@ pub enum Ty {
         ret: Box<Ty>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         is_suspend: bool,
+        /// True when the source-level function type carries an
+        /// `@Composable` annotation. The JVM descriptor for such a
+        /// type is `Function{N+2}<...Composer, Int, R>` instead of
+        /// `Function{N}<..., R>`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        is_composable: bool,
     },
     /// Sentinel emitted when type-checking fails for an expression. The
     /// downstream pass should propagate it without complaining.

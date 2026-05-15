@@ -151,10 +151,20 @@ pub fn lookup_method_descriptor(
     // Previously this re-opened every JAR in CLASSPATH on every call, which
     // made jetchat-scale builds stall (~129 JARs × thousands of method
     // lookups during MIR-lower = millions of ZIP opens).
+    //
+    // The match also accepts `<name>-XXXXXXX` (Kotlin inline-class name
+    // mangling). E.g. `Measurable.measure(Constraints)Placeable` is
+    // emitted by kotlinc as `measure-BRTryo0(J)Placeable` because
+    // `Constraints` is a value class. Skotch's source-level lookup uses
+    // the unmangled `measure`; without the prefix fallback the lookup
+    // returns None and the call site falls back to a `()V` descriptor,
+    // breaking everything that consumes the return value (like
+    // `textPlaceable = measurable.measure(constraints)` in JetChat's
+    // BaselineHeightModifier).
     if let Some(ci) = cached_class_lookup(class_path) {
         let mut best: Option<String> = None;
         for m in &ci.methods {
-            if m.name == method_name
+            if (m.name == method_name || matches_mangled(&m.name, method_name))
                 && count_descriptor_params(&m.descriptor) == param_count
                 && (best.is_none() || has_object_params(&m.descriptor))
             {
@@ -169,7 +179,7 @@ pub fn lookup_method_descriptor(
     if let Ok(ci) = load_jdk_class(class_path) {
         let mut best: Option<&str> = None;
         for m in &ci.methods {
-            if m.name == method_name
+            if (m.name == method_name || matches_mangled(&m.name, method_name))
                 && count_descriptor_params(&m.descriptor) == param_count
                 && (best.is_none() || has_object_params(&m.descriptor))
             {
@@ -181,6 +191,20 @@ pub fn lookup_method_descriptor(
         }
     }
     None
+}
+
+/// Whether `mangled` looks like a kotlinc-mangled form of `unmangled`:
+/// `unmangled-XXXXXXX` where `XXXXXXX` is a 7-char alphanumeric hash.
+/// Used to match `measure-BRTryo0` against the source-level `measure`.
+fn matches_mangled(mangled: &str, unmangled: &str) -> bool {
+    if let Some(rest) = mangled
+        .strip_prefix(unmangled)
+        .and_then(|r| r.strip_prefix('-'))
+    {
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric())
+    } else {
+        false
+    }
 }
 
 /// Look up the descriptor of a static field on a class. Used by MIR
