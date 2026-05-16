@@ -1,0 +1,41 @@
+dex_version   035
+strings       14
+types         7
+methods       3
+classes       1
+
+--- strings ---
+  "C"
+  "CI"
+  "I"
+  "LC"
+  "LInputKt;"
+  "LLL"
+  "Ljava/lang/Character;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "boxChar"
+  "charAt"
+  "first"
+  "input.kt"
+
+--- types ---
+  C
+  I
+  LInputKt;
+  Ljava/lang/Character;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+
+--- methods ---
+  LInputKt;.first(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;
+  Ljava/lang/String;.charAt(I)C
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxChar(C)Ljava/lang/Character;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       first(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=5 ins=2 outs=2 insns=10
