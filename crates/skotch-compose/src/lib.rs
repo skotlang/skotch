@@ -914,6 +914,7 @@ mod tests {
             is_private: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
+            local_generic_args: Default::default(),
         }
     }
 

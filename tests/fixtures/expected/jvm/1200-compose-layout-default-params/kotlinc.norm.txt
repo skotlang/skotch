@@ -1,0 +1,39 @@
+class_version major=61 minor=0
+this_class    test/InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 new Class(test/Receiver)
+    0003 dup
+    0004 invokespecial Method(test/Receiver.<init>:()V)
+    0007 invokestatic Method(test/InputKt.useReceiver:(Ltest/Receiver;)Ljava/lang/String;)
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 swap
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(test/InputKt.main:()V)
+    0003 return
+method        useReceiver (Ltest/Receiver;)Ljava/lang/String; 0x0019
+  code        max_stack=7 max_locals=1
+    0000 aload_0
+    0001 ldc "r"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 bipush 100
+    0009 bipush 50
+    0011 aconst_null
+    0012 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function0;)
+    0017 iconst_4
+    0018 aconst_null
+    0019 invokestatic Method(test/Receiver.layout$default:(Ltest/Receiver;IILjava/lang/String;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Ljava/lang/String;)
+    0022 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        useReceiver$lambda$0 ()Lkotlin/Unit; 0x001A
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0003 areturn
+class_attr    BootstrapMethods (12 bytes)

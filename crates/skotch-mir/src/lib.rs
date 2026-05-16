@@ -462,6 +462,15 @@ pub struct MirFunction {
     /// instruction line. Set during MIR lowering by inspecting the AST.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub needs_leading_nop: bool,
+    /// Per-local generic-arg hint: maps a local's index to the type
+    /// arguments of its declared type. E.g. for `val xs: List<Measurable>`
+    /// at local 3, `local_generic_args[3] = [Ty::Class("Measurable")]`.
+    /// Used at index access and method-call sites to recover element
+    /// types that would otherwise erase to `Ty::Any` on the JVM. Sparse
+    /// (only populated for locals where the source TypeRef had type
+    /// args), so it doesn't bloat memory on uses without generics.
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
+    pub local_generic_args: rustc_hash::FxHashMap<u32, Vec<skotch_types::Ty>>,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either
@@ -846,6 +855,13 @@ pub struct MirModule {
     /// (jvm_name, kind_str, is_data_class). Used for constructor calls.
     #[serde(skip)]
     pub cross_file_classes: rustc_hash::FxHashMap<String, (String, String, bool)>,
+    /// Cross-file top-level val declarations. Maps val name →
+    /// (owner_class, ty). Top-level vals in Kotlin compile to a static
+    /// field plus a static `get<Name>()` accessor on the file's wrapper
+    /// class. Call sites that reference these (e.g. `unreadMessages.toList()`)
+    /// need to invoke the accessor before chaining the method call.
+    #[serde(skip)]
+    pub cross_file_vals: rustc_hash::FxHashMap<String, (String, skotch_types::Ty)>,
     /// Top-level `const val` declarations to be emitted as static final
     /// fields in the wrapper class. Each tuple is `(name, ty, value)`.
     /// kotlinc emits these as `public static final` fields with a

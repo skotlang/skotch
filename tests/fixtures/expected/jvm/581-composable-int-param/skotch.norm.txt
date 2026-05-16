@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        Counter (ILandroidx/compose/runtime/Composer;I)V 0x0019
-  code        max_stack=4 max_locals=3
+  code        max_stack=5 max_locals=3
     0000 aload_1
     0001 ldc int(-66112573)
     0003 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;)
@@ -24,24 +24,26 @@ method        Counter (ILandroidx/compose/runtime/Composer;I)V 0x0019
     0036 aload_1
     0037 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;)
     0042 dup
-    0043 ifnull 60
-    0046 iload_2
-    0047 invokedynamic InvokeDynamic(invoke:(I)Lkotlin/jvm/functions/Function2;)
-    0052 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
-    0057 goto 61
-    0060 pop
-    0061 return
-    sub_attr  StackMapTable (27 bytes)
+    0043 ifnull 61
+    0046 iload_0
+    0047 iload_2
+    0048 invokedynamic InvokeDynamic(invoke:(II)Lkotlin/jvm/functions/Function2;)
+    0053 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
+    0058 goto 62
+    0061 pop
+    0062 return
+    sub_attr  StackMapTable (28 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (11 bytes)
-method        Counter$lambda$0 (ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
-  code        max_stack=3 max_locals=3
-    0000 aload_1
-    0001 iload_0
-    0002 iconst_1
-    0003 ior
-    0004 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
-    0007 invokestatic Method(InputKt.Counter:(ILandroidx/compose/runtime/Composer;I)V)
-    0010 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0013 areturn
+method        Counter$lambda$0 (IILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
+  code        max_stack=4 max_locals=4
+    0000 iload_0
+    0001 aload_2
+    0002 iload_1
+    0003 iconst_1
+    0004 ior
+    0005 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
+    0008 invokestatic Method(InputKt.Counter:(ILandroidx/compose/runtime/Composer;I)V)
+    0011 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0014 areturn
 class_attr    BootstrapMethods (12 bytes)

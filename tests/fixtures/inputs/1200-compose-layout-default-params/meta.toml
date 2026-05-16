@@ -1,0 +1,4 @@
+name   = "1200-compose-layout-default-params"
+status = "supported"
+features = ["default-params"]
+reason = "Method call with default param: `r.layout(100, 50) { ... }` where the 4-param method has a defaulted arg in slot 3. Skotch must either dispatch via `layout$default(int, int, Object, Function0, int, Object)` or pad missing args. Without this, the call site emits a VirtualJava with mismatched arg count, and the enclosing function body gets stubbed. Mirrors the JetChat IconAndTextRow bug where `layout(w, h) { ... }` inside `Layout { ... }` causes AnimatingFabContentKt$Lambda$29 to be stubbed."

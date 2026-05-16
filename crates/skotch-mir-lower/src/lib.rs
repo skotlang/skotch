@@ -366,6 +366,58 @@ fn lookup_composable_descriptor(
     None
 }
 
+/// Parse a JVM method descriptor into a vec of per-slot "kind" characters:
+/// 'I' for int-shaped primitives, 'J' for long, 'F' for float, 'D' for double,
+/// 'L' for reference types (including arrays). Returns one entry per
+/// parameter slot. Used by call-site arg-padding to pick the right default
+/// value (0 for primitives, null for refs).
+fn parse_descriptor_param_chars(desc: &str) -> Vec<char> {
+    let inner = desc
+        .strip_prefix('(')
+        .and_then(|s| s.split(')').next())
+        .unwrap_or("");
+    let mut out = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'B' | 'C' | 'I' | 'S' | 'Z' => out.push('I'),
+            'J' => out.push('J'),
+            'F' => out.push('F'),
+            'D' => out.push('D'),
+            'L' => {
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                }
+                out.push('L');
+            }
+            '[' => {
+                // Array: skip the element descriptor entirely (including any nested L...;)
+                while let Some(&sc) = chars.peek() {
+                    if sc == '[' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(elem) = chars.next() {
+                    if elem == 'L' {
+                        for sc in chars.by_ref() {
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    }
+                }
+                out.push('L');
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
     match ty {
         Ty::Bool => "Z".to_string(),
@@ -978,6 +1030,7 @@ pub fn lower_file(
                 is_private: matches!(f.visibility, skotch_syntax::Visibility::Private),
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             });
             fn_pass1_idx += 1;
         }
@@ -1021,6 +1074,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1077,6 +1131,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_cont = stub.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
             stub.params.push(p_cont);
@@ -1115,6 +1170,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_ctx = stub.new_local(Ty::Class("kotlin/coroutines/CoroutineContext".to_string()));
             stub.params.push(p_ctx);
@@ -1157,6 +1213,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -1197,6 +1254,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_block = stub.new_local(Ty::Class("kotlin/jvm/functions/Function2".to_string()));
             stub.params.push(p_block);
@@ -1237,6 +1295,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1279,6 +1338,7 @@ pub fn lower_file(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let p_ms = stub.new_local(Ty::Long);
             stub.params.push(p_ms);
@@ -1484,6 +1544,7 @@ pub fn lower_file(
                         is_private: false,
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
                     }
                 };
                 let methods: Vec<MirFunction> = ext_class
@@ -1524,6 +1585,15 @@ pub fn lower_file(
                     ),
                 );
             }
+        }
+        // Top-level vals → cross_file_vals so `topLevelVal.someMethod()`
+        // resolves via the wrapper class's static getter rather than
+        // treating the val name as a class.
+        for (name, ext_val) in &pkg.vals {
+            module.cross_file_vals.insert(
+                name.clone(),
+                (ext_val.owner_class.clone(), ext_val.ty.clone()),
+            );
         }
     }
 
@@ -2033,6 +2103,7 @@ fn build_continuation_class(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     let this_local = ctor.new_local(Ty::Class(sm.continuation_class.clone()));
     let completion_local = ctor.new_local(Ty::Class("kotlin/coroutines/Continuation".to_string()));
@@ -2082,6 +2153,7 @@ fn build_continuation_class(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     let invoke_this = invoke.new_local(Ty::Class(sm.continuation_class.clone()));
     let result_param = invoke.new_local(Ty::Any);
@@ -2506,10 +2578,8 @@ fn scan_expr_for_ident(e: &skotch_syntax::Expr, target: Symbol, found: &mut bool
     }
     use skotch_syntax::Expr;
     match e {
-        Expr::Ident(name, _) => {
-            if *name == target {
-                *found = true;
-            }
+        Expr::Ident(name, _) if *name == target => {
+            *found = true;
         }
         Expr::Call { callee, args, .. } => {
             scan_expr_for_ident(callee, target, found);
@@ -2924,6 +2994,7 @@ impl FnBuilder {
             is_private: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
         };
         FnBuilder {
             mf,
@@ -5098,6 +5169,7 @@ fn lower_stmt(
                 is_private: true,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             });
             name_to_func.insert(f.name, FuncId(fn_idx as u32));
 
@@ -6073,6 +6145,30 @@ fn lower_expr(
                         class_name,
                         field_name: name_str,
                         descriptor,
+                    },
+                });
+                Some(dest)
+            } else if let Some((owner_class, val_ty)) =
+                module.cross_file_vals.get(interner.resolve(*name)).cloned()
+            {
+                // Cross-file top-level val: emit a call to the
+                // synthesized `get<Name>()` accessor on the owning
+                // wrapper class. kotlinc generates both a static field
+                // and a getter; we use the getter for parity.
+                let ident_str = interner.resolve(*name).to_string();
+                let getter_name =
+                    format!("get{}{}", ident_str[..1].to_uppercase(), &ident_str[1..]);
+                let descriptor = format!("(){}", jvm_type_string_for_ty(&val_ty));
+                let dest = fb.new_local(val_ty);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: owner_class,
+                            method_name: getter_name,
+                            descriptor,
+                        },
+                        args: vec![],
                     },
                 });
                 Some(dest)
@@ -9054,6 +9150,40 @@ fn lower_expr(
                             } else {
                                 jvm_class.to_string()
                             };
+                            // If the lookup's fallback returned a method whose
+                            // descriptor has more params than the call site
+                            // provided (Kotlin default-param dispatch where the
+                            // caller omitted defaulted args), pad `all_args`
+                            // with type-appropriate defaults based on the
+                            // descriptor's param chars. Without this, the JVM
+                            // backend's arg-count check rejects the call and
+                            // stubs the enclosing method body.
+                            let desc_params =
+                                skotch_classinfo::count_descriptor_params_pub(&descriptor);
+                            let provided = all_args.len() - 1; // skip receiver
+                            let mut all_args = all_args;
+                            if desc_params > provided {
+                                let param_descs = parse_descriptor_param_chars(&descriptor);
+                                for slot in provided..desc_params {
+                                    let slot_ch = param_descs.get(slot).copied().unwrap_or('L');
+                                    let (slot_ty, init): (Ty, Rvalue) = match slot_ch {
+                                        'I' | 'B' | 'C' | 'S' | 'Z' => {
+                                            (Ty::Int, Rvalue::Const(MirConst::Int(0)))
+                                        }
+                                        'J' => (Ty::Long, Rvalue::Const(MirConst::Long(0))),
+                                        'F' | 'D' => {
+                                            (Ty::Double, Rvalue::Const(MirConst::Double(0.0)))
+                                        }
+                                        _ => (Ty::Any, Rvalue::Const(MirConst::Null)),
+                                    };
+                                    let pad_local = fb.new_local(slot_ty);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: pad_local,
+                                        value: init,
+                                    });
+                                    all_args.push(pad_local);
+                                }
+                            }
                             let dest = fb.new_local(ret_ty);
                             fb.push_stmt(MStmt::Assign {
                                 dest,
@@ -9141,6 +9271,13 @@ fn lower_expr(
                     let mut found_on_interface = false;
                     let mut found_is_suspend = false;
                     let mut iface_name = String::new();
+                    // Capture param info for default-param dispatch: when the
+                    // call site provides fewer args than the method declares
+                    // and the missing slots have defaults, we need to pad
+                    // args and route to the `name$default(...)` synthetic.
+                    let mut found_param_count: usize = 0;
+                    let mut found_param_defaults: Vec<Option<MirConst>> = Vec::new();
+                    let mut found_param_types: Vec<Ty> = Vec::new();
                     let mut search = Some(class_name.clone());
                     'outer: while let Some(ref cname) = search {
                         if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
@@ -9148,6 +9285,23 @@ fn lower_expr(
                             {
                                 return_ty = m.return_ty.clone();
                                 found_is_suspend = m.is_suspend;
+                                // For class methods, params[0] is `this` (the
+                                // receiver). Skip it to align with the call
+                                // site's "args excluding receiver" count.
+                                // Class methods: params[0]=this, params[1..]=user.
+                                // param_defaults is indexed by user position
+                                // (does NOT include `this`).
+                                let user_param_start = if m.params.is_empty() { 0 } else { 1 };
+                                found_param_count = m.params.len().saturating_sub(user_param_start);
+                                found_param_defaults = m.param_defaults.clone();
+                                found_param_types = m
+                                    .params
+                                    .iter()
+                                    .skip(user_param_start)
+                                    .map(|lid| {
+                                        m.locals.get(lid.0 as usize).cloned().unwrap_or(Ty::Any)
+                                    })
+                                    .collect();
                                 break;
                             }
                             // Search implemented interfaces.
@@ -9303,6 +9457,183 @@ fn lower_expr(
                                     method_name: "invoke".to_string(),
                                 },
                                 args: invoke_args,
+                            },
+                        });
+                        return Some(dest);
+                    } else if found_param_count > (all_args.len() - 1)
+                        && found_param_defaults.iter().any(|d| d.is_some())
+                    {
+                        // Default-arg dispatch for user-class virtual method.
+                        // Caller provided fewer args than the method declares
+                        // AND the missing slots have defaults — pad with
+                        // typed default values, set the $default mask, and
+                        // emit a synthetic StaticJava call to
+                        // `Class.method$default(receiver, args..., mask, marker)`.
+                        // This mirrors what kotlinc generates and what the
+                        // JVM backend already handles for top-level
+                        // default-arg dispatch.
+                        let provided = all_args.len() - 1;
+                        // Trailing-lambda placement: when the user's last arg
+                        // is a lambda (Function-typed) AND the method's last
+                        // param is also Function-typed BUT a later position
+                        // than where the lambda would land positionally,
+                        // shift the lambda to the last position and default
+                        // the params between. This matches Kotlin's
+                        // `r.layout(w, h) { ... }` desugaring where the
+                        // trailing block goes to the final Function param.
+                        let is_fn_ty = |t: &Ty| {
+                            matches!(t, Ty::Function { .. })
+                                || matches!(t, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
+                                    || n.contains("$Lambda$"))
+                        };
+                        let user_arg_tys: Vec<Ty> = all_args
+                            .iter()
+                            .skip(1)
+                            .map(|a| fb.mf.locals[a.0 as usize].clone())
+                            .collect();
+                        let last_user_is_fn = user_arg_tys.last().map(is_fn_ty).unwrap_or(false);
+                        let last_param_is_fn =
+                            found_param_types.last().map(is_fn_ty).unwrap_or(false);
+                        let lambda_landed_at = provided.saturating_sub(1);
+                        let last_param_pos = found_param_count.saturating_sub(1);
+                        let mut all_args = all_args;
+                        if last_user_is_fn && last_param_is_fn && lambda_landed_at < last_param_pos
+                        {
+                            // Pop the trailing lambda — we'll re-append it
+                            // after the in-between defaults are padded.
+                            let _trailing = all_args.pop();
+                            if let Some(trailing) = _trailing {
+                                let new_provided = all_args.len() - 1;
+                                let mut default_mask: u32 = 0;
+                                for i in new_provided..last_param_pos {
+                                    let default_const = found_param_defaults
+                                        .get(i)
+                                        .cloned()
+                                        .flatten()
+                                        .unwrap_or_else(|| match found_param_types.get(i) {
+                                            Some(Ty::Int) | Some(Ty::Byte) | Some(Ty::Short)
+                                            | Some(Ty::Char) | Some(Ty::Bool) => MirConst::Int(0),
+                                            Some(Ty::Long) => MirConst::Long(0),
+                                            Some(Ty::Double) | Some(Ty::Float) => {
+                                                MirConst::Double(0.0)
+                                            }
+                                            _ => MirConst::Null,
+                                        });
+                                    let pad_ty = found_param_types
+                                        .get(i)
+                                        .cloned()
+                                        .unwrap_or_else(|| const_ty(&default_const));
+                                    let pad_local = fb.new_local(pad_ty);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: pad_local,
+                                        value: Rvalue::Const(default_const),
+                                    });
+                                    all_args.push(pad_local);
+                                    if i < 32 {
+                                        default_mask |= 1u32 << i;
+                                    }
+                                }
+                                all_args.push(trailing);
+                                // Emit using the computed mask. Inline the
+                                // tail of the static-default emit below.
+                                let mask_local = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: mask_local,
+                                    value: Rvalue::Const(MirConst::Int(default_mask as i32)),
+                                });
+                                all_args.push(mask_local);
+                                let marker_local = fb.new_local(Ty::Any);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: marker_local,
+                                    value: Rvalue::Const(MirConst::Null),
+                                });
+                                all_args.push(marker_local);
+                                let mut default_desc = String::from("(");
+                                default_desc.push_str(&jvm_type_string_for_ty(&Ty::Class(
+                                    class_name.clone(),
+                                )));
+                                for pty in &found_param_types {
+                                    default_desc.push_str(&jvm_type_string_for_ty(pty));
+                                }
+                                default_desc.push_str("ILjava/lang/Object;)");
+                                default_desc.push_str(&jvm_type_string_for_ty(&return_ty));
+                                let default_method = format!("{}$default", method_name_str);
+                                let dest = fb.new_local(return_ty.clone());
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::StaticJava {
+                                            class_name: class_name.clone(),
+                                            method_name: default_method,
+                                            descriptor: default_desc,
+                                        },
+                                        args: all_args.clone(),
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
+                        let mut default_mask: u32 = 0;
+                        for i in provided..found_param_count {
+                            let default_const = found_param_defaults
+                                .get(i)
+                                .cloned()
+                                .flatten()
+                                .unwrap_or_else(|| match found_param_types.get(i) {
+                                    Some(Ty::Int) | Some(Ty::Byte) | Some(Ty::Short)
+                                    | Some(Ty::Char) | Some(Ty::Bool) => MirConst::Int(0),
+                                    Some(Ty::Long) => MirConst::Long(0),
+                                    Some(Ty::Double) | Some(Ty::Float) => MirConst::Double(0.0),
+                                    _ => MirConst::Null,
+                                });
+                            let pad_ty = found_param_types
+                                .get(i)
+                                .cloned()
+                                .unwrap_or_else(|| const_ty(&default_const));
+                            let pad_local = fb.new_local(pad_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: pad_local,
+                                value: Rvalue::Const(default_const),
+                            });
+                            all_args.push(pad_local);
+                            if i < 32 {
+                                default_mask |= 1u32 << i;
+                            }
+                        }
+                        // Push mask + null marker as the last two args.
+                        let mask_local = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: mask_local,
+                            value: Rvalue::Const(MirConst::Int(default_mask as i32)),
+                        });
+                        all_args.push(mask_local);
+                        let marker_local = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: marker_local,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        all_args.push(marker_local);
+                        // Build the $default descriptor:
+                        //   (LReceiver;param0...paramN-1, I, Object)RET
+                        let mut default_desc = String::from("(");
+                        default_desc
+                            .push_str(&jvm_type_string_for_ty(&Ty::Class(class_name.clone())));
+                        for pty in &found_param_types {
+                            default_desc.push_str(&jvm_type_string_for_ty(pty));
+                        }
+                        default_desc.push_str("ILjava/lang/Object;)");
+                        default_desc.push_str(&jvm_type_string_for_ty(&return_ty));
+                        let default_method = format!("{}$default", method_name_str);
+                        let dest = fb.new_local(return_ty.clone());
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: class_name.clone(),
+                                    method_name: default_method,
+                                    descriptor: default_desc,
+                                },
+                                args: all_args.clone(),
                             },
                         });
                         return Some(dest);
@@ -12131,8 +12462,8 @@ fn lower_expr(
                 let this_info = scope.iter().rev().find(|(s, _)| *s == this_sym);
                 let mut resolved = None;
                 if let Some((_sym, this_local)) = this_info {
-                    let this_ty = &fb.mf.locals[this_local.0 as usize];
-                    if let Ty::Class(class_name) = this_ty {
+                    let this_ty = fb.mf.locals[this_local.0 as usize].clone();
+                    if let Ty::Class(class_name) = &this_ty {
                         // Look up in this class, superclasses, and interfaces.
                         let mut search_class = Some(class_name.clone());
                         'search: while let Some(ref cname) = search_class {
@@ -12186,9 +12517,52 @@ fn lower_expr(
                         // dispatch in lambda-with-receiver bodies.
                         if resolved.is_none() {
                             if let Ok(info) = skotch_classinfo::load_jdk_class(class_name) {
-                                if let Some(m) = info.methods.iter().find(|m| m.name == callee_str)
-                                {
+                                // Prefer the overload whose param count matches
+                                // the call site; fall back to first by name if
+                                // no exact match exists. Without the preference
+                                // we'd return e.g. a 4-param `layout` for a
+                                // 3-arg call site and the JVM backend stubs
+                                // the whole enclosing lambda. The padding
+                                // below fills missing defaulted slots.
+                                let provided = arg_locals.len();
+                                let exact = info.methods.iter().find(|m| {
+                                    m.name == callee_str
+                                        && skotch_classinfo::count_descriptor_params_pub(
+                                            &m.descriptor,
+                                        ) == provided
+                                });
+                                let m = exact
+                                    .or_else(|| info.methods.iter().find(|m| m.name == callee_str));
+                                if let Some(m) = m {
+                                    let desc_params = skotch_classinfo::count_descriptor_params_pub(
+                                        &m.descriptor,
+                                    );
                                     arg_locals.insert(0, *this_local);
+                                    if desc_params > provided {
+                                        // Pad missing args with typed
+                                        // defaults based on descriptor slots.
+                                        let chars = parse_descriptor_param_chars(&m.descriptor);
+                                        for slot in provided..desc_params {
+                                            let ch = chars.get(slot).copied().unwrap_or('L');
+                                            let (slot_ty, init): (Ty, Rvalue) = match ch {
+                                                'I' | 'B' | 'C' | 'S' | 'Z' => {
+                                                    (Ty::Int, Rvalue::Const(MirConst::Int(0)))
+                                                }
+                                                'J' => (Ty::Long, Rvalue::Const(MirConst::Long(0))),
+                                                'F' | 'D' => (
+                                                    Ty::Double,
+                                                    Rvalue::Const(MirConst::Double(0.0)),
+                                                ),
+                                                _ => (Ty::Any, Rvalue::Const(MirConst::Null)),
+                                            };
+                                            let pad_local = fb.new_local(slot_ty);
+                                            fb.push_stmt(MStmt::Assign {
+                                                dest: pad_local,
+                                                value: init,
+                                            });
+                                            arg_locals.push(pad_local);
+                                        }
+                                    }
                                     resolved = Some((
                                         CallKind::VirtualJava {
                                             class_name: class_name.clone(),
@@ -14010,14 +14384,37 @@ fn lower_expr(
                     }
                 }
                 Ty::Any => {
-                    // Object[] indexing (from arrayOf): uses ArrayLoad,
-                    // JVM backend emits aaload based on dest type Any.
-                    let dest = fb.new_local(Ty::Any);
+                    // Lambda-receiver / generic-erased List: when the type
+                    // resolves to `Any` (e.g. `measurables: List<Measurable>`
+                    // inside a `Layout { measurables, constraints -> ... }`
+                    // body, where the generic parameter gets erased), the
+                    // call `measurables[0]` should compile to
+                    // `List.get(0)`, NOT `aaload`. Object[] indexing is
+                    // rare in idiomatic Kotlin code and is handled via the
+                    // typed `Ty::IntArray`/`Ty::LongArray`/etc. paths.
+                    // Defaulting to List.get matches the common case and
+                    // unblocks JetChat's IconAndTextRow.
+                    // If the source `arr` local had its type args recorded
+                    // (e.g. `measurables: List<Measurable>`), pick up the
+                    // element type so the result local carries it instead
+                    // of the erased Any. Downstream calls then resolve
+                    // the right method overload.
+                    let elem_ty = fb
+                        .mf
+                        .local_generic_args
+                        .get(&arr.0)
+                        .and_then(|args| args.first().cloned())
+                        .unwrap_or(Ty::Any);
+                    let dest = fb.new_local(elem_ty);
                     fb.push_stmt(MStmt::Assign {
                         dest,
-                        value: Rvalue::ArrayLoad {
-                            array: arr,
-                            index: idx,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: "java/util/List".to_string(),
+                                method_name: "get".to_string(),
+                                descriptor: "(I)Ljava/lang/Object;".to_string(),
+                            },
+                            args: vec![arr, idx],
                         },
                     });
                     Some(dest)
@@ -15822,6 +16219,7 @@ fn lower_expr(
                     is_private: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
                 };
                 let ref_this = ref_init.new_local(Ty::Class(ref_class_name.clone()));
                 ref_init.params.push(ref_this);
@@ -15944,6 +16342,7 @@ fn lower_expr(
                     is_private: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
                 },
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda,
@@ -16073,11 +16472,48 @@ fn lower_expr(
                                 value: rv,
                             });
                             invoke_scope.push((p.name, typed_local));
+                            // Record generic args from the lambda param's
+                            // declared TypeRef so element-type recovery
+                            // works on this local (e.g. List<Measurable>
+                            // for `Layout { measurables, _ -> measurables[0] }`).
+                            if !p.ty.type_args.is_empty() {
+                                let arg_tys: Vec<Ty> =
+                                    p.ty.type_args
+                                        .iter()
+                                        .map(|tr| resolve_type_ref(tr, interner, module))
+                                        .collect();
+                                invoke_fb
+                                    .mf
+                                    .local_generic_args
+                                    .insert(typed_local.0, arg_tys);
+                            }
                         } else {
                             invoke_scope.push((p.name, erased_pid));
+                            if !p.ty.type_args.is_empty() {
+                                let arg_tys: Vec<Ty> =
+                                    p.ty.type_args
+                                        .iter()
+                                        .map(|tr| resolve_type_ref(tr, interner, module))
+                                        .collect();
+                                invoke_fb
+                                    .mf
+                                    .local_generic_args
+                                    .insert(erased_pid.0, arg_tys);
+                            }
                         }
                     } else {
                         invoke_scope.push((p.name, erased_pid));
+                        if !p.ty.type_args.is_empty() {
+                            let arg_tys: Vec<Ty> =
+                                p.ty.type_args
+                                    .iter()
+                                    .map(|tr| resolve_type_ref(tr, interner, module))
+                                    .collect();
+                            invoke_fb
+                                .mf
+                                .local_generic_args
+                                .insert(erased_pid.0, arg_tys);
+                        }
                     }
                 }
                 // Implicit `it` for single-param or no-param lambdas:
@@ -16336,6 +16772,7 @@ fn lower_expr(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let init_this = init_fn.new_local(Ty::Class(lambda_class_name.clone()));
             init_fn.params.push(init_this);
@@ -16438,6 +16875,7 @@ fn lower_expr(
                     is_private: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
                 };
                 let susp_this = susp_init.new_local(Ty::Class(lambda_class_name.clone()));
                 susp_init.params.push(susp_this);
@@ -16696,6 +17134,7 @@ fn lower_expr(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
@@ -17282,6 +17721,7 @@ fn lower_enum(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
@@ -17350,6 +17790,7 @@ fn lower_enum(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     let ts_this = ts_fn.new_local(Ty::Class(enum_name.clone()));
     ts_fn.params.push(ts_this);
@@ -17790,6 +18231,7 @@ fn lower_object(
         is_private: true,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     let this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(this_id);
@@ -17942,6 +18384,7 @@ fn lower_class(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     // Add 'this' as local 0.
     let this_id = init_fn.new_local(Ty::Class(class_name.clone()));
@@ -18168,6 +18611,7 @@ fn lower_class(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             }
         })
         .collect();
@@ -18389,13 +18833,38 @@ fn lower_class(
         let this_sym = interner.intern("this");
         let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
 
-        // Add explicit parameters.
+        // Add explicit parameters. Use resolve_type_ref so function-typed
+        // params (e.g. `block: () -> Unit`) resolve to Ty::Function rather
+        // than Ty::Unit (which is the bare return type's name).
         for p in &method.params {
-            let ty = resolve_type(interner.resolve(p.ty.name), module);
+            let ty = resolve_type_ref(&p.ty, interner, module);
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
             scope.push((p.name, id));
+            // Record generic args so index access / method calls on this
+            // param can recover element types that would otherwise erase
+            // to Ty::Any. E.g. `measurables: List<Measurable>` →
+            // local_generic_args[id] = [Class("Measurable")].
+            if !p.ty.type_args.is_empty() {
+                let arg_tys: Vec<Ty> =
+                    p.ty.type_args
+                        .iter()
+                        .map(|tr| resolve_type_ref(tr, interner, module))
+                        .collect();
+                fb.mf.local_generic_args.insert(id.0, arg_tys);
+            }
         }
+
+        // Track param defaults so cross-class call sites can route
+        // through `name$default(...)` when the caller omits defaulted
+        // args (e.g. `MeasureScope.layout(w, h) { }` where the
+        // alignmentLines param has a default — JetChat parity).
+        // Indexed by user param position (excluding `this`).
+        let mut method_defaults: Vec<Option<MirConst>> = Vec::with_capacity(method.params.len());
+        for p in &method.params {
+            method_defaults.push(p.default.as_ref().and_then(|e| lower_const_init(e, module)));
+        }
+        fb.mf.param_defaults = method_defaults;
 
         // Suspend methods get a trailing $completion param.
         if method.is_suspend {
@@ -18867,6 +19336,7 @@ fn lower_class(
             is_private: true,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
         };
         let comp_this = comp_init.new_local(Ty::Class(companion_cls.clone()));
         comp_init.params.push(comp_this);
@@ -19526,6 +19996,7 @@ fn lower_class(
             is_private: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
         };
         // Add 'this' as local 0.
         let sec_this = sec_fn.new_local(Ty::Class(class_name.clone()));
@@ -19853,6 +20324,7 @@ fn lower_interface(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             // Add `this` param.
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
@@ -19890,6 +20362,7 @@ fn lower_interface(
         is_private: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
     };
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -19950,6 +20423,7 @@ fn lower_interface(
                 is_private: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);
