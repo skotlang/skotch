@@ -1,0 +1,44 @@
+dex_version   035
+strings       15
+types         10
+methods       2
+classes       1
+
+--- strings ---
+  "D"
+  "Everything"
+  "F"
+  "I"
+  "J"
+  "L"
+  "LInputKt;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Lkotlin/jvm/functions/Function0;"
+  "V"
+  "VZIJFDLLLI"
+  "Z"
+  "input.kt"
+  "invoke"
+
+--- types ---
+  D
+  F
+  I
+  J
+  LInputKt;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Lkotlin/jvm/functions/Function0;
+  V
+  Z
+
+--- methods ---
+  LInputKt;.Everything(ZIJFDLjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;I)V
+  Lkotlin/jvm/functions/Function0;.invoke()Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       Everything(ZIJFDLjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;I)V flags=0x0019 regs=10 ins=9 outs=1 insns=5

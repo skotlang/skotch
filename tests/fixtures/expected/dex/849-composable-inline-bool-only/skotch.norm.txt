@@ -1,0 +1,31 @@
+dex_version   035
+strings       8
+types         5
+methods       1
+classes       1
+
+--- strings ---
+  "I"
+  "LInputKt;"
+  "Ljava/lang/Object;"
+  "Toggle"
+  "V"
+  "VZLI"
+  "Z"
+  "input.kt"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/lang/Object;
+  V
+  Z
+
+--- methods ---
+  LInputKt;.Toggle(ZLjava/lang/Object;I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       Toggle(ZLjava/lang/Object;I)V flags=0x0019 regs=3 ins=3 outs=0 insns=1

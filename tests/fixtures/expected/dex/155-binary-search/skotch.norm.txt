@@ -40,6 +40,6 @@ classes       1
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       binarySearch(II)I flags=0x0019 regs=26 ins=2 outs=0 insns=61
+  method       binarySearch(II)I flags=0x0019 regs=27 ins=2 outs=0 insns=65
   method       main()V flags=0x0019 regs=13 ins=0 outs=2 insns=51
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

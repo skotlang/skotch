@@ -1,0 +1,31 @@
+dex_version   035
+strings       8
+types         5
+methods       1
+classes       1
+
+--- strings ---
+  "I"
+  "LInputKt;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Multi3"
+  "V"
+  "VLLLLI"
+  "input.kt"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  V
+
+--- methods ---
+  LInputKt;.Multi3(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       Multi3(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;I)V flags=0x0019 regs=5 ins=5 outs=0 insns=1

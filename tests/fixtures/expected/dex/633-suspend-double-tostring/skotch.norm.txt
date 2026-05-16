@@ -1,0 +1,32 @@
+dex_version   035
+strings       9
+types         4
+methods       2
+classes       1
+
+--- strings ---
+  "D"
+  "LD"
+  "LDL"
+  "LInputKt;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "fmt"
+  "input.kt"
+  "valueOf"
+
+--- types ---
+  D
+  LInputKt;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.fmt(DLjava/lang/Object;)Ljava/lang/Object;
+  Ljava/lang/String;.valueOf(D)Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fmt(DLjava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=3 ins=2 outs=1 insns=5

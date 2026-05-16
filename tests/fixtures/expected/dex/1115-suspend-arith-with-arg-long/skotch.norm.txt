@@ -1,0 +1,34 @@
+dex_version   035
+strings       10
+types         5
+methods       2
+classes       1
+
+--- strings ---
+  "J"
+  "LInputKt;"
+  "LJ"
+  "LJL"
+  "Ljava/lang/Long;"
+  "Ljava/lang/Object;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "boxLong"
+  "calc"
+  "input.kt"
+
+--- types ---
+  J
+  LInputKt;
+  Ljava/lang/Long;
+  Ljava/lang/Object;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+
+--- methods ---
+  LInputKt;.calc(JLjava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxLong(J)Ljava/lang/Long;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       calc(JLjava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=5 ins=2 outs=1 insns=12

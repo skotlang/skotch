@@ -1,0 +1,29 @@
+dex_version   035
+strings       7
+types         4
+methods       1
+classes       1
+
+--- strings ---
+  "LInputKt;"
+  "LZLL"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Z"
+  "fmt"
+  "input.kt"
+
+--- types ---
+  LInputKt;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Z
+
+--- methods ---
+  LInputKt;.fmt(ZLjava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fmt(ZLjava/lang/String;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=6 ins=3 outs=0 insns=7

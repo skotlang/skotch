@@ -1,0 +1,34 @@
+dex_version   035
+strings       10
+types         5
+methods       2
+classes       1
+
+--- strings ---
+  "LInputKt;"
+  "LZ"
+  "LZL"
+  "Ljava/lang/Boolean;"
+  "Ljava/lang/Object;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "Z"
+  "boxBoolean"
+  "input.kt"
+  "pick"
+
+--- types ---
+  LInputKt;
+  Ljava/lang/Boolean;
+  Ljava/lang/Object;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+  Z
+
+--- methods ---
+  LInputKt;.pick(ZLjava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxBoolean(Z)Ljava/lang/Boolean;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       pick(ZLjava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=6 ins=2 outs=1 insns=13

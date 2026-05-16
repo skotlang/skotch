@@ -1,0 +1,69 @@
+dex_version   035
+strings       26
+types         9
+methods       11
+classes       1
+
+--- strings ---
+  "<init>"
+  "A"
+  "B"
+  "Box"
+  "Box$lambda$0"
+  "I"
+  "IL"
+  "L"
+  "LInputKt;"
+  "LL"
+  "LV;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/util/ArrayList;"
+  "Lkotlin/jvm/functions/Function1;"
+  "V"
+  "V$valueOf"
+  "V$values"
+  "VL"
+  "VLI"
+  "Z"
+  "ZL"
+  "add"
+  "input.kt"
+  "invoke"
+  "pick"
+
+--- types ---
+  I
+  LInputKt;
+  LV;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/util/ArrayList;
+  Lkotlin/jvm/functions/Function1;
+  V
+  Z
+
+--- methods ---
+  LInputKt;.A()Ljava/lang/Object;
+  LInputKt;.B()Ljava/lang/Object;
+  LInputKt;.Box$lambda$0(Ljava/lang/Object;)I
+  LInputKt;.Box(Ljava/lang/Object;I)V
+  LInputKt;.V$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.V$values()Ljava/lang/Object;
+  LInputKt;.pick(Ljava/lang/Object;)I
+  LV;.<init>(Ljava/lang/String;)V
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       A()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       B()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       Box(Ljava/lang/Object;I)V flags=0x0019 regs=4 ins=2 outs=1 insns=5
+  method       Box$lambda$0(Ljava/lang/Object;)I flags=0x0019 regs=6 ins=1 outs=0 insns=17
+  method       V$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=8 ins=1 outs=0 insns=32
+  method       V$values()Ljava/lang/Object; flags=0x0019 regs=5 ins=0 outs=2 insns=22
+  method       pick(Ljava/lang/Object;)I flags=0x0019 regs=3 ins=1 outs=2 insns=9
