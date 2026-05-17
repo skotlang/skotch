@@ -488,7 +488,7 @@ impl<'a> Lexer<'a> {
         if is_long {
             self.pos += 1;
         }
-        // Check for trailing f/F suffix → float literal without decimal point: 42f
+        // Trailing f/F suffix → Float literal without decimal point: 42f
         if self.pos < self.bytes.len()
             && (self.bytes[self.pos] == b'f' || self.bytes[self.pos] == b'F')
         {
@@ -500,7 +500,7 @@ impl<'a> Lexer<'a> {
                 .collect();
             match s.parse::<f64>() {
                 Ok(v) => self.emit(
-                    TokenKind::DoubleLit,
+                    TokenKind::FloatLit,
                     start,
                     self.pos,
                     Some(TokenPayload::Double(v)),

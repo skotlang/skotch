@@ -1,0 +1,4 @@
+name = "1211-receiver-scope-extension"
+status = "unsupported"
+features = ["receiver-scope-extension", "extension-function"]
+reason = "Extension function `Dp.roundToPx()` defined inside `Density` interface, used in receiver scope of `MeasureScope: Density`. Skotch needs to resolve `dp.roundToPx()` in a `MeasureScope.foo()` context to the inherited `Density.Dp.roundToPx()`. Currently it emits broken `Dp.roundToPx:()V` (wrong descriptor) followed by `aconst_null; checkcast Integer; intValue` stub, producing stack-invalid bytecode that d8 rejects. See JetChat BaselineHeightModifier."

@@ -6528,6 +6528,8 @@ fn lower_expr(
                     BinOp::Add => Some("plus"),
                     BinOp::Sub => Some("minus"),
                     BinOp::Mul => Some("times"),
+                    BinOp::Div => Some("div"),
+                    BinOp::Mod => Some("rem"),
                     BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq => Some("compareTo"),
                     _ => None,
                 };
@@ -6663,7 +6665,11 @@ fn lower_expr(
             };
 
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
-            let is_long = !is_double && (matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long));
+            let is_float =
+                !is_double && (matches!(lhs_ty, Ty::Float) || matches!(rhs_ty, Ty::Float));
+            let is_long = !is_double
+                && !is_float
+                && (matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long));
             // Widen Int→Double when comparing/operating with a Double operand.
             let (l, lhs_ty) = if is_double && matches!(lhs_ty, Ty::Int) {
                 let widened = fb.new_local(Ty::Double);
@@ -6717,7 +6723,6 @@ fn lower_expr(
             } else {
                 (l, lhs_ty)
             };
-            #[allow(unused_variables)]
             let (r, rhs_ty) = if is_long && matches!(rhs_ty, Ty::Int) {
                 let widened = fb.new_local(Ty::Long);
                 fb.push_stmt(MStmt::Assign {
@@ -6735,6 +6740,42 @@ fn lower_expr(
             } else {
                 (r, rhs_ty)
             };
+            // Widen Int→Float when operating with a Float operand.
+            let (l, lhs_ty) = if is_float && matches!(lhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Float);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2f".to_string(),
+                            descriptor: "(I)F".to_string(),
+                        },
+                        args: vec![l],
+                    },
+                });
+                (widened, Ty::Float)
+            } else {
+                (l, lhs_ty)
+            };
+            #[allow(unused_variables)]
+            let (r, rhs_ty) = if is_float && matches!(rhs_ty, Ty::Int) {
+                let widened = fb.new_local(Ty::Float);
+                fb.push_stmt(MStmt::Assign {
+                    dest: widened,
+                    value: Rvalue::Call {
+                        kind: CallKind::StaticJava {
+                            class_name: "$convert".to_string(),
+                            method_name: "i2f".to_string(),
+                            descriptor: "(I)F".to_string(),
+                        },
+                        args: vec![r],
+                    },
+                });
+                (widened, Ty::Float)
+            } else {
+                (r, rhs_ty)
+            };
             let (mop, result_ty) = match op {
                 BinOp::Add if matches!(lhs_ty, Ty::String) || matches!(rhs_ty, Ty::String) => {
                     (MBinOp::ConcatStr, Ty::String)
@@ -6749,6 +6790,11 @@ fn lower_expr(
                 BinOp::Mul if is_long => (MBinOp::MulL, Ty::Long),
                 BinOp::Div if is_long => (MBinOp::DivL, Ty::Long),
                 BinOp::Mod if is_long => (MBinOp::ModL, Ty::Long),
+                BinOp::Add if is_float => (MBinOp::AddF, Ty::Float),
+                BinOp::Sub if is_float => (MBinOp::SubF, Ty::Float),
+                BinOp::Mul if is_float => (MBinOp::MulF, Ty::Float),
+                BinOp::Div if is_float => (MBinOp::DivF, Ty::Float),
+                BinOp::Mod if is_float => (MBinOp::ModF, Ty::Float),
                 BinOp::Add => (MBinOp::AddI, Ty::Int),
                 BinOp::Sub => (MBinOp::SubI, Ty::Int),
                 BinOp::Mul => (MBinOp::MulI, Ty::Int),
@@ -9019,8 +9065,11 @@ fn lower_expr(
                         ("toLong", Ty::Double) => Some((Ty::Long, "d2l")),
                         ("toInt", Ty::Double) => Some((Ty::Int, "d2i")),
                         ("toInt", Ty::Long) => Some((Ty::Int, "l2i")),
+                        ("toInt", Ty::Float) => Some((Ty::Int, "f2i")),
                         ("toInt", Ty::Char) => Some((Ty::Int, "nop")),
                         ("toChar", Ty::Int) => Some((Ty::Char, "i2c")),
+                        ("toLong", Ty::Float) => Some((Ty::Long, "f2l")),
+                        ("toDouble", Ty::Float) => Some((Ty::Double, "f2d")),
                         ("toFloat", Ty::Int) => Some((Ty::Float, "i2f")),
                         ("toFloat", Ty::Long) => Some((Ty::Float, "l2f")),
                         ("toFloat", Ty::Double) => Some((Ty::Float, "d2f")),
@@ -9089,6 +9138,9 @@ fn lower_expr(
                                 "d2i" => "(D)I",
                                 "d2l" => "(D)J",
                                 "d2f" => "(D)F",
+                                "f2i" => "(F)I",
+                                "f2l" => "(F)J",
+                                "f2d" => "(F)D",
                                 _ => "(I)V",
                             };
                             fb.push_stmt(MStmt::Assign {
@@ -9262,6 +9314,76 @@ fn lower_expr(
                             },
                         });
                         return Some(dest);
+                    }
+                }
+
+                // Extension method via enclosing receiver scope. For a call
+                // `dp.roundToPx()` inside `Density.measureIt`, when Dp has
+                // no `roundToPx` member but Density has
+                // `fun Dp.roundToPx(): Int`, kotlinc emits
+                // `aload_0 (this); aload_X (dp); invoke{virtual,interface}
+                // Density.roundToPx(Dp)I`. Walk the enclosing function's
+                // `this` (params[0]) class hierarchy looking for an
+                // extension method matching `(method_name, recv_ty)`.
+                if !fb.mf.params.is_empty() {
+                    let this_local = fb.mf.params[0];
+                    let this_ty = fb.mf.locals[this_local.0 as usize].clone();
+                    if let Ty::Class(enclosing_class) = &this_ty {
+                        let mut search = Some(enclosing_class.clone());
+                        let mut ext_match: Option<(String, Ty, bool, String)> = None;
+                        'ext: while let Some(cn) = search {
+                            if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
+                                for m in &cls.methods {
+                                    if m.name != method_name_str || m.params.is_empty() {
+                                        continue;
+                                    }
+                                    // params[0] is this; params[1] would be
+                                    // the extension receiver (if any).
+                                    if m.params.len() < 2 {
+                                        continue;
+                                    }
+                                    let ext_recv_lid = m.params[1];
+                                    let ext_recv_ty =
+                                        m.locals.get(ext_recv_lid.0 as usize).cloned();
+                                    if ext_recv_ty.as_ref() == Some(&recv_ty)
+                                        && m.params.len() == args.len() + 2
+                                    {
+                                        ext_match = Some((
+                                            cls.name.clone(),
+                                            m.return_ty.clone(),
+                                            cls.is_interface,
+                                            method_name_str.clone(),
+                                        ));
+                                        break 'ext;
+                                    }
+                                }
+                                search = cls.super_class.clone();
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some((target_class, ret_ty, _is_iface, mname)) = ext_match {
+                            // Arg shape: [this, recv, user_args...]
+                            let mut new_args = vec![this_local, recv_local];
+                            for &a in all_args.iter().skip(1) {
+                                new_args.push(a);
+                            }
+                            let dest = fb.new_local(ret_ty.clone());
+                            // Use CallKind::Virtual so the JVM backend's
+                            // existing interface-vs-class detection picks
+                            // the right dispatch instruction.
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Virtual {
+                                        class_name: target_class,
+                                        method_name: mname,
+                                    },
+                                    args: new_args,
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                 }
 
@@ -18833,6 +18955,38 @@ fn lower_class(
         let this_sym = interner.intern("this");
         let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
 
+        // Extension method inside a class/interface
+        // (`fun Dp.roundToPx()` inside `interface Density`): the
+        // receiver becomes the first user param after `this`, and its
+        // properties become accessible as bare identifiers in the body.
+        // The implicit name kotlinc gives this slot is `$this$<method>`.
+        if let Some(ext_recv) = &method.receiver_ty {
+            let ext_recv_ty = resolve_type_ref(ext_recv, interner, module);
+            let ext_recv_local = fb.new_local(ext_recv_ty.clone());
+            fb.mf.params.push(ext_recv_local);
+            let ext_recv_sym = interner.intern(&format!("$this${}", method_name));
+            scope.push((ext_recv_sym, ext_recv_local));
+            // Also bind any field/property on the extension receiver class
+            // so a bare `value` in the body resolves to `$receiver.value`.
+            if let Ty::Class(ext_class_name) = &ext_recv_ty {
+                if let Some(ext_cls) = module.classes.iter().find(|c| &c.name == ext_class_name) {
+                    for field in &ext_cls.fields {
+                        let field_sym = interner.intern(&field.name);
+                        let field_local = fb.new_local(field.ty.clone());
+                        fb.push_stmt(MStmt::Assign {
+                            dest: field_local,
+                            value: Rvalue::GetField {
+                                receiver: ext_recv_local,
+                                class_name: ext_class_name.clone(),
+                                field_name: field.name.clone(),
+                            },
+                        });
+                        scope.push((field_sym, field_local));
+                    }
+                }
+            }
+        }
+
         // Add explicit parameters. Use resolve_type_ref so function-typed
         // params (e.g. `block: () -> Unit`) resolve to Ty::Function rather
         // than Ty::Unit (which is the bare return type's name).
@@ -20427,6 +20581,13 @@ fn lower_interface(
             };
             let this_id = stub.new_local(Ty::Class(iface_name.clone()));
             stub.params.push(this_id);
+            // Extension receiver, e.g. `fun Dp.roundToPx()` inside
+            // `interface Density` adds Dp as the first user param.
+            if let Some(ext_recv) = &method.receiver_ty {
+                let ty = resolve_type_ref(ext_recv, interner, module);
+                let pid = stub.new_local(ty);
+                stub.params.push(pid);
+            }
             for p in &method.params {
                 let ty = resolve_type(interner.resolve(p.ty.name), module);
                 let pid = stub.new_local(ty);
@@ -20441,6 +20602,35 @@ fn lower_interface(
             fb.mf.params.push(this_local);
             let this_sym = interner.intern("this");
             let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+            // Extension receiver inside an interface method, e.g.
+            // `fun Dp.roundToPx()` inside `interface Density`. Add the
+            // receiver as the next param and bind its fields as
+            // bare-identifier locals in the body scope.
+            if let Some(ext_recv) = &method.receiver_ty {
+                let ext_recv_ty = resolve_type_ref(ext_recv, interner, module);
+                let ext_recv_local = fb.new_local(ext_recv_ty.clone());
+                fb.mf.params.push(ext_recv_local);
+                let ext_recv_sym = interner.intern(&format!("$this${}", method_name));
+                scope.push((ext_recv_sym, ext_recv_local));
+                if let Ty::Class(ext_class_name) = &ext_recv_ty {
+                    if let Some(ext_cls) = module.classes.iter().find(|c| &c.name == ext_class_name)
+                    {
+                        for field in &ext_cls.fields {
+                            let field_sym = interner.intern(&field.name);
+                            let field_local = fb.new_local(field.ty.clone());
+                            fb.push_stmt(MStmt::Assign {
+                                dest: field_local,
+                                value: Rvalue::GetField {
+                                    receiver: ext_recv_local,
+                                    class_name: ext_class_name.clone(),
+                                    field_name: field.name.clone(),
+                                },
+                            });
+                            scope.push((field_sym, field_local));
+                        }
+                    }
+                }
+            }
             for p in &method.params {
                 let ty = resolve_type(interner.resolve(p.ty.name), module);
                 let id = fb.new_local(ty);

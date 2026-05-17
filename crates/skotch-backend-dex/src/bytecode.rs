@@ -779,6 +779,18 @@ fn emit_binop(
             code.push(((d as u16) << 8) | opcode as u16);
             code.push(((r as u16) << 8) | (l as u16));
         }
+        MBinOp::AddF | MBinOp::SubF | MBinOp::MulF | MBinOp::DivF | MBinOp::ModF => {
+            let opcode: u8 = match op {
+                MBinOp::AddF => 0xA6, // add-float
+                MBinOp::SubF => 0xA7, // sub-float
+                MBinOp::MulF => 0xA8, // mul-float
+                MBinOp::DivF => 0xA9, // div-float
+                MBinOp::ModF => 0xAA, // rem-float
+                _ => unreachable!(),
+            };
+            code.push(((d as u16) << 8) | opcode as u16);
+            code.push(((r as u16) << 8) | (l as u16));
+        }
         MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL => {
             let opcode: u8 = match op {
                 MBinOp::AddL => 0x9B, // add-long

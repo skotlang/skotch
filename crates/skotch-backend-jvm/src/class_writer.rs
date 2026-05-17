@@ -8895,6 +8895,11 @@ fn emit_mir_segment(
                         MBinOp::MulD => 0x6B,
                         MBinOp::DivD => 0x6F,
                         MBinOp::ModD => 0x73,
+                        MBinOp::AddF => 0x62, // fadd
+                        MBinOp::SubF => 0x66, // fsub
+                        MBinOp::MulF => 0x6A, // fmul
+                        MBinOp::DivF => 0x6E, // fdiv
+                        MBinOp::ModF => 0x72, // frem
                         // Comparison BinOps emit the
                         // if_icmpXX / iconst_0 / goto / iconst_1 pattern.
                         MBinOp::CmpEq
@@ -8951,6 +8956,9 @@ fn emit_mir_segment(
                             "d2i" => 0x8E,
                             "d2l" => 0x8F,
                             "d2f" => 0x90,
+                            "f2i" => 0x8B,
+                            "f2l" => 0x8C,
+                            "f2d" => 0x8D,
                             _ => 0x00,
                         };
                         if opcode != 0x00 {
@@ -12532,22 +12540,30 @@ fn walk_block(
                 // Negation pattern: `0 - x` → `ineg/lneg/dneg`. When lhs is
                 // an inlinable constant 0, emit just the rhs and a negation
                 // opcode instead of `0; rhs; isub`. Matches kotlinc.
-                let lhs_is_zero = matches!(op, MBinOp::SubI | MBinOp::SubL | MBinOp::SubD)
-                    && INLINABLE_CONSTS.with(|cell| {
-                        let m = cell.borrow();
-                        match m.get(&lhs.0) {
-                            Some(MirConst::Int(0)) => matches!(op, MBinOp::SubI),
-                            Some(MirConst::Long(0)) => matches!(op, MBinOp::SubL),
-                            Some(MirConst::Double(d)) if *d == 0.0 => matches!(op, MBinOp::SubD),
-                            _ => false,
+                let lhs_is_zero = matches!(
+                    op,
+                    MBinOp::SubI | MBinOp::SubL | MBinOp::SubD | MBinOp::SubF
+                ) && INLINABLE_CONSTS.with(|cell| {
+                    let m = cell.borrow();
+                    match m.get(&lhs.0) {
+                        Some(MirConst::Int(0)) => matches!(op, MBinOp::SubI),
+                        Some(MirConst::Long(0)) => matches!(op, MBinOp::SubL),
+                        Some(MirConst::Double(d)) if *d == 0.0 => {
+                            matches!(op, MBinOp::SubD)
                         }
-                    });
+                        Some(MirConst::Float(f)) if *f == 0.0 => {
+                            matches!(op, MBinOp::SubF)
+                        }
+                        _ => false,
+                    }
+                });
                 if lhs_is_zero {
                     load_local(code, stack, max_stack, slots, *rhs, &func.locals);
                     let neg_opcode: u8 = match op {
                         MBinOp::SubI => 0x74, // ineg
                         MBinOp::SubL => 0x75, // lneg
                         MBinOp::SubD => 0x77, // dneg
+                        MBinOp::SubF => 0x76, // fneg
                         _ => unreachable!(),
                     };
                     code.push(neg_opcode);
@@ -12617,6 +12633,18 @@ fn walk_block(
                         };
                         code.push(opcode);
                         bump(stack, max_stack, -2); // two doubles (4 slots) in, one double (2 slots) out
+                    }
+                    MBinOp::AddF | MBinOp::SubF | MBinOp::MulF | MBinOp::DivF | MBinOp::ModF => {
+                        let opcode: u8 = match op {
+                            MBinOp::AddF => 0x62, // fadd
+                            MBinOp::SubF => 0x66, // fsub
+                            MBinOp::MulF => 0x6A, // fmul
+                            MBinOp::DivF => 0x6E, // fdiv
+                            MBinOp::ModF => 0x72, // frem
+                            _ => unreachable!(),
+                        };
+                        code.push(opcode);
+                        bump(stack, max_stack, -1); // two floats in, one float out
                     }
                     MBinOp::CmpEq
                     | MBinOp::CmpNe
@@ -13519,6 +13547,9 @@ fn walk_block(
                             "d2i" => 0x8E,
                             "d2l" => 0x8F,
                             "d2f" => 0x90,
+                            "f2i" => 0x8B,
+                            "f2l" => 0x8C,
+                            "f2d" => 0x8D,
                             _ => 0x00, // nop
                         };
                         if opcode != 0x00 {
@@ -13527,9 +13558,9 @@ fn walk_block(
                         // Stack effect: wide→narrow = -1, narrow→wide = +1, same = 0
                         // (Float and Int both occupy 1 slot.)
                         let effect = match method_name.as_str() {
-                            "i2d" | "i2l" => 1,                          // int(1) → double/long(2)
-                            "d2i" | "d2l" | "l2i" | "d2f" | "l2f" => -1, // wide(2) → narrow(1)
-                            // i2f, l2i (already listed), d2f handled above, etc. → 0 net
+                            "i2d" | "i2l" | "f2d" | "f2l" => 1,          // narrow(1)→wide(2)
+                            "d2i" | "d2l" | "l2i" | "d2f" | "l2f" => -1, // wide(2)→narrow(1)
+                            // i2f, f2i, i2c, l2i (listed), d2f (listed), f2d handled, etc. → 0
                             _ => 0,
                         };
                         bump(stack, max_stack, effect);

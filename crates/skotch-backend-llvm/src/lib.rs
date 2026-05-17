@@ -707,6 +707,19 @@ impl<'a> BlockWalker<'a> {
                         writeln!(self.out, "  {dst} = {opcode} double {l}, {r}").unwrap();
                         self.ssa_for_local[dest.0 as usize] = Some(dst);
                     }
+                    MBinOp::AddF | MBinOp::SubF | MBinOp::MulF | MBinOp::DivF | MBinOp::ModF => {
+                        let opcode = match op {
+                            MBinOp::AddF => "fadd",
+                            MBinOp::SubF => "fsub",
+                            MBinOp::MulF => "fmul",
+                            MBinOp::DivF => "fdiv",
+                            MBinOp::ModF => "frem",
+                            _ => unreachable!(),
+                        };
+                        let dst = self.fresh();
+                        writeln!(self.out, "  {dst} = {opcode} float {l}, {r}").unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(dst);
+                    }
                     MBinOp::CmpEq
                     | MBinOp::CmpNe
                     | MBinOp::CmpLt

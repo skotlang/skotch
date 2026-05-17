@@ -218,6 +218,11 @@ pub enum BinOp {
     MulD,
     DivD,
     ModD,
+    AddF,
+    SubF,
+    MulF,
+    DivF,
+    ModF,
     /// String concatenation: lhs (String) + rhs (any → toString).
     ConcatStr,
     /// Integer comparisons — produce a `Bool` local.

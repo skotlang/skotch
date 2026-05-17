@@ -1,0 +1,4 @@
+name   = "1210-value-class-arithmetic"
+status = "supported"
+features = ["operator-overload"]
+reason = "Class with operator-overload arithmetic methods (Dp-like). JetChat's BaselineHeightModifier and ProfileKt lambdas hit this with `containerHeight / 2` style expressions where the class has a `div(Float): Dp` operator method. Skotch needs to dispatch the binary `/` to the receiver's `div(...)` method, not emit `idiv` on object refs."
