@@ -5087,6 +5087,48 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
                         }
                         return true;
                     }
+                    // Descriptor-vs-arg-type mismatch for primitive params:
+                    // e.g. `lerp(FFF)F` called with [Any, Any, Any] from
+                    // unresolved `aconst_null` placeholders — verifier
+                    // rejects when those slots are loaded as floats.
+                    let param_types = parse_descriptor_param_types_jvm(descriptor);
+                    for (param_str, arg) in param_types.iter().zip(args.iter()) {
+                        let arg_ty = func.locals.get(arg.0 as usize);
+                        let first_char = param_str.chars().next().unwrap_or(' ');
+                        let ok = match (first_char, arg_ty) {
+                            // Wide primitives: arg must match exactly.
+                            ('F', Some(Ty::Float))
+                            | ('D', Some(Ty::Double))
+                            | ('J', Some(Ty::Long)) => true,
+                            // Int-slot primitives (I/Z/B/S/C) share a stack
+                            // slot; allow any int-family arg.
+                            ('I', Some(Ty::Int))
+                            | ('I', Some(Ty::Bool))
+                            | ('I', Some(Ty::Byte))
+                            | ('I', Some(Ty::Short))
+                            | ('I', Some(Ty::Char))
+                            | ('Z', Some(Ty::Bool))
+                            | ('Z', Some(Ty::Int))
+                            | ('B', Some(Ty::Byte | Ty::Int))
+                            | ('S', Some(Ty::Short | Ty::Int))
+                            | ('C', Some(Ty::Char | Ty::Int)) => true,
+                            // Non-primitive descriptor: don't enforce.
+                            (c, _)
+                                if !matches!(c, 'F' | 'D' | 'J' | 'I' | 'Z' | 'B' | 'S' | 'C') =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        };
+                        if !ok {
+                            if report {
+                                eprintln!(
+                                    "    reason: StaticJava {cn}.{method_name} param expects {param_str} but arg is {arg_ty:?}"
+                                );
+                            }
+                            return true;
+                        }
+                    }
                 }
                 // VirtualJava call with wrong arg count or wrong receiver type.
                 Rvalue::Call {
@@ -5104,6 +5146,41 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
                             eprintln!("    reason: VirtualJava arg mismatch {call_class}.{method_name}: desc expects {desc_params}, got {} args (excl recv)", args.len() - 1);
                         }
                         return true;
+                    }
+                    // Per-param primitive type check (skip receiver).
+                    let param_types = parse_descriptor_param_types_jvm(descriptor);
+                    for (param_str, arg) in param_types.iter().zip(args.iter().skip(1)) {
+                        let arg_ty = func.locals.get(arg.0 as usize);
+                        let first_char = param_str.chars().next().unwrap_or(' ');
+                        let ok = match (first_char, arg_ty) {
+                            ('F', Some(Ty::Float))
+                            | ('D', Some(Ty::Double))
+                            | ('J', Some(Ty::Long)) => true,
+                            ('I', Some(Ty::Int))
+                            | ('I', Some(Ty::Bool))
+                            | ('I', Some(Ty::Byte))
+                            | ('I', Some(Ty::Short))
+                            | ('I', Some(Ty::Char))
+                            | ('Z', Some(Ty::Bool))
+                            | ('Z', Some(Ty::Int))
+                            | ('B', Some(Ty::Byte | Ty::Int))
+                            | ('S', Some(Ty::Short | Ty::Int))
+                            | ('C', Some(Ty::Char | Ty::Int)) => true,
+                            (c, _)
+                                if !matches!(c, 'F' | 'D' | 'J' | 'I' | 'Z' | 'B' | 'S' | 'C') =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        };
+                        if !ok {
+                            if report {
+                                eprintln!(
+                                    "    reason: VirtualJava {call_class}.{method_name} param expects {param_str} but arg is {arg_ty:?}"
+                                );
+                            }
+                            return true;
+                        }
                     }
                     // Note: receiver type mismatch check removed — calling
                     // superclass methods on `this` is valid JVM bytecode, and
@@ -5282,8 +5359,255 @@ fn has_short_class_in_descriptor(desc: &str) -> bool {
 /// the emitted bytecode. Currently unused — kept as placeholder for
 /// future StackMapTable validation.
 #[allow(dead_code)]
-fn has_type_flow_issues(_func: &MirFunction) -> bool {
+/// Detect MIR shapes that would produce stack-incompatible bytecode:
+/// primitive BinOps where either operand has type Unit (which yields no
+/// stack value) or where one operand is a non-boxable Class. Triggered by
+/// the unresolved-method-call pattern: a stub call returns Unit, and the
+/// downstream `isub` / `iadd` etc. tries to consume it as an int —
+/// producing the stack-underflow that d8 rejects.
+fn has_type_flow_issues(func: &MirFunction) -> bool {
+    use skotch_mir::{Rvalue, Stmt};
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { value, .. } = stmt;
+            if let Rvalue::BinOp { op, lhs, rhs } = value {
+                let is_primitive_arith_op = matches!(
+                    op,
+                    MBinOp::AddI
+                        | MBinOp::SubI
+                        | MBinOp::MulI
+                        | MBinOp::DivI
+                        | MBinOp::ModI
+                        | MBinOp::AddL
+                        | MBinOp::SubL
+                        | MBinOp::MulL
+                        | MBinOp::DivL
+                        | MBinOp::ModL
+                        | MBinOp::AddD
+                        | MBinOp::SubD
+                        | MBinOp::MulD
+                        | MBinOp::DivD
+                        | MBinOp::ModD
+                        | MBinOp::AddF
+                        | MBinOp::SubF
+                        | MBinOp::MulF
+                        | MBinOp::DivF
+                        | MBinOp::ModF
+                );
+                let lhs_ty = func.locals.get(lhs.0 as usize);
+                let rhs_ty = func.locals.get(rhs.0 as usize);
+                if is_primitive_arith_op {
+                    let is_bad_operand = |t: Option<&Ty>| {
+                        matches!(
+                            t,
+                            Some(Ty::Unit)
+                                | Some(Ty::Class(_))
+                                | Some(Ty::Nullable(_))
+                                | Some(Ty::String)
+                                | Some(Ty::Function { .. })
+                        )
+                    };
+                    if is_bad_operand(lhs_ty) || is_bad_operand(rhs_ty) {
+                        return true;
+                    }
+                }
+                // Comparison with Nullable lhs and primitive int rhs:
+                // produces `if_acmp <Nullable>; <bipush int>` which the d8
+                // verifier rejects (Object slot vs int slot mismatch).
+                // Triggered by `aconst_null; astore X; aload X; bipush K;
+                // if_acmpne` from when-expressions over the result of an
+                // unresolved method call. Legitimate `Any == Int` patterns
+                // (lambda `it == 3`) use Ty::Any, not Ty::Nullable, so this
+                // narrower check leaves them alone.
+                if matches!(
+                    op,
+                    MBinOp::CmpEq
+                        | MBinOp::CmpNe
+                        | MBinOp::CmpLt
+                        | MBinOp::CmpGt
+                        | MBinOp::CmpLe
+                        | MBinOp::CmpGe
+                ) {
+                    let is_nullable_ref = |t: Option<&Ty>| matches!(t, Some(Ty::Nullable(_)));
+                    let is_int_slot = |t: Option<&Ty>| {
+                        matches!(
+                            t,
+                            Some(Ty::Int)
+                                | Some(Ty::Byte)
+                                | Some(Ty::Short)
+                                | Some(Ty::Char)
+                                | Some(Ty::Bool)
+                        )
+                    };
+                    if (is_nullable_ref(lhs_ty) && is_int_slot(rhs_ty))
+                        || (is_int_slot(lhs_ty) && is_nullable_ref(rhs_ty))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    // Use-before-def: if any LocalId is read in a block where it isn't
+    // guaranteed-assigned (i.e. some path from entry reaches this block
+    // without assigning the local), the JVM verifier rejects with
+    // "Unexpected read of missing local". Compute the set of locals
+    // guaranteed-assigned at each block's entry via forward dataflow.
+    //
+    // Skip for suspend functions — their state-machine MIR has
+    // tableswitch-like entry that legitimately reads locals assigned
+    // along only one path, and they go through a separate emit path
+    // anyway. This check is only meaningful for the regular emit path.
+    if !func.is_suspend && has_use_before_def(func) {
+        return true;
+    }
     false
+}
+
+/// Forward dataflow: for each block, compute the set of LocalIds that are
+/// guaranteed-assigned on entry (intersection of all predecessors' exit
+/// sets, seeded with params at block 0). Then check each read against the
+/// set — if a read happens before any assignment, flag.
+fn has_use_before_def(func: &MirFunction) -> bool {
+    use skotch_mir::{Stmt, Terminator};
+    if func.blocks.is_empty() {
+        return false;
+    }
+    let n = func.blocks.len();
+    // defs_in_block[i] = LocalIds assigned anywhere in block i.
+    let mut defs_in_block: Vec<rustc_hash::FxHashSet<u32>> = vec![Default::default(); n];
+    for (i, b) in func.blocks.iter().enumerate() {
+        for stmt in &b.stmts {
+            let Stmt::Assign { dest, .. } = stmt;
+            defs_in_block[i].insert(dest.0);
+        }
+    }
+    // Predecessor map.
+    let mut preds: Vec<Vec<usize>> = vec![Default::default(); n];
+    for (i, b) in func.blocks.iter().enumerate() {
+        match &b.terminator {
+            Terminator::Goto(t) => preds[*t as usize].push(i),
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                preds[*then_block as usize].push(i);
+                preds[*else_block as usize].push(i);
+            }
+            _ => {}
+        }
+    }
+    // entry_defs[i] = set of LocalIds guaranteed defined on entry.
+    // Initialize all blocks to "all locals defined" (top of intersection
+    // lattice), then refine to fixpoint. Entry block starts with just
+    // params.
+    let all_locals: rustc_hash::FxHashSet<u32> = (0..func.locals.len() as u32).collect();
+    let mut entry_defs: Vec<rustc_hash::FxHashSet<u32>> = vec![all_locals; n];
+    entry_defs[0] = func.params.iter().map(|p| p.0).collect();
+    let mut changed = true;
+    let mut iter = 0;
+    let max_iter = n * 4 + 16;
+    while changed && iter < max_iter {
+        changed = false;
+        iter += 1;
+        for i in 0..n {
+            if i == 0 {
+                continue;
+            }
+            if preds[i].is_empty() {
+                // Unreachable block; treat as no defs. (Conservative)
+                let empty: rustc_hash::FxHashSet<u32> = Default::default();
+                if entry_defs[i] != empty {
+                    entry_defs[i] = empty;
+                    changed = true;
+                }
+                continue;
+            }
+            // Intersection of all predecessors' exit defs.
+            let mut new_entry: Option<rustc_hash::FxHashSet<u32>> = None;
+            for &p in &preds[i] {
+                let exit: rustc_hash::FxHashSet<u32> = entry_defs[p]
+                    .iter()
+                    .chain(defs_in_block[p].iter())
+                    .copied()
+                    .collect();
+                new_entry = Some(match new_entry {
+                    None => exit,
+                    Some(acc) => acc.intersection(&exit).copied().collect(),
+                });
+            }
+            let new_entry = new_entry.unwrap_or_default();
+            if new_entry != entry_defs[i] {
+                entry_defs[i] = new_entry;
+                changed = true;
+            }
+        }
+    }
+    // Now check each block's reads.
+    let mut reads: Vec<u32> = Vec::new();
+    for (i, b) in func.blocks.iter().enumerate() {
+        let mut defined: rustc_hash::FxHashSet<u32> = entry_defs[i].clone();
+        for stmt in &b.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            reads.clear();
+            collect_local_reads(value, &mut reads);
+            for r in &reads {
+                if !defined.contains(r) {
+                    return true;
+                }
+            }
+            defined.insert(dest.0);
+        }
+        match &b.terminator {
+            Terminator::ReturnValue(l) | Terminator::Throw(l) if !defined.contains(&l.0) => {
+                return true;
+            }
+            Terminator::Branch { cond, .. } if !defined.contains(&cond.0) => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn collect_local_reads(rv: &skotch_mir::Rvalue, out: &mut Vec<u32>) {
+    use skotch_mir::Rvalue;
+    match rv {
+        Rvalue::Local(l) => out.push(l.0),
+        Rvalue::BinOp { lhs, rhs, .. } => {
+            out.push(lhs.0);
+            out.push(rhs.0);
+        }
+        Rvalue::Call { args, .. } => {
+            for a in args {
+                out.push(a.0);
+            }
+        }
+        Rvalue::GetField { receiver, .. } => out.push(receiver.0),
+        Rvalue::PutField {
+            receiver, value, ..
+        } => {
+            out.push(receiver.0);
+            out.push(value.0);
+        }
+        Rvalue::CheckCast { obj, .. } => out.push(obj.0),
+        Rvalue::ArrayLoad { array, index } => {
+            out.push(array.0);
+            out.push(index.0);
+        }
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            out.push(array.0);
+            out.push(index.0);
+            out.push(value.0);
+        }
+        _ => {}
+    }
 }
 
 /// Emit a minimal stub method that just returns the default value for
@@ -12819,11 +13143,16 @@ fn walk_block(
 
                         // Mixed ref/primitive comparison: when one side is a
                         // reference type (Any/Nullable from e.g. iterator.next())
-                        // and the other is a primitive int, autobox the primitive
-                        // and compare via Object.equals() to avoid a JVM
-                        // VerifyError ("Bad type on operand stack" at if_acmpeq).
+                        // and the other is a primitive int-slot (Int/Bool/Char/
+                        // Byte/Short — all share a single JVM stack slot),
+                        // autobox the primitive and compare via Object.equals()
+                        // to avoid a JVM VerifyError ("Bad type on operand
+                        // stack" at if_acmpeq).
                         if is_ref
-                            && matches!(rhs_ty, Ty::Int | Ty::Bool)
+                            && matches!(
+                                rhs_ty,
+                                Ty::Int | Ty::Bool | Ty::Char | Ty::Byte | Ty::Short
+                            )
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
                             // Stack: [lhs_ref, rhs_int]
@@ -13037,8 +13366,18 @@ fn walk_block(
                 ..
             } => {
                 load_local(code, stack, max_stack, slots, *receiver, &func.locals);
-                let field_ty = &func.locals[dest.0 as usize];
-                let descriptor = jvm_type_string(field_ty);
+                // Prefer the field's DECLARED type so the Fieldref descriptor
+                // matches the field declaration. Falls back to the dest
+                // local's type for external classes.
+                let declared_ty = module
+                    .classes
+                    .iter()
+                    .find(|c| &c.name == class_name)
+                    .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
+                    .map(|f| f.ty.clone());
+                let dest_ty = &func.locals[dest.0 as usize];
+                let field_ty = declared_ty.as_ref().unwrap_or(dest_ty);
+                let descriptor = jvm_param_type_string(field_ty);
                 let fr = cp.fieldref(class_name, field_name, &descriptor);
                 code.push(0xB4); // getfield
                 code.write_u16::<BigEndian>(fr).unwrap();
@@ -13049,7 +13388,21 @@ fn walk_block(
                     1
                 };
                 bump(stack, max_stack, field_width - 1); // net = pushed - popped_receiver
-                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                                                         // If the destination local is typed Unit but the field
+                                                         // pushed a non-Unit value, `store_local` is a no-op so
+                                                         // the value is orphaned on the stack. Emit pop/pop2
+                                                         // to keep the stack consistent.
+                if matches!(dest_ty, Ty::Unit) && !matches!(field_ty, Ty::Unit) {
+                    if field_width == 2 {
+                        code.push(0x58); // pop2
+                        bump(stack, max_stack, -2);
+                    } else {
+                        code.push(0x57); // pop
+                        bump(stack, max_stack, -1);
+                    }
+                } else {
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                }
             }
             Rvalue::PutField {
                 receiver,
@@ -13058,9 +13411,30 @@ fn walk_block(
                 value,
             } => {
                 load_local(code, stack, max_stack, slots, *receiver, &func.locals);
-                load_local(code, stack, max_stack, slots, *value, &func.locals);
                 let value_ty = &func.locals[value.0 as usize];
-                let descriptor = jvm_type_string(value_ty);
+                // Prefer the field's DECLARED type from the target class,
+                // so the Fieldref descriptor matches the field declaration.
+                // Falls back to the value's local type when the class
+                // isn't in MIR (e.g. external classes).
+                let declared_ty = module
+                    .classes
+                    .iter()
+                    .find(|c| &c.name == class_name)
+                    .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
+                    .map(|f| f.ty.clone());
+                let effective_ty = declared_ty.as_ref().unwrap_or(value_ty);
+                // load_local skips Ty::Unit (no slot reserved). When the
+                // field expects a reference type, push aconst_null in its
+                // place so the putfield has the right stack shape.
+                let need_null_for_unit_value =
+                    matches!(value_ty, Ty::Unit) && !matches!(effective_ty, Ty::Unit | Ty::Nothing);
+                if need_null_for_unit_value {
+                    code.push(0x01); // aconst_null
+                    bump(stack, max_stack, 1);
+                } else {
+                    load_local(code, stack, max_stack, slots, *value, &func.locals);
+                }
+                let descriptor = jvm_param_type_string(effective_ty);
                 let fr = cp.fieldref(class_name, field_name, &descriptor);
                 code.push(0xB5); // putfield
                 code.write_u16::<BigEndian>(fr).unwrap();
@@ -13834,10 +14208,25 @@ fn walk_block(
                             .unwrap_or_default();
                         let mut descriptor = String::from("(");
                         for (i, a) in args.iter().enumerate() {
-                            load_local(code, stack, max_stack, slots, *a, &func.locals);
                             let arg_ty = &func.locals[a.0 as usize];
+                            let param_ty_opt = ctor_params.get(i);
+                            // When the constructor param is Unit (descriptor
+                            // `Lkotlin/Unit;` — a ref slot) but the arg is
+                            // also Unit (load_local skips Unit, leaving no
+                            // value on stack), push aconst_null so the
+                            // invokespecial has the right stack shape.
+                            let need_null_for_unit_param = matches!(arg_ty, Ty::Unit)
+                                && param_ty_opt.is_some_and(|p| {
+                                    matches!(p, Ty::Unit) || !matches!(p, Ty::Nothing)
+                                });
+                            if need_null_for_unit_param {
+                                code.push(0x01); // aconst_null
+                                bump(stack, max_stack, 1);
+                            } else {
+                                load_local(code, stack, max_stack, slots, *a, &func.locals);
+                            }
                             // Autobox if constructor param expects Object but arg is primitive.
-                            if let Some(param_ty) = ctor_params.get(i) {
+                            if let Some(param_ty) = param_ty_opt {
                                 if matches!(param_ty, Ty::Any) {
                                     autobox(code, cp, stack, max_stack, arg_ty);
                                 }

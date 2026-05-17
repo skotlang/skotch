@@ -1,0 +1,4 @@
+name = "1212-lambda-captures-ext-receiver"
+status = "unsupported"
+features = ["lambda-capture", "extension-function"]
+reason = "Nested lambda calling an extension method that's dispatched through `this`'s class scope. JetChat's BaseLineHeightModifierKt$Lambda$20 hits this: a `layout { ... }` lambda body uses `heightFromBaseline.roundToPx()` where roundToPx is a Density extension and Density is the receiver of the enclosing measure() method. Lambda needs to capture the outer extension receiver and dispatch the call through it."

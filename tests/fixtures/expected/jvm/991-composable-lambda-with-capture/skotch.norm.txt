@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        Inner (LHolder;IILandroidx/compose/runtime/Composer;I)V 0x0019
-  code        max_stack=4 max_locals=5
+  code        max_stack=7 max_locals=5
     0000 aload_3
     0001 ldc int(2124115655)
     0003 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;)
@@ -24,14 +24,17 @@ method        Inner (LHolder;IILandroidx/compose/runtime/Composer;I)V 0x0019
     0038 aload_3
     0039 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;)
     0044 dup
-    0045 ifnull 63
-    0048 iload 4
-    0050 invokedynamic InvokeDynamic(invoke:(I)Lkotlin/jvm/functions/Function2;)
-    0055 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
-    0060 goto 64
-    0063 pop
-    0064 return
-    sub_attr  StackMapTable (27 bytes)
+    0045 ifnull 66
+    0048 aload_0
+    0049 iload_1
+    0050 iload_2
+    0051 iload 4
+    0053 invokedynamic InvokeDynamic(invoke:(LHolder;III)Lkotlin/jvm/functions/Function2;)
+    0058 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
+    0063 goto 67
+    0066 pop
+    0067 return
+    sub_attr  StackMapTable (32 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (19 bytes)
 method        Inner$default (LHolder;IILandroidx/compose/runtime/Composer;IILjava/lang/Object;)V 0x1009
@@ -56,18 +59,21 @@ method        Inner$default (LHolder;IILandroidx/compose/runtime/Composer;IILjav
     0024 invokestatic Method(InputKt.Inner:(LHolder;IILandroidx/compose/runtime/Composer;I)V)
     0027 return
     sub_attr  StackMapTable (4 bytes)
-method        Inner$lambda$0 (ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
-  code        max_stack=3 max_locals=3
-    0000 aload_1
-    0001 iload_0
-    0002 iconst_1
-    0003 ior
-    0004 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
-    0007 invokestatic Method(InputKt.Inner:(LHolder;IILandroidx/compose/runtime/Composer;I)V)
-    0010 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0013 areturn
-method        Outer (Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V 0x0019
-  code        max_stack=4 max_locals=3
+method        Inner$lambda$0 (LHolder;IIILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
+  code        max_stack=6 max_locals=6
+    0000 aload_0
+    0001 iload_1
+    0002 iload_2
+    0003 aload 4
+    0005 iload_3
+    0006 iconst_1
+    0007 ior
+    0008 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
+    0011 invokestatic Method(InputKt.Inner:(LHolder;IILandroidx/compose/runtime/Composer;I)V)
+    0014 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0017 areturn
+method        Outer (Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V 0x0019
+  code        max_stack=5 max_locals=3
     0000 aload_1
     0001 ldc int(779780628)
     0003 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;)
@@ -88,29 +94,31 @@ method        Outer (Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/C
     0036 aload_1
     0037 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;)
     0042 dup
-    0043 ifnull 60
-    0046 iload_2
-    0047 invokedynamic InvokeDynamic(invoke:(I)Lkotlin/jvm/functions/Function2;)
-    0052 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
-    0057 goto 61
-    0060 pop
-    0061 return
-    sub_attr  StackMapTable (27 bytes)
+    0043 ifnull 61
+    0046 aload_0
+    0047 iload_2
+    0048 invokedynamic InvokeDynamic(invoke:(Lkotlin/jvm/functions/Function2;I)Lkotlin/jvm/functions/Function2;)
+    0053 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
+    0058 goto 62
+    0061 pop
+    0062 return
+    sub_attr  StackMapTable (30 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (15 bytes)
-method        Outer$lambda$0 (ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
-  code        max_stack=3 max_locals=3
-    0000 aload_1
-    0001 iload_0
-    0002 iconst_1
-    0003 ior
-    0004 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
-    0007 invokestatic Method(InputKt.Outer:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V)
-    0010 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0013 areturn
+method        Outer$lambda$0 (Lkotlin/jvm/functions/Function2;ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
+  code        max_stack=4 max_locals=4
+    0000 aload_0
+    0001 aload_2
+    0002 iload_1
+    0003 iconst_1
+    0004 ior
+    0005 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
+    0008 invokestatic Method(InputKt.Outer:(Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V)
+    0011 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0014 areturn
 method        Top (LHolder;Landroidx/compose/runtime/Composer;I)V 0x0019
-  code        max_stack=4 max_locals=3
+  code        max_stack=5 max_locals=3
     0000 aload_1
     0001 ldc int(161182684)
     0003 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;)
@@ -131,25 +139,27 @@ method        Top (LHolder;Landroidx/compose/runtime/Composer;I)V 0x0019
     0036 aload_1
     0037 invokeinterface InterfaceMethod(androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;)
     0042 dup
-    0043 ifnull 60
-    0046 iload_2
-    0047 invokedynamic InvokeDynamic(invoke:(I)Lkotlin/jvm/functions/Function2;)
-    0052 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
-    0057 goto 61
-    0060 pop
-    0061 return
-    sub_attr  StackMapTable (27 bytes)
+    0043 ifnull 61
+    0046 aload_0
+    0047 iload_2
+    0048 invokedynamic InvokeDynamic(invoke:(LHolder;I)Lkotlin/jvm/functions/Function2;)
+    0053 invokeinterface InterfaceMethod(androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V)
+    0058 goto 62
+    0061 pop
+    0062 return
+    sub_attr  StackMapTable (30 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (15 bytes)
-method        Top$lambda$0 (ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
-  code        max_stack=3 max_locals=3
-    0000 aload_1
-    0001 iload_0
-    0002 iconst_1
-    0003 ior
-    0004 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
-    0007 invokestatic Method(InputKt.Top:(LHolder;Landroidx/compose/runtime/Composer;I)V)
-    0010 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0013 areturn
+method        Top$lambda$0 (LHolder;ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit; 0x001A
+  code        max_stack=4 max_locals=4
+    0000 aload_0
+    0001 aload_2
+    0002 iload_1
+    0003 iconst_1
+    0004 ior
+    0005 invokestatic Method(androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I)
+    0008 invokestatic Method(InputKt.Top:(LHolder;Landroidx/compose/runtime/Composer;I)V)
+    0011 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0014 areturn
 class_attr    InnerClasses (10 bytes)
 class_attr    BootstrapMethods (32 bytes)

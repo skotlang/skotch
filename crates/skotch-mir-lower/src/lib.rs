@@ -2647,9 +2647,26 @@ fn body_needs_outer_this(
     interner: &mut Interner,
 ) -> bool {
     let mut method_syms: rustc_hash::FxHashSet<Symbol> = rustc_hash::FxHashSet::default();
-    if let Some(cls) = module.classes.iter().find(|c| c.name == outer_class_name) {
-        for m in &cls.methods {
-            method_syms.insert(interner.intern(&m.name));
+    // Walk the class plus its superclass chain and implemented interfaces
+    // so that calls to inherited extension methods (e.g. `dp.roundToPx()`
+    // on `Density`-extension inherited by a `MyDensity : Density` outer
+    // class) are detected.
+    let mut to_visit: Vec<String> = vec![outer_class_name.to_string()];
+    let mut visited: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+    while let Some(cn) = to_visit.pop() {
+        if !visited.insert(cn.clone()) {
+            continue;
+        }
+        if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
+            for m in &cls.methods {
+                method_syms.insert(interner.intern(&m.name));
+            }
+            for iname in &cls.interfaces {
+                to_visit.push(iname.clone());
+            }
+            if let Some(sc) = &cls.super_class {
+                to_visit.push(sc.clone());
+            }
         }
     }
     if method_syms.is_empty() {
@@ -2696,6 +2713,17 @@ fn scan_expr_for_outer_calls(
     match e {
         Expr::Call { callee, args, .. } => {
             if let Expr::Ident(name, _) = callee.as_ref() {
+                if method_syms.contains(name) {
+                    *found = true;
+                    return;
+                }
+            }
+            // Receiver dot-call form: `dp.roundToPx()`. If `roundToPx` is
+            // an extension method on the outer `this`'s class (which is
+            // what method_syms reflects), kotlinc lowers this as
+            // `outer.roundToPx(dp)`, requiring the lambda to capture
+            // the outer `this`.
+            if let Expr::Field { name, .. } = callee.as_ref() {
                 if method_syms.contains(name) {
                     *found = true;
                     return;
@@ -8812,8 +8840,10 @@ fn lower_expr(
                         None
                     };
                 if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = overload_override {
-                    let is_instance =
-                        !matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
+                    let is_instance = !matches!(
+                        &recv_ty,
+                        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool
+                    );
                     let dest = fb.new_local(ret_ty);
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -8983,6 +9013,7 @@ fn lower_expr(
                     Ty::String => Some("java/lang/String"),
                     Ty::Int => Some("java/lang/Integer"),
                     Ty::Long => Some("java/lang/Long"),
+                    Ty::Float => Some("java/lang/Float"),
                     Ty::Double => Some("java/lang/Double"),
                     Ty::Bool => Some("java/lang/Boolean"),
                     Ty::Class(cn) if cn.contains('/') => {
@@ -9001,10 +9032,12 @@ fn lower_expr(
                     ("toInt", Some("java/lang/String")) => "parseInt__on__java/lang/Integer",
                     ("toDouble", Some("java/lang/String")) => "parseDouble__on__java/lang/Double",
                     ("toLong", Some("java/lang/String")) => "parseLong__on__java/lang/Long",
+                    ("toFloat", Some("java/lang/String")) => "parseFloat__on__java/lang/Float",
                     // Kotlin compiles `<primitive>.toString()` to
                     // `String.valueOf(<primitive>)` for parity with Java.
                     ("toString", Some("java/lang/Integer")) => "valueOf__on__java/lang/String",
                     ("toString", Some("java/lang/Long")) => "valueOf__on__java/lang/String",
+                    ("toString", Some("java/lang/Float")) => "valueOf__on__java/lang/String",
                     ("toString", Some("java/lang/Double")) => "valueOf__on__java/lang/String",
                     ("toString", Some("java/lang/Boolean")) => "valueOf__on__java/lang/String",
                     _ => method_name_str.as_str(),
@@ -9160,8 +9193,10 @@ fn lower_expr(
                 }
 
                 if let Some(jvm_class) = effective_class {
-                    let is_primitive_ty =
-                        matches!(&recv_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool);
+                    let is_primitive_ty = matches!(
+                        &recv_ty,
+                        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool
+                    );
                     let is_cross_class = jvm_method_name.contains("__on__");
 
                     // For instance methods on reference types, try instance lookup first.
@@ -9325,65 +9360,90 @@ fn lower_expr(
                 // Density.roundToPx(Dp)I`. Walk the enclosing function's
                 // `this` (params[0]) class hierarchy looking for an
                 // extension method matching `(method_name, recv_ty)`.
-                if !fb.mf.params.is_empty() {
-                    let this_local = fb.mf.params[0];
-                    let this_ty = fb.mf.locals[this_local.0 as usize].clone();
-                    if let Ty::Class(enclosing_class) = &this_ty {
-                        let mut search = Some(enclosing_class.clone());
-                        let mut ext_match: Option<(String, Ty, bool, String)> = None;
-                        'ext: while let Some(cn) = search {
-                            if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
-                                for m in &cls.methods {
-                                    if m.name != method_name_str || m.params.is_empty() {
-                                        continue;
+                // Inside a lambda, also try the captured `$outerThis` or
+                // captured `$this$<method>` extension receivers.
+                {
+                    let mut this_candidates: Vec<LocalId> = Vec::new();
+                    if !fb.mf.params.is_empty() {
+                        this_candidates.push(fb.mf.params[0]);
+                    }
+                    let outer_this_sym = interner.intern("$outerThis");
+                    if let Some((_, outer_lid)) =
+                        scope.iter().rev().find(|(s, _)| *s == outer_this_sym)
+                    {
+                        this_candidates.push(*outer_lid);
+                    }
+                    // Any captured `$this$<name>` extension receivers
+                    // from enclosing functions/methods.
+                    for (sym, lid) in scope.iter().rev() {
+                        let s = interner.resolve(*sym);
+                        if s.starts_with("$this$") && s.len() > 6 {
+                            this_candidates.push(*lid);
+                        }
+                    }
+                    let mut matched: Option<(LocalId, String, Ty, String)> = None;
+                    'cand: for this_local in this_candidates {
+                        let this_ty = fb.mf.locals[this_local.0 as usize].clone();
+                        if let Ty::Class(enclosing_class) = &this_ty {
+                            // Walk the class plus its superclass chain and
+                            // implemented interfaces (extension methods may
+                            // be inherited via interface, e.g.
+                            // `MyDensity : Density { fun Dp.roundToPx() }`).
+                            let mut to_visit: Vec<String> = vec![enclosing_class.clone()];
+                            let mut visited: rustc_hash::FxHashSet<String> =
+                                rustc_hash::FxHashSet::default();
+                            while let Some(cn) = to_visit.pop() {
+                                if !visited.insert(cn.clone()) {
+                                    continue;
+                                }
+                                if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
+                                    for m in &cls.methods {
+                                        if m.name != method_name_str || m.params.len() < 2 {
+                                            continue;
+                                        }
+                                        // params[0]=this, params[1]=ext_receiver.
+                                        let ext_recv_lid = m.params[1];
+                                        let ext_recv_ty =
+                                            m.locals.get(ext_recv_lid.0 as usize).cloned();
+                                        if ext_recv_ty.as_ref() == Some(&recv_ty)
+                                            && m.params.len() == args.len() + 2
+                                        {
+                                            matched = Some((
+                                                this_local,
+                                                cls.name.clone(),
+                                                m.return_ty.clone(),
+                                                method_name_str.clone(),
+                                            ));
+                                            break 'cand;
+                                        }
                                     }
-                                    // params[0] is this; params[1] would be
-                                    // the extension receiver (if any).
-                                    if m.params.len() < 2 {
-                                        continue;
+                                    for iname in &cls.interfaces {
+                                        to_visit.push(iname.clone());
                                     }
-                                    let ext_recv_lid = m.params[1];
-                                    let ext_recv_ty =
-                                        m.locals.get(ext_recv_lid.0 as usize).cloned();
-                                    if ext_recv_ty.as_ref() == Some(&recv_ty)
-                                        && m.params.len() == args.len() + 2
-                                    {
-                                        ext_match = Some((
-                                            cls.name.clone(),
-                                            m.return_ty.clone(),
-                                            cls.is_interface,
-                                            method_name_str.clone(),
-                                        ));
-                                        break 'ext;
+                                    if let Some(sc) = &cls.super_class {
+                                        to_visit.push(sc.clone());
                                     }
                                 }
-                                search = cls.super_class.clone();
-                            } else {
-                                break;
                             }
                         }
-                        if let Some((target_class, ret_ty, _is_iface, mname)) = ext_match {
-                            // Arg shape: [this, recv, user_args...]
-                            let mut new_args = vec![this_local, recv_local];
-                            for &a in all_args.iter().skip(1) {
-                                new_args.push(a);
-                            }
-                            let dest = fb.new_local(ret_ty.clone());
-                            // Use CallKind::Virtual so the JVM backend's
-                            // existing interface-vs-class detection picks
-                            // the right dispatch instruction.
-                            fb.push_stmt(MStmt::Assign {
-                                dest,
-                                value: Rvalue::Call {
-                                    kind: CallKind::Virtual {
-                                        class_name: target_class,
-                                        method_name: mname,
-                                    },
-                                    args: new_args,
+                    }
+                    if let Some((this_local, target_class, ret_ty, mname)) = matched {
+                        let mut new_args = vec![this_local, recv_local];
+                        for &a in all_args.iter().skip(1) {
+                            new_args.push(a);
+                        }
+                        let dest = fb.new_local(ret_ty.clone());
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Virtual {
+                                    class_name: target_class,
+                                    method_name: mname,
                                 },
-                            });
-                            return Some(dest);
-                        }
+                                args: new_args,
+                            },
+                        });
+                        return Some(dest);
                     }
                 }
 
@@ -10145,11 +10205,12 @@ fn lower_expr(
                         // For the inlined instanceof, we just use the arg directly —
                         // if it's a primitive, we need to box it first.
                         let obj_local = match fb.mf.locals[arg_local.0 as usize] {
-                            Ty::Int | Ty::Long | Ty::Double | Ty::Bool => {
+                            Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
                                 // Box the primitive by calling it through a static valueOf.
                                 let (class, desc) = match fb.mf.locals[arg_local.0 as usize] {
                                     Ty::Int => ("java/lang/Integer", "(I)Ljava/lang/Integer;"),
                                     Ty::Long => ("java/lang/Long", "(J)Ljava/lang/Long;"),
+                                    Ty::Float => ("java/lang/Float", "(F)Ljava/lang/Float;"),
                                     Ty::Double => ("java/lang/Double", "(D)Ljava/lang/Double;"),
                                     Ty::Bool => ("java/lang/Boolean", "(Z)Ljava/lang/Boolean;"),
                                     _ => unreachable!(),
@@ -12330,27 +12391,40 @@ fn lower_expr(
                             // smart-cast handles narrowing downstream.
                             Ty::Any
                         };
-                        if matches!(fn_ret, Ty::Int) {
-                            // Kotlinc unboxes via `checkcast Number;
-                            // invokevirtual Number.intValue()I`. Use
-                            // the Number parent class (not Integer)
-                            // so the bytecode matches exactly.
-                            let casted = fb.new_local(Ty::Class("java/lang/Number".to_string()));
+                        // Primitive returns from FunctionN.invoke (Object)
+                        // unbox via `checkcast Number; <type>Value()<type>`
+                        // (or `checkcast Boolean; booleanValue()Z` for Bool).
+                        // Kotlinc uses the Number parent class for numeric
+                        // primitives, matching bytecode exactly.
+                        let unbox: Option<(&str, &str, &str, Ty)> = match &fn_ret {
+                            Ty::Int => Some(("java/lang/Number", "intValue", "()I", Ty::Int)),
+                            Ty::Long => Some(("java/lang/Number", "longValue", "()J", Ty::Long)),
+                            Ty::Float => Some(("java/lang/Number", "floatValue", "()F", Ty::Float)),
+                            Ty::Double => {
+                                Some(("java/lang/Number", "doubleValue", "()D", Ty::Double))
+                            }
+                            Ty::Bool => {
+                                Some(("java/lang/Boolean", "booleanValue", "()Z", Ty::Bool))
+                            }
+                            _ => None,
+                        };
+                        if let Some((cast_class, unbox_method, unbox_desc, unboxed_ty)) = unbox {
+                            let casted = fb.new_local(Ty::Class(cast_class.to_string()));
                             fb.push_stmt(MStmt::Assign {
                                 dest: casted,
                                 value: Rvalue::CheckCast {
                                     obj: raw_result,
-                                    target_class: "java/lang/Number".to_string(),
+                                    target_class: cast_class.to_string(),
                                 },
                             });
-                            let unboxed = fb.new_local(Ty::Int);
+                            let unboxed = fb.new_local(unboxed_ty);
                             fb.push_stmt(MStmt::Assign {
                                 dest: unboxed,
                                 value: Rvalue::Call {
                                     kind: CallKind::VirtualJava {
-                                        class_name: "java/lang/Number".to_string(),
-                                        method_name: "intValue".to_string(),
-                                        descriptor: "()I".to_string(),
+                                        class_name: cast_class.to_string(),
+                                        method_name: unbox_method.to_string(),
+                                        descriptor: unbox_desc.to_string(),
                                     },
                                     args: vec![casted],
                                 },
@@ -12772,7 +12846,140 @@ fn lower_expr(
                 } else if let Some((owner, desc, _ret_ty)) =
                     module.cross_file_fns.get(callee_str).cloned()
                 {
-                    // Cross-file function call.
+                    // Cross-file function call. Apply the same trailing-
+                    // lambda + composer/changed/default padding that the
+                    // import_map branch does, so calls to in-project
+                    // Composables like `JetchatTheme { ... }` route the
+                    // lambda to the correct (final user-param) slot and
+                    // forward $composer/$changed.
+                    let desc_param_count = skotch_classinfo::count_descriptor_params_pub(&desc);
+                    if arg_locals.len() < desc_param_count {
+                        let composer_sym = interner.intern("$composer");
+                        let changed_sym = interner.intern("$changed");
+                        let scope_composer = scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| *s == composer_sym)
+                            .map(|(_, id)| *id);
+                        let scope_changed = scope
+                            .iter()
+                            .rev()
+                            .find(|(s, _)| *s == changed_sym)
+                            .map(|(_, id)| *id);
+                        let composer_abs_pos = composer_position_in_descriptor(&desc);
+                        let desc_param_tys = param_tys_from_descriptor(&desc);
+                        let mut default_mask: u64 = 0;
+                        let default_slot_idx = composer_abs_pos.map(|p| p + 2);
+                        // Trailing-lambda re-positioning.
+                        if let Some(composer_pos) = composer_abs_pos {
+                            let user_slot_count = composer_pos;
+                            let is_fn_slot = |ty: &Ty| {
+                                matches!(ty, Ty::Function { .. })
+                                    || matches!(ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
+                                        || n.contains("$Lambda$"))
+                            };
+                            let last_user_slot_is_fn = composer_pos > 0
+                                && desc_param_tys
+                                    .get(composer_pos - 1)
+                                    .map(is_fn_slot)
+                                    .unwrap_or(false);
+                            let last_user_arg_is_fn = arg_locals
+                                .last()
+                                .and_then(|l| fb.mf.locals.get(l.0 as usize))
+                                .map(is_fn_slot)
+                                .unwrap_or(false);
+                            if last_user_arg_is_fn
+                                && last_user_slot_is_fn
+                                && arg_locals.len() < user_slot_count
+                                && user_slot_count >= 2
+                            {
+                                let trailing = arg_locals.pop().expect("non-empty checked above");
+                                let pad_until = user_slot_count - 1;
+                                while arg_locals.len() < pad_until {
+                                    let cur = arg_locals.len();
+                                    let slot_ty =
+                                        desc_param_tys.get(cur).cloned().unwrap_or(Ty::Any);
+                                    default_mask |= 1u64 << cur;
+                                    let pad = fb.new_local(slot_ty.clone());
+                                    let init = match &slot_ty {
+                                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                            Rvalue::Const(MirConst::Int(0))
+                                        }
+                                        Ty::Long => Rvalue::Const(MirConst::Long(0)),
+                                        Ty::Float => Rvalue::Const(MirConst::Float(0.0)),
+                                        Ty::Double => Rvalue::Const(MirConst::Double(0.0)),
+                                        Ty::Bool => Rvalue::Const(MirConst::Bool(false)),
+                                        _ => Rvalue::Const(MirConst::Null),
+                                    };
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: pad,
+                                        value: init,
+                                    });
+                                    arg_locals.push(pad);
+                                }
+                                arg_locals.push(trailing);
+                            }
+                        }
+                        while arg_locals.len() < desc_param_count {
+                            let cur = arg_locals.len();
+                            let slot_ty = desc_param_tys.get(cur).cloned().unwrap_or(Ty::Any);
+                            let is_composer_slot = composer_abs_pos == Some(cur);
+                            let is_changed_slot = composer_abs_pos == Some(cur.wrapping_sub(1));
+                            let is_default_slot = Some(cur) == default_slot_idx;
+                            if is_composer_slot {
+                                if let Some(cid) = scope_composer {
+                                    arg_locals.push(cid);
+                                } else {
+                                    let composer = fb.new_local(Ty::Class(
+                                        "androidx/compose/runtime/Composer".to_string(),
+                                    ));
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: composer,
+                                        value: Rvalue::Const(MirConst::Null),
+                                    });
+                                    arg_locals.push(composer);
+                                }
+                            } else if is_changed_slot {
+                                if let Some(cid) = scope_changed {
+                                    arg_locals.push(cid);
+                                } else {
+                                    let changed = fb.new_local(Ty::Int);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: changed,
+                                        value: Rvalue::Const(MirConst::Int(0)),
+                                    });
+                                    arg_locals.push(changed);
+                                }
+                            } else if is_default_slot {
+                                let mask = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: mask,
+                                    value: Rvalue::Const(MirConst::Int(default_mask as i32)),
+                                });
+                                arg_locals.push(mask);
+                            } else {
+                                if cur < composer_abs_pos.unwrap_or(usize::MAX) {
+                                    default_mask |= 1u64 << cur;
+                                }
+                                let placeholder = fb.new_local(slot_ty.clone());
+                                let init = match &slot_ty {
+                                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                        Rvalue::Const(MirConst::Int(0))
+                                    }
+                                    Ty::Long => Rvalue::Const(MirConst::Long(0)),
+                                    Ty::Float => Rvalue::Const(MirConst::Float(0.0)),
+                                    Ty::Double => Rvalue::Const(MirConst::Double(0.0)),
+                                    Ty::Bool => Rvalue::Const(MirConst::Bool(false)),
+                                    _ => Rvalue::Const(MirConst::Null),
+                                };
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: placeholder,
+                                    value: init,
+                                });
+                                arg_locals.push(placeholder);
+                            }
+                        }
+                    }
                     CallKind::StaticJava {
                         class_name: owner,
                         method_name: callee_str.to_string(),
@@ -13010,6 +13217,67 @@ fn lower_expr(
                         // lambda).
                         let mut default_mask: u64 = 0;
                         let default_slot_idx = composer_abs_pos.map(|p| p + 2);
+
+                        // Trailing-lambda placement: if the user provided
+                        // a Function-typed last arg AND the last user-param
+                        // slot in the descriptor (just before Composer) is
+                        // also Function-typed AND we don't already have the
+                        // right number of user args, treat the user's last
+                        // arg as the trailing lambda destined for the final
+                        // user-param slot. Fill the in-between slots with
+                        // defaults (mask bits set) so the call dispatches
+                        // through $default-style defaults at the callee.
+                        if let Some(composer_pos) = composer_abs_pos {
+                            let user_slot_count = composer_pos;
+                            let is_fn_slot = |ty: &Ty| {
+                                matches!(ty, Ty::Function { .. })
+                                    || matches!(ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
+                                        || n.contains("$Lambda$"))
+                            };
+                            let last_user_slot_is_fn = composer_pos > 0
+                                && desc_param_tys
+                                    .get(composer_pos - 1)
+                                    .map(is_fn_slot)
+                                    .unwrap_or(false);
+                            let last_user_arg_is_fn = arg_locals
+                                .last()
+                                .and_then(|l| fb.mf.locals.get(l.0 as usize))
+                                .map(is_fn_slot)
+                                .unwrap_or(false);
+                            if last_user_arg_is_fn
+                                && last_user_slot_is_fn
+                                && arg_locals.len() < user_slot_count
+                                && user_slot_count >= 2
+                            {
+                                let trailing = arg_locals.pop().expect("non-empty checked above");
+                                // Pad positions arg_locals.len()..(user_slot_count-1) with
+                                // descriptor-typed defaults; record mask bits.
+                                let pad_until = user_slot_count - 1;
+                                while arg_locals.len() < pad_until {
+                                    let cur = arg_locals.len();
+                                    let slot_ty =
+                                        desc_param_tys.get(cur).cloned().unwrap_or(Ty::Any);
+                                    default_mask |= 1u64 << cur;
+                                    let pad = fb.new_local(slot_ty.clone());
+                                    let init = match &slot_ty {
+                                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                            Rvalue::Const(MirConst::Int(0))
+                                        }
+                                        Ty::Long => Rvalue::Const(MirConst::Long(0)),
+                                        Ty::Float => Rvalue::Const(MirConst::Float(0.0)),
+                                        Ty::Double => Rvalue::Const(MirConst::Double(0.0)),
+                                        Ty::Bool => Rvalue::Const(MirConst::Bool(false)),
+                                        _ => Rvalue::Const(MirConst::Null),
+                                    };
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest: pad,
+                                        value: init,
+                                    });
+                                    arg_locals.push(pad);
+                                }
+                                arg_locals.push(trailing);
+                            }
+                        }
 
                         while arg_locals.len() < desc_param_count {
                             let cur = arg_locals.len();
@@ -16069,6 +16337,34 @@ fn lower_expr(
                     }
                 }
             }
+            // Extension-receiver capture: when the enclosing function is
+            // an extension on some interface (e.g. `fun MeasureScope.measure`),
+            // a lambda inside the body that calls extension methods on
+            // that receiver (e.g. `dp.roundToPx()` resolving via
+            // `MeasureScope: Density`) needs to capture the extension
+            // receiver too. Scope holds it as `$this$<methodName>` per
+            // the class-method lower fix.
+            for (sym, lid) in scope.iter().rev() {
+                let s = interner.resolve(*sym).to_string();
+                if !s.starts_with("$this$") || s == "$this" {
+                    continue;
+                }
+                let ext_ty = fb.mf.locals.get(lid.0 as usize).cloned();
+                let Some(Ty::Class(ext_class_name)) = ext_ty.clone() else {
+                    continue;
+                };
+                if ext_class_name.contains("$Lambda$") || ext_class_name.contains("$Callable") {
+                    continue;
+                }
+                let ext_sym = interner.intern(&s);
+                let already = free_vars.iter().any(|(s2, _, _)| *s2 == ext_sym);
+                if already {
+                    continue;
+                }
+                if body_needs_outer_this(body, &ext_class_name, module, interner) {
+                    free_vars.push((ext_sym, *lid, ext_ty.unwrap()));
+                }
+            }
             let free_vars = free_vars;
 
             // ── Simple-case metafactory path ───────────────────────
@@ -16409,11 +16705,17 @@ fn lower_expr(
             }
 
             // Fields for captured variables — use $Ref type for mutated captures.
+            // Substitute Ty::Unit with Ty::Any so JVM doesn't emit a `V`
+            // descriptor for the field (which is invalid for fields).
+            // Unit-typed captures arise when an unresolved value is closed
+            // over; the runtime field will hold null/Unit.INSTANCE.
             let capture_fields: Vec<MirField> = free_vars
                 .iter()
                 .map(|(sym, _, ty)| {
                     let field_ty = if let Some(ref_name) = ref_class_names.get(sym) {
                         Ty::Class(ref_name.clone())
+                    } else if matches!(ty, Ty::Unit) {
+                        Ty::Any
                     } else {
                         ty.clone()
                     };
@@ -19151,13 +19453,17 @@ fn lower_class(
             for block in &mut fb.mf.blocks {
                 if let Terminator::ReturnValue(local) = &block.terminator {
                     let local_ty = fb.mf.locals[local.0 as usize].clone();
-                    if matches!(local_ty, Ty::Int | Ty::Long | Ty::Double | Ty::Bool) {
+                    if matches!(
+                        local_ty,
+                        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool
+                    ) {
                         // Autobox: insert valueOf call before return.
                         let boxed = fb.mf.locals.len() as u32;
                         fb.mf.locals.push(Ty::Any);
                         let (box_class, box_desc) = match local_ty {
                             Ty::Int => ("java/lang/Integer", "(I)Ljava/lang/Integer;"),
                             Ty::Long => ("java/lang/Long", "(J)Ljava/lang/Long;"),
+                            Ty::Float => ("java/lang/Float", "(F)Ljava/lang/Float;"),
                             Ty::Double => ("java/lang/Double", "(D)Ljava/lang/Double;"),
                             Ty::Bool => ("java/lang/Boolean", "(Z)Ljava/lang/Boolean;"),
                             _ => unreachable!(),
