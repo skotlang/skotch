@@ -146,6 +146,17 @@ pub enum Rvalue {
         field_name: std::string::String,
         value: LocalId,
     },
+    /// Write a static field: `ClassName.FIELD = value`.
+    /// On JVM this emits `getstatic`-less `putstatic`. Used by the synthetic
+    /// `<clinit>` to initialize non-const top-level vals with non-literal
+    /// initializers. The `dest` of the enclosing `MStmt::Assign` is unused
+    /// (this is a side effect; semantically returns Unit).
+    PutStaticField {
+        class_name: std::string::String,
+        field_name: std::string::String,
+        descriptor: std::string::String,
+        value: LocalId,
+    },
     Call {
         kind: CallKind,
         args: Vec<LocalId>,

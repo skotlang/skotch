@@ -434,6 +434,30 @@ fn walk_block(
                 });
                 code.push(0);
             }
+            Rvalue::PutStaticField {
+                class_name,
+                field_name,
+                descriptor,
+                value: val,
+            } => {
+                // sput-* vAA, field@BBBB (format 21c) — opcode picks the
+                // variant based on the field descriptor.
+                let val_reg = slot_get(&slot, &val.0);
+                let opcode: u8 = match descriptor.as_str() {
+                    "I" | "Z" | "B" | "C" | "S" | "F" => 0x67, // sput
+                    "J" | "D" => 0x68,                         // sput-wide
+                    _ => 0x69,                                 // sput-object
+                };
+                let field_idx =
+                    pools.intern_field(&format!("L{class_name};"), field_name, descriptor);
+                code.push(opcode_aa(opcode, val_reg as u8));
+                patches.push(Patch {
+                    insn_offset: code.len(),
+                    kind: PatchKind::Field,
+                    old_idx: field_idx,
+                });
+                code.push(0);
+            }
             Rvalue::GetStaticField {
                 class_name,
                 field_name,

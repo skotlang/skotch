@@ -786,6 +786,7 @@ impl<'a> BlockWalker<'a> {
             Rvalue::NewInstance(_)
             | Rvalue::GetField { .. }
             | Rvalue::PutField { .. }
+            | Rvalue::PutStaticField { .. }
             | Rvalue::InstanceOf { .. }
             | Rvalue::CheckCast { .. } => {
                 // TODO: class/instanceof/checkcast support in LLVM backend

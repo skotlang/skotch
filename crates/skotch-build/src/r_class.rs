@@ -26,6 +26,13 @@ pub struct ResourceEntry {
 #[derive(Clone, Debug, Default)]
 pub struct ResourceTable {
     pub entries: BTreeMap<String, Vec<ResourceEntry>>,
+    /// `int[] styleable X { id0, id1, ... }` arrays from R.txt, in
+    /// declaration order — the index of each id within the array is
+    /// what the `int styleable X_N` constants name. AAR R.txt files
+    /// list these with 0x0 placeholder ids; the real ids come from
+    /// aapt2's `--output-text-symbols` R.txt and are wired in after
+    /// parsing by the caller via [`apply_styleable_arrays`].
+    pub styleable_arrays: BTreeMap<String, Vec<u32>>,
 }
 
 /// Standard Android resource type IDs.
@@ -68,20 +75,75 @@ pub fn parse_r_txt(content: &str) -> ResourceTable {
     let mut table = ResourceTable::default();
     for line in content.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        // `int <type> <name> <id>` — skip styleable arrays for now.
+        // `int[] styleable <name> { id, id, ... }` — array of resource
+        // ids that AppCompat's TintTypedArray dereferences by index.
+        if parts.len() >= 4 && parts[0] == "int[]" && parts[1] == "styleable" {
+            let name = parts[2].to_string();
+            // Collect ids between the braces; tolerate commas + 0x prefix.
+            let after_brace = match line.find('{') {
+                Some(i) => &line[i + 1..],
+                None => continue,
+            };
+            let inside = after_brace.trim_end_matches('}').trim();
+            let ids: Vec<u32> = inside
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .filter(|s| !s.is_empty())
+                .filter_map(|tok| {
+                    let s = tok.trim().trim_start_matches("0x");
+                    u32::from_str_radix(s, 16).ok()
+                })
+                .collect();
+            table.styleable_arrays.insert(name, ids);
+            continue;
+        }
+        // `int <type> <name> <value>` for non-styleable types; the value
+        // is overwritten by `assign_resource_ids` since AAR R.txt files
+        // ship with 0x0 placeholders.
+        //
+        // For `int styleable <name> <index>` rows, the value IS the
+        // literal index into the array (a small integer) — preserve it
+        // verbatim and skip `assign_resource_ids` below.
         if parts.len() < 4 || parts[0] != "int" {
             continue;
         }
         let res_type = parts[1].to_string();
         let name = parts[2].to_string();
+        let id = if res_type == "styleable" {
+            let raw = parts[3].trim_start_matches("0x");
+            // styleable index values are usually decimal; allow hex too.
+            raw.parse::<u32>()
+                .ok()
+                .or_else(|| u32::from_str_radix(raw, 16).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
         table
             .entries
             .entry(res_type)
             .or_default()
-            .push(ResourceEntry { name, id: 0 });
+            .push(ResourceEntry { name, id });
     }
     assign_resource_ids(&mut table);
     table
+}
+
+/// Replace each `int[]` styleable array's ids with values from `real`
+/// (keyed by name). Caller obtains `real` by parsing aapt2's
+/// `--output-text-symbols` R.txt, which lists each styleable array
+/// with the resource ids actually baked into `resources.arsc`. Lookups
+/// without a match leave the existing array intact so generation still
+/// produces a structurally valid `R$styleable` class — runtime
+/// dereferences for those will hit the placeholder 0x0 ids.
+pub fn apply_styleable_arrays(
+    table: &mut ResourceTable,
+    real: &std::collections::HashMap<String, Vec<u32>>,
+) {
+    for (name, ids) in &mut table.styleable_arrays {
+        if let Some(replacement) = real.get(name) {
+            *ids = replacement.clone();
+        }
+    }
 }
 
 /// Scan a `res/` directory and build the resource table.
@@ -184,9 +246,15 @@ fn parse_values_xml(xml: &str, table: &mut ResourceTable) {
 }
 
 /// Assign numeric IDs to all resources following Android conventions.
+/// Styleable index constants (`int styleable X_Y N`) preserve their
+/// literal R.txt value — those are array indices, not resource ids,
+/// so the synthetic `0x7f<type><idx>` form would be wrong.
 fn assign_resource_ids(table: &mut ResourceTable) {
     const PACKAGE_ID: u32 = 0x7f;
     for (res_type, entries) in &mut table.entries {
+        if res_type == "styleable" {
+            continue;
+        }
         let type_id = type_id_for(res_type) as u32;
         for (i, entry) in entries.iter_mut().enumerate() {
             entry.id = (PACKAGE_ID << 24) | (type_id << 16) | (i as u32 + 1);
@@ -403,9 +471,29 @@ pub fn generate_r_class(package: &str, table: &ResourceTable) -> Vec<(String, Ve
     let mut classes = Vec::new();
 
     // For each resource type, generate an inner class with int constants.
+    // R$styleable also gets the `int[]` array fields declared by
+    // `int[] styleable X { ... }` lines, initialized in <clinit>.
+    let empty_entries: Vec<ResourceEntry> = Vec::new();
+    let mut styleable_emitted = false;
     for (res_type, entries) in &table.entries {
         let inner_name = format!("{}${}", r_class_name, res_type);
-        let class_bytes = generate_inner_r_class(&inner_name, entries);
+        if res_type == "styleable" {
+            let class_bytes =
+                generate_styleable_r_class(&inner_name, entries, &table.styleable_arrays);
+            classes.push((inner_name, class_bytes));
+            styleable_emitted = true;
+        } else {
+            let class_bytes = generate_inner_r_class(&inner_name, entries);
+            classes.push((inner_name, class_bytes));
+        }
+    }
+    // If the AAR declares styleable arrays but no `int styleable` index
+    // constants (rare but legal), still emit a R$styleable class so the
+    // array fields are reachable.
+    if !styleable_emitted && !table.styleable_arrays.is_empty() {
+        let inner_name = format!("{}$styleable", r_class_name);
+        let class_bytes =
+            generate_styleable_r_class(&inner_name, &empty_entries, &table.styleable_arrays);
         classes.push((inner_name, class_bytes));
     }
 
@@ -491,6 +579,229 @@ fn generate_inner_r_class(class_name: &str, entries: &[ResourceEntry]) -> Vec<u8
     buf.write_u16::<BigEndian>(0).unwrap();
 
     buf
+}
+
+/// Generate bytecode for `R$styleable`: a class with int constants AND
+/// `int[]` static array fields initialized by a `<clinit>` method.
+///
+/// AppCompat reads `R$styleable.SomeWidget[N]` where `N` is one of
+/// the `int styleable SomeWidget_<attr>` index constants. The array's
+/// elements are resource ids that aapt2 baked into `resources.arsc`.
+fn generate_styleable_r_class(
+    class_name: &str,
+    entries: &[ResourceEntry],
+    arrays: &BTreeMap<String, Vec<u32>>,
+) -> Vec<u8> {
+    use byteorder::{BigEndian, WriteBytesExt};
+    let mut buf = Vec::new();
+
+    buf.write_u32::<BigEndian>(0xCAFEBABE).unwrap();
+    buf.write_u16::<BigEndian>(0).unwrap();
+    buf.write_u16::<BigEndian>(61).unwrap();
+
+    // ── Constant pool ──
+    // Indices 1..6 are the standard "this class + super + descriptors"
+    // boilerplate. After that we append, in order:
+    //   * per-int-field: 1 Utf8 (name) + 1 Integer (constant value)
+    //   * per-array-field: 1 Utf8 (name)
+    //   * Code-emission constants: each unique array length and each
+    //     unique array element id may need a CONSTANT_Integer if it
+    //     can't be encoded inline with iconst_*/bipush/sipush. We
+    //     synthesize those on demand below.
+    let mut cp: Vec<Vec<u8>> = vec![
+        Vec::new(),                     // index 0 unused
+        utf8_entry(class_name),         // #1
+        class_entry(1),                 // #2: this
+        utf8_entry("java/lang/Object"), // #3
+        class_entry(3),                 // #4: super
+        utf8_entry("I"),                // #5: int descriptor
+        utf8_entry("[I"),               // #6: int[] descriptor
+        utf8_entry("ConstantValue"),    // #7: attr name
+        utf8_entry("Code"),             // #8: attr name
+        utf8_entry("<clinit>"),         // #9: method name
+        utf8_entry("()V"),              // #10: method desc
+    ];
+
+    // Field metadata: (name_idx, kind) where kind = Some(const_idx) for
+    // int fields with a ConstantValue attribute, or None for int[]
+    // fields initialized in <clinit>.
+    let mut int_fields: Vec<(u16, u16)> = Vec::new(); // (name_idx, const_value_idx)
+    for entry in entries {
+        let name_idx = cp.len() as u16;
+        cp.push(utf8_entry(&entry.name));
+        let val_idx = cp.len() as u16;
+        cp.push(int_entry(entry.id as i32));
+        int_fields.push((name_idx, val_idx));
+    }
+    let mut array_fields: Vec<(u16, Vec<u32>, u16)> = Vec::new();
+    // (name_idx, ids, fieldref_idx). fieldref_idx points to a
+    // CONSTANT_Fieldref so <clinit>'s putstatic can resolve it.
+    for (name, ids) in arrays {
+        let name_idx = cp.len() as u16;
+        cp.push(utf8_entry(name));
+        // NameAndType for putstatic: (name_idx, [I_desc_idx=6).
+        let nat_idx = cp.len() as u16;
+        cp.push(name_and_type_entry(name_idx, 6));
+        let fieldref_idx = cp.len() as u16;
+        cp.push(fieldref_entry(2, nat_idx)); // class=#2 (this)
+        array_fields.push((name_idx, ids.clone(), fieldref_idx));
+    }
+
+    // Pre-allocate Integer CP entries for any id that can't be encoded
+    // inline (i.e. > 32767 or < -32768). Most resource ids exceed
+    // 0x7f0000 so they always need a CP entry.
+    let mut id_const_cp: std::collections::HashMap<u32, u16> = std::collections::HashMap::new();
+    for (_, ids, _) in &array_fields {
+        for &id in ids {
+            if !fits_in_sipush(id) && !id_const_cp.contains_key(&id) {
+                let idx = cp.len() as u16;
+                cp.push(int_entry(id as i32));
+                id_const_cp.insert(id, idx);
+            }
+        }
+    }
+
+    let cp_count = cp.len() as u16;
+    buf.write_u16::<BigEndian>(cp_count).unwrap();
+    for entry in &cp[1..] {
+        buf.extend_from_slice(entry);
+    }
+
+    // Access flags: ACC_PUBLIC | ACC_FINAL | ACC_SUPER
+    buf.write_u16::<BigEndian>(0x0031).unwrap();
+    buf.write_u16::<BigEndian>(2).unwrap(); // this
+    buf.write_u16::<BigEndian>(4).unwrap(); // super
+    buf.write_u16::<BigEndian>(0).unwrap(); // interfaces
+
+    // ── Fields ──
+    let total_fields = int_fields.len() + array_fields.len();
+    buf.write_u16::<BigEndian>(total_fields as u16).unwrap();
+    for (name_idx, const_idx) in &int_fields {
+        buf.write_u16::<BigEndian>(0x0019).unwrap(); // public static final
+        buf.write_u16::<BigEndian>(*name_idx).unwrap();
+        buf.write_u16::<BigEndian>(5).unwrap(); // "I"
+        buf.write_u16::<BigEndian>(1).unwrap(); // 1 attribute
+        buf.write_u16::<BigEndian>(7).unwrap(); // ConstantValue
+        buf.write_u32::<BigEndian>(2).unwrap();
+        buf.write_u16::<BigEndian>(*const_idx).unwrap();
+    }
+    for (name_idx, _, _) in &array_fields {
+        buf.write_u16::<BigEndian>(0x0019).unwrap(); // public static final
+        buf.write_u16::<BigEndian>(*name_idx).unwrap();
+        buf.write_u16::<BigEndian>(6).unwrap(); // "[I"
+        buf.write_u16::<BigEndian>(0).unwrap(); // 0 attributes (init in <clinit>)
+    }
+
+    // ── Methods ──
+    // Emit a <clinit>()V if there are any array fields to initialize.
+    if array_fields.is_empty() {
+        buf.write_u16::<BigEndian>(0).unwrap();
+    } else {
+        buf.write_u16::<BigEndian>(1).unwrap(); // 1 method
+                                                // method_info: access (ACC_STATIC=0x0008), name (#9), desc (#10),
+                                                // attributes=1 (Code).
+        buf.write_u16::<BigEndian>(0x0008).unwrap();
+        buf.write_u16::<BigEndian>(9).unwrap();
+        buf.write_u16::<BigEndian>(10).unwrap();
+        buf.write_u16::<BigEndian>(1).unwrap();
+        // Code attribute.
+        let code = build_styleable_clinit(&array_fields, &id_const_cp);
+        let max_stack: u16 = 4; // worst case: arrayref, arrayref, index, value
+        let max_locals: u16 = 0;
+        buf.write_u16::<BigEndian>(8).unwrap(); // attribute_name_index = "Code"
+                                                // attribute_length = 2 + 2 + 4 + code.len() + 2 + 2
+        let attr_len = 12 + code.len() as u32;
+        buf.write_u32::<BigEndian>(attr_len).unwrap();
+        buf.write_u16::<BigEndian>(max_stack).unwrap();
+        buf.write_u16::<BigEndian>(max_locals).unwrap();
+        buf.write_u32::<BigEndian>(code.len() as u32).unwrap();
+        buf.extend_from_slice(&code);
+        buf.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+        buf.write_u16::<BigEndian>(0).unwrap(); // attributes_count
+    }
+
+    // ── Class attributes (none) ──
+    buf.write_u16::<BigEndian>(0).unwrap();
+    buf
+}
+
+fn fits_in_sipush(id: u32) -> bool {
+    let signed = id as i32;
+    (-32768..=32767).contains(&signed)
+}
+
+fn build_styleable_clinit(
+    array_fields: &[(u16, Vec<u32>, u16)],
+    id_const_cp: &std::collections::HashMap<u32, u16>,
+) -> Vec<u8> {
+    use byteorder::{BigEndian, WriteBytesExt};
+    let mut code = Vec::new();
+    for (_, ids, fieldref_idx) in array_fields {
+        push_int_const(&mut code, ids.len() as i32);
+        // newarray T_INT (atype=10)
+        code.push(0xBC);
+        code.push(10);
+        for (i, &id) in ids.iter().enumerate() {
+            // dup; iconst i (or bipush); ldc id (or inline); iastore
+            code.push(0x59); // dup
+            push_int_const(&mut code, i as i32);
+            if let Some(&cp_idx) = id_const_cp.get(&id) {
+                if cp_idx < 256 {
+                    code.push(0x12); // ldc
+                    code.push(cp_idx as u8);
+                } else {
+                    code.push(0x13); // ldc_w
+                    code.write_u16::<BigEndian>(cp_idx).unwrap();
+                }
+            } else {
+                push_int_const(&mut code, id as i32);
+            }
+            code.push(0x4F); // iastore
+        }
+        code.push(0xB3); // putstatic
+        code.write_u16::<BigEndian>(*fieldref_idx).unwrap();
+    }
+    code.push(0xB1); // return
+    code
+}
+
+/// Push an `int` constant using the smallest valid encoding
+/// (iconst_*, bipush, sipush). Callers must use ldc for values outside
+/// the sipush range (handled separately for resource ids).
+fn push_int_const(code: &mut Vec<u8>, v: i32) {
+    use byteorder::{BigEndian, WriteBytesExt};
+    if (-1..=5).contains(&v) {
+        // iconst_m1 = 0x02, iconst_0 = 0x03, ..., iconst_5 = 0x08.
+        code.push((0x03_i32 + v) as u8);
+    } else if (-128..=127).contains(&v) {
+        code.push(0x10); // bipush
+        code.push(v as u8);
+    } else if (-32768..=32767).contains(&v) {
+        code.push(0x11); // sipush
+        code.write_i16::<BigEndian>(v as i16).unwrap();
+    } else {
+        // Caller should have routed through ldc; emit iconst_0 as a
+        // structural fallback so the verifier still accepts the class.
+        code.push(0x03);
+    }
+}
+
+fn name_and_type_entry(name_idx: u16, desc_idx: u16) -> Vec<u8> {
+    use byteorder::{BigEndian, WriteBytesExt};
+    let mut e = Vec::new();
+    e.push(12u8); // CONSTANT_NameAndType
+    e.write_u16::<BigEndian>(name_idx).unwrap();
+    e.write_u16::<BigEndian>(desc_idx).unwrap();
+    e
+}
+
+fn fieldref_entry(class_idx: u16, nat_idx: u16) -> Vec<u8> {
+    use byteorder::{BigEndian, WriteBytesExt};
+    let mut e = Vec::new();
+    e.push(9u8); // CONSTANT_Fieldref
+    e.write_u16::<BigEndian>(class_idx).unwrap();
+    e.write_u16::<BigEndian>(nat_idx).unwrap();
+    e
 }
 
 /// Generate bytecode for the outer R class.

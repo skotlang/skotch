@@ -1392,11 +1392,16 @@ pub fn lower_file(
     // ("top-level val initializers must be a literal"), so we
     // skip silently here when we can't extract a `MirConst`.
     let mut name_to_global: FxHashMap<Symbol, MirConst> = FxHashMap::default();
+    // Track non-const top-level vals whose initializers couldn't be const-
+    // folded. After all functions are lowered (and thus all call sites
+    // resolvable), we synthesize a `<clinit>` MirFunction that lowers each
+    // saved init expression and stores the result via PutStaticField.
+    let mut deferred_val_inits: Vec<(String, &skotch_syntax::Expr)> = Vec::new();
     for decl in &file.decls {
         if let Decl::Val(v) = decl {
+            let name_str = interner.resolve(v.name).to_string();
             if let Some(c) = lower_const_init(&v.init, &mut module) {
                 let ty = const_ty(&c);
-                let name_str = interner.resolve(v.name).to_string();
                 if v.is_const {
                     // `const val` → `public static final` field with
                     // ConstantValue attribute. Use sites inline the
@@ -1413,10 +1418,18 @@ pub fn lower_file(
                     module.top_level_props.push((name_str.clone(), ty, c));
                     module.top_level_prop_names.insert(name_str);
                 }
+            } else if !v.is_const {
+                // Non-const val whose initializer is a function call,
+                // construction, or other non-trivial expression. Register
+                // the field with a `Null` placeholder so it exists at the
+                // backend (the actual value is computed in the synthetic
+                // <clinit> emitted below — see deferred_val_inits).
+                module
+                    .top_level_props
+                    .push((name_str.clone(), Ty::Any, MirConst::Null));
+                module.top_level_prop_names.insert(name_str.clone());
+                deferred_val_inits.push((name_str, &v.init));
             }
-            // If we can't extract a constant, typeck already errored;
-            // we just don't register the global, and any reference to
-            // it later will produce its own diagnostic.
         }
     }
 
@@ -1691,6 +1704,85 @@ pub fn lower_file(
     }
     let _ = resolved;
 
+    // ─── Pass 3b: synthesize `<clinit>` for non-const val initializers ──
+    //
+    // The Null placeholders registered in pass 2 keep the static fields
+    // and getters from disappearing, but reads return `null` — which is
+    // wrong for Compose theme constants like
+    // `val JetchatLightColorScheme = lightColorScheme(...)`. Synthesize a
+    // proper `<clinit>` that runs each deferred initializer and stores
+    // the result via `Rvalue::PutStaticField`. Also handles the
+    // const-foldable props (was previously the auto-clinit's job), so
+    // both kinds end up in a single <clinit> as the JVM requires.
+    if !deferred_val_inits.is_empty() {
+        let clinit_idx = module.functions.len();
+        let mut fb = FnBuilder::new(clinit_idx, "<clinit>".to_string(), Ty::Unit);
+        let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
+        let wrapper_class = module.wrapper_class.clone();
+        let deferred_names: rustc_hash::FxHashSet<String> =
+            deferred_val_inits.iter().map(|(n, _)| n.clone()).collect();
+        // Const-foldable props go first — same order as the auto-clinit.
+        // We snapshot them so we don't borrow `module.top_level_props`
+        // while calling lower_expr (which mutates module).
+        let const_props: Vec<(String, Ty, MirConst)> = module
+            .top_level_props
+            .iter()
+            .filter(|(n, _, _)| !deferred_names.contains(n))
+            .cloned()
+            .collect();
+        for (val_name, ty, value) in const_props {
+            let local = fb.new_local(ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: local,
+                value: Rvalue::Const(value),
+            });
+            let dummy = fb.new_local(Ty::Unit);
+            let descriptor = jvm_type_string_for_ty(&ty);
+            fb.push_stmt(MStmt::Assign {
+                dest: dummy,
+                value: Rvalue::PutStaticField {
+                    class_name: wrapper_class.clone(),
+                    field_name: val_name,
+                    descriptor,
+                    value: local,
+                },
+            });
+        }
+        // Now the deferred initializers — each lowers its real init
+        // expression and stores the result via PutStaticField.
+        for (val_name, init_expr) in deferred_val_inits {
+            if let Some(value_local) = lower_expr(
+                init_expr,
+                &mut fb,
+                &mut scope,
+                &mut module,
+                &mut name_to_func,
+                &name_to_global,
+                interner,
+                diags,
+                None,
+            ) {
+                let dummy = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: dummy,
+                    value: Rvalue::PutStaticField {
+                        class_name: wrapper_class.clone(),
+                        field_name: val_name,
+                        descriptor: "Ljava/lang/Object;".to_string(),
+                        value: value_local,
+                    },
+                });
+            }
+        }
+        let mut clinit_mf = fb.finish();
+        clinit_mf.return_ty = Ty::Unit;
+        // <clinit> is implicitly static — no `this`, no instance args.
+        // Mark it as private so the JVM backend emits the right access
+        // flags (kotlinc emits `static`-only flags for <clinit>).
+        clinit_mf.is_private = true;
+        module.functions.push(clinit_mf);
+    }
+
     // ─── Apply package prefix ──────────────────────────────────────────
     //
     // If the source file has a `package` declaration, prepend the
@@ -1712,6 +1804,15 @@ pub fn lower_file(
                 .map(|c| c.name.clone())
                 .collect();
 
+            // Capture the un-prefixed wrapper class name so step 4 can
+            // also rewrite class refs that point at the wrapper itself
+            // (e.g. same-file `Rvalue::GetStaticField` for a top-level
+            // val: `ThemesKt.JetchatDarkColorScheme` → `com/example/.../
+            // ThemesKt.JetchatDarkColorScheme`). Without this, JetChat's
+            // JetchatTheme reads its own `JetchatLightColorScheme` field
+            // through `LThemesKt;` and ClassLoader can't resolve it.
+            let unprefixed_wrapper = module.wrapper_class.clone();
+
             // 1. Prefix the wrapper class.
             module.wrapper_class = format!("{prefix}/{}", module.wrapper_class);
 
@@ -1731,7 +1832,7 @@ pub fn lower_file(
 
             // 4. Rewrite class-name references inside all MIR functions.
             let rewrite = |name: &mut String| {
-                if user_classes.contains(name.as_str()) {
+                if user_classes.contains(name.as_str()) || name.as_str() == unprefixed_wrapper {
                     *name = format!("{prefix}/{name}");
                 }
             };
@@ -1756,6 +1857,9 @@ pub fn lower_file(
                                 ref mut class_name, ..
                             } => rewrite(class_name),
                             Rvalue::PutField {
+                                ref mut class_name, ..
+                            } => rewrite(class_name),
+                            Rvalue::GetStaticField {
                                 ref mut class_name, ..
                             } => rewrite(class_name),
                             Rvalue::InstanceOf {
@@ -3619,6 +3723,9 @@ fn collect_rvalue_reads(v: &Rvalue, out: &mut rustc_hash::FxHashSet<u32>) {
             out.insert(receiver.0);
             out.insert(value.0);
         }
+        Rvalue::PutStaticField { value, .. } => {
+            out.insert(value.0);
+        }
         Rvalue::Call { args, .. } => {
             for a in args {
                 out.insert(a.0);
@@ -4034,6 +4141,12 @@ fn lower_function(
             diags,
             None, // no loop context at function body level
         ) {
+            // Abort lowering — see v42 note in project_jetchat_progress
+            // memory. Trying to "preserve partial bodies on stmt failure"
+            // produces malformed bytecode that fails JVM verification
+            // (e.g. half-lowered `LocalContext.current` reads on a null
+            // receiver). An empty placeholder body with the correct
+            // descriptor is strictly safer than a partial one with junk.
             ok = false;
             break;
         }
@@ -10326,7 +10439,33 @@ fn lower_expr(
                     && (skotch_classinfo::load_jdk_class(&jvm_class).is_ok()
                         || skotch_classinfo::lookup_method_descriptor(&jvm_class, "<init>", 0)
                             .is_some());
-                if class_exists {
+                // Compose convention: the simple name `MaterialTheme` resolves
+                // to BOTH an `object MaterialTheme` (singleton accessor for
+                // `MaterialTheme.colorScheme.primary` etc.) AND a sibling top-
+                // level `@Composable fun MaterialTheme(...)` in a Kt facade
+                // class (`MaterialTheme_androidKt` / `MaterialThemeKt`). The
+                // function is the one users invoke at composition sites.
+                //
+                // If a Kt facade in the same package exports a static method
+                // with the same name and the imported class is a Kotlin
+                // singleton (has an `INSTANCE` field), prefer the function:
+                // route through the StaticJava path below instead of falling
+                // into constructor dispatch, which would emit
+                // `new MaterialTheme; invokespecial <init>` and crash with
+                // NoSuchMethodError at runtime.
+                let is_kotlin_object = class_exists
+                    && skotch_classinfo::lookup_static_field_descriptor(&jvm_class, "INSTANCE")
+                        .is_some();
+                let sibling_kt_fn = if is_kotlin_object {
+                    if let Some((pkg, _)) = jvm_class.rsplit_once('/') {
+                        skotch_classinfo::find_wrapper_class_for_function(pkg, &callee_str)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if class_exists && sibling_kt_fn.is_none() {
                     let mut arg_locals = Vec::new();
                     for a in args {
                         let id = lower_expr(
@@ -14823,6 +14962,67 @@ fn lower_expr(
             name,
             span,
         } => {
+            // Nested static field access: `OuterClass.NestedClass.FIELD`
+            //
+            // Pattern matches when receiver is itself an Expr::Field with an
+            // Ident inner receiver — i.e. a three-segment dotted path. This
+            // covers `android.os.Build.VERSION.SDK_INT` (imported as
+            // `import android.os.Build`, then referenced as
+            // `Build.VERSION.SDK_INT`) and `Build.VERSION_CODES.S`-style
+            // constants used widely in Android theme code.
+            //
+            // Without this, MIR-lower's recursive Field-evaluation cannot
+            // resolve the inner `Build.VERSION` (Build is not a class in
+            // module.classes; VERSION is not a function or global) and
+            // returns None, dropping the entire enclosing statement.
+            if let Expr::Field {
+                receiver: inner_receiver,
+                name: inner_name,
+                ..
+            } = receiver.as_ref()
+            {
+                if let Expr::Ident(outer_sym, _) = inner_receiver.as_ref() {
+                    let outer_str = interner.resolve(*outer_sym).to_string();
+                    let mid_str = interner.resolve(*inner_name).to_string();
+                    let field_str = interner.resolve(*name).to_string();
+                    // Resolve outer simple name through the import map.
+                    if let Some(outer_jvm) = module.import_map.get(&outer_str).cloned() {
+                        let nested_class = format!("{outer_jvm}${mid_str}");
+                        // Hardcoded descriptors for the small set of Android
+                        // Build nested-static fields actually used by sample
+                        // apps. The JVM emitter just needs the descriptor +
+                        // result type; we list the ones JetChat exercises.
+                        let known: Option<(Ty, &str)> =
+                            match (outer_jvm.as_str(), mid_str.as_str(), field_str.as_str()) {
+                                ("android/os/Build", "VERSION", "SDK_INT") => Some((Ty::Int, "I")),
+                                ("android/os/Build", "VERSION", "RELEASE") => {
+                                    Some((Ty::String, "Ljava/lang/String;"))
+                                }
+                                ("android/os/Build", "VERSION", "CODENAME") => {
+                                    Some((Ty::String, "Ljava/lang/String;"))
+                                }
+                                // Build.VERSION_CODES.* — all Int level constants
+                                // (BASE=1 through current). We don't enumerate
+                                // every code; match by mid-segment and accept any
+                                // FIELD name as Int.
+                                ("android/os/Build", "VERSION_CODES", _) => Some((Ty::Int, "I")),
+                                _ => None,
+                            };
+                        if let Some((ty, desc)) = known {
+                            let dest = fb.new_local(ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::GetStaticField {
+                                    class_name: nested_class,
+                                    field_name: field_str,
+                                    descriptor: desc.to_string(),
+                                },
+                            });
+                            return Some(dest);
+                        }
+                    }
+                }
+            }
             // Companion property access: `OuterClass.PROP` →
             // `getstatic Outer.Companion; invokevirtual
             //  Outer$Companion.get<PROP>()`. Matches kotlinc's emission.

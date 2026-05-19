@@ -1205,7 +1205,14 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // user-declared methods. Skipped when there are no top-level
     // properties to initialize (the JVM treats classes without
     // `<clinit>` as having an implicit no-op initializer).
-    if !module.top_level_props.is_empty() {
+    //
+    // If MIR-lower already synthesized a manual <clinit> (because some
+    // val had a non-const initializer), it will appear in
+    // `module.functions` and the normal method emit-loop below picks
+    // it up. Suppress the auto-clinit in that case — the JVM only
+    // allows one <clinit> per class.
+    let has_manual_clinit = module.functions.iter().any(|f| f.name == "<clinit>");
+    if !module.top_level_props.is_empty() && !has_manual_clinit {
         let clinit = emit_clinit_for_props(
             class_name,
             &module.top_level_props,
@@ -1214,7 +1221,11 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             code_attr_name_idx,
         );
         method_blobs.push(clinit);
-        // Getter per property — `get<Name>()<ty>`.
+    }
+    // Getters for top-level props — always emitted (even when the
+    // manual <clinit> handles initialization, callers still need the
+    // `get<Name>()` accessor methods).
+    if !module.top_level_props.is_empty() {
         for (field_name, ty, _value) in &module.top_level_props {
             let getter =
                 emit_property_getter(class_name, field_name, ty, &mut cp, code_attr_name_idx);
@@ -5733,14 +5744,34 @@ fn emit_method(
     // bytecode — mirroring kotlinc's compose-compiler-plugin output.
     if !func.is_inline {
         if let Some(group_key) = compose_group_key(func) {
-            return emit_composable_method(
-                func,
-                module,
-                class_name,
-                cp,
-                code_attr_name_idx,
-                group_key,
-            );
+            // `emit_composable_method` inlines the user body only for
+            // single-block, Return-terminated functions today; anything
+            // with a `when`/`if`-else chain (e.g. JetChat's `JetchatTheme`,
+            // whose body picks between dark/light/dynamic color schemes)
+            // would otherwise have its body dropped and `content` never
+            // invoked — the visible symptom is a blank Compose UI.
+            // Until the composable-method emitter learns multi-block
+            // bodies, route those cases through the regular static-method
+            // path so the body at least runs. The trade-off is no
+            // start/endRestartGroup wrapping for that one function, which
+            // breaks skippability/restartability but lets the rest of the
+            // composition execute.
+            let body_inlinable_in_composable_method = func.blocks.len() == 1
+                && matches!(
+                    func.blocks[0].terminator,
+                    Terminator::Return | Terminator::ReturnValue(_)
+                );
+            if body_inlinable_in_composable_method {
+                return emit_composable_method(
+                    func,
+                    module,
+                    class_name,
+                    cp,
+                    code_attr_name_idx,
+                    group_key,
+                );
+            }
+            let _ = group_key;
         }
     }
     // Coroutine transform. If the MIR lowerer
@@ -6380,6 +6411,17 @@ fn emit_composable_method(
     code.write_u16::<BigEndian>(mr_should_execute).unwrap();
     code.push(3); // count: receiver + Z + I
     code.push(0);
+    // Decide whether to emit the user's actual body. We only do this
+    // when the body is "simple": a single block with no internal
+    // branches, terminator = Return / ReturnValue(Unit). Anything more
+    // complex falls back to the empty-body (TODO) path until block
+    // emission with full branch + StackMapTable support lands.
+    let body_can_inline = func.blocks.len() == 1
+        && func.blocks[0].stmts.iter().any(|_| true)
+        && matches!(
+            func.blocks[0].terminator,
+            Terminator::Return | Terminator::ReturnValue(_)
+        );
     // ifne L_body — placeholder.
     let ifne_pos = code.len();
     code.push(0x9A); // ifne
@@ -6390,12 +6432,76 @@ fn emit_composable_method(
     code.write_u16::<BigEndian>(mr_skip_to_end).unwrap();
     code.push(1); // receiver only
     code.push(0);
+    // When the body has its own bytecode, jump past it to L_end so the
+    // skip path doesn't fall through into the body. For the empty-body
+    // case we omit this goto so the shape stays byte-stable.
+    let goto_end_after_skip_pos: Option<usize> = if body_can_inline {
+        let p = code.len();
+        code.push(0xA7); // goto L_end (placeholder)
+        code.write_i16::<BigEndian>(0).unwrap();
+        Some(p)
+    } else {
+        None
+    };
     // L_body target — start of original-body bytecode. For the empty
     // case this is also the position of the endRestartGroup call.
     let l_body_offset = code.len();
 
-    // (3) Original body — for now, empty (only handle 580's case).
-    // TODO: emit the user's actual body via emit_method_body shape.
+    // (3) Emit the user's body inline when it's simple enough. Set up
+    // the slot map (user params at slots 0..N-1, $composer at N,
+    // $changed at N+1) and the thread-local caches walk_block needs,
+    // then walk each block's stmts. Terminators are intentionally not
+    // emitted: control falls through to endRestartGroup.
+    let mut body_max_stack: i32 = 0;
+    let mut body_max_locals_u8: u8 = changed_slot + 1;
+    if body_can_inline {
+        let mut slots: FxHashMap<u32, u8> = FxHashMap::default();
+        let mut next_slot: u8 = 0;
+        for &p in &func.params {
+            slots.insert(p.0, next_slot);
+            let ty = &func.locals[p.0 as usize];
+            next_slot += if matches!(ty, Ty::Long | Ty::Double) {
+                2
+            } else {
+                1
+            };
+        }
+        let inlinable = compute_inlinable_constants(func);
+        INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
+        let inlinable_getstatic = compute_inlinable_getstatic(func);
+        INLINABLE_GETSTATIC.with(|cell| *cell.borrow_mut() = inlinable_getstatic);
+        let unused = compute_unused_locals(func);
+        UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
+        NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
+        EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
+        EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
+        let mut stack: i32 = 0;
+        let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
+        walk_block(
+            &func.blocks[0],
+            0,
+            cp,
+            module,
+            func,
+            class_name,
+            &mut code,
+            &mut stack,
+            &mut body_max_stack,
+            &mut slots,
+            &mut next_slot,
+            &mut cmp_targets,
+        );
+        body_max_locals_u8 = body_max_locals_u8.max(next_slot);
+        INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
+        INLINABLE_GETSTATIC.with(|cell| cell.borrow_mut().clear());
+        UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
+        NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
+        EMIT_CP.with(|cell| *cell.borrow_mut() = None);
+        EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
+    }
+    // L_end target — start of endRestartGroup bytecode. Same as
+    // l_body_offset for the empty-body case; differs after body bytes.
+    let l_end_offset = code.len();
 
     // (4) endRestartGroup → stack: [ScopeUpdateScope or null].
     emit_aload(&mut code, composer_slot);
@@ -6457,6 +6563,9 @@ fn emit_composable_method(
     patch(&mut code, ifeq_pos, l0_offset);
     patch(&mut code, goto_after_zero_pos, l1_offset);
     patch(&mut code, ifne_pos, l_body_offset);
+    if let Some(p) = goto_end_after_skip_pos {
+        patch(&mut code, p, l_end_offset);
+    }
     patch(&mut code, ifnull_pos, l_pop_offset);
     patch(&mut code, goto_ret_pos, l_ret_offset);
 
@@ -6466,10 +6575,13 @@ fn emit_composable_method(
     // captures + the iload($changed) before the indy, so the peak is
     // at least n_user + 1 (plus the Composer for the ScopeUpdateScope
     // receiver). Use n_user + 2 to leave headroom for the dup before
-    // the ifnull branch and the rest of the boilerplate.
+    // the ifnull branch and the rest of the boilerplate. When we
+    // emit the user body inline, also account for the body's stack
+    // peak (which may exceed the boilerplate peak for calls with
+    // many args).
     let n_user = func.params.len().saturating_sub(2);
-    let max_stack: u16 = (n_user as u16 + 4).max(4);
-    let max_locals: u16 = changed_slot as u16 + 1;
+    let max_stack: u16 = ((n_user as u16 + 4).max(4)).max(body_max_stack.max(0) as u16);
+    let max_locals: u16 = (changed_slot as u16 + 1).max(body_max_locals_u8 as u16);
     let smt_name_idx = cp.utf8("StackMapTable");
     // Build the method-entry verification-type-info list — one VTI per
     // method param slot. The compose transform appends Composer + Int
@@ -6487,6 +6599,11 @@ fn emit_composable_method(
         l1_offset,
         ifne_pos,
         l_body_offset,
+        if l_end_offset != l_body_offset {
+            Some(l_end_offset)
+        } else {
+            None
+        },
         ifnull_pos,
         l_pop_offset,
         l_ret_offset,
@@ -6791,6 +6908,7 @@ fn build_composable_empty_smt(
     l1_offset: usize,
     _ifne_pos: usize,
     l_body_offset: usize,
+    l_end_offset: Option<usize>,
     _ifnull_pos: usize,
     l_pop_offset: usize,
     l_ret_offset: usize,
@@ -6871,6 +6989,11 @@ fn build_composable_empty_smt(
     prev = l1_offset as i32;
     // L_body: target of `ifne` — empty stack.
     emit_same(&mut out, &mut prev, l_body_offset);
+    // L_end: target of the goto-past-body emitted only when the user
+    // body is inlined. Same locals, empty stack — emit a `same_frame`.
+    if let Some(le) = l_end_offset {
+        emit_same(&mut out, &mut prev, le);
+    }
     // L_pop: target of `ifnull` — stack has [ScopeUpdateScope].
     emit_slss(&mut out, &mut prev, l_pop_offset, &cls_scope_vti);
     // L_ret: target of final `goto` — empty stack.
@@ -12294,6 +12417,7 @@ fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
             bump(*receiver);
             bump(*value);
         }
+        Rvalue::PutStaticField { value, .. } => bump(*value),
         Rvalue::Call { args, .. } => {
             for &a in args {
                 bump(a);
@@ -13440,6 +13564,26 @@ fn walk_block(
                 code.write_u16::<BigEndian>(fr).unwrap();
                 bump(stack, max_stack, -2);
             }
+            Rvalue::PutStaticField {
+                class_name,
+                field_name,
+                descriptor,
+                value,
+            } => {
+                // Emitted by the synthetic <clinit> body for non-const top-
+                // level vals whose initializer was lowered to MIR rather
+                // than reduced to a MirConst. Load the value, then putstatic.
+                load_local(code, stack, max_stack, slots, *value, &func.locals);
+                let fr = cp.fieldref(class_name, field_name, descriptor);
+                code.push(0xB3); // putstatic
+                code.write_u16::<BigEndian>(fr).unwrap();
+                let pop = if descriptor.starts_with('J') || descriptor.starts_with('D') {
+                    2
+                } else {
+                    1
+                };
+                bump(stack, max_stack, -pop);
+            }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println => {
                     // For inlinable-getstatic args, evaluate the arg FIRST,
@@ -13993,12 +14137,24 @@ fn walk_block(
                                 // `StringsKt.repeat`.
                                 if expected.starts_with('L') && expected.ends_with(';') {
                                     let target = &expected[1..expected.len() - 1];
-                                    let actual_class = match actual {
+                                    // For Ty::Any (Object) → typed class param,
+                                    // the JVM verifier strictly rejects passing
+                                    // Object where a specific reference type is
+                                    // declared. Compose surfaces this any time
+                                    // a property whose initializer we couldn't
+                                    // const-fold (e.g. `val foo = bar()`) gets
+                                    // passed to a typed @Composable param. Use
+                                    // checkcast to assert the cast — runtime
+                                    // ClassCastException is preferable to a
+                                    // class-loading-time VerifyError that kills
+                                    // the whole class.
+                                    let needs_checkcast = match actual {
                                         Ty::String => Some("java/lang/String"),
                                         Ty::Class(c) => Some(c.as_str()),
+                                        Ty::Any => Some("java/lang/Object"),
                                         _ => None,
                                     };
-                                    if let Some(ac) = actual_class {
+                                    if let Some(ac) = needs_checkcast {
                                         if ac != target && target != "java/lang/Object" {
                                             let ci = cp.class(target);
                                             code.push(0xC0); // checkcast
@@ -14145,7 +14301,21 @@ fn walk_block(
                     //    constructor params (not including receiver).
                     // 2. Super call in <init>: first arg IS the receiver (this),
                     //    rest are constructor params.
-                    let receiver_in_args = !args.is_empty()
+                    //
+                    // Case 2 only applies when we are emitting an <init>
+                    // method; in any other function, `args[0]` matching
+                    // `func.params[0]` is a coincidence (e.g. a static
+                    // @Composable whose first user param happens to be
+                    // the first capture passed to a lambda constructor).
+                    // Without the `func.name == "<init>"` guard, the
+                    // descriptor-build path drops the first arg as the
+                    // implicit receiver and the resulting invokespecial
+                    // descriptor has one fewer param than the actual
+                    // capture list — d8 then rejects the class because
+                    // the unmatched aload of an initialized value
+                    // collides with the uninitialized-this slot.
+                    let receiver_in_args = func.name == "<init>"
+                        && !args.is_empty()
                         && matches!(func.locals.get(args[0].0 as usize), Some(Ty::Class(_)))
                         && func.params.first() == Some(&args[0]);
 
@@ -14281,9 +14451,50 @@ fn walk_block(
                 } => {
                     // External constructor with explicit descriptor.
                     // Stack already has [ref, ref] from NewInstance + dup.
-                    // Load the actual args (not including receiver).
-                    for a in args {
+                    // Load the actual args (not including receiver), widening
+                    // primitive types as the descriptor requires — covers
+                    // `Color(0xFFADC6FF)` where Color's only constructor
+                    // takes `J` (long) but the literal lowered as `I`.
+                    let param_types = parse_descriptor_param_types_jvm(descriptor);
+                    for (i, a) in args.iter().enumerate() {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        if let Some(expected) = param_types.get(i) {
+                            let actual = &func.locals[a.0 as usize];
+                            match (actual, expected.as_str()) {
+                                (Ty::Int, "J") => {
+                                    code.push(0x85); // i2l
+                                    bump(stack, max_stack, 1);
+                                }
+                                (Ty::Int, "D") => {
+                                    code.push(0x87); // i2d
+                                    bump(stack, max_stack, 1);
+                                }
+                                (Ty::Int, "F") => {
+                                    code.push(0x86); // i2f
+                                }
+                                _ => {}
+                            }
+                            // Same Ty::Any → Class checkcast as the
+                            // StaticJava path. Without this the verifier
+                            // rejects Object args passed to typed-class
+                            // params on constructors.
+                            if expected.starts_with('L') && expected.ends_with(';') {
+                                let target = &expected[1..expected.len() - 1];
+                                let needs_checkcast = match actual {
+                                    Ty::String => Some("java/lang/String"),
+                                    Ty::Class(c) => Some(c.as_str()),
+                                    Ty::Any => Some("java/lang/Object"),
+                                    _ => None,
+                                };
+                                if let Some(ac) = needs_checkcast {
+                                    if ac != target && target != "java/lang/Object" {
+                                        let ci = cp.class(target);
+                                        code.push(0xC0); // checkcast
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                    }
+                                }
+                            }
+                        }
                     }
                     let mref = cp.methodref(class_name, "<init>", descriptor);
                     code.push(0xB7); // invokespecial

@@ -185,6 +185,9 @@ fn validate_rvalue(
             check_local(*receiver, func, ctx, errors);
             check_local(*value, func, ctx, errors);
         }
+        Rvalue::PutStaticField { value, .. } => {
+            check_local(*value, func, ctx, errors);
+        }
         Rvalue::Call { kind, args } => {
             for &a in args {
                 check_local(a, func, ctx, errors);

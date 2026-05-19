@@ -2227,12 +2227,338 @@ fn count_elements(elem: &skotch_axml::Element) -> usize {
     1 + elem.children.iter().map(count_elements).sum::<usize>()
 }
 
+/// Output of [`link_app_resources_with_aapt2`].
+struct LinkedResources {
+    /// Bytes of `resources.arsc` from the aapt2-link base APK.
+    resources_arsc: Vec<u8>,
+    /// Bytes of the aapt2-compiled binary `AndroidManifest.xml`. This
+    /// one was linked together with the same resources that ended up in
+    /// `resources.arsc`, so `@style/Foo` and `@mipmap/Bar` references
+    /// resolve to real resource ids. Prefer it over the standalone
+    /// `compile_manifest_with_aapt2` output, which doesn't see any
+    /// resources and silently drops attributes whose values reference
+    /// the resource table.
+    manifest: Vec<u8>,
+    /// All `res/...` binary XML files in the base APK, keyed by APK
+    /// entry path (e.g. `res/drawable/icon.xml`).
+    res_files: Vec<(String, Vec<u8>)>,
+    /// `(type, name) -> resource id` map parsed from
+    /// aapt2's `--output-text-symbols` R.txt. Used to rebuild AAR R
+    /// classes with IDs that match what aapt2 actually baked into
+    /// `resources.arsc` (otherwise our skotch-assigned IDs use the
+    /// Android-standard ordering — drawable=2 — while aapt2 picks
+    /// alphabetical — drawable=8 — and runtime resource lookups
+    /// dereference the wrong type).
+    symbol_ids: std::collections::HashMap<(String, String), u32>,
+    /// `int[] styleable X { ids... }` arrays parsed from aapt2's R.txt.
+    /// AAR R.txt files ship these with 0x0 placeholders; we substitute
+    /// the real ids here so `R$styleable.X[i]` resolves to the same
+    /// resource that `resources.arsc` knows about.
+    styleable_arrays: std::collections::HashMap<String, Vec<u32>>,
+}
+
+/// Compile + link app + AAR resources into a base APK using aapt2. Returns
+/// the [`LinkedResources`] tuple. Mirrors the `assemble_android` aapt2
+/// pipeline but is callable from `build_multi_module`'s Android path so
+/// it can stop emitting an APK with no resource table (the source of
+/// jetchat's onCreate `Resources$NotFoundException`).
+#[allow(clippy::too_many_arguments)]
+fn link_app_resources_with_aapt2(
+    aapt2: &Path,
+    android_jar: &Path,
+    app_res_dir: &Path,
+    extra_res_dirs: &[PathBuf],
+    manifest_path: &Path,
+    project: &ProjectModel,
+    build_dir: &Path,
+) -> Result<LinkedResources> {
+    let pkg = project
+        .namespace
+        .as_deref()
+        .or(project.application_id.as_deref())
+        .unwrap_or("com.example");
+    let min_sdk = project.min_sdk.unwrap_or(24);
+    let target_sdk = project.target_sdk.unwrap_or(35);
+
+    // ── Step 1: aapt2 compile each res dir to a .zip ─────────────────
+    let compiled_dir = build_dir.join("aapt2-compiled");
+    std::fs::create_dir_all(&compiled_dir)?;
+    let mut res_zips: Vec<PathBuf> = Vec::new();
+
+    if app_res_dir.is_dir() {
+        let app_zip = compiled_dir.join("app-res.zip");
+        let _ = std::fs::remove_file(&app_zip);
+        let out = std::process::Command::new(aapt2)
+            .arg("compile")
+            .arg("--dir")
+            .arg(app_res_dir)
+            .arg("-o")
+            .arg(&app_zip)
+            .output()?;
+        if out.status.success() && app_zip.exists() {
+            res_zips.push(app_zip);
+        }
+    }
+    // Deduplicate library resource dirs by artifact: when both 1.2.0
+    // and 1.7.1 of `appcompat` extracted, keep only the latest so aapt2
+    // doesn't error on conflicting drawable/color/interpolator entries.
+    let deduped_res_dirs: Vec<PathBuf> = {
+        use std::collections::HashMap;
+        let mut best: HashMap<String, (String, PathBuf)> = HashMap::new();
+        for dir in extra_res_dirs {
+            let ver_dir = dir.parent();
+            let art_dir = ver_dir.and_then(|p| p.parent());
+            if let (Some(art), Some(ver)) = (art_dir, ver_dir) {
+                let key = art.to_string_lossy().to_string();
+                let ver_name = ver
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if let Some((ev, _)) = best.get(&key) {
+                    if semver_gt(&ver_name, ev) {
+                        best.insert(key, (ver_name, dir.clone()));
+                    }
+                } else {
+                    best.insert(key, (ver_name, dir.clone()));
+                }
+            } else {
+                best.entry(dir.to_string_lossy().to_string())
+                    .or_insert_with(|| (String::new(), dir.clone()));
+            }
+        }
+        best.into_values().map(|(_, p)| p).collect()
+    };
+    for (i, res_dir) in deduped_res_dirs.iter().enumerate() {
+        let res_path = res_dir.join("res");
+        if !res_path.is_dir() {
+            continue;
+        }
+        let zip = compiled_dir.join(format!("lib-{i}-res.zip"));
+        let _ = std::fs::remove_file(&zip);
+        let out = std::process::Command::new(aapt2)
+            .arg("compile")
+            .arg("--dir")
+            .arg(&res_path)
+            .arg("-o")
+            .arg(&zip)
+            .output()?;
+        if out.status.success() && zip.exists() {
+            res_zips.push(zip);
+        }
+    }
+
+    // ── Step 2: aapt2 link, retrying with conflicting zips removed ────
+    let tmp_manifest = build_dir.join("aapt2-manifest.xml");
+    let manifest_xml = std::fs::read_to_string(manifest_path).unwrap_or_else(|_| {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"{pkg}\">\n  <application><activity android:name=\".MainActivity\" android:exported=\"true\"><intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter></activity></application>\n</manifest>"
+        )
+    });
+    let fixed_xml = if manifest_xml.contains("package=") {
+        manifest_xml
+    } else {
+        manifest_xml.replace("<manifest ", &format!("<manifest package=\"{pkg}\" "))
+    };
+    std::fs::write(&tmp_manifest, &fixed_xml)?;
+
+    let base_apk = build_dir.join("aapt2-base.apk");
+    let r_txt_path = build_dir.join("aapt2-R.txt");
+    let mut link_ok = false;
+    let mut working_zips = res_zips.clone();
+    eprintln!(
+        "  aapt2 link: {} app+lib zips, retrying up to 30x",
+        working_zips.len()
+    );
+    let mut last_stderr = String::new();
+    for _ in 0..30 {
+        let _ = std::fs::remove_file(&base_apk);
+        let _ = std::fs::remove_file(&r_txt_path);
+        let mut cmd = std::process::Command::new(aapt2);
+        cmd.arg("link")
+            .arg("-o")
+            .arg(&base_apk)
+            .arg("-I")
+            .arg(android_jar)
+            .arg("--manifest")
+            .arg(&tmp_manifest)
+            .arg("--min-sdk-version")
+            .arg(min_sdk.to_string())
+            .arg("--target-sdk-version")
+            .arg(target_sdk.to_string())
+            .arg("--version-code")
+            .arg(project.version_code.unwrap_or(1).to_string())
+            .arg("--version-name")
+            .arg(project.version_name.as_deref().unwrap_or("1.0"))
+            .arg("--auto-add-overlay")
+            .arg("--output-text-symbols")
+            .arg(&r_txt_path);
+        for z in &working_zips {
+            cmd.arg(z);
+        }
+        let out = cmd.output()?;
+        if out.status.success() && base_apk.exists() {
+            link_ok = true;
+            break;
+        }
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        last_stderr = stderr.to_string();
+        let bad_zip = stderr.lines().find_map(|line| {
+            line.find(".zip@").map(|idx| {
+                let prefix = &line[..idx + 4];
+                PathBuf::from(prefix.split_whitespace().last().unwrap_or(prefix))
+            })
+        });
+        if let Some(bad) = bad_zip {
+            let before = working_zips.len();
+            working_zips.retain(|z| z != &bad);
+            if working_zips.len() == before {
+                if let Some(name) = bad.file_name() {
+                    working_zips.retain(|z| z.file_name() != Some(name));
+                }
+            }
+            if working_zips.len() < before {
+                continue;
+            }
+        }
+        break;
+    }
+    if !link_ok {
+        eprintln!(
+            "  aapt2 link retries exhausted, last stderr (5 lines):\n{}",
+            last_stderr.lines().take(5).collect::<Vec<_>>().join("\n  ")
+        );
+        // Last resort — link with only the app resources (no AAR overlays).
+        let _ = std::fs::remove_file(&base_apk);
+        let _ = std::fs::remove_file(&r_txt_path);
+        let app_zip = compiled_dir.join("app-res.zip");
+        let mut retry = std::process::Command::new(aapt2);
+        retry
+            .arg("link")
+            .arg("-o")
+            .arg(&base_apk)
+            .arg("-I")
+            .arg(android_jar)
+            .arg("--manifest")
+            .arg(&tmp_manifest)
+            .arg("--min-sdk-version")
+            .arg(min_sdk.to_string())
+            .arg("--target-sdk-version")
+            .arg(target_sdk.to_string())
+            .arg("--auto-add-overlay")
+            .arg("--output-text-symbols")
+            .arg(&r_txt_path);
+        if app_zip.exists() {
+            retry.arg(&app_zip);
+        }
+        let retry_out = retry.output()?;
+        if !retry_out.status.success() || !base_apk.exists() {
+            let stderr = String::from_utf8_lossy(&retry_out.stderr);
+            anyhow::bail!(
+                "aapt2 link failed for resources.arsc generation: {}",
+                stderr.lines().take(3).collect::<Vec<_>>().join("; ")
+            );
+        }
+    }
+
+    // ── Step 3: Extract resources.arsc + manifest + binary res files ──
+    let base_file = std::fs::File::open(&base_apk)?;
+    let mut archive = zip::ZipArchive::new(base_file)?;
+    let mut arsc = Vec::new();
+    let mut manifest_bytes = Vec::new();
+    let mut res_files: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)?;
+        let name = entry.name().to_string();
+        if entry.is_dir() {
+            continue;
+        }
+        if name == "resources.arsc" {
+            std::io::Read::read_to_end(&mut entry, &mut arsc)?;
+        } else if name == "AndroidManifest.xml" {
+            std::io::Read::read_to_end(&mut entry, &mut manifest_bytes)?;
+        } else if name.starts_with("res/") {
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut bytes)?;
+            res_files.push((name, bytes));
+        }
+    }
+
+    // ── Step 4: Parse aapt2's R.txt for the actual (type, name) → id
+    // map and the styleable arrays. Each non-styleable line is
+    // `int <type> <name> <hex_id>`; styleable arrays use
+    // `int[] styleable <name> { id, id, ... }` with the same baked-in
+    // ids that `resources.arsc` exposes.
+    let mut symbol_ids: std::collections::HashMap<(String, String), u32> =
+        std::collections::HashMap::new();
+    let mut styleable_arrays: std::collections::HashMap<String, Vec<u32>> =
+        std::collections::HashMap::new();
+    if let Ok(r_txt) = std::fs::read_to_string(&r_txt_path) {
+        for line in r_txt.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 4 && parts[0] == "int[]" && parts[1] == "styleable" {
+                let name = parts[2].to_string();
+                let after_brace = match line.find('{') {
+                    Some(i) => &line[i + 1..],
+                    None => continue,
+                };
+                let inside = after_brace.trim_end_matches('}').trim();
+                let ids: Vec<u32> = inside
+                    .split(|c: char| c == ',' || c.is_whitespace())
+                    .filter(|s| !s.is_empty())
+                    .filter_map(|tok| {
+                        let s = tok.trim().trim_start_matches("0x");
+                        u32::from_str_radix(s, 16).ok()
+                    })
+                    .collect();
+                styleable_arrays.insert(name, ids);
+                continue;
+            }
+            if parts.len() < 4 || parts[0] != "int" {
+                continue;
+            }
+            let res_type = parts[1].to_string();
+            // `int styleable X_N` lines hold the array index for
+            // `R$styleable.X[N]` lookups — small decimal integers, not
+            // resource ids. Skip them in this map (which is used to
+            // overwrite resource-id fields); their literal values are
+            // already preserved by `parse_r_txt` in r_class.rs.
+            if res_type == "styleable" {
+                continue;
+            }
+            let name = parts[2].to_string();
+            let id_str = parts[3].trim_start_matches("0x");
+            let Ok(id) = u32::from_str_radix(id_str, 16) else {
+                continue;
+            };
+            symbol_ids.insert((res_type, name), id);
+        }
+    }
+    eprintln!(
+        "  aapt2 R.txt: {} symbols + {} styleable arrays parsed",
+        symbol_ids.len(),
+        styleable_arrays.len()
+    );
+
+    Ok(LinkedResources {
+        resources_arsc: arsc,
+        manifest: manifest_bytes,
+        res_files,
+        symbol_ids,
+        styleable_arrays,
+    })
+}
+
 /// Generate `R` and `R$<type>` class bytes for a library AAR by parsing
 /// its `R.txt` (resource id list) and its `AndroidManifest.xml`
 /// (package name). Returns `(jvm_class_name, bytes)` pairs ready to be
 /// fed to d8. Returns an empty vec if either file is missing or the
 /// package can't be determined.
-fn generate_r_classes_from_aar(aar_path: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+fn generate_r_classes_from_aar(
+    aar_path: &Path,
+    symbol_ids: Option<&std::collections::HashMap<(String, String), u32>>,
+    styleable_arrays: Option<&std::collections::HashMap<String, Vec<u32>>>,
+) -> Result<Vec<(String, Vec<u8>)>> {
     let file = std::fs::File::open(aar_path)
         .with_context(|| format!("opening AAR {}", aar_path.display()))?;
     let mut archive = zip::ZipArchive::new(file)
@@ -2268,9 +2594,30 @@ fn generate_r_classes_from_aar(aar_path: &Path) -> Result<Vec<(String, Vec<u8>)>
         None => return Ok(Vec::new()),
     };
 
-    let table = crate::r_class::parse_r_txt(&r_txt);
+    let mut table = crate::r_class::parse_r_txt(&r_txt);
     if table.entries.is_empty() {
         return Ok(Vec::new());
+    }
+    // Overwrite skotch's stand-in IDs with the real ones aapt2 baked
+    // into `resources.arsc` whenever we have them. Without this,
+    // alphabetical aapt2 type ordering (drawable=0x08) clashes with
+    // skotch's Android-standard ordering (drawable=0x02), so
+    // `R.drawable.X` resolves to an animator XML at runtime.
+    if let Some(ids) = symbol_ids {
+        for (res_type, entries) in &mut table.entries {
+            for entry in entries.iter_mut() {
+                if let Some(&id) = ids.get(&(res_type.clone(), entry.name.clone())) {
+                    entry.id = id;
+                }
+            }
+        }
+    }
+    // Replace the 0x0 placeholder ids inside each `int[] styleable` array
+    // with the real ones from aapt2's R.txt. AppCompat's TintTypedArray
+    // reads `R$styleable.AppCompatTheme[i]` and resolves the resulting
+    // resource id; without this substitution it gets 0 and crashes.
+    if let Some(arrays) = styleable_arrays {
+        crate::r_class::apply_styleable_arrays(&mut table, arrays);
     }
     Ok(crate::r_class::generate_r_class(&package, &table))
 }
@@ -2932,6 +3279,90 @@ fn build_multi_module(
         if !dep_jars.is_empty() {
             eprintln!("  {} dependencies resolved for DEX", dep_jars.len());
         }
+
+        let res_dir = app_dir.join("src/main/res");
+        let pkg = project
+            .namespace
+            .as_deref()
+            .or(project.application_id.as_deref())
+            .unwrap_or("com.example");
+
+        // Build the resource table via aapt2 link UP FRONT so we have
+        // both a proper binary `resources.arsc` AND the symbol-id map
+        // that aapt2 actually baked. The R-class generation below
+        // depends on those IDs — without them, AAR R fields point to
+        // the wrong type (e.g. `R.drawable.X` reads an animator XML).
+        let aar_res_dirs: Vec<PathBuf> = dep_jars
+            .iter()
+            .filter_map(|jar| {
+                let aar_path = jar.with_extension("aar");
+                if !aar_path.exists() {
+                    return None;
+                }
+                let file = std::fs::File::open(&aar_path).ok()?;
+                let mut archive = zip::ZipArchive::new(file).ok()?;
+                let has_res = (0..archive.len()).any(|i| {
+                    archive
+                        .by_index(i)
+                        .map(|f| f.name().starts_with("res/"))
+                        .unwrap_or(false)
+                });
+                if !has_res {
+                    return None;
+                }
+                let res_extract_dir = aar_path.with_extension("res");
+                if !res_extract_dir.exists() {
+                    std::fs::create_dir_all(&res_extract_dir).ok();
+                    for i in 0..archive.len() {
+                        let Ok(mut entry) = archive.by_index(i) else {
+                            continue;
+                        };
+                        let name = entry.name().to_string();
+                        if !name.starts_with("res/") || entry.is_dir() {
+                            continue;
+                        }
+                        let out_path = res_extract_dir.join(&name);
+                        if let Some(parent) = out_path.parent() {
+                            std::fs::create_dir_all(parent).ok();
+                        }
+                        if let Ok(mut out) = std::fs::File::create(&out_path) {
+                            std::io::copy(&mut entry, &mut out).ok();
+                        }
+                    }
+                }
+                Some(res_extract_dir)
+            })
+            .collect();
+
+        let linked: Option<LinkedResources> = match find_aapt2() {
+            Ok(aapt2) => {
+                let android_jar = find_android_jar().unwrap_or_default();
+                match link_app_resources_with_aapt2(
+                    &aapt2,
+                    &android_jar,
+                    &res_dir,
+                    &aar_res_dirs,
+                    &manifest_path,
+                    &project,
+                    &build_dir,
+                ) {
+                    Ok(l) => {
+                        eprintln!(
+                            "  aapt2 resources.arsc: {} bytes, {} binary res files",
+                            l.resources_arsc.len(),
+                            l.res_files.len()
+                        );
+                        Some(l)
+                    }
+                    Err(e) => {
+                        eprintln!("  aapt2 link failed: {e}");
+                        None
+                    }
+                }
+            }
+            Err(_) => None,
+        };
+
         // Generate R$type classes for each library AAR. Library .jar files
         // ship without an R class (gradle/aapt2 emits per-app at build
         // time from the merged resource table). Without these, classes
@@ -2958,7 +3389,11 @@ fn build_multi_module(
             if !aar.exists() {
                 continue;
             }
-            let r_classes = match generate_r_classes_from_aar(&aar) {
+            let r_classes = match generate_r_classes_from_aar(
+                &aar,
+                linked.as_ref().map(|l| &l.symbol_ids),
+                linked.as_ref().map(|l| &l.styleable_arrays),
+            ) {
                 Ok(classes) => classes,
                 Err(_) => continue,
             };
@@ -3011,10 +3446,12 @@ fn build_multi_module(
             }
             vec![skotch_backend_dex::compile_module(&combined_module)]
         };
-        // Collect resource files from app module.
-        let res_dir = app_dir.join("src/main/res");
+        // Resource files: prefer aapt2-compiled binary XML, fall back to
+        // raw XML walked from the app's res/ dir.
         let mut res_files = Vec::new();
-        if res_dir.is_dir() {
+        if let Some(ref l) = linked {
+            res_files.extend(l.res_files.iter().cloned());
+        } else if res_dir.is_dir() {
             for entry in walkdir::WalkDir::new(&res_dir)
                 .into_iter()
                 .filter_map(|e| e.ok())
@@ -3033,11 +3470,6 @@ fn build_multi_module(
 
         // Generate resources.arsc from the resource table.
         let resource_table = crate::r_class::scan_resources(&res_dir);
-        let pkg = project
-            .namespace
-            .as_deref()
-            .or(project.application_id.as_deref())
-            .unwrap_or("com.example");
         // Collect string values from values/*.xml for the resource table.
         let mut res_values = std::collections::HashMap::new();
         let values_dir = res_dir.join("values");
@@ -3092,20 +3524,27 @@ fn build_multi_module(
         // resource lookups (`R.layout.X`, etc.) fail with
         // `Resources$NotFoundException`, which is currently jetchat's
         // first onCreate crash.
-        #[allow(clippy::overly_complex_bool_expr)]
-        let resources_arsc: Option<Vec<u8>> = if !resource_table.entries.is_empty() && false {
-            let arsc = crate::r_class::generate_resources_arsc(pkg, &resource_table, &res_values);
-            eprintln!("  resources.arsc: {} bytes", arsc.len());
-            Some(arsc)
-        } else {
-            None
-        };
+        let resources_arsc: Option<Vec<u8>> = linked.as_ref().map(|l| l.resources_arsc.clone());
+        // Avoid warnings about unused branches when aapt2 is available.
+        let _ = (&resource_table, &res_values, pkg);
 
         let mut dex_iter = dex_blobs.into_iter();
         let primary_dex = dex_iter.next().unwrap_or_default();
         let extra_dexes: Vec<Vec<u8>> = dex_iter.collect();
+        // Prefer the aapt2-link manifest when available — that one was
+        // linked against the same resources that ended up in
+        // `resources.arsc`, so `@style/...` and `@mipmap/...` references
+        // resolve to real resource IDs. The standalone
+        // `compile_manifest_with_aapt2` path can't resolve them (no
+        // resources passed in), so it silently drops `android:theme`
+        // and `android:icon`. JetChat's AppCompat check fails when
+        // `application/@android:theme` isn't set.
+        let manifest_to_ship = linked
+            .as_ref()
+            .map(|l| l.manifest.clone())
+            .unwrap_or(axml_bytes);
         let contents = skotch_apk::ApkContents {
-            manifest_xml: axml_bytes,
+            manifest_xml: manifest_to_ship,
             classes_dex: primary_dex,
             extra_dexes,
             resources_arsc,

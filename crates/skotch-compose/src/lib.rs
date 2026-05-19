@@ -120,25 +120,193 @@ pub fn compose_transform(module: &mut MirModule) {
     // FunctionN; we detect lambda classes whose invoke method has the
     // @Composable annotation OR whose interface is Function0 and
     // they're used in a composable context — and bump their arity by 2.
-    patch_composable_lambda_interfaces(module);
+    patch_composable_lambda_interfaces(module, &composable_param_types);
     patch_static_calls_to_composable(module, &composable_param_types);
 }
 
 /// Patch lambda classes to implement the correct FunctionN interface
 /// for Compose. A @Composable () -> Unit lambda must implement
 /// Function2<Composer, Int, Unit> instead of Function0<Unit>.
-fn patch_composable_lambda_interfaces(module: &mut MirModule) {
-    // Collect names of all @Composable top-level functions.
-    let _composable_fn_names: std::collections::HashSet<String> = module
-        .functions
-        .iter()
-        .filter(|f| is_composable(f))
-        .map(|f| f.name.clone())
-        .collect();
+fn patch_composable_lambda_interfaces(
+    module: &mut MirModule,
+    composable_param_types: &std::collections::HashMap<u32, Vec<Ty>>,
+) {
+    // Build `lambda_use_arity`: for every Function0 lambda class that's
+    // passed at a `@Composable () -> Unit` (or higher-arity composable
+    // lambda) arg position of some composable call, record the
+    // FunctionN arity it ought to implement. This catches lambdas whose
+    // own invoke body has no Composer-mentioning calls (e.g. JetChat's
+    // JetchatScaffoldKt$Lambda$19 — its invoke just wraps a call to
+    // `ModalNavigationDrawer` whose MIR descriptor doesn't currently
+    // expose the trailing `Composer;I` params) but which are still
+    // required to be Function2 by their caller's declared signature.
+    let mut lambda_use_arity: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut record_lambda_use = |arg_local_ty: &Ty, param_ty: &Ty| {
+        let Ty::Class(lambda_name) = arg_local_ty else {
+            return;
+        };
+        if !lambda_name.contains("$Lambda$") {
+            return;
+        }
+        let Ty::Function {
+            params,
+            is_composable,
+            is_suspend,
+            ..
+        } = param_ty
+        else {
+            return;
+        };
+        if !*is_composable && !*is_suspend {
+            return;
+        }
+        let arity =
+            params.len() + if *is_composable { 2 } else { 0 } + if *is_suspend { 1 } else { 0 };
+        let entry = lambda_use_arity.entry(lambda_name.clone()).or_insert(0);
+        if arity > *entry {
+            *entry = arity;
+        }
+    };
+    // Parse a JVM method descriptor's parameter list into a Vec of
+    // descriptor strings. Used to detect FunctionN positions in
+    // CallKind::StaticJava descriptors (e.g. `(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V`).
+    fn parse_descriptor_params(desc: &str) -> Vec<String> {
+        let mut params = Vec::new();
+        let inside = desc
+            .strip_prefix('(')
+            .and_then(|s| s.split(')').next())
+            .unwrap_or("");
+        let mut chars = inside.chars().peekable();
+        while let Some(c) = chars.next() {
+            let mut p = String::new();
+            p.push(c);
+            if c == '[' {
+                while chars.peek() == Some(&'[') {
+                    p.push(chars.next().unwrap());
+                }
+                if let Some(&next) = chars.peek() {
+                    if next == 'L' {
+                        p.push(chars.next().unwrap());
+                        for ch in chars.by_ref() {
+                            p.push(ch);
+                            if ch == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        p.push(chars.next().unwrap());
+                    }
+                }
+            } else if c == 'L' {
+                for ch in chars.by_ref() {
+                    p.push(ch);
+                    if ch == ';' {
+                        break;
+                    }
+                }
+            }
+            params.push(p);
+        }
+        params
+    }
+    let scan_body = |func: &MirFunction,
+                     locals_provider: &dyn Fn(LocalId) -> Ty,
+                     mut on_use: &mut dyn FnMut(&Ty, &Ty)| {
+        for block in &func.blocks {
+            for stmt in &block.stmts {
+                let MStmt::Assign { value, .. } = stmt;
+                match value {
+                    Rvalue::Call {
+                        kind: CallKind::Static(fid),
+                        args,
+                    } => {
+                        let Some(param_tys) = composable_param_types.get(&fid.0) else {
+                            continue;
+                        };
+                        for (i, arg) in args.iter().enumerate() {
+                            let Some(param_ty) = param_tys.get(i) else {
+                                continue;
+                            };
+                            let arg_ty = locals_provider(*arg);
+                            on_use(&arg_ty, param_ty);
+                        }
+                    }
+                    Rvalue::Call {
+                        kind: CallKind::StaticJava { descriptor, .. },
+                        args,
+                    } => {
+                        // Use the descriptor's FunctionN annotations as a
+                        // fallback signal — JVM-erased but still useful:
+                        // any `Lkotlin/jvm/functions/FunctionN;` at a
+                        // composer-following slot indicates a composable
+                        // callback whose arity is N (without Composer +
+                        // Int).
+                        let dparams = parse_descriptor_params(descriptor);
+                        let has_composer_param = dparams.iter().any(|p| p.contains("Composer;"));
+                        if !has_composer_param {
+                            continue;
+                        }
+                        for (i, arg) in args.iter().enumerate() {
+                            let Some(dp) = dparams.get(i) else {
+                                continue;
+                            };
+                            let arg_ty = locals_provider(*arg);
+                            // Synthesize a Ty::Function { is_composable:
+                            // true } when the descriptor slot is
+                            // FunctionN and the call also passes a
+                            // Composer somewhere — that's the contract
+                            // kotlinc emits for `@Composable` lambda
+                            // params.
+                            let Some(fn_arity_str) =
+                                dp.strip_prefix("Lkotlin/jvm/functions/Function")
+                            else {
+                                continue;
+                            };
+                            let fn_arity_str = fn_arity_str.trim_end_matches(';');
+                            let Ok(n) = fn_arity_str.parse::<usize>() else {
+                                continue;
+                            };
+                            if n < 2 {
+                                continue;
+                            }
+                            let synth = Ty::Function {
+                                params: vec![Ty::Any; n.saturating_sub(2)],
+                                ret: Box::new(Ty::Unit),
+                                is_suspend: false,
+                                is_composable: true,
+                            };
+                            on_use(&arg_ty, &synth);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // Silence "unused" — the body is called via the closure below.
+        let _ = &mut on_use;
+    };
+    for func in &module.functions {
+        scan_body(
+            func,
+            &|lid: LocalId| func.locals[lid.0 as usize].clone(),
+            &mut record_lambda_use,
+        );
+    }
+    for class in &module.classes {
+        for method in &class.methods {
+            scan_body(
+                method,
+                &|lid: LocalId| method.locals[lid.0 as usize].clone(),
+                &mut record_lambda_use,
+            );
+        }
+    }
 
-    // Bump Function0 lambda classes to Function2 only when the lambda's
-    // invoke body actually makes composable calls (descriptor contains
-    // `Composer;`). Non-composable Function0 lambdas (e.g. the calculation
+    // Bump Function0 lambda classes to Function2+ either when the
+    // lambda's invoke body makes Composer-mentioning calls OR when the
+    // lambda is passed at a composable arg position elsewhere in the
+    // module. Non-composable Function0 lambdas (e.g. the calculation
     // block passed to `remember { ... }`) must STAY Function0 — bumping
     // them breaks call-site casts like `checkcast Function0` that the
     // surrounding code performs before invoking.
@@ -175,7 +343,12 @@ fn patch_composable_lambda_interfaces(module: &mut MirModule) {
                     _ => false,
                 }
             });
-        if !invoke_has_composer_call {
+        // Fallback: if the lambda is passed at a composable param
+        // position somewhere in the module, the caller's declared
+        // signature dictates the lambda's interface even when the
+        // invoke body's own calls don't reveal it.
+        let use_arity = lambda_use_arity.get(&class.name).copied();
+        if !invoke_has_composer_call && use_arity.is_none() {
             continue;
         }
         for iface in &mut class.interfaces {
@@ -715,6 +888,15 @@ fn transform_composable_function(func: &mut MirFunction) {
         }],
         retention: AnnotationRetention::Source,
     });
+
+    // Thread the new $composer/$changed locals through composable call
+    // sites in this function's body. MIR lowering ran before these
+    // params existed, so those calls have `null` / `0` placeholder
+    // locals at the $composer / $changed positions in their arg lists.
+    // Without this, the body emits aconst_null for the composer arg
+    // and the call invokes the Compose runtime with no live composer,
+    // crashing on the first slot-table read.
+    thread_composer_args(func, composer_local, changed_local);
 }
 
 /// Check if a module contains any `@Composable` functions.
