@@ -1,0 +1,55 @@
+Compiled from "com/example/compose/jetchat/UiExtras.kt"
+public final class com.example.compose.jetchat.UiExtrasKt {
+  public static final <T> void FunctionalityNotAvailablePopup(kotlin.jvm.functions.Function0, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: ldc           #33                 // int -644209954
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_1
+         9: aload_1
+        10: iload_2
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_2
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_1
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          56
+        39: new           #35                 // class com/example/compose/jetchat/UiExtrasKt$Lambda$23
+        42: dup
+        43: invokespecial #38                 // Method com/example/compose/jetchat/UiExtrasKt$Lambda$23."<init>":()V
+        46: pop
+        47: new           #40                 // class com/example/compose/jetchat/UiExtrasKt$Lambda$24
+        50: dup
+        51: aload_0
+        52: invokespecial #43                 // Method com/example/compose/jetchat/UiExtrasKt$Lambda$24."<init>":(Lkotlin/jvm/functions/Function0;)V
+        55: pop
+        56: aload_1
+        57: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        62: dup
+        63: ifnull        81
+        66: aload_0
+        67: iload_2
+        68: invokedynamic #63,  0             // InvokeDynamic #0:invoke:(Lkotlin/jvm/functions/Function0;I)Lkotlin/jvm/functions/Function2;
+        73: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        78: goto          82
+        81: pop
+        82: return
+
+  private static final kotlin.Unit FunctionalityNotAvailablePopup$lambda$0(kotlin.jvm.functions.Function0, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_2
+         2: iload_1
+         3: iconst_1
+         4: ior
+         5: invokestatic  #78                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         8: invokestatic  #80                 // Method FunctionalityNotAvailablePopup:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+        11: getstatic     #86                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        14: areturn
+}

@@ -113,7 +113,7 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (Ljava/lang/Object;)Z 0x001A
+method        main$lambda$0 (Ljava/lang/Object;)Z 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 checkcast Class(java/lang/Integer)
@@ -126,7 +126,7 @@ method        main$lambda$0 (Ljava/lang/Object;)Z 0x001A
     0016 iconst_0
     0017 ireturn
     sub_attr  StackMapTable (5 bytes)
-method        main$lambda$1 (Ljava/lang/Object;)Z 0x001A
+method        main$lambda$1 (Ljava/lang/Object;)Z 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 checkcast Class(java/lang/Integer)
@@ -139,7 +139,7 @@ method        main$lambda$1 (Ljava/lang/Object;)Z 0x001A
     0016 iconst_0
     0017 ireturn
     sub_attr  StackMapTable (5 bytes)
-method        main$lambda$2 (Ljava/lang/Object;)Z 0x001A
+method        main$lambda$2 (Ljava/lang/Object;)Z 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 checkcast Class(java/lang/Integer)
@@ -152,7 +152,7 @@ method        main$lambda$2 (Ljava/lang/Object;)Z 0x001A
     0016 iconst_0
     0017 ireturn
     sub_attr  StackMapTable (5 bytes)
-method        main$lambda$3 (Ljava/lang/Object;)Z 0x001A
+method        main$lambda$3 (Ljava/lang/Object;)Z 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 checkcast Class(java/lang/Integer)

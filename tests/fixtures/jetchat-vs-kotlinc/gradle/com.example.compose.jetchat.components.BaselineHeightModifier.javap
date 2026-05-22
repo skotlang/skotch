@@ -1,0 +1,243 @@
+Compiled from "BaseLineHeightModifier.kt"
+public final class com.example.compose.jetchat.components.BaselineHeightModifier implements androidx.compose.ui.layout.LayoutModifier {
+  private final float heightFromBaseline;
+
+  public static final int $stable;
+
+  private com.example.compose.jetchat.components.BaselineHeightModifier(float);
+    Code:
+         0: aload_0
+         1: invokespecial #11                 // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: fload_1
+         6: putfield      #15                 // Field heightFromBaseline:F
+         9: return
+
+  public final float getHeightFromBaseline-D9Ej5fM();
+    Code:
+         0: aload_0
+         1: getfield      #15                 // Field heightFromBaseline:F
+         4: freturn
+
+  public androidx.compose.ui.layout.MeasureResult measure-3p2s80s(androidx.compose.ui.layout.MeasureScope, androidx.compose.ui.layout.Measurable, long);
+    Code:
+         0: aload_1
+         1: ldc           #24                 // String $this$measure
+         3: invokestatic  #30                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_2
+         7: ldc           #32                 // String measurable
+         9: invokestatic  #30                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        12: aload_2
+        13: lload_3
+        14: invokeinterface #38,  3           // InterfaceMethod androidx/compose/ui/layout/Measurable."measure-BRTryo0":(J)Landroidx/compose/ui/layout/Placeable;
+        19: astore        5
+        21: aload         5
+        23: invokestatic  #44                 // Method androidx/compose/ui/layout/AlignmentLineKt.getFirstBaseline:()Landroidx/compose/ui/layout/HorizontalAlignmentLine;
+        26: checkcast     #46                 // class androidx/compose/ui/layout/AlignmentLine
+        29: invokevirtual #52                 // Method androidx/compose/ui/layout/Placeable.get:(Landroidx/compose/ui/layout/AlignmentLine;)I
+        32: istore        6
+        34: aload         5
+        36: invokestatic  #55                 // Method androidx/compose/ui/layout/AlignmentLineKt.getLastBaseline:()Landroidx/compose/ui/layout/HorizontalAlignmentLine;
+        39: checkcast     #46                 // class androidx/compose/ui/layout/AlignmentLine
+        42: invokevirtual #52                 // Method androidx/compose/ui/layout/Placeable.get:(Landroidx/compose/ui/layout/AlignmentLine;)I
+        45: istore        7
+        47: aload_1
+        48: aload_0
+        49: getfield      #15                 // Field heightFromBaseline:F
+        52: invokeinterface #61,  2           // InterfaceMethod androidx/compose/ui/layout/MeasureScope."roundToPx-0680j_4":(F)I
+        57: iload         7
+        59: iadd
+        60: iload         6
+        62: isub
+        63: istore        8
+        65: aload_1
+        66: lload_3
+        67: invokestatic  #67                 // Method androidx/compose/ui/unit/Constraints."getMaxWidth-impl":(J)I
+        70: iload         8
+        72: aconst_null
+        73: aload_0
+        74: iload         6
+        76: aload         5
+        78: invokedynamic #87,  0             // InvokeDynamic #0:invoke:(Lcom/example/compose/jetchat/components/BaselineHeightModifier;ILandroidx/compose/ui/layout/Placeable;)Lkotlin/jvm/functions/Function1;
+        83: iconst_4
+        84: aconst_null
+        85: invokestatic  #91                 // InterfaceMethod androidx/compose/ui/layout/MeasureScope.layout$default:(Landroidx/compose/ui/layout/MeasureScope;IILjava/util/Map;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Landroidx/compose/ui/layout/MeasureResult;
+        88: areturn
+
+  public final float component1-D9Ej5fM();
+    Code:
+         0: aload_0
+         1: getfield      #15                 // Field heightFromBaseline:F
+         4: freturn
+
+  public final com.example.compose.jetchat.components.BaselineHeightModifier copy-0680j_4(float);
+    Code:
+         0: new           #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
+         3: dup
+         4: fload_1
+         5: aconst_null
+         6: invokespecial #108                // Method "<init>":(FLkotlin/jvm/internal/DefaultConstructorMarker;)V
+         9: areturn
+
+  public static com.example.compose.jetchat.components.BaselineHeightModifier copy-0680j_4$default(com.example.compose.jetchat.components.BaselineHeightModifier, float, int, java.lang.Object);
+    Code:
+         0: iload_2
+         1: iconst_1
+         2: iand
+         3: ifeq          11
+         6: aload_0
+         7: getfield      #15                 // Field heightFromBaseline:F
+        10: fstore_1
+        11: aload_0
+        12: fload_1
+        13: invokevirtual #112                // Method "copy-0680j_4":(F)Lcom/example/compose/jetchat/components/BaselineHeightModifier;
+        16: areturn
+
+  public java.lang.String toString();
+    Code:
+         0: aload_0
+         1: getfield      #15                 // Field heightFromBaseline:F
+         4: invokestatic  #120                // Method androidx/compose/ui/unit/Dp."toString-impl":(F)Ljava/lang/String;
+         7: invokedynamic #132,  0            // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        12: areturn
+
+  public int hashCode();
+    Code:
+         0: aload_0
+         1: getfield      #15                 // Field heightFromBaseline:F
+         4: invokestatic  #137                // Method androidx/compose/ui/unit/Dp."hashCode-impl":(F)I
+         7: ireturn
+
+  public boolean equals(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: if_acmpne     7
+         5: iconst_1
+         6: ireturn
+         7: aload_1
+         8: instanceof    #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
+        11: ifne          16
+        14: iconst_0
+        15: ireturn
+        16: aload_1
+        17: checkcast     #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
+        20: astore_2
+        21: aload_0
+        22: getfield      #15                 // Field heightFromBaseline:F
+        25: aload_2
+        26: getfield      #15                 // Field heightFromBaseline:F
+        29: invokestatic  #144                // Method androidx/compose/ui/unit/Dp."equals-impl0":(FF)Z
+        32: ifne          37
+        35: iconst_0
+        36: ireturn
+        37: iconst_1
+        38: ireturn
+
+  public int minIntrinsicWidth(androidx.compose.ui.layout.IntrinsicMeasureScope, androidx.compose.ui.layout.IntrinsicMeasurable, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: iload_3
+         4: invokespecial #150                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.minIntrinsicWidth:(Landroidx/compose/ui/layout/IntrinsicMeasureScope;Landroidx/compose/ui/layout/IntrinsicMeasurable;I)I
+         7: ireturn
+
+  public int minIntrinsicHeight(androidx.compose.ui.layout.IntrinsicMeasureScope, androidx.compose.ui.layout.IntrinsicMeasurable, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: iload_3
+         4: invokespecial #156                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.minIntrinsicHeight:(Landroidx/compose/ui/layout/IntrinsicMeasureScope;Landroidx/compose/ui/layout/IntrinsicMeasurable;I)I
+         7: ireturn
+
+  public int maxIntrinsicWidth(androidx.compose.ui.layout.IntrinsicMeasureScope, androidx.compose.ui.layout.IntrinsicMeasurable, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: iload_3
+         4: invokespecial #161                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.maxIntrinsicWidth:(Landroidx/compose/ui/layout/IntrinsicMeasureScope;Landroidx/compose/ui/layout/IntrinsicMeasurable;I)I
+         7: ireturn
+
+  public int maxIntrinsicHeight(androidx.compose.ui.layout.IntrinsicMeasureScope, androidx.compose.ui.layout.IntrinsicMeasurable, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: iload_3
+         4: invokespecial #165                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.maxIntrinsicHeight:(Landroidx/compose/ui/layout/IntrinsicMeasureScope;Landroidx/compose/ui/layout/IntrinsicMeasurable;I)I
+         7: ireturn
+
+  public <R> R foldIn(R, kotlin.jvm.functions.Function2<? super R, ? super androidx.compose.ui.Modifier$Element, ? extends R>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokespecial #171                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.foldIn:(Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;
+         6: areturn
+
+  public <R> R foldOut(R, kotlin.jvm.functions.Function2<? super androidx.compose.ui.Modifier$Element, ? super R, ? extends R>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokespecial #178                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.foldOut:(Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;
+         6: areturn
+
+  public boolean any(kotlin.jvm.functions.Function1<? super androidx.compose.ui.Modifier$Element, java.lang.Boolean>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokespecial #183                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.any:(Lkotlin/jvm/functions/Function1;)Z
+         5: ireturn
+
+  public boolean all(kotlin.jvm.functions.Function1<? super androidx.compose.ui.Modifier$Element, java.lang.Boolean>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokespecial #188                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.all:(Lkotlin/jvm/functions/Function1;)Z
+         5: ireturn
+
+  public androidx.compose.ui.Modifier then(androidx.compose.ui.Modifier);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokespecial #192                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.then:(Landroidx/compose/ui/Modifier;)Landroidx/compose/ui/Modifier;
+         5: areturn
+
+  private static final kotlin.Unit measure_3p2s80s$lambda$0(com.example.compose.jetchat.components.BaselineHeightModifier, int, androidx.compose.ui.layout.Placeable, androidx.compose.ui.layout.Placeable$PlacementScope);
+    Code:
+         0: aload_3
+         1: ldc           #195                // String $this$layout
+         3: invokestatic  #30                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_3
+         7: aload_0
+         8: getfield      #15                 // Field heightFromBaseline:F
+        11: invokevirtual #198                // Method androidx/compose/ui/layout/Placeable$PlacementScope."roundToPx-0680j_4":(F)I
+        14: iload_1
+        15: isub
+        16: istore        4
+        18: aload_3
+        19: aload_2
+        20: iconst_0
+        21: iload         4
+        23: fconst_0
+        24: iconst_4
+        25: aconst_null
+        26: invokestatic  #202                // Method androidx/compose/ui/layout/Placeable$PlacementScope.place$default:(Landroidx/compose/ui/layout/Placeable$PlacementScope;Landroidx/compose/ui/layout/Placeable;IIFILjava/lang/Object;)V
+        29: getstatic     #208                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        32: areturn
+
+  public com.example.compose.jetchat.components.BaselineHeightModifier(float, kotlin.jvm.internal.DefaultConstructorMarker);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: invokespecial #215                // Method "<init>":(F)V
+         5: return
+
+  static {};
+    Code:
+         0: return
+}

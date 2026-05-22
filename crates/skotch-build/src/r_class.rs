@@ -146,6 +146,74 @@ pub fn apply_styleable_arrays(
     }
 }
 
+/// Re-derive each styleable's `int[]` array AND its per-attribute
+/// integer indices from aapt2's link-time `symbol_ids` + `link_arrays`.
+/// Library R.txt files ship pre-link indices ordered by the library's
+/// own attribute declaration, but at app build time aapt2 sorts the
+/// attribute IDs ascending in each `int[] styleable` array AND emits
+/// the per-package R.java with indices that match the sorted ordering.
+/// The AAR's pre-compiled bytecode reads `R$styleable.<S>_<attr>`
+/// dynamically (no `ConstantValue` inlining at AAR build time), so it
+/// picks up the runtime values from whatever `R$styleable.class` ends
+/// up in the APK — those values must be aapt2's sorted ordering for
+/// `TypedArray.getString(index)` to return the right attribute. We
+/// keep the library's R.txt only as the source-of-truth for which
+/// `(styleable, attr)` pairs this AAR owns.
+pub fn apply_styleable_arrays_for_lib(
+    table: &mut ResourceTable,
+    symbol_ids: &std::collections::HashMap<(String, String), u32>,
+    link_arrays: &std::collections::HashMap<String, Vec<u32>>,
+) {
+    let lib_styleable_entries: Vec<ResourceEntry> =
+        table.entries.get("styleable").cloned().unwrap_or_default();
+    let lib_arrays = table.styleable_arrays.clone();
+    let array_names: Vec<String> = lib_arrays.keys().cloned().collect();
+    let mut new_index_entries: Vec<ResourceEntry> = Vec::new();
+    for styleable_name in &array_names {
+        let prefix = format!("{styleable_name}_");
+        let sorted_arr = match link_arrays.get(styleable_name) {
+            Some(a) => a.clone(),
+            None => continue,
+        };
+        let lib_arr = lib_arrays.get(styleable_name).cloned().unwrap_or_default();
+        table
+            .styleable_arrays
+            .insert(styleable_name.clone(), sorted_arr.clone());
+        for entry in &lib_styleable_entries {
+            let Some(attr_name) = entry.name.strip_prefix(&prefix) else {
+                continue;
+            };
+            let lib_pos = entry.id as usize;
+            // Resolve the attribute's resource id. AAR R.txt arrays put
+            // the framework attr id directly (e.g. `0x10100d0` for
+            // `android:id`) and use `0x0` as a placeholder for
+            // non-framework attrs that aapt2 fills in at link time.
+            let lib_id = lib_arr.get(lib_pos).copied().unwrap_or(0);
+            let resolved_id = if lib_id != 0 {
+                Some(lib_id)
+            } else {
+                symbol_ids
+                    .get(&("attr".to_string(), attr_name.to_string()))
+                    .copied()
+            };
+            let Some(id) = resolved_id else {
+                continue;
+            };
+            if let Some(pos) = sorted_arr.iter().position(|&v| v == id) {
+                new_index_entries.push(ResourceEntry {
+                    name: format!("{prefix}{attr_name}"),
+                    id: pos as u32,
+                });
+            }
+        }
+    }
+    if !new_index_entries.is_empty() {
+        table
+            .entries
+            .insert("styleable".to_string(), new_index_entries);
+    }
+}
+
 /// Scan a `res/` directory and build the resource table.
 ///
 /// Discovers resources from directory structure:

@@ -5,6 +5,7 @@
 //! backend for packaging (JVM → JAR, Android → APK).
 
 pub mod cache;
+pub mod databinding;
 pub mod discover;
 pub mod merge;
 pub mod pipeline;

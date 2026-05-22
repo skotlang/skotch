@@ -1,0 +1,356 @@
+Compiled from "Color.kt"
+public final class com.example.compose.jetchat.theme.ColorKt {
+  private static final long Blue10;
+
+  private static final long Blue20;
+
+  private static final long Blue30;
+
+  private static final long Blue40;
+
+  private static final long Blue80;
+
+  private static final long Blue90;
+
+  private static final long DarkBlue10;
+
+  private static final long DarkBlue20;
+
+  private static final long DarkBlue30;
+
+  private static final long DarkBlue40;
+
+  private static final long DarkBlue80;
+
+  private static final long DarkBlue90;
+
+  private static final long Yellow10;
+
+  private static final long Yellow20;
+
+  private static final long Yellow30;
+
+  private static final long Yellow40;
+
+  private static final long Yellow80;
+
+  private static final long Yellow90;
+
+  private static final long Red10;
+
+  private static final long Red20;
+
+  private static final long Red30;
+
+  private static final long Red40;
+
+  private static final long Red80;
+
+  private static final long Red90;
+
+  private static final long Grey10;
+
+  private static final long Grey20;
+
+  private static final long Grey80;
+
+  private static final long Grey90;
+
+  private static final long Grey95;
+
+  private static final long Grey99;
+
+  private static final long BlueGrey30;
+
+  private static final long BlueGrey50;
+
+  private static final long BlueGrey60;
+
+  private static final long BlueGrey80;
+
+  private static final long BlueGrey90;
+
+  public static final long getBlue10();
+    Code:
+         0: getstatic     #10                 // Field Blue10:J
+         3: lreturn
+
+  public static final long getBlue20();
+    Code:
+         0: getstatic     #14                 // Field Blue20:J
+         3: lreturn
+
+  public static final long getBlue30();
+    Code:
+         0: getstatic     #18                 // Field Blue30:J
+         3: lreturn
+
+  public static final long getBlue40();
+    Code:
+         0: getstatic     #22                 // Field Blue40:J
+         3: lreturn
+
+  public static final long getBlue80();
+    Code:
+         0: getstatic     #26                 // Field Blue80:J
+         3: lreturn
+
+  public static final long getBlue90();
+    Code:
+         0: getstatic     #30                 // Field Blue90:J
+         3: lreturn
+
+  public static final long getDarkBlue10();
+    Code:
+         0: getstatic     #34                 // Field DarkBlue10:J
+         3: lreturn
+
+  public static final long getDarkBlue20();
+    Code:
+         0: getstatic     #38                 // Field DarkBlue20:J
+         3: lreturn
+
+  public static final long getDarkBlue30();
+    Code:
+         0: getstatic     #42                 // Field DarkBlue30:J
+         3: lreturn
+
+  public static final long getDarkBlue40();
+    Code:
+         0: getstatic     #46                 // Field DarkBlue40:J
+         3: lreturn
+
+  public static final long getDarkBlue80();
+    Code:
+         0: getstatic     #50                 // Field DarkBlue80:J
+         3: lreturn
+
+  public static final long getDarkBlue90();
+    Code:
+         0: getstatic     #54                 // Field DarkBlue90:J
+         3: lreturn
+
+  public static final long getYellow10();
+    Code:
+         0: getstatic     #58                 // Field Yellow10:J
+         3: lreturn
+
+  public static final long getYellow20();
+    Code:
+         0: getstatic     #62                 // Field Yellow20:J
+         3: lreturn
+
+  public static final long getYellow30();
+    Code:
+         0: getstatic     #66                 // Field Yellow30:J
+         3: lreturn
+
+  public static final long getYellow40();
+    Code:
+         0: getstatic     #70                 // Field Yellow40:J
+         3: lreturn
+
+  public static final long getYellow80();
+    Code:
+         0: getstatic     #74                 // Field Yellow80:J
+         3: lreturn
+
+  public static final long getYellow90();
+    Code:
+         0: getstatic     #78                 // Field Yellow90:J
+         3: lreturn
+
+  public static final long getRed10();
+    Code:
+         0: getstatic     #82                 // Field Red10:J
+         3: lreturn
+
+  public static final long getRed20();
+    Code:
+         0: getstatic     #86                 // Field Red20:J
+         3: lreturn
+
+  public static final long getRed30();
+    Code:
+         0: getstatic     #90                 // Field Red30:J
+         3: lreturn
+
+  public static final long getRed40();
+    Code:
+         0: getstatic     #94                 // Field Red40:J
+         3: lreturn
+
+  public static final long getRed80();
+    Code:
+         0: getstatic     #98                 // Field Red80:J
+         3: lreturn
+
+  public static final long getRed90();
+    Code:
+         0: getstatic     #102                // Field Red90:J
+         3: lreturn
+
+  public static final long getGrey10();
+    Code:
+         0: getstatic     #106                // Field Grey10:J
+         3: lreturn
+
+  public static final long getGrey20();
+    Code:
+         0: getstatic     #110                // Field Grey20:J
+         3: lreturn
+
+  public static final long getGrey80();
+    Code:
+         0: getstatic     #114                // Field Grey80:J
+         3: lreturn
+
+  public static final long getGrey90();
+    Code:
+         0: getstatic     #118                // Field Grey90:J
+         3: lreturn
+
+  public static final long getGrey95();
+    Code:
+         0: getstatic     #122                // Field Grey95:J
+         3: lreturn
+
+  public static final long getGrey99();
+    Code:
+         0: getstatic     #126                // Field Grey99:J
+         3: lreturn
+
+  public static final long getBlueGrey30();
+    Code:
+         0: getstatic     #130                // Field BlueGrey30:J
+         3: lreturn
+
+  public static final long getBlueGrey50();
+    Code:
+         0: getstatic     #134                // Field BlueGrey50:J
+         3: lreturn
+
+  public static final long getBlueGrey60();
+    Code:
+         0: getstatic     #138                // Field BlueGrey60:J
+         3: lreturn
+
+  public static final long getBlueGrey80();
+    Code:
+         0: getstatic     #142                // Field BlueGrey80:J
+         3: lreturn
+
+  public static final long getBlueGrey90();
+    Code:
+         0: getstatic     #146                // Field BlueGrey90:J
+         3: lreturn
+
+  static {};
+    Code:
+         0: ldc2_w        #149                // long 4278194014l
+         3: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+         6: putstatic     #10                 // Field Blue10:J
+         9: ldc2_w        #157                // long 4278197906l
+        12: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        15: putstatic     #14                 // Field Blue20:J
+        18: ldc2_w        #159                // long 4278202060l
+        21: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        24: putstatic     #18                 // Field Blue30:J
+        27: ldc2_w        #161                // long 4279584502l
+        30: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        33: putstatic     #22                 // Field Blue40:J
+        36: ldc2_w        #163                // long 4290298879l
+        39: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        42: putstatic     #26                 // Field Blue80:J
+        45: ldc2_w        #165                // long 4292731391l
+        48: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        51: putstatic     #30                 // Field Blue90:J
+        54: ldc2_w        #167                // long 4278190955l
+        57: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        60: putstatic     #34                 // Field DarkBlue10:J
+        63: ldc2_w        #169                // long 4278193062l
+        66: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        69: putstatic     #38                 // Field DarkBlue20:J
+        72: ldc2_w        #171                // long 4279248595l
+        75: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        78: putstatic     #42                 // Field DarkBlue30:J
+        81: ldc2_w        #173                // long 4281747690l
+        84: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        87: putstatic     #46                 // Field DarkBlue40:J
+        90: ldc2_w        #175                // long 4290495231l
+        93: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+        96: putstatic     #50                 // Field DarkBlue80:J
+        99: ldc2_w        #177                // long 4292796671l
+       102: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       105: putstatic     #54                 // Field DarkBlue90:J
+       108: ldc2_w        #179                // long 4280686848l
+       111: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       114: putstatic     #58                 // Field Yellow10:J
+       117: ldc2_w        #181                // long 4282395904l
+       120: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       123: putstatic     #62                 // Field Yellow20:J
+       126: ldc2_w        #183                // long 4284236288l
+       129: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       132: putstatic     #66                 // Field Yellow30:J
+       135: ldc2_w        #185                // long 4286208256l
+       138: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       141: putstatic     #70                 // Field Yellow40:J
+       144: ldc2_w        #187                // long 4294622491l
+       147: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       150: putstatic     #74                 // Field Yellow80:J
+       153: ldc2_w        #189                // long 4294958748l
+       156: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       159: putstatic     #78                 // Field Yellow90:J
+       162: ldc2_w        #191                // long 4282449921l
+       165: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       168: putstatic     #82                 // Field Red10:J
+       171: ldc2_w        #193                // long 4285005827l
+       174: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       177: putstatic     #86                 // Field Red20:J
+       180: ldc2_w        #195                // long 4287823878l
+       183: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       186: putstatic     #90                 // Field Red30:J
+       189: ldc2_w        #197                // long 4290386715l
+       192: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       195: putstatic     #94                 // Field Red40:J
+       198: ldc2_w        #199                // long 4294948009l
+       201: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       204: putstatic     #98                 // Field Red80:J
+       207: ldc2_w        #201                // long 4294957780l
+       210: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       213: putstatic     #102                // Field Red90:J
+       216: ldc2_w        #203                // long 4279835677l
+       219: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       222: putstatic     #106                // Field Grey10:J
+       225: ldc2_w        #205                // long 4281151794l
+       228: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       231: putstatic     #110                // Field Grey20:J
+       234: ldc2_w        #207                // long 4291086279l
+       237: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       240: putstatic     #114                // Field Grey80:J
+       243: ldc2_w        #209                // long 4292928483l
+       246: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       249: putstatic     #118                // Field Grey90:J
+       252: ldc2_w        #211                // long 4293915121l
+       255: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       258: putstatic     #122                // Field Grey95:J
+       261: ldc2_w        #213                // long 4294704637l
+       264: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       267: putstatic     #126                // Field Grey99:J
+       270: ldc2_w        #215                // long 4282730063l
+       273: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       276: putstatic     #130                // Field BlueGrey30:J
+       279: ldc2_w        #217                // long 4285953664l
+       282: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       285: putstatic     #134                // Field BlueGrey50:J
+       288: ldc2_w        #219                // long 4287664282l
+       291: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       294: putstatic     #138                // Field BlueGrey60:J
+       297: ldc2_w        #221                // long 4291216848l
+       300: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       303: putstatic     #142                // Field BlueGrey80:J
+       306: ldc2_w        #223                // long 4293059052l
+       309: invokestatic  #156                // Method androidx/compose/ui/graphics/ColorKt.Color:(J)J
+       312: putstatic     #146                // Field BlueGrey90:J
+       315: return
+}

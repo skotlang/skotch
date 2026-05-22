@@ -1,0 +1,18 @@
+Compiled from "com/example/compose/jetchat/data/EMOJIS.kt"
+public final class com.example.compose.jetchat.data.EMOJIS {
+  public static final com.example.compose.jetchat.data.EMOJIS INSTANCE;
+
+  static {};
+    Code:
+         0: new           #2                  // class com/example/compose/jetchat/data/EMOJIS
+         3: dup
+         4: invokespecial #14                 // Method "<init>":()V
+         7: putstatic     #16                 // Field INSTANCE:Lcom/example/compose/jetchat/data/EMOJIS;
+        10: return
+
+  public com.example.compose.jetchat.data.EMOJIS();
+    Code:
+         0: aload_0
+         1: invokespecial #17                 // Method java/lang/Object."<init>":()V
+         4: return
+}

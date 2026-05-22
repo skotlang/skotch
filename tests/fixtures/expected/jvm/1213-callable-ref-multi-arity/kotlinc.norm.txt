@@ -1,0 +1,49 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        consumeFunction3 (Lkotlin/jvm/functions/Function3;)Ljava/lang/String; 0x0019
+  code        max_stack=4 max_locals=1
+    0000 aload_0
+    0001 ldc "f"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 ldc "hi"
+    0009 bipush 7
+    0011 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0014 iconst_1
+    0015 invokestatic Method(java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;)
+    0018 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function3.invoke:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0023 checkcast Class(java/lang/String)
+    0026 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(InputKt$main$result$1.INSTANCE:LInputKt$main$result$1;)
+    0003 checkcast Class(kotlin/jvm/functions/Function3)
+    0006 invokestatic Method(InputKt.consumeFunction3:(Lkotlin/jvm/functions/Function3;)Ljava/lang/String;)
+    0009 astore_0
+    0010 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0013 aload_0
+    0014 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0017 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        makeStr (Ljava/lang/String;IZ)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 ldc "a"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 iload_2
+    0009 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;IZ)Ljava/lang/String;)
+    0014 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (11 bytes)
+class_attr    InnerClasses (10 bytes)
+class_attr    BootstrapMethods (8 bytes)

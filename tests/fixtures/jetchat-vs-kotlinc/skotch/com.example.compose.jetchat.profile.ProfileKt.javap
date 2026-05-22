@@ -1,0 +1,719 @@
+Compiled from "com/example/compose/jetchat/profile/Profile.kt"
+public final class com.example.compose.jetchat.profile.ProfileKt {
+  public static final void ProfileScreen(com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.input.nestedscroll.NestedScrollConnection, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #9                  // String userData
+         3: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_1
+         7: ldc           #17                 // String nestedScrollInteropConnection
+         9: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        12: new           #19                 // class com/example/compose/jetchat/profile/ProfileKt$Lambda$23
+        15: dup
+        16: invokespecial #23                 // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$23."<init>":()V
+        19: checkcast     #25                 // class kotlin/jvm/functions/Function0
+        22: aload_2
+        23: iload_3
+        24: invokestatic  #31                 // Method androidx/compose/runtime/ComposablesKt.remember:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)Ljava/lang/Object;
+        27: astore        4
+        29: aconst_null
+        30: astore        5
+        32: aload         5
+        34: ifnull        52
+        37: new           #33                 // class com/example/compose/jetchat/profile/ProfileKt$Lambda$24
+        40: dup
+        41: invokespecial #34                 // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$24."<init>":()V
+        44: checkcast     #25                 // class kotlin/jvm/functions/Function0
+        47: aload_2
+        48: iload_3
+        49: invokestatic  #40                 // Method com/example/compose/jetchat/UiExtrasKt.FunctionalityNotAvailablePopup:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+        52: iconst_0
+        53: aload_2
+        54: iload_3
+        55: iconst_1
+        56: invokestatic  #46                 // Method androidx/compose/foundation/ScrollKt.rememberScrollState:(ILandroidx/compose/runtime/Composer;II)Landroidx/compose/foundation/ScrollState;
+        59: astore        6
+        61: new           #48                 // class com/example/compose/jetchat/profile/ProfileKt$Lambda$25
+        64: dup
+        65: aload         6
+        67: aload_0
+        68: invokespecial #51                 // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$25."<init>":(Ljava/lang/Object;Lcom/example/compose/jetchat/profile/ProfileScreenState;)V
+        71: pop
+        72: return
+
+  private static final kotlin.Unit ProfileScreen$lambda$0(com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.input.nestedscroll.NestedScrollConnection, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_3
+         3: iload_2
+         4: iconst_1
+         5: ior
+         6: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         9: invokestatic  #72                 // Method ProfileScreen:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/ui/input/nestedscroll/NestedScrollConnection;Landroidx/compose/runtime/Composer;I)V
+        12: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        15: areturn
+
+  public static final void UserInfoFields(com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.unit.Dp, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_2
+         1: ldc           #104                // int 449913783
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_2
+         9: aload_2
+        10: iload_3
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_3
+        20: iconst_1
+        21: iand
+        22: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_2
+        31: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          65
+        39: new           #106                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$31
+        42: dup
+        43: aload_0
+        44: aload_1
+        45: invokespecial #109                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$31."<init>":(Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/ui/unit/Dp;)V
+        48: astore        4
+        50: aconst_null
+        51: aconst_null
+        52: aconst_null
+        53: aload         4
+        55: checkcast     #111                // class kotlin/jvm/functions/Function3
+        58: aload_2
+        59: iload_3
+        60: bipush        7
+        62: invokestatic  #117                // Method androidx/compose/foundation/layout/ColumnKt.Column:(Landroidx/compose/ui/Modifier;Landroidx/compose/foundation/layout/Arrangement$Vertical;Landroidx/compose/ui/Alignment$Horizontal;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
+        65: aload_2
+        66: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        71: dup
+        72: ifnull        91
+        75: aload_0
+        76: aload_1
+        77: iload_3
+        78: invokedynamic #137,  0            // InvokeDynamic #0:invoke:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/ui/unit/Dp;I)Lkotlin/jvm/functions/Function2;
+        83: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        88: goto          92
+        91: pop
+        92: return
+
+  private static final kotlin.Unit UserInfoFields$lambda$0(com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.unit.Dp, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_3
+         3: iload_2
+         4: iconst_1
+         5: ior
+         6: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         9: invokestatic  #141                // Method UserInfoFields:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/ui/unit/Dp;Landroidx/compose/runtime/Composer;I)V
+        12: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        15: areturn
+
+  public static final void NameAndPosition(com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: ldc           #144                // int 916590796
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_1
+         9: aload_1
+        10: iload_2
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_2
+        20: iconst_1
+        21: iand
+        22: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_1
+        31: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          57
+        39: bipush        16
+        41: i2f
+        42: fstore_3
+        43: bipush        16
+        45: i2f
+        46: fstore        4
+        48: new           #146                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$33
+        51: dup
+        52: aload_0
+        53: invokespecial #149                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$33."<init>":(Lcom/example/compose/jetchat/profile/ProfileScreenState;)V
+        56: pop
+        57: aload_1
+        58: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        63: dup
+        64: ifnull        82
+        67: aload_0
+        68: iload_2
+        69: invokedynamic #157,  0            // InvokeDynamic #1:invoke:(Lcom/example/compose/jetchat/profile/ProfileScreenState;I)Lkotlin/jvm/functions/Function2;
+        74: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        79: goto          83
+        82: pop
+        83: return
+
+  private static final kotlin.Unit NameAndPosition$lambda$0(com.example.compose.jetchat.profile.ProfileScreenState, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_2
+         2: iload_1
+         3: iconst_1
+         4: ior
+         5: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         8: invokestatic  #159                // Method NameAndPosition:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/runtime/Composer;I)V
+        11: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        14: areturn
+
+  public static final void Name(com.example.compose.jetchat.profile.ProfileScreenState, com.example.compose.jetchat.profile.Modifier, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_2
+         1: ldc           #162                // int 266367750
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_2
+         9: aload_2
+        10: iload_3
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_3
+        20: iconst_1
+        21: iand
+        22: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          36
+        30: aload_2
+        31: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: aload_2
+        37: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        42: dup
+        43: ifnull        62
+        46: aload_0
+        47: aload_1
+        48: iload_3
+        49: invokedynamic #170,  0            // InvokeDynamic #2:invoke:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Lcom/example/compose/jetchat/profile/Modifier;I)Lkotlin/jvm/functions/Function2;
+        54: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        59: goto          63
+        62: pop
+        63: return
+
+  private static final kotlin.Unit Name$lambda$0(com.example.compose.jetchat.profile.ProfileScreenState, com.example.compose.jetchat.profile.Modifier, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_3
+         3: iload_2
+         4: iconst_1
+         5: ior
+         6: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         9: invokestatic  #174                // Method Name:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Lcom/example/compose/jetchat/profile/Modifier;Landroidx/compose/runtime/Composer;I)V
+        12: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        15: areturn
+
+  public static final void Position(com.example.compose.jetchat.profile.ProfileScreenState, com.example.compose.jetchat.profile.Modifier, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_2
+         1: ldc           #176                // int -494980054
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_2
+         9: aload_2
+        10: iload_3
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_3
+        20: iconst_1
+        21: iand
+        22: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          36
+        30: aload_2
+        31: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: aload_2
+        37: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        42: dup
+        43: ifnull        62
+        46: aload_0
+        47: aload_1
+        48: iload_3
+        49: invokedynamic #181,  0            // InvokeDynamic #3:invoke:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Lcom/example/compose/jetchat/profile/Modifier;I)Lkotlin/jvm/functions/Function2;
+        54: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        59: goto          63
+        62: pop
+        63: return
+
+  private static final kotlin.Unit Position$lambda$0(com.example.compose.jetchat.profile.ProfileScreenState, com.example.compose.jetchat.profile.Modifier, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_3
+         3: iload_2
+         4: iconst_1
+         5: ior
+         6: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         9: invokestatic  #183                // Method Position:(Lcom/example/compose/jetchat/profile/ProfileScreenState;Lcom/example/compose/jetchat/profile/Modifier;Landroidx/compose/runtime/Composer;I)V
+        12: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        15: areturn
+
+  private static final void ProfileHeader(androidx.compose.foundation.ScrollState, com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.unit.Dp, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #187                // String scrollState
+         3: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_1
+         7: ldc           #189                // String data
+         9: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        12: aload_2
+        13: ldc           #191                // String containerHeight
+        15: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        18: aload_0
+        19: invokevirtual #197                // Method androidx/compose/foundation/ScrollState.getValue:()I
+        22: iconst_2
+        23: idiv
+        24: istore        5
+        26: aconst_null
+        27: getfield      #203                // Field androidx/compose/ui/platform/LocalDensity.current:Ljava/lang/Object;
+        30: astore        6
+        32: new           #205                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$34
+        35: dup
+        36: iload         5
+        38: invokespecial #208                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$34."<init>":(I)V
+        41: aload         6
+        43: invokevirtual #211                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$34.invoke:(Ljava/lang/Object;)Ljava/lang/Object;
+        46: astore        7
+        48: aload_1
+        49: getfield      #215                // Field com/example/compose/jetchat/profile/ProfileScreenState.photo:Ljava/lang/Integer;
+        52: ifnull        55
+        55: new           #217                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$35
+        58: dup
+        59: aload_2
+        60: aload         7
+        62: invokespecial #220                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$35."<init>":(Landroidx/compose/ui/unit/Dp;Ljava/lang/Object;)V
+        65: pop
+        66: return
+
+  private static final kotlin.Unit ProfileHeader$lambda$0(androidx.compose.foundation.ScrollState, com.example.compose.jetchat.profile.ProfileScreenState, androidx.compose.ui.unit.Dp, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: aload         4
+         5: iload_3
+         6: iconst_1
+         7: ior
+         8: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        11: invokestatic  #224                // Method ProfileHeader:(Landroidx/compose/foundation/ScrollState;Lcom/example/compose/jetchat/profile/ProfileScreenState;Landroidx/compose/ui/unit/Dp;Landroidx/compose/runtime/Composer;I)V
+        14: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        17: areturn
+
+  public static final void ProfileProperty(java.lang.String, java.lang.String, boolean, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_3
+         1: ldc           #227                // int -786453797
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_3
+         9: aload_3
+        10: iload         4
+        12: ifeq          19
+        15: iconst_1
+        16: goto          20
+        19: iconst_0
+        20: iload         4
+        22: iconst_1
+        23: iand
+        24: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        29: ifne          41
+        32: aload_3
+        33: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        38: goto          82
+        41: bipush        16
+        43: i2f
+        44: fstore        5
+        46: bipush        16
+        48: i2f
+        49: fstore        6
+        51: bipush        16
+        53: i2f
+        54: fstore        7
+        56: bipush        16
+        58: i2f
+        59: fstore        8
+        61: bipush        16
+        63: i2f
+        64: fstore        9
+        66: bipush        16
+        68: i2f
+        69: fstore        10
+        71: new           #229                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$36
+        74: dup
+        75: aload_0
+        76: iload_2
+        77: aload_1
+        78: invokespecial #232                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$36."<init>":(Ljava/lang/String;ZLjava/lang/String;)V
+        81: pop
+        82: aload_3
+        83: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        88: dup
+        89: ifnull        110
+        92: aload_0
+        93: aload_1
+        94: iload_2
+        95: iload         4
+        97: invokedynamic #240,  0            // InvokeDynamic #4:invoke:(Ljava/lang/String;Ljava/lang/String;ZI)Lkotlin/jvm/functions/Function2;
+       102: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       107: goto          111
+       110: pop
+       111: return
+
+  private static final kotlin.Unit ProfileProperty$lambda$0(java.lang.String, java.lang.String, boolean, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: aload         4
+         5: iload_3
+         6: iconst_1
+         7: ior
+         8: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        11: invokestatic  #242                // Method ProfileProperty:(Ljava/lang/String;Ljava/lang/String;ZLandroidx/compose/runtime/Composer;I)V
+        14: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        17: areturn
+
+  public static void ProfileProperty$default(java.lang.String, java.lang.String, boolean, androidx.compose.runtime.Composer, int, int, java.lang.Object);
+    Code:
+         0: iload         5
+         2: iconst_4
+         3: iand
+         4: ifeq          9
+         7: iconst_0
+         8: istore_2
+         9: aload_0
+        10: aload_1
+        11: iload_2
+        12: aload_3
+        13: iload         4
+        15: invokestatic  #242                // Method ProfileProperty:(Ljava/lang/String;Ljava/lang/String;ZLandroidx/compose/runtime/Composer;I)V
+        18: return
+
+  public static final void ProfileError(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #247                // int -380253544
+         3: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: iload_1
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_1
+        20: iconst_1
+        21: iand
+        22: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_0
+        31: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          48
+        39: getstatic     #253                // Field com/example/compose/jetchat/R$string.profile_error:I
+        42: aload_0
+        43: iload_1
+        44: invokestatic  #259                // Method androidx/compose/ui/res/StringResources_androidKt.stringResource:(ILandroidx/compose/runtime/Composer;I)Ljava/lang/String;
+        47: astore_2
+        48: aload_0
+        49: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        54: dup
+        55: ifnull        72
+        58: iload_1
+        59: invokedynamic #267,  0            // InvokeDynamic #5:invoke:(I)Lkotlin/jvm/functions/Function2;
+        64: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        69: goto          73
+        72: pop
+        73: return
+
+  private static final kotlin.Unit ProfileError$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #269                // Method ProfileError:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final <T> void ProfileFab(boolean, boolean, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function0, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         4
+         2: ldc_w         #272                // int -508488421
+         5: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+        10: astore        4
+        12: aload         4
+        14: iload         5
+        16: ifeq          23
+        19: iconst_1
+        20: goto          24
+        23: iconst_0
+        24: iload         5
+        26: iconst_1
+        27: iand
+        28: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifne          46
+        36: aload         4
+        38: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        43: goto          58
+        46: new           #274                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$37
+        49: dup
+        50: aload_3
+        51: aload_2
+        52: iload_1
+        53: iload_0
+        54: invokespecial #277                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$37."<init>":(Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZZ)V
+        57: pop
+        58: aload         4
+        60: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        88
+        69: iload_0
+        70: iload_1
+        71: aload_2
+        72: aload_3
+        73: iload         5
+        75: invokedynamic #285,  0            // InvokeDynamic #6:invoke:(ZZLandroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;I)Lkotlin/jvm/functions/Function2;
+        80: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        85: goto          89
+        88: pop
+        89: return
+
+  private static final kotlin.Unit ProfileFab$lambda$0(boolean, boolean, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function0, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: iload_0
+         1: iload_1
+         2: aload_2
+         3: aload_3
+         4: aload         5
+         6: iload         4
+         8: iconst_1
+         9: ior
+        10: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        13: invokestatic  #290                // Method ProfileFab:(ZZLandroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+        16: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        19: areturn
+
+  public static final void ConvPreviewLandscapeMeDefault(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc_w         #292                // int 1621628641
+         4: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore_0
+        10: aload_0
+        11: iload_1
+        12: ifeq          19
+        15: iconst_1
+        16: goto          20
+        19: iconst_0
+        20: iload_1
+        21: iconst_1
+        22: iand
+        23: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        28: ifne          40
+        31: aload_0
+        32: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        37: goto          59
+        40: new           #294                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$38
+        43: dup
+        44: invokespecial #295                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$38."<init>":()V
+        47: astore_2
+        48: iconst_0
+        49: iconst_0
+        50: aload_2
+        51: checkcast     #297                // class kotlin/jvm/functions/Function2
+        54: aload_0
+        55: iload_1
+        56: invokestatic  #303                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        59: aload_0
+        60: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        83
+        69: iload_1
+        70: invokedynamic #308,  0            // InvokeDynamic #7:invoke:(I)Lkotlin/jvm/functions/Function2;
+        75: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        80: goto          84
+        83: pop
+        84: return
+
+  private static final kotlin.Unit ConvPreviewLandscapeMeDefault$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #316                // Method ConvPreviewLandscapeMeDefault:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final void ConvPreviewPortraitMeDefault(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc_w         #318                // int -1593324471
+         4: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore_0
+        10: aload_0
+        11: iload_1
+        12: ifeq          19
+        15: iconst_1
+        16: goto          20
+        19: iconst_0
+        20: iload_1
+        21: iconst_1
+        22: iand
+        23: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        28: ifne          40
+        31: aload_0
+        32: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        37: goto          59
+        40: new           #320                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$39
+        43: dup
+        44: invokespecial #321                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$39."<init>":()V
+        47: astore_2
+        48: iconst_0
+        49: iconst_0
+        50: aload_2
+        51: checkcast     #297                // class kotlin/jvm/functions/Function2
+        54: aload_0
+        55: iload_1
+        56: invokestatic  #303                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        59: aload_0
+        60: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        83
+        69: iload_1
+        70: invokedynamic #326,  0            // InvokeDynamic #8:invoke:(I)Lkotlin/jvm/functions/Function2;
+        75: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        80: goto          84
+        83: pop
+        84: return
+
+  private static final kotlin.Unit ConvPreviewPortraitMeDefault$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #329                // Method ConvPreviewPortraitMeDefault:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final void ConvPreviewPortraitOtherDefault(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc_w         #331                // int 705334017
+         4: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore_0
+        10: aload_0
+        11: iload_1
+        12: ifeq          19
+        15: iconst_1
+        16: goto          20
+        19: iconst_0
+        20: iload_1
+        21: iconst_1
+        22: iand
+        23: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        28: ifne          40
+        31: aload_0
+        32: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        37: goto          59
+        40: new           #333                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$40
+        43: dup
+        44: invokespecial #334                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$40."<init>":()V
+        47: astore_2
+        48: iconst_0
+        49: iconst_0
+        50: aload_2
+        51: checkcast     #297                // class kotlin/jvm/functions/Function2
+        54: aload_0
+        55: iload_1
+        56: invokestatic  #303                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        59: aload_0
+        60: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        83
+        69: iload_1
+        70: invokedynamic #339,  0            // InvokeDynamic #9:invoke:(I)Lkotlin/jvm/functions/Function2;
+        75: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        80: goto          84
+        83: pop
+        84: return
+
+  private static final kotlin.Unit ConvPreviewPortraitOtherDefault$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #341                // Method ConvPreviewPortraitOtherDefault:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final void ProfileFabPreview(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc_w         #343                // int 614950925
+         4: invokeinterface #88,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore_0
+        10: aload_0
+        11: iload_1
+        12: ifeq          19
+        15: iconst_1
+        16: goto          20
+        19: iconst_0
+        20: iload_1
+        21: iconst_1
+        22: iand
+        23: invokeinterface #92,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        28: ifne          40
+        31: aload_0
+        32: invokeinterface #95,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        37: goto          59
+        40: new           #345                // class com/example/compose/jetchat/profile/ProfileKt$Lambda$41
+        43: dup
+        44: invokespecial #346                // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$41."<init>":()V
+        47: astore_2
+        48: iconst_0
+        49: iconst_0
+        50: aload_2
+        51: checkcast     #297                // class kotlin/jvm/functions/Function2
+        54: aload_0
+        55: iload_1
+        56: invokestatic  #303                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        59: aload_0
+        60: invokeinterface #99,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        83
+        69: iload_1
+        70: invokedynamic #351,  0            // InvokeDynamic #10:invoke:(I)Lkotlin/jvm/functions/Function2;
+        75: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        80: goto          84
+        83: pop
+        84: return
+
+  private static final kotlin.Unit ProfileFabPreview$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #70                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #353                // Method ProfileFabPreview:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #78                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+}

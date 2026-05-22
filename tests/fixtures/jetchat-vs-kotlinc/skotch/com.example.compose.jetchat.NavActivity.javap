@@ -1,0 +1,125 @@
+Compiled from "com/example/compose/jetchat/NavActivity.kt"
+public final class com.example.compose.jetchat.NavActivity extends androidx.appcompat.app.AppCompatActivity {
+  public com.example.compose.jetchat.MainViewModel viewModel;
+
+  public boolean viewModel$initialized;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.NavActivity();
+    Code:
+         0: aload_0
+         1: invokespecial #17                 // Method androidx/appcompat/app/AppCompatActivity."<init>":()V
+         4: return
+
+  public com.example.compose.jetchat.MainViewModel getViewModel();
+    Code:
+         0: aload_0
+         1: getfield      #21                 // Field viewModel$initialized:Z
+         4: ifne          35
+         7: aconst_null
+         8: aconst_null
+         9: invokestatic  #27                 // Method androidx/activity/ActivityViewModelLazyKt.viewModels:(Landroidx/activity/ComponentActivity;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
+        12: checkcast     #29                 // class kotlin/Lazy
+        15: invokeinterface #33,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+        20: checkcast     #35                 // class com/example/compose/jetchat/MainViewModel
+        23: aload_0
+        24: swap
+        25: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+        28: iconst_1
+        29: istore_1
+        30: aload_0
+        31: iload_1
+        32: putfield      #21                 // Field viewModel$initialized:Z
+        35: aload_0
+        36: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+        39: areturn
+
+  public void onCreate(android.os.Bundle);
+    Code:
+         0: aload_0
+         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+         4: astore_2
+         5: aload_0
+         6: getfield      #21                 // Field viewModel$initialized:Z
+         9: istore_3
+        10: aload_0
+        11: aload_1
+        12: invokespecial #44                 // Method androidx/appcompat/app/AppCompatActivity.onCreate:(Landroid/os/Bundle;)V
+        15: invokedynamic #63,  0             // InvokeDynamic #0:invoke:()Lkotlin/jvm/functions/Function2;
+        20: astore        4
+        22: new           #65                 // class androidx/compose/ui/platform/ComposeView
+        25: dup
+        26: aload_0
+        27: checkcast     #67                 // class android/content/Context
+        30: invokespecial #70                 // Method androidx/compose/ui/platform/ComposeView."<init>":(Landroid/content/Context;)V
+        33: astore        5
+        35: new           #72                 // class com/example/compose/jetchat/NavActivityKt$Lambda$24
+        38: dup
+        39: aload_2
+        40: invokespecial #75                 // Method com/example/compose/jetchat/NavActivityKt$Lambda$24."<init>":(Lcom/example/compose/jetchat/MainViewModel;)V
+        43: aload         5
+        45: invokevirtual #78                 // Method com/example/compose/jetchat/NavActivityKt$Lambda$24.invoke:(Ljava/lang/Object;)Ljava/lang/Object;
+        48: pop
+        49: aload_0
+        50: aload         5
+        52: invokevirtual #82                 // Method androidx/appcompat/app/AppCompatActivity.setContentView:(Landroid/view/View;)V
+        55: aload_0
+        56: aload_2
+        57: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+        60: aload_0
+        61: iload_3
+        62: putfield      #21                 // Field viewModel$initialized:Z
+        65: return
+
+  public boolean onSupportNavigateUp();
+    Code:
+         0: aload_0
+         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+         4: astore_1
+         5: aload_0
+         6: getfield      #21                 // Field viewModel$initialized:Z
+         9: istore_2
+        10: aload_0
+        11: invokevirtual #90                 // Method findNavController:()Landroidx/navigation/NavController;
+        14: invokevirtual #95                 // Method androidx/navigation/NavController.navigateUp:()Z
+        17: istore_3
+        18: iconst_1
+        19: istore        4
+        21: iload_3
+        22: ifne          31
+        25: aload_0
+        26: invokespecial #97                 // Method androidx/appcompat/app/AppCompatActivity.onSupportNavigateUp:()Z
+        29: istore        4
+        31: aload_0
+        32: aload_1
+        33: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+        36: aload_0
+        37: iload_2
+        38: putfield      #21                 // Field viewModel$initialized:Z
+        41: iload         4
+        43: ireturn
+
+  public androidx.navigation.NavController findNavController();
+    Code:
+         0: aload_0
+         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+         4: astore_1
+         5: aload_0
+         6: getfield      #21                 // Field viewModel$initialized:Z
+         9: istore_2
+        10: aload_0
+        11: aload_1
+        12: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+        15: aload_0
+        16: iload_2
+        17: putfield      #21                 // Field viewModel$initialized:Z
+        20: aconst_null
+        21: areturn
+
+  public final boolean getViewModel$initialized();
+    Code:
+         0: aload_0
+         1: getfield      #21                 // Field viewModel$initialized:Z
+         4: ireturn
+}

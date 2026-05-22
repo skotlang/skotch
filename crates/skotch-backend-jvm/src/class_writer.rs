@@ -915,6 +915,133 @@ fn emit_clinit_for_props(
     )
 }
 
+/// Emit a `public final get<Name>()<Ty>` accessor for an INSTANCE field
+/// on a user-defined class: `aload_0; getfield <field>; <return>`. This
+/// matches kotlinc's emission for every property: kotlinc never exposes
+/// the backing field to callers — they go through this getter.
+fn emit_instance_property_getter(
+    class_name: &str,
+    field_name: &str,
+    ty: &Ty,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let access = ACC_PUBLIC | ACC_FINAL;
+    let getter_name = format!(
+        "get{}{}",
+        field_name.chars().next().unwrap_or('?').to_uppercase(),
+        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
+    );
+    let name_idx = cp.utf8(&getter_name);
+    let desc = jvm_param_type_string(ty);
+    let descriptor = format!("(){desc}");
+    let descriptor_idx = cp.utf8(&descriptor);
+
+    let mut code: Vec<u8> = Vec::new();
+    code.push(0x2A); // aload_0 (this)
+    let fr = cp.fieldref(class_name, field_name, &desc);
+    code.push(0xB4); // getfield
+    code.write_u16::<BigEndian>(fr).unwrap();
+    let return_op: u8 = match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => 0xAC, // ireturn
+        Ty::Long => 0xAD,                                             // lreturn
+        Ty::Float => 0xAE,                                            // freturn
+        Ty::Double => 0xAF,                                           // dreturn
+        Ty::Unit => 0xB1,                                             // return
+        _ => 0xB0,                                                    // areturn
+    };
+    code.push(return_op);
+    let max_stack: u16 = if matches!(ty, Ty::Long | Ty::Double) {
+        2
+    } else {
+        1
+    };
+    let max_locals: u16 = 1; // 'this' only
+
+    let mut code_attr: Vec<u8> = Vec::new();
+    code_attr.write_u16::<BigEndian>(max_stack).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
+    code_attr.write_u16::<BigEndian>(0).unwrap(); // sub-attributes count
+
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(access).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap(); // attr_count = 1 (just Code)
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    method
+}
+
+/// Emit a `public final set<Name>(<Ty>)V` setter for an instance field:
+#[allow(dead_code)]
+/// `aload_0; <load arg>; putfield <field>; return`. Only emitted for
+/// mutable (var) properties.
+fn emit_instance_property_setter(
+    class_name: &str,
+    field_name: &str,
+    ty: &Ty,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    let access = ACC_PUBLIC | ACC_FINAL;
+    let setter_name = format!(
+        "set{}{}",
+        field_name.chars().next().unwrap_or('?').to_uppercase(),
+        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
+    );
+    let name_idx = cp.utf8(&setter_name);
+    let desc = jvm_param_type_string(ty);
+    let descriptor = format!("({desc})V");
+    let descriptor_idx = cp.utf8(&descriptor);
+
+    // Pick the right load opcode for the param at slot 1 (after `this`).
+    let (load_op, is_wide) = match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => (0x1B, false), // iload_1
+        Ty::Long => (0x1F, true),                                              // lload_1
+        Ty::Float => (0x23, false),                                            // fload_1
+        Ty::Double => (0x27, true),                                            // dload_1
+        _ => (0x2B, false),                                                    // aload_1
+    };
+
+    let mut code: Vec<u8> = Vec::new();
+    code.push(0x2A); // aload_0 (this)
+    code.push(load_op);
+    let fr = cp.fieldref(class_name, field_name, &desc);
+    code.push(0xB5); // putfield
+    code.write_u16::<BigEndian>(fr).unwrap();
+    code.push(0xB1); // return
+
+    let max_stack: u16 = if is_wide { 3 } else { 2 };
+    let max_locals: u16 = if is_wide { 3 } else { 2 };
+
+    let mut code_attr: Vec<u8> = Vec::new();
+    code_attr.write_u16::<BigEndian>(max_stack).unwrap();
+    code_attr.write_u16::<BigEndian>(max_locals).unwrap();
+    code_attr.write_u32::<BigEndian>(code.len() as u32).unwrap();
+    code_attr.write_all(&code).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap();
+    code_attr.write_u16::<BigEndian>(0).unwrap();
+
+    let mut method: Vec<u8> = Vec::new();
+    method.write_u16::<BigEndian>(access).unwrap();
+    method.write_u16::<BigEndian>(name_idx).unwrap();
+    method.write_u16::<BigEndian>(descriptor_idx).unwrap();
+    method.write_u16::<BigEndian>(1).unwrap();
+    method.write_u16::<BigEndian>(code_attr_name_idx).unwrap();
+    method
+        .write_u32::<BigEndian>(code_attr.len() as u32)
+        .unwrap();
+    method.write_all(&code_attr).unwrap();
+    method
+}
+
 /// Emit a `public static final get<Name>()<Ty>` accessor for a non-
 /// `const val` top-level property — `getstatic <field>; <return>`.
 /// For non-null reference returns, also emits the
@@ -1520,8 +1647,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     cp.write_to(&mut out);
     let class_flags = if class.is_interface {
         ACC_PUBLIC | ACC_INTERFACE | ACC_ABSTRACT
+    } else if class.is_abstract {
+        ACC_PUBLIC | ACC_SUPER | ACC_ABSTRACT
+    } else if class.is_open {
+        ACC_PUBLIC | ACC_SUPER
     } else {
-        ACC_PUBLIC | ACC_SUPER | if class.is_abstract { ACC_ABSTRACT } else { 0 }
+        // Kotlin classes are `final` by default — kotlinc adds ACC_FINAL to
+        // every non-`open` non-abstract non-interface class.
+        ACC_PUBLIC | ACC_SUPER | ACC_FINAL
     };
     out.write_u16::<BigEndian>(class_flags).unwrap();
     out.write_u16::<BigEndian>(this_class_idx).unwrap();
@@ -1574,6 +1707,24 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         let n = cp2.utf8(&field.name);
         let d = cp2.utf8(&jvm_param_type_string(&field.ty));
         field_infos.push((n, d, ACC_PUBLIC));
+    }
+    // Compose `$stable`: kotlinc emits `public static final int $stable`
+    // on every Kotlin class — Compose runtime reads it during skip-checks
+    // to decide whether a recomposition can be elided. The value is 0 for
+    // `@Stable`/`@Immutable` types and a structural hash otherwise. Until
+    // we run a proper stability analysis, emit the field with default
+    // value 0 (the JVM zero-init for int fields is automatic; no clinit
+    // entry needed). For interfaces / suspend lambdas / object singletons
+    // / companion-only classes, kotlinc skips this field — we mirror.
+    if !effective_suspend_lambda
+        && !class.is_interface
+        && !class.is_object_singleton
+        && !class.name.contains("$Lambda$")
+        && !class.name.ends_with("$Companion")
+    {
+        let n = cp2.utf8("$stable");
+        let d = cp2.utf8("I");
+        field_infos.push((n, d, ACC_PUBLIC | ACC_STATIC | ACC_FINAL));
     }
     // Object singletons get a public static final `INSTANCE` field of
     // type `LClassName;` that holds the lone instance. Initialized in
@@ -1666,6 +1817,41 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             );
             append_method_annotations(&mut blob, method, &mut cp2, module);
             method_blobs2.push(blob);
+        }
+        // Emit synthetic property getters for every field. kotlinc never
+        // exposes the backing field to callers — code that accesses
+        // `instance.foo` is rewritten to `instance.getFoo()`. We emit the
+        // getter even when the user didn't declare one explicitly. Skip
+        // when the user already declared a method with the same getter
+        // name to avoid duplicate methodref entries.
+        let existing_method_names: std::collections::HashSet<String> =
+            class.methods.iter().map(|m| m.name.clone()).collect();
+        for field in &class.fields {
+            let getter_name = format!(
+                "get{}{}",
+                field.name.chars().next().unwrap_or('?').to_uppercase(),
+                &field.name[field.name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
+            );
+            if existing_method_names.contains(&getter_name) {
+                continue;
+            }
+            // Skip fields that look like synthetic compose/coroutine
+            // internals (label, $stable, captured vars `$capture$N`).
+            // These aren't source-level properties.
+            if field.name == "label"
+                || field.name == "$stable"
+                || field.name.starts_with('$')
+                || field.name.starts_with("$capture")
+            {
+                continue;
+            }
+            method_blobs2.push(emit_instance_property_getter(
+                &class.name,
+                &field.name,
+                &field.ty,
+                &mut cp2,
+                code_attr_name_idx,
+            ));
         }
     }
 
@@ -9390,7 +9576,7 @@ fn emit_mir_segment(
                     method_name,
                     descriptor,
                 } => {
-                    if class_name == "$convert" {
+                    if class_name == "$convert" || class_name.ends_with("/$convert") {
                         emit_load_mir_local(code, func, local_slot, args[0]);
                         let opcode: u8 = match method_name.as_str() {
                             "i2d" => 0x87,
@@ -9655,7 +9841,19 @@ fn emit_mir_segment(
                 field_name,
             } => {
                 emit_load_mir_local(code, func, local_slot, *receiver);
-                let field_ty = &func.locals[dest.0 as usize];
+                // Prefer the field's declared type from the real MirClass
+                // (skip cross-file stubs whose field types erase to Any).
+                // Falls back to the dest local's type when the field
+                // isn't declared on the resolved class.
+                let declared_ty = module
+                    .classes
+                    .iter()
+                    .filter(|c| &c.name == class_name)
+                    .min_by_key(|c| c.is_cross_file_stub as u8)
+                    .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
+                    .map(|f| f.ty.clone());
+                let dest_local_ty = &func.locals[dest.0 as usize];
+                let field_ty = declared_ty.as_ref().unwrap_or(dest_local_ty);
                 let fr = cp.fieldref(class_name, field_name, &jvm_param_type_string(field_ty));
                 code.push(0xB4); // getfield
                 code.write_u16::<BigEndian>(fr).unwrap();
@@ -12066,6 +12264,61 @@ fn jvm_descriptor(func: &MirFunction) -> String {
     s
 }
 
+/// Push a zero-valued default onto the operand stack matching `ty`.
+/// Used when a constructor call site supplies fewer args than the
+/// receiver class's primary `<init>` requires — the missing tail slots
+/// (default parameters) get null/0/false placeholders so the
+/// `invokespecial` descriptor matches the actual method signature.
+fn push_default_for_ty(
+    code: &mut Vec<u8>,
+    cp: &mut ConstantPool,
+    stack: &mut i32,
+    max_stack: &mut i32,
+    ty: &Ty,
+) {
+    match ty {
+        Ty::Bool | Ty::Char | Ty::Byte | Ty::Short | Ty::Int => {
+            code.push(0x03); // iconst_0
+            bump(stack, max_stack, 1);
+        }
+        Ty::Long => {
+            code.push(0x09); // lconst_0
+            bump(stack, max_stack, 2);
+        }
+        Ty::Float => {
+            code.push(0x0B); // fconst_0
+            bump(stack, max_stack, 1);
+        }
+        Ty::Double => {
+            code.push(0x0E); // dconst_0
+            bump(stack, max_stack, 2);
+        }
+        Ty::Unit => {
+            // Treat Unit positions as a ref-slot null — kotlinc never
+            // actually uses Unit-typed default parameters.
+            code.push(0x01); // aconst_null
+            bump(stack, max_stack, 1);
+        }
+        Ty::String => {
+            // String defaults: emit empty literal so the descriptor
+            // reads as Ljava/lang/String; without needing autobox.
+            let s_idx = cp.string("");
+            if s_idx <= 0xFF {
+                code.push(0x12); // ldc
+                code.push(s_idx as u8);
+            } else {
+                code.push(0x13); // ldc_w
+                code.write_u16::<BigEndian>(s_idx).unwrap();
+            }
+            bump(stack, max_stack, 1);
+        }
+        _ => {
+            code.push(0x01); // aconst_null
+            bump(stack, max_stack, 1);
+        }
+    }
+}
+
 /// Type descriptor for parameter positions — `Unit` becomes `Lkotlin/Unit;`
 /// (not `V`, which is only valid as a return type).
 fn jvm_param_type_string(ty: &Ty) -> String {
@@ -13493,10 +13746,14 @@ fn walk_block(
                 // Prefer the field's DECLARED type so the Fieldref descriptor
                 // matches the field declaration. Falls back to the dest
                 // local's type for external classes.
+                //
+                // Prefer the real MirClass over a cross-file stub when
+                // both exist — see the PutField path above for why.
                 let declared_ty = module
                     .classes
                     .iter()
-                    .find(|c| &c.name == class_name)
+                    .filter(|c| &c.name == class_name)
+                    .min_by_key(|c| c.is_cross_file_stub as u8)
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let dest_ty = &func.locals[dest.0 as usize];
@@ -13540,10 +13797,20 @@ fn walk_block(
                 // so the Fieldref descriptor matches the field declaration.
                 // Falls back to the value's local type when the class
                 // isn't in MIR (e.g. external classes).
+                //
+                // When two MirClass entries share a name (real + cross-file
+                // stub from the same file's `PackageSymbolTable`), prefer
+                // the non-stub one — its field types come from
+                // `resolve_type_ref` on the constructor params and reflect
+                // the source declaration, whereas the stub's fields come
+                // from `type_ref_to_ty` without the file's `import_map`
+                // and erase to `Ty::Any`. This is the field-descriptor
+                // drift behind VerifyError on synthesized getters.
                 let declared_ty = module
                     .classes
                     .iter()
-                    .find(|c| &c.name == class_name)
+                    .filter(|c| &c.name == class_name)
+                    .min_by_key(|c| c.is_cross_file_stub as u8)
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let effective_ty = declared_ty.as_ref().unwrap_or(value_ty);
@@ -13754,6 +14021,25 @@ fn walk_block(
                                 if target_cls != actual_cls {
                                     let ci = cp.class(target_cls);
                                     code.push(0xC0); // checkcast
+                                    code.write_u16::<BigEndian>(ci).unwrap();
+                                }
+                            }
+                            // Any → String: caller has Object, callee
+                            // wants String — emit `checkcast String`.
+                            if matches!(arg_ty, Ty::Any | Ty::Nullable(_))
+                                && matches!(p_ty, Ty::String)
+                            {
+                                let ci = cp.class("java/lang/String");
+                                code.push(0xC0);
+                                code.write_u16::<BigEndian>(ci).unwrap();
+                            }
+                            // Any → Class(C): erased Object needs a
+                            // checkcast to the concrete class type
+                            // before the invokestatic.
+                            if matches!(arg_ty, Ty::Any | Ty::Nullable(_)) {
+                                if let Ty::Class(target_cls) = p_ty {
+                                    let ci = cp.class(target_cls);
+                                    code.push(0xC0);
                                     code.write_u16::<BigEndian>(ci).unwrap();
                                 }
                             }
@@ -14052,7 +14338,7 @@ fn walk_block(
                 } => {
                     // readLine() intrinsic: emit Scanner(System.in).nextLine()
                     // Type conversion opcodes: i2d, i2l, d2i, l2i, etc.
-                    if class_name == "$convert" {
+                    if class_name == "$convert" || class_name.ends_with("/$convert") {
                         load_local(code, stack, max_stack, slots, args[0], &func.locals);
                         let opcode: u8 = match method_name.as_str() {
                             "i2d" => 0x87,
@@ -14339,10 +14625,15 @@ fn walk_block(
                         // Look up the target class constructor to get expected param types.
                         // Check primary and secondary constructors, picking the one
                         // whose param count (excluding `this`) matches the arg count.
+                        // Prefer the real MirClass over a cross-file stub — stubs
+                        // ship with erased Any-typed params, which would make the
+                        // emitted descriptor `(Ljava/lang/Object;...)V` instead of
+                        // matching the real constructor's typed signature.
                         let ctor_params: Vec<Ty> = module
                             .classes
                             .iter()
-                            .find(|c| c.name == *class_name)
+                            .filter(|c| c.name == *class_name)
+                            .min_by_key(|c| c.is_cross_file_stub as u8)
                             .map(|c| {
                                 // Try primary constructor first.
                                 let primary_count = c.constructor.params.len().saturating_sub(1);
@@ -14395,9 +14686,29 @@ fn walk_block(
                             } else {
                                 load_local(code, stack, max_stack, slots, *a, &func.locals);
                             }
-                            // Autobox if constructor param expects Object but arg is primitive.
+                            // Autobox if constructor param expects a
+                            // reference (Object or boxed `T?`) but the arg
+                            // is primitive. Previously only fired for
+                            // `Ty::Any`; without the `Nullable(<primitive>)`
+                            // arm, `Message(..., R.drawable.sticker, ...)`
+                            // where param 4 is `image: Int?` passes a
+                            // primitive int into an `Ljava/lang/Integer;`
+                            // descriptor slot and d8 rejects the class as
+                            // a verifier error.
                             if let Some(param_ty) = param_ty_opt {
-                                if matches!(param_ty, Ty::Any) {
+                                let needs_box = matches!(param_ty, Ty::Any)
+                                    || matches!(
+                                        (param_ty, arg_ty),
+                                        (Ty::Nullable(_), Ty::Int)
+                                            | (Ty::Nullable(_), Ty::Long)
+                                            | (Ty::Nullable(_), Ty::Float)
+                                            | (Ty::Nullable(_), Ty::Double)
+                                            | (Ty::Nullable(_), Ty::Bool)
+                                            | (Ty::Nullable(_), Ty::Char)
+                                            | (Ty::Nullable(_), Ty::Byte)
+                                            | (Ty::Nullable(_), Ty::Short)
+                                    );
+                                if needs_box {
                                     autobox(code, cp, stack, max_stack, arg_ty);
                                 }
                                 // Reference widening: if the param expects
@@ -14416,6 +14727,27 @@ fn walk_block(
                                 descriptor.push_str(&jvm_param_type_string(arg_ty));
                             }
                         }
+                        // Pad remaining primary-ctor params when the user
+                        // supplied fewer args than the class's primary
+                        // constructor requires (default-param tail). The
+                        // call site's MIR has only the user's args, but the
+                        // class's primary ctor descriptor includes every
+                        // declared param. Match by pushing a typed default
+                        // (null / 0 / false) for each missing slot so the
+                        // invokespecial descriptor matches the actual
+                        // <init> signature emitted on the receiver class.
+                        // This isn't kotlinc-accurate (the real $default
+                        // synthetic computes per-param defaults from the
+                        // initializer expressions), but it keeps the call
+                        // resolvable at runtime and is correct for
+                        // null/zero default initializers; richer defaults
+                        // remain task #317.
+                        if args.len() < ctor_params.len() {
+                            for ty in ctor_params.iter().skip(args.len()) {
+                                push_default_for_ty(code, cp, stack, max_stack, ty);
+                                descriptor.push_str(&jvm_param_type_string(ty));
+                            }
+                        }
                         descriptor.push_str(")V");
                         let mref = cp.methodref(class_name, "<init>", &descriptor);
                         code.push(0xB7); // invokespecial
@@ -14423,7 +14755,7 @@ fn walk_block(
                         // invokespecial pops 1 receiver + each arg's stack
                         // width. Long/Double take 2 stack slots; everything
                         // else takes 1.
-                        let arg_pop: i32 = args
+                        let mut arg_pop: i32 = args
                             .iter()
                             .map(|a| {
                                 if matches!(
@@ -14436,6 +14768,20 @@ fn walk_block(
                                 }
                             })
                             .sum();
+                        // Account for the default-fill pads pushed above.
+                        if args.len() < ctor_params.len() {
+                            arg_pop += ctor_params
+                                .iter()
+                                .skip(args.len())
+                                .map(|t| {
+                                    if matches!(t, Ty::Long | Ty::Double) {
+                                        2
+                                    } else {
+                                        1
+                                    }
+                                })
+                                .sum::<i32>();
+                        }
                         bump(stack, max_stack, -arg_pop - 1);
                         if is_unused_local(*dest) {
                             code.push(0x57); // pop
@@ -14528,6 +14874,34 @@ fn walk_block(
                     let is_function_invoke = method_name == "invoke"
                         && (class_name.contains("$Lambda$")
                             || class_name.starts_with("kotlin/jvm/functions/Function"));
+                    // Pre-resolve the target's declared param types so we
+                    // can insert `checkcast`s when the caller's local is
+                    // a broader type (Object/Any) than the method
+                    // expects. Without this, an `aload_0` of an Object
+                    // would pass to a method signature requiring
+                    // LayoutInflater and the verifier rejects.
+                    let pre_target_sig: Option<Vec<Ty>> = if is_function_invoke {
+                        None
+                    } else {
+                        let user_arity = args.len().saturating_sub(1);
+                        module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == class_name)
+                            .and_then(|c| {
+                                c.methods.iter().find(|m| {
+                                    m.name == *method_name
+                                        && m.params.len().saturating_sub(1) == user_arity
+                                })
+                            })
+                            .map(|m| {
+                                m.params
+                                    .iter()
+                                    .skip(1)
+                                    .map(|lid| m.locals[lid.0 as usize].clone())
+                                    .collect::<Vec<_>>()
+                            })
+                    };
                     // Load receiver (first arg) then remaining args.
                     // For FunctionN.invoke, box primitive args inline
                     // so the descriptor matches `(Object^N)Object`
@@ -14537,6 +14911,77 @@ fn walk_block(
                     // receiver/arg load order).
                     for (i, a) in args.iter().enumerate() {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        // Reference-widening checkcast for user args
+                        // (skip receiver, skip Function-invoke since that
+                        // path forces Object descriptors anyway).
+                        if i > 0 && !is_function_invoke {
+                            if let Some(ref ptys) = pre_target_sig {
+                                let arg_ty = &func.locals[a.0 as usize];
+                                if let Some(pty) = ptys.get(i - 1) {
+                                    let arg_is_obj = matches!(arg_ty, Ty::Any | Ty::Nullable(_));
+                                    if arg_is_obj {
+                                        let target_class: Option<String> = match pty {
+                                            Ty::Class(c) => Some(c.clone()),
+                                            Ty::String => Some("java/lang/String".to_string()),
+                                            Ty::Nullable(inner) => match inner.as_ref() {
+                                                Ty::Class(c) => Some(c.clone()),
+                                                Ty::String => Some("java/lang/String".to_string()),
+                                                _ => None,
+                                            },
+                                            _ => None,
+                                        };
+                                        if let Some(tc) = target_class {
+                                            let ci = cp.class(&tc);
+                                            code.push(0xC0); // checkcast
+                                            code.write_u16::<BigEndian>(ci).unwrap();
+                                        } else if matches!(
+                                            pty,
+                                            Ty::Int
+                                                | Ty::Char
+                                                | Ty::Long
+                                                | Ty::Double
+                                                | Ty::Bool
+                                                | Ty::Byte
+                                                | Ty::Short
+                                                | Ty::Float
+                                        ) {
+                                            // Unbox Object → primitive.
+                                            let (box_class, unbox_method, unbox_desc) = match pty {
+                                                Ty::Bool => {
+                                                    ("java/lang/Boolean", "booleanValue", "()Z")
+                                                }
+                                                Ty::Int => ("java/lang/Integer", "intValue", "()I"),
+                                                Ty::Byte => ("java/lang/Byte", "byteValue", "()B"),
+                                                Ty::Short => {
+                                                    ("java/lang/Short", "shortValue", "()S")
+                                                }
+                                                Ty::Char => {
+                                                    ("java/lang/Character", "charValue", "()C")
+                                                }
+                                                Ty::Long => ("java/lang/Long", "longValue", "()J"),
+                                                Ty::Float => {
+                                                    ("java/lang/Float", "floatValue", "()F")
+                                                }
+                                                Ty::Double => {
+                                                    ("java/lang/Double", "doubleValue", "()D")
+                                                }
+                                                _ => unreachable!(),
+                                            };
+                                            let cls_ci = cp.class(box_class);
+                                            code.push(0xC0); // checkcast
+                                            code.write_u16::<BigEndian>(cls_ci).unwrap();
+                                            let m =
+                                                cp.methodref(box_class, unbox_method, unbox_desc);
+                                            code.push(0xB6); // invokevirtual
+                                            code.write_u16::<BigEndian>(m).unwrap();
+                                            if matches!(pty, Ty::Long | Ty::Double) {
+                                                bump(stack, max_stack, 1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if is_function_invoke && i > 0 {
                             let ty = &func.locals[a.0 as usize];
                             let box_info: Option<(&str, &str)> = match ty {
@@ -14564,9 +15009,49 @@ fn walk_block(
                     } else {
                         jvm_type_string(dest_ty)
                     };
+                    // Look up the target method's MirFunction (if present)
+                    // and use its declared param/return types for the
+                    // descriptor — the caller's local types are the
+                    // erased Function-invoke shape on the stack, but the
+                    // real method's signature is what the JVM resolver
+                    // matches against. Without this, cross-file companion
+                    // dispatch produces `(Object,Object,Object)Object`
+                    // methodrefs that miss methods like
+                    // `Companion.inflate(LayoutInflater,ViewGroup,boolean)Binding`.
+                    let target_method_sig: Option<(Vec<Ty>, Ty)> = if is_function_invoke {
+                        None
+                    } else {
+                        // Match by name AND user-arity so overloaded
+                        // methods like `inflate(Inflater)` vs.
+                        // `inflate(Inflater, ViewGroup?, Boolean)` each
+                        // get their own descriptor. The user-arity is
+                        // `args.len() - 1` (skip the receiver) and the
+                        // method's user-arity is `params.len() - 1`
+                        // (params[0] is `this`).
+                        let user_arity = args.len().saturating_sub(1);
+                        module
+                            .classes
+                            .iter()
+                            .find(|c| &c.name == class_name)
+                            .and_then(|c| {
+                                c.methods.iter().find(|m| {
+                                    m.name == *method_name
+                                        && m.params.len().saturating_sub(1) == user_arity
+                                })
+                            })
+                            .map(|m| {
+                                let ptys: Vec<Ty> = m
+                                    .params
+                                    .iter()
+                                    .skip(1)
+                                    .map(|lid| m.locals[lid.0 as usize].clone())
+                                    .collect();
+                                (ptys, m.return_ty.clone())
+                            })
+                    };
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
-                    for a in args.iter().skip(1) {
+                    for (i, a) in args.iter().skip(1).enumerate() {
                         if is_function_invoke {
                             // FunctionN.invoke's signature is always
                             // `(Object^N)Object` — force Object descriptors
@@ -14574,13 +15059,24 @@ fn walk_block(
                             // the invokeinterface call matches the
                             // interface's erased signature.
                             descriptor.push_str("Ljava/lang/Object;");
+                        } else if let Some((ref ptys, _)) = target_method_sig {
+                            if let Some(pty) = ptys.get(i) {
+                                descriptor.push_str(&jvm_param_type_string(pty));
+                            } else {
+                                let ty = &func.locals[a.0 as usize];
+                                descriptor.push_str(&jvm_param_type_string(ty));
+                            }
                         } else {
                             let ty = &func.locals[a.0 as usize];
                             descriptor.push_str(&jvm_param_type_string(ty));
                         }
                     }
                     descriptor.push(')');
-                    descriptor.push_str(&ret_desc);
+                    if let Some((_, ref rty)) = target_method_sig {
+                        descriptor.push_str(&jvm_type_string(rty));
+                    } else {
+                        descriptor.push_str(&ret_desc);
+                    }
                     // Check if receiver type is an interface — if so, use
                     // invokeinterface instead of invokevirtual.
                     let is_iface = module

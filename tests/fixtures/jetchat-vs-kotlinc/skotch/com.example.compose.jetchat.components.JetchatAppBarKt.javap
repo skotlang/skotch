@@ -1,0 +1,183 @@
+Compiled from "com/example/compose/jetchat/components/JetchatAppBar.kt"
+public final class com.example.compose.jetchat.components.JetchatAppBarKt {
+  public static final <T> void JetchatAppBar(androidx.compose.ui.Modifier, androidx.compose.material3.TopAppBarScrollBehavior, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function2, kotlin.jvm.functions.Function3, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         5
+         2: ldc           #33                 // int -1312880834
+         4: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore        5
+        11: aload         5
+        13: iload         6
+        15: ifeq          22
+        18: iconst_1
+        19: goto          23
+        22: iconst_0
+        23: iload         6
+        25: iconst_1
+        26: iand
+        27: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        32: ifne          45
+        35: aload         5
+        37: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        42: goto          54
+        45: new           #35                 // class com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$23
+        48: dup
+        49: aload_2
+        50: invokespecial #39                 // Method com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$23."<init>":(Lkotlin/jvm/functions/Function0;)V
+        53: pop
+        54: aload         5
+        56: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        61: dup
+        62: ifnull        86
+        65: aload_0
+        66: aload_1
+        67: aload_2
+        68: aload_3
+        69: aload         4
+        71: iload         6
+        73: invokedynamic #59,  0             // InvokeDynamic #0:invoke:(Landroidx/compose/ui/Modifier;Landroidx/compose/material3/TopAppBarScrollBehavior;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;I)Lkotlin/jvm/functions/Function2;
+        78: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        83: goto          87
+        86: pop
+        87: return
+
+  private static final kotlin.Unit JetchatAppBar$lambda$0(androidx.compose.ui.Modifier, androidx.compose.material3.TopAppBarScrollBehavior, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function2, kotlin.jvm.functions.Function3, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: aload_3
+         4: aload         4
+         6: aload         6
+         8: iload         5
+        10: iconst_1
+        11: ior
+        12: invokestatic  #80                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        15: invokestatic  #82                 // Method JetchatAppBar:(Landroidx/compose/ui/Modifier;Landroidx/compose/material3/TopAppBarScrollBehavior;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;I)V
+        18: getstatic     #88                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        21: areturn
+
+  public static void JetchatAppBar$default(androidx.compose.ui.Modifier, androidx.compose.material3.TopAppBarScrollBehavior, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function2, kotlin.jvm.functions.Function3, androidx.compose.runtime.Composer, int, int, java.lang.Object);
+    Code:
+         0: iload         7
+         2: iconst_2
+         3: iand
+         4: ifeq          9
+         7: aconst_null
+         8: astore_1
+         9: aload_0
+        10: aload_1
+        11: aload_2
+        12: aload_3
+        13: aload         4
+        15: aload         5
+        17: iload         6
+        19: invokestatic  #82                 // Method JetchatAppBar:(Landroidx/compose/ui/Modifier;Landroidx/compose/material3/TopAppBarScrollBehavior;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;I)V
+        22: return
+
+  public static final void JetchatAppBarPreview(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #93                 // int 1495768722
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: iload_1
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_1
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_0
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          58
+        39: new           #95                 // class com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$24
+        42: dup
+        43: invokespecial #97                 // Method com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$24."<init>":()V
+        46: astore_2
+        47: iconst_0
+        48: iconst_0
+        49: aload_2
+        50: checkcast     #66                 // class kotlin/jvm/functions/Function2
+        53: aload_0
+        54: iload_1
+        55: invokestatic  #103                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        58: aload_0
+        59: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        64: dup
+        65: ifnull        82
+        68: iload_1
+        69: invokedynamic #111,  0            // InvokeDynamic #1:invoke:(I)Lkotlin/jvm/functions/Function2;
+        74: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        79: goto          83
+        82: pop
+        83: return
+
+  private static final kotlin.Unit JetchatAppBarPreview$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #80                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #115                // Method JetchatAppBarPreview:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #88                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final void JetchatAppBarPreviewDark(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #117                // int -1777275378
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: iload_1
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_1
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_0
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          58
+        39: new           #119                // class com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$26
+        42: dup
+        43: invokespecial #120                // Method com/example/compose/jetchat/components/JetchatAppBarKt$Lambda$26."<init>":()V
+        46: astore_2
+        47: iconst_1
+        48: iconst_0
+        49: aload_2
+        50: checkcast     #66                 // class kotlin/jvm/functions/Function2
+        53: aload_0
+        54: iload_1
+        55: invokestatic  #103                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        58: aload_0
+        59: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        64: dup
+        65: ifnull        82
+        68: iload_1
+        69: invokedynamic #125,  0            // InvokeDynamic #2:invoke:(I)Lkotlin/jvm/functions/Function2;
+        74: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        79: goto          83
+        82: pop
+        83: return
+
+  private static final kotlin.Unit JetchatAppBarPreviewDark$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #80                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #127                // Method JetchatAppBarPreviewDark:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #88                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+}

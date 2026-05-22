@@ -1,0 +1,97 @@
+--- ./gradle/com.example.compose.jetchat.conversation.EmojiStickerSelector.javap	2026-05-21 07:24:26
++++ ./skotch/com.example.compose.jetchat.conversation.EmojiStickerSelector.javap	2026-05-21 07:24:27
+@@ -1,76 +1,27 @@
+-Compiled from "UserInput.kt"
+-public final class com.example.compose.jetchat.conversation.EmojiStickerSelector extends java.lang.Enum<com.example.compose.jetchat.conversation.EmojiStickerSelector> {
+-  public static final com.example.compose.jetchat.conversation.EmojiStickerSelector EMOJI;
++Compiled from "com/example/compose/jetchat/conversation/EmojiStickerSelector.kt"
++public final class com.example.compose.jetchat.conversation.EmojiStickerSelector {
++  public java.lang.String name;
+ 
+-  public static final com.example.compose.jetchat.conversation.EmojiStickerSelector STICKER;
++  public static final int $stable;
+ 
+-  private static final com.example.compose.jetchat.conversation.EmojiStickerSelector[] $VALUES;
+-
+-  private static final kotlin.enums.EnumEntries $ENTRIES;
+-
+-  private com.example.compose.jetchat.conversation.EmojiStickerSelector();
++  public com.example.compose.jetchat.conversation.EmojiStickerSelector(java.lang.String);
+     Code:
+          0: aload_0
+-         1: aload_1
+-         2: iload_2
+-         3: invokespecial #10                 // Method java/lang/Enum."<init>":(Ljava/lang/String;I)V
+-         6: return
++         1: invokespecial #16                 // Method java/lang/Object."<init>":()V
++         4: aload_0
++         5: aload_1
++         6: putfield      #18                 // Field name:Ljava/lang/String;
++         9: return
+ 
+-  public static com.example.compose.jetchat.conversation.EmojiStickerSelector[] values();
++  public java.lang.String toString();
+     Code:
+-         0: getstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-         3: invokevirtual #28                 // Method java/lang/Object.clone:()Ljava/lang/Object;
+-         6: checkcast     #29                 // class "[Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;"
+-         9: areturn
++         0: aload_0
++         1: getfield      #18                 // Field name:Ljava/lang/String;
++         4: areturn
+ 
+-  public static com.example.compose.jetchat.conversation.EmojiStickerSelector valueOf(java.lang.String);
++  public final java.lang.String getName();
+     Code:
+-         0: ldc           #2                  // class com/example/compose/jetchat/conversation/EmojiStickerSelector
+-         2: aload_0
+-         3: invokestatic  #34                 // Method java/lang/Enum.valueOf:(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;
+-         6: checkcast     #2                  // class com/example/compose/jetchat/conversation/EmojiStickerSelector
+-         9: areturn
+-
+-  public static kotlin.enums.EnumEntries<com.example.compose.jetchat.conversation.EmojiStickerSelector> getEntries();
+-    Code:
+-         0: getstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
+-         3: areturn
+-
+-  private static final com.example.compose.jetchat.conversation.EmojiStickerSelector[] $values();
+-    Code:
+-         0: iconst_2
+-         1: anewarray     #2                  // class com/example/compose/jetchat/conversation/EmojiStickerSelector
+-         4: astore_0
+-         5: aload_0
+-         6: iconst_0
+-         7: getstatic     #47                 // Field EMOJI:Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        10: aastore
+-        11: aload_0
+-        12: iconst_1
+-        13: getstatic     #50                 // Field STICKER:Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        16: aastore
+-        17: aload_0
+-        18: areturn
+-
+-  static {};
+-    Code:
+-         0: new           #2                  // class com/example/compose/jetchat/conversation/EmojiStickerSelector
+-         3: dup
+-         4: ldc           #52                 // String EMOJI
+-         6: iconst_0
+-         7: invokespecial #53                 // Method "<init>":(Ljava/lang/String;I)V
+-        10: putstatic     #47                 // Field EMOJI:Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        13: new           #2                  // class com/example/compose/jetchat/conversation/EmojiStickerSelector
+-        16: dup
+-        17: ldc           #54                 // String STICKER
+-        19: iconst_1
+-        20: invokespecial #53                 // Method "<init>":(Ljava/lang/String;I)V
+-        23: putstatic     #50                 // Field STICKER:Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        26: invokestatic  #56                 // Method $values:()[Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        29: putstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        32: getstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/EmojiStickerSelector;
+-        35: checkcast     #58                 // class "[Ljava/lang/Enum;"
+-        38: invokestatic  #64                 // Method kotlin/enums/EnumEntriesKt.enumEntries:([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;
+-        41: putstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
+-        44: return
++         0: aload_0
++         1: getfield      #18                 // Field name:Ljava/lang/String;
++         4: areturn
+ }

@@ -1,0 +1,124 @@
+Compiled from "UserInput.kt"
+public final class com.example.compose.jetchat.conversation.InputSelector extends java.lang.Enum<com.example.compose.jetchat.conversation.InputSelector> {
+  public static final com.example.compose.jetchat.conversation.InputSelector NONE;
+
+  public static final com.example.compose.jetchat.conversation.InputSelector MAP;
+
+  public static final com.example.compose.jetchat.conversation.InputSelector DM;
+
+  public static final com.example.compose.jetchat.conversation.InputSelector EMOJI;
+
+  public static final com.example.compose.jetchat.conversation.InputSelector PHONE;
+
+  public static final com.example.compose.jetchat.conversation.InputSelector PICTURE;
+
+  private static final com.example.compose.jetchat.conversation.InputSelector[] $VALUES;
+
+  private static final kotlin.enums.EnumEntries $ENTRIES;
+
+  private com.example.compose.jetchat.conversation.InputSelector();
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokespecial #10                 // Method java/lang/Enum."<init>":(Ljava/lang/String;I)V
+         6: return
+
+  public static com.example.compose.jetchat.conversation.InputSelector[] values();
+    Code:
+         0: getstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/InputSelector;
+         3: invokevirtual #28                 // Method java/lang/Object.clone:()Ljava/lang/Object;
+         6: checkcast     #29                 // class "[Lcom/example/compose/jetchat/conversation/InputSelector;"
+         9: areturn
+
+  public static com.example.compose.jetchat.conversation.InputSelector valueOf(java.lang.String);
+    Code:
+         0: ldc           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+         2: aload_0
+         3: invokestatic  #34                 // Method java/lang/Enum.valueOf:(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;
+         6: checkcast     #2                  // class com/example/compose/jetchat/conversation/InputSelector
+         9: areturn
+
+  public static kotlin.enums.EnumEntries<com.example.compose.jetchat.conversation.InputSelector> getEntries();
+    Code:
+         0: getstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
+         3: areturn
+
+  private static final com.example.compose.jetchat.conversation.InputSelector[] $values();
+    Code:
+         0: bipush        6
+         2: anewarray     #2                  // class com/example/compose/jetchat/conversation/InputSelector
+         5: astore_0
+         6: aload_0
+         7: iconst_0
+         8: getstatic     #47                 // Field NONE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        11: aastore
+        12: aload_0
+        13: iconst_1
+        14: getstatic     #50                 // Field MAP:Lcom/example/compose/jetchat/conversation/InputSelector;
+        17: aastore
+        18: aload_0
+        19: iconst_2
+        20: getstatic     #53                 // Field DM:Lcom/example/compose/jetchat/conversation/InputSelector;
+        23: aastore
+        24: aload_0
+        25: iconst_3
+        26: getstatic     #56                 // Field EMOJI:Lcom/example/compose/jetchat/conversation/InputSelector;
+        29: aastore
+        30: aload_0
+        31: iconst_4
+        32: getstatic     #59                 // Field PHONE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        35: aastore
+        36: aload_0
+        37: iconst_5
+        38: getstatic     #62                 // Field PICTURE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        41: aastore
+        42: aload_0
+        43: areturn
+
+  static {};
+    Code:
+         0: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+         3: dup
+         4: ldc           #64                 // String NONE
+         6: iconst_0
+         7: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        10: putstatic     #47                 // Field NONE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        13: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+        16: dup
+        17: ldc           #66                 // String MAP
+        19: iconst_1
+        20: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        23: putstatic     #50                 // Field MAP:Lcom/example/compose/jetchat/conversation/InputSelector;
+        26: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+        29: dup
+        30: ldc           #67                 // String DM
+        32: iconst_2
+        33: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        36: putstatic     #53                 // Field DM:Lcom/example/compose/jetchat/conversation/InputSelector;
+        39: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+        42: dup
+        43: ldc           #68                 // String EMOJI
+        45: iconst_3
+        46: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        49: putstatic     #56                 // Field EMOJI:Lcom/example/compose/jetchat/conversation/InputSelector;
+        52: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+        55: dup
+        56: ldc           #69                 // String PHONE
+        58: iconst_4
+        59: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        62: putstatic     #59                 // Field PHONE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        65: new           #2                  // class com/example/compose/jetchat/conversation/InputSelector
+        68: dup
+        69: ldc           #70                 // String PICTURE
+        71: iconst_5
+        72: invokespecial #65                 // Method "<init>":(Ljava/lang/String;I)V
+        75: putstatic     #62                 // Field PICTURE:Lcom/example/compose/jetchat/conversation/InputSelector;
+        78: invokestatic  #72                 // Method $values:()[Lcom/example/compose/jetchat/conversation/InputSelector;
+        81: putstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/InputSelector;
+        84: getstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/InputSelector;
+        87: checkcast     #74                 // class "[Ljava/lang/Enum;"
+        90: invokestatic  #80                 // Method kotlin/enums/EnumEntriesKt.enumEntries:([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;
+        93: putstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
+        96: return
+}

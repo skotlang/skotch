@@ -1,0 +1,4 @@
+name   = "1215-overload-delegate-default"
+status = "supported"
+features = ["overload-resolution", "single-expression-body"]
+expected_output = "hi/0/false\n"

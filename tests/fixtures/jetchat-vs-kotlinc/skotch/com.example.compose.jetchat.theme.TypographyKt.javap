@@ -1,0 +1,293 @@
+Compiled from "com/example/compose/jetchat/theme/Typography.kt"
+public final class com.example.compose.jetchat.theme.TypographyKt {
+  private static final java.lang.Object provider;
+
+  private static final java.lang.Object MontserratFont;
+
+  private static final java.lang.Object KarlaFont;
+
+  private static final java.lang.Object MontserratFontFamily;
+
+  private static final java.lang.Object KarlaFontFamily;
+
+  private static final java.lang.Object JetchatTypography;
+
+  public static final java.lang.Object getProvider();
+    Code:
+         0: getstatic     #15                 // Field provider:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getMontserratFont();
+    Code:
+         0: getstatic     #20                 // Field MontserratFont:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getKarlaFont();
+    Code:
+         0: getstatic     #23                 // Field KarlaFont:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getMontserratFontFamily();
+    Code:
+         0: getstatic     #26                 // Field MontserratFontFamily:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getKarlaFontFamily();
+    Code:
+         0: getstatic     #29                 // Field KarlaFontFamily:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getJetchatTypography();
+    Code:
+         0: getstatic     #32                 // Field JetchatTypography:Ljava/lang/Object;
+         3: areturn
+
+  private static final {};
+    Code:
+         0: aconst_null
+         1: putstatic     #15                 // Field provider:Ljava/lang/Object;
+         4: new           #36                 // class androidx/compose/ui/text/googlefonts/GoogleFont
+         7: dup
+         8: ldc           #38                 // String Montserrat
+        10: iconst_0
+        11: iconst_2
+        12: aconst_null
+        13: invokespecial #42                 // Method androidx/compose/ui/text/googlefonts/GoogleFont."<init>":(Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+        16: putstatic     #20                 // Field MontserratFont:Ljava/lang/Object;
+        19: new           #36                 // class androidx/compose/ui/text/googlefonts/GoogleFont
+        22: dup
+        23: ldc           #44                 // String Karla
+        25: iconst_0
+        26: iconst_2
+        27: aconst_null
+        28: invokespecial #42                 // Method androidx/compose/ui/text/googlefonts/GoogleFont."<init>":(Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+        31: putstatic     #23                 // Field KarlaFont:Ljava/lang/Object;
+        34: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        37: invokevirtual #56                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getLight:()Landroidx/compose/ui/text/font/FontWeight;
+        40: pop
+        41: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        44: invokevirtual #56                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getLight:()Landroidx/compose/ui/text/font/FontWeight;
+        47: pop
+        48: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        51: invokevirtual #59                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getMedium:()Landroidx/compose/ui/text/font/FontWeight;
+        54: pop
+        55: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        58: invokevirtual #59                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getMedium:()Landroidx/compose/ui/text/font/FontWeight;
+        61: pop
+        62: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        65: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+        68: pop
+        69: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        72: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+        75: pop
+        76: aconst_null
+        77: putstatic     #26                 // Field MontserratFontFamily:Ljava/lang/Object;
+        80: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        83: invokevirtual #65                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+        86: pop
+        87: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+        90: invokevirtual #65                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+        93: pop
+        94: aconst_null
+        95: putstatic     #29                 // Field KarlaFontFamily:Ljava/lang/Object;
+        98: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       101: invokevirtual #56                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getLight:()Landroidx/compose/ui/text/font/FontWeight;
+       104: pop
+       105: bipush        57
+       107: i2f
+       108: fstore_0
+       109: bipush        64
+       111: i2f
+       112: fstore_0
+       113: iconst_0
+       114: i2f
+       115: fstore_0
+       116: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       119: invokevirtual #56                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getLight:()Landroidx/compose/ui/text/font/FontWeight;
+       122: pop
+       123: bipush        45
+       125: i2f
+       126: fstore_0
+       127: bipush        52
+       129: i2f
+       130: fstore_0
+       131: iconst_0
+       132: i2f
+       133: fstore_0
+       134: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       137: invokevirtual #68                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getNormal:()Landroidx/compose/ui/text/font/FontWeight;
+       140: pop
+       141: bipush        36
+       143: i2f
+       144: fstore_0
+       145: bipush        44
+       147: i2f
+       148: fstore_0
+       149: iconst_0
+       150: i2f
+       151: fstore_0
+       152: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       155: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       158: pop
+       159: bipush        32
+       161: i2f
+       162: fstore_0
+       163: bipush        40
+       165: i2f
+       166: fstore_0
+       167: iconst_0
+       168: i2f
+       169: fstore_0
+       170: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       173: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       176: pop
+       177: bipush        28
+       179: i2f
+       180: fstore_0
+       181: bipush        36
+       183: i2f
+       184: fstore_0
+       185: iconst_0
+       186: i2f
+       187: fstore_0
+       188: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       191: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       194: pop
+       195: bipush        24
+       197: i2f
+       198: fstore_0
+       199: bipush        32
+       201: i2f
+       202: fstore_0
+       203: iconst_0
+       204: i2f
+       205: fstore_0
+       206: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       209: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       212: pop
+       213: bipush        22
+       215: i2f
+       216: fstore_0
+       217: bipush        28
+       219: i2f
+       220: fstore_0
+       221: iconst_0
+       222: i2f
+       223: fstore_0
+       224: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       227: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       230: pop
+       231: bipush        16
+       233: i2f
+       234: fstore_0
+       235: bipush        24
+       237: i2f
+       238: fstore_0
+       239: ldc2_w        #69                 // double 0.15d
+       242: d2f
+       243: fstore_0
+       244: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       247: invokevirtual #65                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+       250: pop
+       251: bipush        14
+       253: i2f
+       254: fstore_0
+       255: bipush        20
+       257: i2f
+       258: fstore_0
+       259: ldc2_w        #71                 // double 0.1d
+       262: d2f
+       263: fstore_0
+       264: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       267: invokevirtual #68                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getNormal:()Landroidx/compose/ui/text/font/FontWeight;
+       270: pop
+       271: bipush        16
+       273: i2f
+       274: fstore_0
+       275: bipush        24
+       277: i2f
+       278: fstore_0
+       279: ldc2_w        #69                 // double 0.15d
+       282: d2f
+       283: fstore_0
+       284: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       287: invokevirtual #59                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getMedium:()Landroidx/compose/ui/text/font/FontWeight;
+       290: pop
+       291: bipush        14
+       293: i2f
+       294: fstore_0
+       295: bipush        20
+       297: i2f
+       298: fstore_0
+       299: ldc2_w        #73                 // double 0.25d
+       302: d2f
+       303: fstore_0
+       304: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       307: invokevirtual #65                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+       310: pop
+       311: bipush        12
+       313: i2f
+       314: fstore_0
+       315: bipush        16
+       317: i2f
+       318: fstore_0
+       319: ldc2_w        #75                 // double 0.4d
+       322: d2f
+       323: fstore_0
+       324: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       327: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       330: pop
+       331: bipush        14
+       333: i2f
+       334: fstore_0
+       335: bipush        20
+       337: i2f
+       338: fstore_0
+       339: ldc2_w        #71                 // double 0.1d
+       342: d2f
+       343: fstore_0
+       344: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       347: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       350: pop
+       351: bipush        12
+       353: i2f
+       354: fstore_0
+       355: bipush        16
+       357: i2f
+       358: fstore_0
+       359: ldc2_w        #77                 // double 0.5d
+       362: d2f
+       363: fstore_0
+       364: getstatic     #50                 // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+       367: invokevirtual #62                 // Method androidx/compose/ui/text/font/FontWeight$Companion.getSemiBold:()Landroidx/compose/ui/text/font/FontWeight;
+       370: pop
+       371: bipush        11
+       373: i2f
+       374: fstore_0
+       375: bipush        16
+       377: i2f
+       378: fstore_0
+       379: ldc2_w        #77                 // double 0.5d
+       382: d2f
+       383: fstore_0
+       384: new           #80                 // class androidx/compose/material3/Typography
+       387: dup
+       388: aconst_null
+       389: aconst_null
+       390: aconst_null
+       391: aconst_null
+       392: aconst_null
+       393: aconst_null
+       394: aconst_null
+       395: aconst_null
+       396: aconst_null
+       397: aconst_null
+       398: aconst_null
+       399: aconst_null
+       400: aconst_null
+       401: aconst_null
+       402: aconst_null
+       403: invokespecial #83                 // Method androidx/compose/material3/Typography."<init>":(Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;Landroidx/compose/ui/text/TextStyle;)V
+       406: putstatic     #32                 // Field JetchatTypography:Ljava/lang/Object;
+       409: return
+}

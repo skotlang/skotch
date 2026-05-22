@@ -1,0 +1,4 @@
+name   = "1213-callable-ref-multi-arity"
+status = "supported"
+features = ["callable-reference", "higher-order-fn"]
+expected_output = "hi/7/true\n"

@@ -1,0 +1,54 @@
+Compiled from "MainViewModel.kt"
+public final class com.example.compose.jetchat.MainViewModel extends androidx.lifecycle.ViewModel {
+  private final kotlinx.coroutines.flow.MutableStateFlow<java.lang.Boolean> _drawerShouldBeOpened;
+
+  private final kotlinx.coroutines.flow.StateFlow<java.lang.Boolean> drawerShouldBeOpened;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.MainViewModel();
+    Code:
+         0: aload_0
+         1: invokespecial #8                  // Method androidx/lifecycle/ViewModel."<init>":()V
+         4: aload_0
+         5: iconst_0
+         6: invokestatic  #14                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+         9: invokestatic  #20                 // Method kotlinx/coroutines/flow/StateFlowKt.MutableStateFlow:(Ljava/lang/Object;)Lkotlinx/coroutines/flow/MutableStateFlow;
+        12: putfield      #24                 // Field _drawerShouldBeOpened:Lkotlinx/coroutines/flow/MutableStateFlow;
+        15: aload_0
+        16: aload_0
+        17: getfield      #24                 // Field _drawerShouldBeOpened:Lkotlinx/coroutines/flow/MutableStateFlow;
+        20: invokestatic  #30                 // Method kotlinx/coroutines/flow/FlowKt.asStateFlow:(Lkotlinx/coroutines/flow/MutableStateFlow;)Lkotlinx/coroutines/flow/StateFlow;
+        23: putfield      #34                 // Field drawerShouldBeOpened:Lkotlinx/coroutines/flow/StateFlow;
+        26: return
+
+  public final kotlinx.coroutines.flow.StateFlow<java.lang.Boolean> getDrawerShouldBeOpened();
+    Code:
+         0: aload_0
+         1: getfield      #34                 // Field drawerShouldBeOpened:Lkotlinx/coroutines/flow/StateFlow;
+         4: areturn
+
+  public final void openDrawer();
+    Code:
+         0: aload_0
+         1: getfield      #24                 // Field _drawerShouldBeOpened:Lkotlinx/coroutines/flow/MutableStateFlow;
+         4: iconst_1
+         5: invokestatic  #14                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+         8: invokeinterface #47,  2           // InterfaceMethod kotlinx/coroutines/flow/MutableStateFlow.setValue:(Ljava/lang/Object;)V
+        13: return
+
+  public final void resetOpenDrawerAction();
+    Code:
+         0: aload_0
+         1: getfield      #24                 // Field _drawerShouldBeOpened:Lkotlinx/coroutines/flow/MutableStateFlow;
+         4: iconst_0
+         5: invokestatic  #14                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+         8: invokeinterface #47,  2           // InterfaceMethod kotlinx/coroutines/flow/MutableStateFlow.setValue:(Ljava/lang/Object;)V
+        13: return
+
+  static {};
+    Code:
+         0: bipush        8
+         2: putstatic     #53                 // Field $stable:I
+         5: return
+}

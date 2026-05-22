@@ -1,0 +1,46 @@
+--- ./gradle/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-21 07:24:34
++++ ./skotch/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-21 07:24:34
+@@ -1,33 +1,18 @@
+-Compiled from "Theme.kt"
++Compiled from "com/example/compose/jetchat/widget/theme/JetchatGlanceColorScheme.kt"
+ public final class com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme {
+   public static final com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme INSTANCE;
+ 
+-  private static final androidx.glance.color.ColorProviders colors;
+-
+-  public static final int $stable;
+-
+-  private com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme();
+-    Code:
+-         0: aload_0
+-         1: invokespecial #8                  // Method java/lang/Object."<init>":()V
+-         4: return
+-
+-  public final androidx.glance.color.ColorProviders getColors();
+-    Code:
+-         0: getstatic     #17                 // Field colors:Landroidx/glance/color/ColorProviders;
+-         3: areturn
+-
+   static {};
+     Code:
+          0: new           #2                  // class com/example/compose/jetchat/widget/theme/JetchatGlanceColorScheme
+          3: dup
+-         4: invokespecial #19                 // Method "<init>":()V
+-         7: putstatic     #22                 // Field INSTANCE:Lcom/example/compose/jetchat/widget/theme/JetchatGlanceColorScheme;
+-        10: invokestatic  #28                 // Method com/example/compose/jetchat/theme/ThemesKt.getJetchatLightColorScheme:()Landroidx/compose/material3/ColorScheme;
+-        13: invokestatic  #31                 // Method com/example/compose/jetchat/theme/ThemesKt.getJetchatDarkColorScheme:()Landroidx/compose/material3/ColorScheme;
+-        16: invokestatic  #37                 // Method androidx/glance/material3/Material3ThemesKt.ColorProviders:(Landroidx/compose/material3/ColorScheme;Landroidx/compose/material3/ColorScheme;)Landroidx/glance/color/ColorProviders;
+-        19: putstatic     #17                 // Field colors:Landroidx/glance/color/ColorProviders;
+-        22: getstatic     #43                 // Field androidx/glance/color/ColorProviders.$stable:I
+-        25: putstatic     #44                 // Field $stable:I
+-        28: return
++         4: invokespecial #14                 // Method "<init>":()V
++         7: putstatic     #16                 // Field INSTANCE:Lcom/example/compose/jetchat/widget/theme/JetchatGlanceColorScheme;
++        10: return
++
++  public com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme();
++    Code:
++         0: aload_0
++         1: invokespecial #17                 // Method java/lang/Object."<init>":()V
++         4: return
+ }

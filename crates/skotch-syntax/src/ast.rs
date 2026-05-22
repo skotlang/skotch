@@ -313,9 +313,19 @@ pub struct PropertyDecl {
     pub name_span: Span,
     pub ty: Option<TypeRef>,
     pub init: Option<Expr>,
-    /// Delegate expression: `val x by lazy { ... }`.
-    /// Stores the body of the `lazy` lambda for eager desugaring.
+    /// Delegate expression: `val x by lazy { ... }` or `val x by other`.
+    /// For `lazy { body }` this stores the lambda's body and we run it
+    /// directly to compute `x`. For other delegates (`by viewModels()`,
+    /// `by Cached { … }`, …) this stores a single-expression block whose
+    /// value is a *delegate object* — `getValue(thisRef, prop)` must be
+    /// invoked on it to read `x`. See [`PropertyDecl::delegate_is_lazy_block`].
     pub delegate: Option<Box<Block>>,
+    /// True when [`Self::delegate`] is the body of a literal `by lazy { … }`
+    /// (parser stored the lambda's stmts directly). False for any other
+    /// `by <expr>` form, where the block contains a single expression
+    /// that produces a delegate object whose `.value`/`.getValue(...)`
+    /// must be called from the property getter.
+    pub delegate_is_lazy_block: bool,
     /// Custom getter: `val x: Int get() = expr`.
     pub getter: Option<Block>,
     /// Custom setter: `var x: Int set(value) { ... }`.

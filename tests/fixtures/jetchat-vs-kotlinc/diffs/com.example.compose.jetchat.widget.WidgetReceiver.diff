@@ -1,0 +1,38 @@
+--- ./gradle/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-21 07:24:34
++++ ./skotch/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-21 07:24:34
+@@ -1,24 +1,22 @@
+-Compiled from "WidgetReceiver.kt"
++Compiled from "com/example/compose/jetchat/widget/WidgetReceiver.kt"
+ public final class com.example.compose.jetchat.widget.WidgetReceiver extends androidx.glance.appwidget.GlanceAppWidgetReceiver {
++  public androidx.glance.appwidget.GlanceAppWidget glanceAppWidget;
++
+   public static final int $stable;
+ 
+   public com.example.compose.jetchat.widget.WidgetReceiver();
+     Code:
+          0: aload_0
+-         1: invokespecial #8                  // Method androidx/glance/appwidget/GlanceAppWidgetReceiver."<init>":()V
++         1: invokespecial #15                 // Method androidx/glance/appwidget/GlanceAppWidgetReceiver."<init>":()V
+          4: return
+ 
+   public androidx.glance.appwidget.GlanceAppWidget getGlanceAppWidget();
+     Code:
+-         0: new           #15                 // class com/example/compose/jetchat/widget/JetChatWidget
+-         3: dup
+-         4: invokespecial #16                 // Method com/example/compose/jetchat/widget/JetChatWidget."<init>":()V
+-         7: checkcast     #18                 // class androidx/glance/appwidget/GlanceAppWidget
+-        10: areturn
+-
+-  static {};
+-    Code:
+-         0: getstatic     #23                 // Field androidx/glance/appwidget/GlanceAppWidgetReceiver.$stable:I
+-         3: putstatic     #24                 // Field $stable:I
+-         6: return
++         0: aload_0
++         1: getfield      #19                 // Field glanceAppWidget:Landroidx/glance/appwidget/GlanceAppWidget;
++         4: astore_1
++         5: new           #21                 // class com/example/compose/jetchat/widget/JetChatWidget
++         8: dup
++         9: invokespecial #22                 // Method com/example/compose/jetchat/widget/JetChatWidget."<init>":()V
++        12: areturn
+ }

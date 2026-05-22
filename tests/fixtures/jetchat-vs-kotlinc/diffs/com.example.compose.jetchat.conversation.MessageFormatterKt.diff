@@ -1,0 +1,654 @@
+--- ./gradle/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-21 07:24:28
++++ ./skotch/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-21 07:24:28
+@@ -1,530 +1,134 @@
+-Compiled from "MessageFormatter.kt"
++Compiled from "com/example/compose/jetchat/conversation/MessageFormatter.kt"
+ public final class com.example.compose.jetchat.conversation.MessageFormatterKt {
+-  private static final kotlin.Lazy symbolPattern$delegate;
++  private static final java.lang.Object symbolPattern;
+ 
+-  public static final kotlin.text.Regex getSymbolPattern();
++  public static final java.lang.Object getSymbolPattern();
+     Code:
+-         0: getstatic     #11                 // Field symbolPattern$delegate:Lkotlin/Lazy;
+-         3: astore_0
+-         4: aload_0
+-         5: invokeinterface #17,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+-        10: checkcast     #19                 // class kotlin/text/Regex
+-        13: areturn
++         0: getstatic     #10                 // Field symbolPattern:Ljava/lang/Object;
++         3: areturn
+ 
+   public static final androidx.compose.ui.text.AnnotatedString messageFormatter(java.lang.String, boolean, androidx.compose.runtime.Composer, int);
+     Code:
++         0: aload_2
++         1: ldc           #41                 // int 1959515538
++         3: invokeinterface #24,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
++         8: astore_2
++         9: aload_2
++        10: iload_3
++        11: ifeq          18
++        14: iconst_1
++        15: goto          19
++        18: iconst_0
++        19: iload_3
++        20: iconst_1
++        21: iand
++        22: invokeinterface #28,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
++        27: ifne          39
++        30: aload_2
++        31: invokeinterface #32,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
++        36: goto          65
++        39: aconst_null
++        40: astore        4
++        42: new           #43                 // class com/example/compose/jetchat/conversation/MessageFormatterKt$Lambda$24
++        45: dup
++        46: iload_1
++        47: aload         4
++        49: aload_0
++        50: invokespecial #47                 // Method com/example/compose/jetchat/conversation/MessageFormatterKt$Lambda$24."<init>":(ZLjava/lang/Object;Ljava/lang/String;)V
++        53: astore        5
++        55: aload         5
++        57: checkcast     #49                 // class kotlin/jvm/functions/Function1
++        60: invokestatic  #55                 // Method androidx/compose/ui/text/AnnotatedStringKt.buildAnnotatedString:(Lkotlin/jvm/functions/Function1;)Landroidx/compose/ui/text/AnnotatedString;
++        63: astore        6
++        65: aload_2
++        66: invokeinterface #36,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
++        71: dup
++        72: ifnull        91
++        75: aload_0
++        76: iload_1
++        77: iload_3
++        78: invokedynamic #75,  0             // InvokeDynamic #0:invoke:(Ljava/lang/String;ZI)Lkotlin/jvm/functions/Function2;
++        83: invokeinterface #40,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
++        88: goto          92
++        91: pop
++        92: return
++
++  private static final kotlin.Unit messageFormatter$lambda$0(java.lang.String, boolean, int, androidx.compose.runtime.Composer, int);
++    Code:
+          0: aload_0
+-         1: ldc           #25                 // String text
+-         3: invokestatic  #31                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         6: aload_2
+-         7: ldc           #32                 // int 425599961
+-         9: ldc           #34                 // String C(messageFormatter)N(text,primary):MessageFormatter.kt#q327eb
+-        11: invokestatic  #40                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-        14: invokestatic  #44                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-        17: ifeq          29
+-        20: ldc           #32                 // int 425599961
+-        22: iload_3
+-        23: iconst_m1
+-        24: ldc           #46                 // String com.example.compose.jetchat.conversation.messageFormatter (MessageFormatter.kt:59)
+-        26: invokestatic  #50                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+-        29: invokestatic  #52                 // Method getSymbolPattern:()Lkotlin/text/Regex;
+-        32: aload_0
+-        33: checkcast     #54                 // class java/lang/CharSequence
+-        36: iconst_0
+-        37: iconst_2
+-        38: aconst_null
+-        39: invokestatic  #58                 // Method kotlin/text/Regex.findAll$default:(Lkotlin/text/Regex;Ljava/lang/CharSequence;IILjava/lang/Object;)Lkotlin/sequences/Sequence;
+-        42: astore        4
+-        44: aload_2
+-        45: ldc           #59                 // int 979674633
+-        47: invokeinterface #65,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-        52: aload_2
+-        53: ldc           #67                 // String
+-        55: invokestatic  #71                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-        58: iconst_0
+-        59: istore        7
+-        61: new           #73                 // class androidx/compose/ui/text/AnnotatedString$Builder
+-        64: dup
+-        65: iconst_0
+-        66: iconst_1
+-        67: aconst_null
+-        68: invokespecial #77                 // Method androidx/compose/ui/text/AnnotatedString$Builder."<init>":(IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-        71: astore        8
+-        73: aload         8
+-        75: astore        9
+-        77: iconst_0
+-        78: istore        10
+-        80: iconst_0
+-        81: istore        11
+-        83: iload_1
+-        84: ifeq          127
+-        87: aload_2
+-        88: ldc           #78                 // int 1766494097
+-        90: invokeinterface #65,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-        95: aload_2
+-        96: ldc           #80                 // String 68@2498L11
+-        98: invokestatic  #71                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       101: getstatic     #86                 // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+-       104: aload_2
+-       105: getstatic     #90                 // Field androidx/compose/material3/MaterialTheme.$stable:I
+-       108: invokevirtual #94                 // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+-       111: invokevirtual #100                // Method androidx/compose/material3/ColorScheme."getSecondary-0d7_KjU":()J
+-       114: lstore        12
+-       116: aload_2
+-       117: invokeinterface #104,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       122: lload         12
+-       124: goto          164
+-       127: aload_2
+-       128: ldc           #105                // int 1766566451
+-       130: invokeinterface #65,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       135: aload_2
+-       136: ldc           #107                // String 70@2571L11
+-       138: invokestatic  #71                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       141: getstatic     #86                 // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+-       144: aload_2
+-       145: getstatic     #90                 // Field androidx/compose/material3/MaterialTheme.$stable:I
+-       148: invokevirtual #94                 // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+-       151: invokevirtual #110                // Method androidx/compose/material3/ColorScheme."getSurface-0d7_KjU":()J
+-       154: lstore        12
+-       156: aload_2
+-       157: invokeinterface #104,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       162: lload         12
+-       164: lstore        14
+-       166: aload_2
+-       167: ldc           #111                // int 979682696
+-       169: invokeinterface #65,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       174: aload_2
+-       175: ldc           #113                // String *78@2866L11
+-       177: invokestatic  #71                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       180: aload         4
+-       182: invokeinterface #119,  1          // InterfaceMethod kotlin/sequences/Sequence.iterator:()Ljava/util/Iterator;
+-       187: astore        16
+-       189: aload         16
+-       191: invokeinterface #124,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+-       196: ifeq          352
+-       199: aload         16
+-       201: invokeinterface #127,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+-       206: checkcast     #129                // class kotlin/text/MatchResult
+-       209: astore        17
+-       211: aload         9
+-       213: aload_0
+-       214: iload         11
+-       216: aload         17
+-       218: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       223: invokevirtual #139                // Method kotlin/ranges/IntRange.getFirst:()I
+-       226: invokestatic  #145                // Method kotlin/ranges/RangesKt.until:(II)Lkotlin/ranges/IntRange;
+-       229: invokestatic  #151                // Method kotlin/text/StringsKt.slice:(Ljava/lang/String;Lkotlin/ranges/IntRange;)Ljava/lang/String;
+-       232: invokevirtual #155                // Method androidx/compose/ui/text/AnnotatedString$Builder.append:(Ljava/lang/String;)V
+-       235: aload         17
+-       237: getstatic     #86                 // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+-       240: aload_2
+-       241: getstatic     #90                 // Field androidx/compose/material3/MaterialTheme.$stable:I
+-       244: invokevirtual #94                 // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+-       247: iload_1
+-       248: lload         14
+-       250: invokestatic  #159                // Method "getSymbolAnnotation-g2O1Hgs":(Lkotlin/text/MatchResult;Landroidx/compose/material3/ColorScheme;ZJ)Lkotlin/Pair;
+-       253: astore        18
+-       255: aload         18
+-       257: invokevirtual #164                // Method kotlin/Pair.component1:()Ljava/lang/Object;
+-       260: checkcast     #166                // class androidx/compose/ui/text/AnnotatedString
+-       263: astore        19
+-       265: aload         18
+-       267: invokevirtual #169                // Method kotlin/Pair.component2:()Ljava/lang/Object;
+-       270: checkcast     #171                // class androidx/compose/ui/text/AnnotatedString$Range
+-       273: astore        20
+-       275: aload         9
+-       277: aload         19
+-       279: invokevirtual #174                // Method androidx/compose/ui/text/AnnotatedString$Builder.append:(Landroidx/compose/ui/text/AnnotatedString;)V
+-       282: aload         20
+-       284: ifnull        335
+-       287: aload         20
+-       289: astore        21
+-       291: aload         21
+-       293: invokevirtual #175                // Method androidx/compose/ui/text/AnnotatedString$Range.component1:()Ljava/lang/Object;
+-       296: checkcast     #177                // class java/lang/String
+-       299: astore        22
+-       301: aload         21
+-       303: invokevirtual #179                // Method androidx/compose/ui/text/AnnotatedString$Range.component2:()I
+-       306: istore        23
+-       308: aload         21
+-       310: invokevirtual #182                // Method androidx/compose/ui/text/AnnotatedString$Range.component3:()I
+-       313: istore        24
+-       315: aload         21
+-       317: invokevirtual #186                // Method androidx/compose/ui/text/AnnotatedString$Range.component4:()Ljava/lang/String;
+-       320: astore        25
+-       322: aload         9
+-       324: aload         25
+-       326: aload         22
+-       328: iload         23
+-       330: iload         24
+-       332: invokevirtual #190                // Method androidx/compose/ui/text/AnnotatedString$Builder.addStringAnnotation:(Ljava/lang/String;Ljava/lang/String;II)V
+-       335: aload         17
+-       337: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       342: invokevirtual #193                // Method kotlin/ranges/IntRange.getLast:()I
+-       345: iconst_1
+-       346: iadd
+-       347: istore        11
+-       349: goto          189
+-       352: aload_2
+-       353: invokeinterface #104,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       358: aload         4
+-       360: invokestatic  #199                // Method kotlin/sequences/SequencesKt.none:(Lkotlin/sequences/Sequence;)Z
+-       363: ifne          394
+-       366: aload         9
+-       368: aload_0
+-       369: new           #135                // class kotlin/ranges/IntRange
+-       372: dup
+-       373: iload         11
+-       375: aload_0
+-       376: checkcast     #54                 // class java/lang/CharSequence
+-       379: invokestatic  #203                // Method kotlin/text/StringsKt.getLastIndex:(Ljava/lang/CharSequence;)I
+-       382: invokespecial #206                // Method kotlin/ranges/IntRange."<init>":(II)V
+-       385: invokestatic  #151                // Method kotlin/text/StringsKt.slice:(Ljava/lang/String;Lkotlin/ranges/IntRange;)Ljava/lang/String;
+-       388: invokevirtual #155                // Method androidx/compose/ui/text/AnnotatedString$Builder.append:(Ljava/lang/String;)V
+-       391: goto          400
+-       394: aload         9
+-       396: aload_0
+-       397: invokevirtual #155                // Method androidx/compose/ui/text/AnnotatedString$Builder.append:(Ljava/lang/String;)V
+-       400: nop
+-       401: aload         8
+-       403: invokevirtual #210                // Method androidx/compose/ui/text/AnnotatedString$Builder.toAnnotatedString:()Landroidx/compose/ui/text/AnnotatedString;
+-       406: astore        6
+-       408: aload_2
+-       409: invokeinterface #104,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       414: aload         6
+-       416: astore        5
+-       418: invokestatic  #44                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-       421: ifeq          427
+-       424: invokestatic  #213                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+-       427: aload_2
+-       428: invokestatic  #217                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       431: aload         5
+-       433: areturn
++         1: iload_1
++         2: aload_3
++         3: iload_2
++         4: iconst_1
++         5: ior
++         6: invokestatic  #85                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
++         9: invokestatic  #87                 // Method messageFormatter:(Ljava/lang/String;ZLandroidx/compose/runtime/Composer;I)Landroidx/compose/ui/text/AnnotatedString;
++        12: getstatic     #93                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
++        15: areturn
+ 
+-  private static final kotlin.Pair<androidx.compose.ui.text.AnnotatedString, androidx.compose.ui.text.AnnotatedString$Range<java.lang.String>> getSymbolAnnotation-g2O1Hgs(kotlin.text.MatchResult, androidx.compose.material3.ColorScheme, boolean, long);
++  public static final <T> kotlin.Pair getSymbolAnnotation(com.example.compose.jetchat.conversation.MatchResult, androidx.compose.material3.ColorScheme, boolean, androidx.compose.ui.graphics.Color);
+     Code:
++         0: aconst_null
++         1: areturn
++
++  public static final com.example.compose.jetchat.conversation.SymbolAnnotationType PERSON();
++    Code:
++         0: new           #100                // class com/example/compose/jetchat/conversation/SymbolAnnotationType
++         3: dup
++         4: ldc           #101                // String PERSON
++         6: invokespecial #104                // Method com/example/compose/jetchat/conversation/SymbolAnnotationType."<init>":(Ljava/lang/String;)V
++         9: areturn
++
++  public static final com.example.compose.jetchat.conversation.SymbolAnnotationType LINK();
++    Code:
++         0: new           #100                // class com/example/compose/jetchat/conversation/SymbolAnnotationType
++         3: dup
++         4: ldc           #106                // String LINK
++         6: invokespecial #104                // Method com/example/compose/jetchat/conversation/SymbolAnnotationType."<init>":(Ljava/lang/String;)V
++         9: areturn
++
++  public static final java.util.ArrayList SymbolAnnotationType$values();
++    Code:
++         0: new           #110                // class java/util/ArrayList
++         3: dup
++         4: invokespecial #112                // Method java/util/ArrayList."<init>":()V
++         7: astore_0
++         8: aload_0
++         9: invokestatic  #114                // Method PERSON:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
++        12: invokevirtual #118                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
++        15: pop
++        16: aload_0
++        17: invokestatic  #120                // Method LINK:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
++        20: invokevirtual #118                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
++        23: pop
++        24: aload_0
++        25: areturn
++
++  public static final com.example.compose.jetchat.conversation.SymbolAnnotationType SymbolAnnotationType$valueOf(java.lang.String);
++    Code:
+          0: aload_0
+-         1: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-         6: checkcast     #54                 // class java/lang/CharSequence
+-         9: invokestatic  #249                // Method kotlin/text/StringsKt.first:(Ljava/lang/CharSequence;)C
+-        12: lookupswitch  { // 6
+-                      42: 185
+-                      64: 72
+-                      95: 256
+-                      96: 401
+-                     104: 499
+-                     126: 330
+-                 default: 596
+-            }
+-        72: new           #161                // class kotlin/Pair
+-        75: dup
+-        76: aload_0
+-        77: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-        82: new           #251                // class androidx/compose/ui/text/SpanStyle
+-        85: dup
+-        86: iload_2
+-        87: ifeq          97
+-        90: aload_1
+-        91: invokevirtual #254                // Method androidx/compose/material3/ColorScheme."getInversePrimary-0d7_KjU":()J
+-        94: goto          101
+-        97: aload_1
+-        98: invokevirtual #257                // Method androidx/compose/material3/ColorScheme."getPrimary-0d7_KjU":()J
+-       101: lconst_0
+-       102: getstatic     #263                // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+-       105: invokevirtual #269                // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+-       108: aconst_null
+-       109: aconst_null
+-       110: aconst_null
+-       111: aconst_null
+-       112: lconst_0
+-       113: aconst_null
+-       114: aconst_null
+-       115: aconst_null
+-       116: lconst_0
+-       117: aconst_null
+-       118: aconst_null
+-       119: aconst_null
+-       120: aconst_null
+-       121: ldc_w         #270                // int 65530
+-       124: aconst_null
+-       125: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       128: aconst_null
+-       129: iconst_4
+-       130: aconst_null
+-       131: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       134: new           #171                // class androidx/compose/ui/text/AnnotatedString$Range
+-       137: dup
+-       138: aload_0
+-       139: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       144: iconst_1
+-       145: invokevirtual #283                // Method java/lang/String.substring:(I)Ljava/lang/String;
+-       148: dup
+-       149: ldc_w         #285                // String substring(...)
+-       152: invokestatic  #288                // Method kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V
+-       155: aload_0
+-       156: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       161: invokevirtual #139                // Method kotlin/ranges/IntRange.getFirst:()I
+-       164: aload_0
+-       165: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       170: invokevirtual #193                // Method kotlin/ranges/IntRange.getLast:()I
+-       173: ldc_w         #290                // String PERSON
+-       176: invokespecial #293                // Method androidx/compose/ui/text/AnnotatedString$Range."<init>":(Ljava/lang/Object;IILjava/lang/String;)V
+-       179: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       182: goto          620
+-       185: new           #161                // class kotlin/Pair
+-       188: dup
+-       189: aload_0
+-       190: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       195: iconst_1
+-       196: newarray       char
+-       198: astore        5
+-       200: aload         5
+-       202: iconst_0
+-       203: bipush        42
+-       205: castore
+-       206: aload         5
+-       208: invokestatic  #300                // Method kotlin/text/StringsKt.trim:(Ljava/lang/String;[C)Ljava/lang/String;
+-       211: new           #251                // class androidx/compose/ui/text/SpanStyle
+-       214: dup
+-       215: lconst_0
+-       216: lconst_0
+-       217: getstatic     #263                // Field androidx/compose/ui/text/font/FontWeight.Companion:Landroidx/compose/ui/text/font/FontWeight$Companion;
+-       220: invokevirtual #269                // Method androidx/compose/ui/text/font/FontWeight$Companion.getBold:()Landroidx/compose/ui/text/font/FontWeight;
+-       223: aconst_null
+-       224: aconst_null
+-       225: aconst_null
+-       226: aconst_null
+-       227: lconst_0
+-       228: aconst_null
+-       229: aconst_null
+-       230: aconst_null
+-       231: lconst_0
+-       232: aconst_null
+-       233: aconst_null
+-       234: aconst_null
+-       235: aconst_null
+-       236: ldc_w         #301                // int 65531
+-       239: aconst_null
+-       240: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       243: aconst_null
+-       244: iconst_4
+-       245: aconst_null
+-       246: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       249: aconst_null
+-       250: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       253: goto          620
+-       256: new           #161                // class kotlin/Pair
+-       259: dup
+-       260: aload_0
+-       261: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       266: iconst_1
+-       267: newarray       char
+-       269: astore        5
+-       271: aload         5
+-       273: iconst_0
+-       274: bipush        95
+-       276: castore
+-       277: aload         5
+-       279: invokestatic  #300                // Method kotlin/text/StringsKt.trim:(Ljava/lang/String;[C)Ljava/lang/String;
+-       282: new           #251                // class androidx/compose/ui/text/SpanStyle
+-       285: dup
+-       286: lconst_0
+-       287: lconst_0
+-       288: aconst_null
+-       289: getstatic     #306                // Field androidx/compose/ui/text/font/FontStyle.Companion:Landroidx/compose/ui/text/font/FontStyle$Companion;
+-       292: invokevirtual #311                // Method androidx/compose/ui/text/font/FontStyle$Companion."getItalic-_-LCdwA":()I
+-       295: invokestatic  #315                // Method androidx/compose/ui/text/font/FontStyle."box-impl":(I)Landroidx/compose/ui/text/font/FontStyle;
+-       298: aconst_null
+-       299: aconst_null
+-       300: aconst_null
+-       301: lconst_0
+-       302: aconst_null
+-       303: aconst_null
+-       304: aconst_null
+-       305: lconst_0
+-       306: aconst_null
+-       307: aconst_null
+-       308: aconst_null
+-       309: aconst_null
+-       310: ldc_w         #316                // int 65527
+-       313: aconst_null
+-       314: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       317: aconst_null
+-       318: iconst_4
+-       319: aconst_null
+-       320: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       323: aconst_null
+-       324: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       327: goto          620
+-       330: new           #161                // class kotlin/Pair
+-       333: dup
+-       334: aload_0
+-       335: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       340: iconst_1
+-       341: newarray       char
+-       343: astore        5
+-       345: aload         5
+-       347: iconst_0
+-       348: bipush        126
+-       350: castore
+-       351: aload         5
+-       353: invokestatic  #300                // Method kotlin/text/StringsKt.trim:(Ljava/lang/String;[C)Ljava/lang/String;
+-       356: new           #251                // class androidx/compose/ui/text/SpanStyle
+-       359: dup
+-       360: lconst_0
+-       361: lconst_0
+-       362: aconst_null
+-       363: aconst_null
+-       364: aconst_null
+-       365: aconst_null
+-       366: aconst_null
+-       367: lconst_0
+-       368: aconst_null
+-       369: aconst_null
+-       370: aconst_null
+-       371: lconst_0
+-       372: getstatic     #321                // Field androidx/compose/ui/text/style/TextDecoration.Companion:Landroidx/compose/ui/text/style/TextDecoration$Companion;
+-       375: invokevirtual #327                // Method androidx/compose/ui/text/style/TextDecoration$Companion.getLineThrough:()Landroidx/compose/ui/text/style/TextDecoration;
+-       378: aconst_null
+-       379: aconst_null
+-       380: aconst_null
+-       381: ldc_w         #328                // int 61439
+-       384: aconst_null
+-       385: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       388: aconst_null
+-       389: iconst_4
+-       390: aconst_null
+-       391: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       394: aconst_null
+-       395: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       398: goto          620
+-       401: new           #161                // class kotlin/Pair
+-       404: dup
+-       405: aload_0
+-       406: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       411: iconst_1
+-       412: newarray       char
+-       414: astore        5
+-       416: aload         5
+-       418: iconst_0
+-       419: bipush        96
+-       421: castore
+-       422: aload         5
+-       424: invokestatic  #300                // Method kotlin/text/StringsKt.trim:(Ljava/lang/String;[C)Ljava/lang/String;
+-       427: getstatic     #333                // Field androidx/compose/ui/text/font/FontFamily.Companion:Landroidx/compose/ui/text/font/FontFamily$Companion;
+-       430: invokevirtual #339                // Method androidx/compose/ui/text/font/FontFamily$Companion.getMonospace:()Landroidx/compose/ui/text/font/GenericFontFamily;
+-       433: astore        5
+-       435: bipush        12
+-       437: invokestatic  #345                // Method androidx/compose/ui/unit/TextUnitKt.getSp:(I)J
+-       440: lstore        6
+-       442: ldc_w         #346                // float 0.2f
+-       445: invokestatic  #352                // Method androidx/compose/ui/text/style/BaselineShift."constructor-impl":(F)F
+-       448: fstore        8
+-       450: new           #251                // class androidx/compose/ui/text/SpanStyle
+-       453: dup
+-       454: lconst_0
+-       455: lload         6
+-       457: aconst_null
+-       458: aconst_null
+-       459: aconst_null
+-       460: aload         5
+-       462: checkcast     #330                // class androidx/compose/ui/text/font/FontFamily
+-       465: aconst_null
+-       466: lconst_0
+-       467: fload         8
+-       469: invokestatic  #355                // Method androidx/compose/ui/text/style/BaselineShift."box-impl":(F)Landroidx/compose/ui/text/style/BaselineShift;
+-       472: aconst_null
+-       473: aconst_null
+-       474: lload_3
+-       475: aconst_null
+-       476: aconst_null
+-       477: aconst_null
+-       478: aconst_null
+-       479: ldc_w         #356                // int 63197
+-       482: aconst_null
+-       483: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       486: aconst_null
+-       487: iconst_4
+-       488: aconst_null
+-       489: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       492: aconst_null
+-       493: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       496: goto          620
+-       499: new           #161                // class kotlin/Pair
+-       502: dup
+-       503: aload_0
+-       504: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       509: new           #251                // class androidx/compose/ui/text/SpanStyle
+-       512: dup
+-       513: iload_2
+-       514: ifeq          524
+-       517: aload_1
+-       518: invokevirtual #254                // Method androidx/compose/material3/ColorScheme."getInversePrimary-0d7_KjU":()J
+-       521: goto          528
+-       524: aload_1
+-       525: invokevirtual #257                // Method androidx/compose/material3/ColorScheme."getPrimary-0d7_KjU":()J
+-       528: lconst_0
+-       529: aconst_null
+-       530: aconst_null
+-       531: aconst_null
+-       532: aconst_null
+-       533: aconst_null
+-       534: lconst_0
+-       535: aconst_null
+-       536: aconst_null
+-       537: aconst_null
+-       538: lconst_0
+-       539: aconst_null
+-       540: aconst_null
+-       541: aconst_null
+-       542: aconst_null
+-       543: ldc_w         #357                // int 65534
+-       546: aconst_null
+-       547: invokespecial #273                // Method androidx/compose/ui/text/SpanStyle."<init>":(JJLandroidx/compose/ui/text/font/FontWeight;Landroidx/compose/ui/text/font/FontStyle;Landroidx/compose/ui/text/font/FontSynthesis;Landroidx/compose/ui/text/font/FontFamily;Ljava/lang/String;JLandroidx/compose/ui/text/style/BaselineShift;Landroidx/compose/ui/text/style/TextGeometricTransform;Landroidx/compose/ui/text/intl/LocaleList;JLandroidx/compose/ui/text/style/TextDecoration;Landroidx/compose/ui/graphics/Shadow;Landroidx/compose/ui/text/PlatformSpanStyle;Landroidx/compose/ui/graphics/drawscope/DrawStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       550: aconst_null
+-       551: iconst_4
+-       552: aconst_null
+-       553: invokestatic  #279                // Method androidx/compose/ui/text/AnnotatedStringKt.AnnotatedString$default:(Ljava/lang/String;Landroidx/compose/ui/text/SpanStyle;Landroidx/compose/ui/text/ParagraphStyle;ILjava/lang/Object;)Landroidx/compose/ui/text/AnnotatedString;
+-       556: new           #171                // class androidx/compose/ui/text/AnnotatedString$Range
+-       559: dup
+-       560: aload_0
+-       561: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       566: aload_0
+-       567: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       572: invokevirtual #139                // Method kotlin/ranges/IntRange.getFirst:()I
+-       575: aload_0
+-       576: invokeinterface #133,  1          // InterfaceMethod kotlin/text/MatchResult.getRange:()Lkotlin/ranges/IntRange;
+-       581: invokevirtual #193                // Method kotlin/ranges/IntRange.getLast:()I
+-       584: ldc_w         #359                // String LINK
+-       587: invokespecial #293                // Method androidx/compose/ui/text/AnnotatedString$Range."<init>":(Ljava/lang/Object;IILjava/lang/String;)V
+-       590: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       593: goto          620
+-       596: new           #161                // class kotlin/Pair
+-       599: dup
+-       600: new           #166                // class androidx/compose/ui/text/AnnotatedString
+-       603: dup
+-       604: aload_0
+-       605: invokeinterface #245,  1          // InterfaceMethod kotlin/text/MatchResult.getValue:()Ljava/lang/String;
+-       610: aconst_null
+-       611: iconst_2
+-       612: aconst_null
+-       613: invokespecial #362                // Method androidx/compose/ui/text/AnnotatedString."<init>":(Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-       616: aconst_null
+-       617: invokespecial #296                // Method kotlin/Pair."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+-       620: areturn
++         1: ldc           #124                // String name
++         3: invokestatic  #130                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
++         6: aload_0
++         7: ldc           #101                // String PERSON
++         9: invokestatic  #134                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
++        12: ifeq          22
++        15: goto          35
++        18: invokestatic  #114                // Method PERSON:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
++        21: areturn
++        22: aload_0
++        23: ldc           #106                // String LINK
++        25: invokestatic  #134                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
++        28: ifeq          18
++        31: invokestatic  #120                // Method LINK:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
++        34: areturn
++        35: invokestatic  #114                // Method PERSON:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
++        38: areturn
+ 
+-  private static final kotlin.text.Regex symbolPattern_delegate$lambda$0();
++  private static final {};
+     Code:
+-         0: new           #19                 // class kotlin/text/Regex
+-         3: dup
+-         4: ldc_w         #369                // String (https?://[^\\s\\t\\n]+)|(`[^`]+`)|(@\\w+)|(\\*[\\w]+\\*)|(_[\\w]+_)|(~[\\w]+~)
+-         7: invokespecial #371                // Method kotlin/text/Regex."<init>":(Ljava/lang/String;)V
+-        10: areturn
+-
+-  static {};
+-    Code:
+-         0: invokedynamic #388,  0            // InvokeDynamic #0:invoke:()Lkotlin/jvm/functions/Function0;
+-         5: invokestatic  #394                // Method kotlin/LazyKt.lazy:(Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
+-         8: putstatic     #11                 // Field symbolPattern$delegate:Lkotlin/Lazy;
+-        11: return
++         0: ldc           #139                // String (https?://[^\\s\\t\\n]+)|(`[^`]+`)|(@\\w+)|(\\*[\\w]+\\*)|(_[\\w]+_)|(~[\\w]+~)
++         2: invokestatic  #145                // Method java/util/regex/Pattern.compile:(Ljava/lang/String;)Ljava/util/regex/Pattern;
++         5: putstatic     #10                 // Field symbolPattern:Ljava/lang/Object;
++         8: return
+ }

@@ -463,6 +463,36 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
     for block in &mut func.blocks {
         for stmt in &mut block.stmts {
             let MStmt::Assign { value, .. } = stmt;
+            // Special-case the content-invoke fallback emitted by
+            // mir-lower for null-stubbed Compose wrapper calls — it uses
+            // `CallKind::Virtual` to call `Function2.invoke(content,
+            // null_composer, 0_changed)` with placeholders that we patch
+            // here. Without this, the lambda body sees a null composer
+            // and crashes on the first slot-table read.
+            if let Rvalue::Call {
+                kind:
+                    CallKind::Virtual {
+                        class_name,
+                        method_name,
+                    },
+                args,
+            } = value
+            {
+                if (class_name.starts_with("kotlin/jvm/functions/Function")
+                    || class_name.contains("$Lambda$"))
+                    && method_name == "invoke"
+                    && args.len() >= 3
+                {
+                    // Patch args[1] (composer slot) and args[2] (changed slot).
+                    if null_locals.contains(&args[1].0) {
+                        args[1] = composer_local;
+                    }
+                    if zero_locals.contains(&args[2].0) {
+                        args[2] = changed_local;
+                    }
+                    continue;
+                }
+            }
             let (descriptor, args, is_virtual): (&str, &mut Vec<LocalId>, bool) = match value {
                 Rvalue::Call {
                     kind: CallKind::StaticJava { descriptor, .. },

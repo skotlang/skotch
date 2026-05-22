@@ -1,0 +1,382 @@
+Compiled from "JetchatScaffold.kt"
+public final class com.example.compose.jetchat.components.JetchatScaffoldKt {
+  public static final void JetchatDrawer(androidx.compose.material3.DrawerState, java.lang.String, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int, int);
+    Code:
+         0: aload_1
+         1: ldc           #15                 // String selectedMenu
+         3: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_2
+         7: ldc           #23                 // String onProfileClicked
+         9: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        12: aload_3
+        13: ldc           #25                 // String onChatClicked
+        15: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        18: aload         4
+        20: ldc           #27                 // String content
+        22: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        25: aload         5
+        27: ldc           #28                 // int 382925439
+        29: invokeinterface #34,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+        34: astore        5
+        36: aload         5
+        38: ldc           #36                 // String C(JetchatDrawer)N(drawerState,selectedMenu,onProfileClicked,onChatClicked,content)35@1338L677,35@1325L690:JetchatScaffold.kt#o9oqao
+        40: invokestatic  #42                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        43: iload         6
+        45: istore        8
+        47: iload         6
+        49: bipush        6
+        51: iand
+        52: ifne          83
+        55: iload         8
+        57: iload         7
+        59: iconst_1
+        60: iand
+        61: ifne          79
+        64: aload         5
+        66: aload_0
+        67: invokeinterface #46,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+        72: ifeq          79
+        75: iconst_4
+        76: goto          80
+        79: iconst_2
+        80: ior
+        81: istore        8
+        83: iload         6
+        85: bipush        48
+        87: iand
+        88: ifne          114
+        91: iload         8
+        93: aload         5
+        95: aload_1
+        96: invokeinterface #46,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+       101: ifeq          109
+       104: bipush        32
+       106: goto          111
+       109: bipush        16
+       111: ior
+       112: istore        8
+       114: iload         6
+       116: sipush        384
+       119: iand
+       120: ifne          148
+       123: iload         8
+       125: aload         5
+       127: aload_2
+       128: invokeinterface #49,  2           // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+       133: ifeq          142
+       136: sipush        256
+       139: goto          145
+       142: sipush        128
+       145: ior
+       146: istore        8
+       148: iload         6
+       150: sipush        3072
+       153: iand
+       154: ifne          182
+       157: iload         8
+       159: aload         5
+       161: aload_3
+       162: invokeinterface #49,  2           // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+       167: ifeq          176
+       170: sipush        2048
+       173: goto          179
+       176: sipush        1024
+       179: ior
+       180: istore        8
+       182: iload         6
+       184: sipush        24576
+       187: iand
+       188: ifne          217
+       191: iload         8
+       193: aload         5
+       195: aload         4
+       197: invokeinterface #49,  2           // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+       202: ifeq          211
+       205: sipush        16384
+       208: goto          214
+       211: sipush        8192
+       214: ior
+       215: istore        8
+       217: aload         5
+       219: iload         8
+       221: sipush        9363
+       224: iand
+       225: sipush        9362
+       228: if_icmpeq     235
+       231: iconst_1
+       232: goto          236
+       235: iconst_0
+       236: iload         8
+       238: iconst_1
+       239: iand
+       240: invokeinterface #53,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+       245: ifeq          400
+       248: aload         5
+       250: invokeinterface #57,  1           // InterfaceMethod androidx/compose/runtime/Composer.startDefaults:()V
+       255: aload         5
+       257: ldc           #59                 // String 29@1133L42
+       259: invokestatic  #42                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+       262: iload         6
+       264: iconst_1
+       265: iand
+       266: ifeq          279
+       269: aload         5
+       271: invokeinterface #63,  1           // InterfaceMethod androidx/compose/runtime/Composer.getDefaultsInvalid:()Z
+       276: ifeq          309
+       279: iload         7
+       281: iconst_1
+       282: iand
+       283: ifeq          330
+       286: getstatic     #69                 // Field androidx/compose/material3/DrawerValue.Closed:Landroidx/compose/material3/DrawerValue;
+       289: aconst_null
+       290: aload         5
+       292: bipush        6
+       294: iconst_2
+       295: invokestatic  #75                 // Method androidx/compose/material3/NavigationDrawerKt.rememberDrawerState:(Landroidx/compose/material3/DrawerValue;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)Landroidx/compose/material3/DrawerState;
+       298: astore_0
+       299: iload         8
+       301: bipush        -15
+       303: iand
+       304: istore        8
+       306: goto          330
+       309: aload         5
+       311: invokeinterface #78,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+       316: iload         7
+       318: iconst_1
+       319: iand
+       320: ifeq          330
+       323: iload         8
+       325: bipush        -15
+       327: iand
+       328: istore        8
+       330: aload         5
+       332: invokeinterface #81,  1           // InterfaceMethod androidx/compose/runtime/Composer.endDefaults:()V
+       337: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+       340: ifeq          353
+       343: ldc           #28                 // int 382925439
+       345: iload         8
+       347: iconst_m1
+       348: ldc           #86                 // String com.example.compose.jetchat.components.JetchatDrawer (JetchatScaffold.kt:34)
+       350: invokestatic  #90                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+       353: iconst_0
+       354: iconst_0
+       355: ldc           #91                 // int -1486514952
+       357: iconst_1
+       358: aload_0
+       359: aload         4
+       361: aload_2
+       362: aload_3
+       363: aload_1
+       364: invokedynamic #111,  0            // InvokeDynamic #0:invoke:(Landroidx/compose/material3/DrawerState;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Lkotlin/jvm/functions/Function2;
+       369: aload         5
+       371: bipush        54
+       373: invokestatic  #117                // Method androidx/compose/runtime/internal/ComposableLambdaKt.rememberComposableLambda:(IZLjava/lang/Object;Landroidx/compose/runtime/Composer;I)Landroidx/compose/runtime/internal/ComposableLambda;
+       376: checkcast     #119                // class kotlin/jvm/functions/Function2
+       379: aload         5
+       381: sipush        384
+       384: iconst_3
+       385: invokestatic  #125                // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+       388: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+       391: ifeq          407
+       394: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+       397: goto          407
+       400: aload         5
+       402: invokeinterface #78,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+       407: aload         5
+       409: invokeinterface #132,  1          // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+       414: dup
+       415: ifnull        441
+       418: aload_0
+       419: aload_1
+       420: aload_2
+       421: aload_3
+       422: aload         4
+       424: iload         6
+       426: iload         7
+       428: invokedynamic #140,  0            // InvokeDynamic #1:invoke:(Landroidx/compose/material3/DrawerState;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;II)Lkotlin/jvm/functions/Function2;
+       433: invokeinterface #146,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       438: goto          442
+       441: pop
+       442: return
+
+  private static final kotlin.Unit JetchatDrawer$lambda$0$0$0(kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, java.lang.String, androidx.compose.foundation.layout.ColumnScope, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_3
+         1: ldc           #169                // String $this$ModalDrawerSheet
+         3: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload         4
+         8: ldc           #171                // String C44@1723L212:JetchatScaffold.kt#o9oqao
+        10: invokestatic  #42                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        13: aload         4
+        15: iload         5
+        17: bipush        17
+        19: iand
+        20: bipush        16
+        22: if_icmpeq     29
+        25: iconst_1
+        26: goto          30
+        29: iconst_0
+        30: iload         5
+        32: iconst_1
+        33: iand
+        34: invokeinterface #53,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        39: ifeq          80
+        42: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        45: ifeq          58
+        48: ldc           #172                // int -1423063434
+        50: iload         5
+        52: iconst_m1
+        53: ldc           #174                // String com.example.compose.jetchat.components.JetchatDrawer.<anonymous>.<anonymous>.<anonymous> (JetchatScaffold.kt:44)
+        55: invokestatic  #90                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        58: aload_0
+        59: aload_1
+        60: aload_2
+        61: aload         4
+        63: iconst_0
+        64: iconst_0
+        65: invokestatic  #180                // Method com/example/compose/jetchat/components/JetchatDrawerKt.JetchatDrawerContent:(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Landroidx/compose/runtime/Composer;II)V
+        68: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        71: ifeq          87
+        74: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        77: goto          87
+        80: aload         4
+        82: invokeinterface #78,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        87: getstatic     #186                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        90: areturn
+
+  private static final kotlin.Unit JetchatDrawer$lambda$0$0(androidx.compose.material3.DrawerState, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, java.lang.String, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         4
+         2: ldc           #196                // String C41@1578L11,42@1657L11,43@1701L252,39@1456L497:JetchatScaffold.kt#o9oqao
+         4: invokestatic  #42                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+         7: aload         4
+         9: iload         5
+        11: iconst_3
+        12: iand
+        13: iconst_2
+        14: if_icmpeq     21
+        17: iconst_1
+        18: goto          22
+        21: iconst_0
+        22: iload         5
+        24: iconst_1
+        25: iand
+        26: invokeinterface #53,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        31: ifeq          125
+        34: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        37: ifeq          50
+        40: ldc           #197                // int -2001395503
+        42: iload         5
+        44: iconst_m1
+        45: ldc           #199                // String com.example.compose.jetchat.components.JetchatDrawer.<anonymous>.<anonymous> (JetchatScaffold.kt:39)
+        47: invokestatic  #90                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        50: aload_0
+        51: aconst_null
+        52: aconst_null
+        53: getstatic     #204                // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+        56: aload         4
+        58: getstatic     #207                // Field androidx/compose/material3/MaterialTheme.$stable:I
+        61: invokevirtual #211                // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+        64: invokevirtual #217                // Method androidx/compose/material3/ColorScheme."getBackground-0d7_KjU":()J
+        67: getstatic     #204                // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+        70: aload         4
+        72: getstatic     #207                // Field androidx/compose/material3/MaterialTheme.$stable:I
+        75: invokevirtual #211                // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+        78: invokevirtual #220                // Method androidx/compose/material3/ColorScheme."getOnBackground-0d7_KjU":()J
+        81: fconst_0
+        82: aconst_null
+        83: ldc           #172                // int -1423063434
+        85: iconst_1
+        86: aload_1
+        87: aload_2
+        88: aload_3
+        89: invokedynamic #230,  0            // InvokeDynamic #2:invoke:(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Lkotlin/jvm/functions/Function3;
+        94: aload         4
+        96: bipush        54
+        98: invokestatic  #117                // Method androidx/compose/runtime/internal/ComposableLambdaKt.rememberComposableLambda:(IZLjava/lang/Object;Landroidx/compose/runtime/Composer;I)Landroidx/compose/runtime/internal/ComposableLambda;
+       101: checkcast     #232                // class kotlin/jvm/functions/Function3
+       104: aload         4
+       106: ldc           #233                // int 12582912
+       108: bipush        102
+       110: invokestatic  #237                // Method androidx/compose/material3/NavigationDrawerKt."ModalDrawerSheet-Snr_uVM":(Landroidx/compose/material3/DrawerState;Landroidx/compose/ui/Modifier;Landroidx/compose/ui/graphics/Shape;JJFLandroidx/compose/foundation/layout/WindowInsets;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
+       113: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+       116: ifeq          132
+       119: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+       122: goto          132
+       125: aload         4
+       127: invokeinterface #78,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+       132: getstatic     #186                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+       135: areturn
+
+  private static final kotlin.Unit JetchatDrawer$lambda$0(androidx.compose.material3.DrawerState, kotlin.jvm.functions.Function2, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, java.lang.String, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         5
+         2: ldc           #240                // String C38@1438L529,36@1348L661:JetchatScaffold.kt#o9oqao
+         4: invokestatic  #42                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+         7: aload         5
+         9: iload         6
+        11: iconst_3
+        12: iand
+        13: iconst_2
+        14: if_icmpeq     21
+        17: iconst_1
+        18: goto          22
+        21: iconst_0
+        22: iload         6
+        24: iconst_1
+        25: iand
+        26: invokeinterface #53,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        31: ifeq          99
+        34: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        37: ifeq          50
+        40: ldc           #91                 // int -1486514952
+        42: iload         6
+        44: iconst_m1
+        45: ldc           #242                // String com.example.compose.jetchat.components.JetchatDrawer.<anonymous> (JetchatScaffold.kt:36)
+        47: invokestatic  #90                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        50: ldc           #197                // int -2001395503
+        52: iconst_1
+        53: aload_0
+        54: aload_2
+        55: aload_3
+        56: aload         4
+        58: invokedynamic #248,  0            // InvokeDynamic #3:invoke:(Landroidx/compose/material3/DrawerState;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;)Lkotlin/jvm/functions/Function2;
+        63: aload         5
+        65: bipush        54
+        67: invokestatic  #117                // Method androidx/compose/runtime/internal/ComposableLambdaKt.rememberComposableLambda:(IZLjava/lang/Object;Landroidx/compose/runtime/Composer;I)Landroidx/compose/runtime/internal/ComposableLambda;
+        70: checkcast     #119                // class kotlin/jvm/functions/Function2
+        73: aconst_null
+        74: aload_0
+        75: iconst_0
+        76: lconst_0
+        77: aload_1
+        78: aload         5
+        80: bipush        6
+        82: bipush        26
+        84: invokestatic  #252                // Method androidx/compose/material3/NavigationDrawerKt."ModalNavigationDrawer-FHprtrg":(Lkotlin/jvm/functions/Function2;Landroidx/compose/ui/Modifier;Landroidx/compose/material3/DrawerState;ZJLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        87: invokestatic  #84                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        90: ifeq          106
+        93: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        96: goto          106
+        99: aload         5
+       101: invokeinterface #78,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+       106: getstatic     #186                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+       109: areturn
+
+  private static final kotlin.Unit JetchatDrawer$lambda$1(androidx.compose.material3.DrawerState, java.lang.String, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function2, int, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: aload_3
+         4: aload         4
+         6: aload         7
+         8: iload         5
+        10: iconst_1
+        11: ior
+        12: invokestatic  #259                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        15: iload         6
+        17: invokestatic  #261                // Method JetchatDrawer:(Landroidx/compose/material3/DrawerState;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        20: getstatic     #186                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        23: areturn
+}

@@ -1,0 +1,251 @@
+Compiled from "com/example/compose/jetchat/theme/Color.kt"
+public final class com.example.compose.jetchat.theme.ColorKt {
+  private static final java.lang.Object Blue10;
+
+  private static final java.lang.Object Blue20;
+
+  private static final java.lang.Object Blue30;
+
+  private static final java.lang.Object Blue40;
+
+  private static final java.lang.Object Blue80;
+
+  private static final java.lang.Object Blue90;
+
+  private static final java.lang.Object DarkBlue10;
+
+  private static final java.lang.Object DarkBlue20;
+
+  private static final java.lang.Object DarkBlue30;
+
+  private static final java.lang.Object DarkBlue40;
+
+  private static final java.lang.Object DarkBlue80;
+
+  private static final java.lang.Object DarkBlue90;
+
+  private static final java.lang.Object Yellow10;
+
+  private static final java.lang.Object Yellow20;
+
+  private static final java.lang.Object Yellow30;
+
+  private static final java.lang.Object Yellow40;
+
+  private static final java.lang.Object Yellow80;
+
+  private static final java.lang.Object Yellow90;
+
+  private static final java.lang.Object Red10;
+
+  private static final java.lang.Object Red20;
+
+  private static final java.lang.Object Red30;
+
+  private static final java.lang.Object Red40;
+
+  private static final java.lang.Object Red80;
+
+  private static final java.lang.Object Red90;
+
+  private static final java.lang.Object Grey10;
+
+  private static final java.lang.Object Grey20;
+
+  private static final java.lang.Object Grey80;
+
+  private static final java.lang.Object Grey90;
+
+  private static final java.lang.Object Grey95;
+
+  private static final java.lang.Object Grey99;
+
+  private static final java.lang.Object BlueGrey30;
+
+  private static final java.lang.Object BlueGrey50;
+
+  private static final java.lang.Object BlueGrey60;
+
+  private static final java.lang.Object BlueGrey80;
+
+  private static final java.lang.Object BlueGrey90;
+
+  public static final java.lang.Object getBlue10();
+    Code:
+         0: getstatic     #44                 // Field Blue10:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlue20();
+    Code:
+         0: getstatic     #49                 // Field Blue20:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlue30();
+    Code:
+         0: getstatic     #52                 // Field Blue30:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlue40();
+    Code:
+         0: getstatic     #55                 // Field Blue40:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlue80();
+    Code:
+         0: getstatic     #58                 // Field Blue80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlue90();
+    Code:
+         0: getstatic     #61                 // Field Blue90:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue10();
+    Code:
+         0: getstatic     #64                 // Field DarkBlue10:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue20();
+    Code:
+         0: getstatic     #67                 // Field DarkBlue20:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue30();
+    Code:
+         0: getstatic     #70                 // Field DarkBlue30:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue40();
+    Code:
+         0: getstatic     #73                 // Field DarkBlue40:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue80();
+    Code:
+         0: getstatic     #76                 // Field DarkBlue80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getDarkBlue90();
+    Code:
+         0: getstatic     #79                 // Field DarkBlue90:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow10();
+    Code:
+         0: getstatic     #82                 // Field Yellow10:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow20();
+    Code:
+         0: getstatic     #85                 // Field Yellow20:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow30();
+    Code:
+         0: getstatic     #88                 // Field Yellow30:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow40();
+    Code:
+         0: getstatic     #91                 // Field Yellow40:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow80();
+    Code:
+         0: getstatic     #94                 // Field Yellow80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getYellow90();
+    Code:
+         0: getstatic     #97                 // Field Yellow90:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed10();
+    Code:
+         0: getstatic     #100                // Field Red10:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed20();
+    Code:
+         0: getstatic     #103                // Field Red20:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed30();
+    Code:
+         0: getstatic     #106                // Field Red30:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed40();
+    Code:
+         0: getstatic     #109                // Field Red40:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed80();
+    Code:
+         0: getstatic     #112                // Field Red80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getRed90();
+    Code:
+         0: getstatic     #115                // Field Red90:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey10();
+    Code:
+         0: getstatic     #118                // Field Grey10:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey20();
+    Code:
+         0: getstatic     #121                // Field Grey20:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey80();
+    Code:
+         0: getstatic     #124                // Field Grey80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey90();
+    Code:
+         0: getstatic     #127                // Field Grey90:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey95();
+    Code:
+         0: getstatic     #130                // Field Grey95:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getGrey99();
+    Code:
+         0: getstatic     #133                // Field Grey99:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlueGrey30();
+    Code:
+         0: getstatic     #136                // Field BlueGrey30:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlueGrey50();
+    Code:
+         0: getstatic     #139                // Field BlueGrey50:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlueGrey60();
+    Code:
+         0: getstatic     #142                // Field BlueGrey60:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlueGrey80();
+    Code:
+         0: getstatic     #145                // Field BlueGrey80:Ljava/lang/Object;
+         3: areturn
+
+  public static final java.lang.Object getBlueGrey90();
+    Code:
+         0: getstatic     #148                // Field BlueGrey90:Ljava/lang/Object;
+         3: areturn
+
+  public static final {};
+    Code:
+         0: return
+}

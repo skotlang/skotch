@@ -1,0 +1,728 @@
+--- ./gradle/com.example.compose.jetchat.theme.ThemesKt.javap	2026-05-21 07:24:32
++++ ./skotch/com.example.compose.jetchat.theme.ThemesKt.javap	2026-05-21 07:24:32
+@@ -1,517 +1,231 @@
+-Compiled from "Themes.kt"
++Compiled from "com/example/compose/jetchat/theme/Themes.kt"
+ public final class com.example.compose.jetchat.theme.ThemesKt {
+-  private static final androidx.compose.material3.ColorScheme JetchatDarkColorScheme;
++  private static final java.lang.Object JetchatDarkColorScheme;
+ 
+-  private static final androidx.compose.material3.ColorScheme JetchatLightColorScheme;
++  private static final java.lang.Object JetchatLightColorScheme;
+ 
+-  public static final androidx.compose.material3.ColorScheme getJetchatDarkColorScheme();
++  public static final java.lang.Object getJetchatDarkColorScheme();
+     Code:
+-         0: getstatic     #11                 // Field JetchatDarkColorScheme:Landroidx/compose/material3/ColorScheme;
++         0: getstatic     #11                 // Field JetchatDarkColorScheme:Ljava/lang/Object;
+          3: areturn
+ 
+-  public static final androidx.compose.material3.ColorScheme getJetchatLightColorScheme();
++  public static final java.lang.Object getJetchatLightColorScheme();
+     Code:
+-         0: getstatic     #15                 // Field JetchatLightColorScheme:Landroidx/compose/material3/ColorScheme;
++         0: getstatic     #16                 // Field JetchatLightColorScheme:Ljava/lang/Object;
+          3: areturn
+ 
+-  public static final void JetchatTheme(boolean, boolean, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int, int);
++  public static final <T> void JetchatTheme(boolean, boolean, kotlin.jvm.functions.Function2, androidx.compose.runtime.Composer, int);
+     Code:
+          0: aload_2
+-         1: ldc           #28                 // String content
+-         3: invokestatic  #34                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         6: aload_3
+-         7: ldc           #35                 // int -1043376048
+-         9: invokeinterface #41,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+-        14: astore_3
+-        15: aload_3
+-        16: ldc           #43                 // String C(JetchatTheme)N(isDarkTheme,isDynamicColor,content)106@3385L124:Themes.kt#9rjjpd
+-        18: invokestatic  #49                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-        21: iload         4
+-        23: istore        6
+-        25: iload         4
+-        27: bipush        6
+-        29: iand
+-        30: ifne          60
+-        33: iload         6
+-        35: iload         5
+-        37: iconst_1
+-        38: iand
+-        39: ifne          56
+-        42: aload_3
+-        43: iload_0
+-        44: invokeinterface #53,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Z)Z
+-        49: ifeq          56
+-        52: iconst_4
+-        53: goto          57
+-        56: iconst_2
+-        57: ior
+-        58: istore        6
+-        60: iload         5
+-        62: iconst_2
+-        63: iand
+-        64: ifeq          77
+-        67: iload         6
+-        69: bipush        48
+-        71: ior
+-        72: istore        6
+-        74: goto          107
+-        77: iload         4
+-        79: bipush        48
+-        81: iand
+-        82: ifne          107
+-        85: iload         6
+-        87: aload_3
+-        88: iload_1
+-        89: invokeinterface #53,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Z)Z
+-        94: ifeq          102
+-        97: bipush        32
+-        99: goto          104
+-       102: bipush        16
+-       104: ior
+-       105: istore        6
+-       107: iload         4
+-       109: sipush        384
+-       112: iand
+-       113: ifne          140
++         1: ldc           #20                 // String content
++         3: invokestatic  #26                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
++         6: iconst_0
++         7: istore        5
++         9: iload_1
++        10: ifeq          29
++        13: getstatic     #32                 // Field android/os/Build$VERSION.SDK_INT:I
++        16: getstatic     #37                 // Field android/os/Build$VERSION_CODES.S:I
++        19: if_icmplt     26
++        22: iconst_1
++        23: goto          27
++        26: iconst_0
++        27: istore        5
++        29: iconst_0
++        30: istore        6
++        32: iload         5
++        34: ifeq          116
++        37: goto          113
++        40: aconst_null
++        41: getfield      #42                 // Field androidx/compose/ui/platform/LocalContext.current:Ljava/lang/Object;
++        44: checkcast     #44                 // class android/content/Context
++        47: invokestatic  #50                 // Method androidx/compose/material3/DynamicTonalPaletteKt.dynamicDarkColorScheme:(Landroid/content/Context;)Landroidx/compose/material3/ColorScheme;
++        50: astore        7
++        52: return
++        53: iconst_0
++        54: istore        8
++        56: iload         5
++        58: ifeq          135
++        61: goto          124
++        64: aconst_null
++        65: getfield      #42                 // Field androidx/compose/ui/platform/LocalContext.current:Ljava/lang/Object;
++        68: checkcast     #44                 // class android/content/Context
++        71: invokestatic  #53                 // Method androidx/compose/material3/DynamicTonalPaletteKt.dynamicLightColorScheme:(Landroid/content/Context;)Landroidx/compose/material3/ColorScheme;
++        74: astore        7
++        76: return
++        77: iload_0
++        78: ifeq          89
++        81: getstatic     #11                 // Field JetchatDarkColorScheme:Ljava/lang/Object;
++        84: astore        7
++        86: goto          94
++        89: getstatic     #16                 // Field JetchatLightColorScheme:Ljava/lang/Object;
++        92: astore        7
++        94: invokestatic  #58                 // Method com/example/compose/jetchat/theme/TypographyKt.getJetchatTypography:()Ljava/lang/Object;
++        97: astore        9
++        99: aload_2
++       100: aload_3
++       101: iload         4
++       103: invokestatic  #64                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
++       106: invokeinterface #70,  3           // InterfaceMethod kotlin/jvm/functions/Function2.invoke:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
++       111: pop
++       112: return
++       113: iload_0
++       114: istore        6
+        116: iload         6
+-       118: aload_3
+-       119: aload_2
+-       120: invokeinterface #57,  2           // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       125: ifeq          134
+-       128: sipush        256
+-       131: goto          137
+-       134: sipush        128
+-       137: ior
+-       138: istore        6
+-       140: aload_3
+-       141: iload         6
+-       143: sipush        147
+-       146: iand
+-       147: sipush        146
+-       150: if_icmpeq     157
+-       153: iconst_1
+-       154: goto          158
+-       157: iconst_0
+-       158: iload         6
+-       160: iconst_1
+-       161: iand
+-       162: invokeinterface #61,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+-       167: ifeq          543
+-       170: aload_3
+-       171: invokeinterface #65,  1           // InterfaceMethod androidx/compose/runtime/Composer.startDefaults:()V
+-       176: aload_3
+-       177: ldc           #67                 // String 90@2858L21
+-       179: invokestatic  #49                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       182: iload         4
+-       184: iconst_1
+-       185: iand
+-       186: ifeq          198
+-       189: aload_3
+-       190: invokeinterface #71,  1           // InterfaceMethod androidx/compose/runtime/Composer.getDefaultsInvalid:()Z
+-       195: ifeq          230
+-       198: iload         5
+-       200: iconst_1
+-       201: iand
+-       202: ifeq          218
+-       205: aload_3
+-       206: iconst_0
+-       207: invokestatic  #77                 // Method androidx/compose/foundation/DarkThemeKt.isSystemInDarkTheme:(Landroidx/compose/runtime/Composer;I)Z
+-       210: istore_0
+-       211: iload         6
+-       213: bipush        -15
+-       215: iand
+-       216: istore        6
+-       218: iload         5
+-       220: iconst_2
+-       221: iand
+-       222: ifeq          250
+-       225: iconst_1
+-       226: istore_1
+-       227: goto          250
+-       230: aload_3
+-       231: invokeinterface #80,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+-       236: iload         5
+-       238: iconst_1
+-       239: iand
+-       240: ifeq          250
+-       243: iload         6
+-       245: bipush        -15
+-       247: iand
+-       248: istore        6
+-       250: aload_3
+-       251: invokeinterface #83,  1           // InterfaceMethod androidx/compose/runtime/Composer.endDefaults:()V
+-       256: invokestatic  #86                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-       259: ifeq          272
+-       262: ldc           #35                 // int -1043376048
+-       264: iload         6
+-       266: iconst_m1
+-       267: ldc           #88                 // String com.example.compose.jetchat.theme.JetchatTheme (Themes.kt:90)
+-       269: invokestatic  #92                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+-       272: iload_1
+-       273: ifeq          288
+-       276: getstatic     #98                 // Field android/os/Build$VERSION.SDK_INT:I
+-       279: bipush        31
+-       281: if_icmplt     288
+-       284: iconst_1
+-       285: goto          289
+-       288: iconst_0
+-       289: istore        7
+-       291: nop
+-       292: iload         7
+-       294: ifeq          378
+-       297: iload_0
+-       298: ifeq          378
+-       301: aload_3
+-       302: ldc           #99                 // int -537237010
+-       304: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       309: aload_3
+-       310: ldc           #105                // String 94@3156L7
+-       312: invokestatic  #49                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       315: invokestatic  #111                // Method androidx/compose/ui/platform/AndroidCompositionLocals_androidKt.getLocalContext:()Landroidx/compose/runtime/ProvidableCompositionLocal;
+-       318: checkcast     #113                // class androidx/compose/runtime/CompositionLocal
+-       321: astore        10
+-       323: aload_3
+-       324: astore        11
+-       326: iconst_0
+-       327: istore        12
+-       329: iconst_0
+-       330: istore        13
+-       332: aload         11
+-       334: ldc           #114                // int 2023513938
+-       336: ldc           #116                // String CC(<get-current>):CompositionLocal.kt#9igjgp
+-       338: invokestatic  #120                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       341: aload         11
+-       343: aload         10
+-       345: invokeinterface #124,  2          // InterfaceMethod androidx/compose/runtime/Composer.consume:(Landroidx/compose/runtime/CompositionLocal;)Ljava/lang/Object;
+-       350: astore        14
+-       352: aload         11
+-       354: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       357: aload         14
+-       359: checkcast     #130                // class android/content/Context
+-       362: invokestatic  #136                // Method androidx/compose/material3/DynamicTonalPaletteKt.dynamicDarkColorScheme:(Landroid/content/Context;)Landroidx/compose/material3/ColorScheme;
+-       365: astore        9
+-       367: aload_3
+-       368: invokeinterface #139,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       373: aload         9
+-       375: goto          505
+-       378: iload         7
+-       380: ifeq          464
+-       383: iload_0
+-       384: ifne          464
+-       387: aload_3
+-       388: ldc           #140                // int -537127859
+-       390: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       395: aload_3
+-       396: ldc           #142                // String 98@3267L7
+-       398: invokestatic  #49                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       401: invokestatic  #111                // Method androidx/compose/ui/platform/AndroidCompositionLocals_androidKt.getLocalContext:()Landroidx/compose/runtime/ProvidableCompositionLocal;
+-       404: checkcast     #113                // class androidx/compose/runtime/CompositionLocal
+-       407: astore        10
+-       409: aload_3
+-       410: astore        11
+-       412: iconst_0
+-       413: istore        12
+-       415: iconst_0
+-       416: istore        13
+-       418: aload         11
+-       420: ldc           #114                // int 2023513938
+-       422: ldc           #116                // String CC(<get-current>):CompositionLocal.kt#9igjgp
+-       424: invokestatic  #120                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       427: aload         11
+-       429: aload         10
+-       431: invokeinterface #124,  2          // InterfaceMethod androidx/compose/runtime/Composer.consume:(Landroidx/compose/runtime/CompositionLocal;)Ljava/lang/Object;
+-       436: astore        14
+-       438: aload         11
+-       440: invokestatic  #128                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       443: aload         14
+-       445: checkcast     #130                // class android/content/Context
+-       448: invokestatic  #145                // Method androidx/compose/material3/DynamicTonalPaletteKt.dynamicLightColorScheme:(Landroid/content/Context;)Landroidx/compose/material3/ColorScheme;
+-       451: astore        9
+-       453: aload_3
+-       454: invokeinterface #139,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       459: aload         9
+-       461: goto          505
+-       464: iload_0
+-       465: ifeq          488
+-       468: aload_3
+-       469: ldc           #146                // int -1956986394
+-       471: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       476: aload_3
+-       477: invokeinterface #139,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       482: getstatic     #11                 // Field JetchatDarkColorScheme:Landroidx/compose/material3/ColorScheme;
+-       485: goto          505
+-       488: aload_3
+-       489: ldc           #147                // int -1956985113
+-       491: invokeinterface #103,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       496: aload_3
+-       497: invokeinterface #139,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       502: getstatic     #15                 // Field JetchatLightColorScheme:Landroidx/compose/material3/ColorScheme;
+-       505: astore        8
+-       507: aload         8
+-       509: aconst_null
+-       510: invokestatic  #153                // Method com/example/compose/jetchat/theme/TypographyKt.getJetchatTypography:()Landroidx/compose/material3/Typography;
+-       513: aload_2
+-       514: aload_3
+-       515: sipush        384
+-       518: sipush        7168
+-       521: iload         6
+-       523: iconst_3
+-       524: ishl
+-       525: iand
+-       526: ior
+-       527: iconst_2
+-       528: invokestatic  #159                // Method androidx/compose/material3/MaterialThemeKt.MaterialTheme:(Landroidx/compose/material3/ColorScheme;Landroidx/compose/material3/Shapes;Landroidx/compose/material3/Typography;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+-       531: invokestatic  #86                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-       534: ifeq          549
+-       537: invokestatic  #162                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+-       540: goto          549
+-       543: aload_3
+-       544: invokeinterface #80,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+-       549: aload_3
+-       550: invokeinterface #166,  1          // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+-       555: dup
+-       556: ifnull        579
+-       559: iload_0
+-       560: iload_1
+-       561: aload_2
+-       562: iload         4
+-       564: iload         5
+-       566: invokedynamic #186,  0            // InvokeDynamic #0:invoke:(ZZLkotlin/jvm/functions/Function2;II)Lkotlin/jvm/functions/Function2;
+-       571: invokeinterface #192,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+-       576: goto          580
+-       579: pop
+-       580: return
++       118: ifeq          53
++       121: goto          40
++       124: iload_0
++       125: ifne          132
++       128: iconst_1
++       129: goto          133
++       132: iconst_0
++       133: istore        8
++       135: iload         8
++       137: ifeq          77
++       140: goto          64
+ 
+-  private static final kotlin.Unit JetchatTheme$lambda$0(boolean, boolean, kotlin.jvm.functions.Function2, int, int, androidx.compose.runtime.Composer, int);
++  private static final kotlin.Unit JetchatTheme$lambda$0(boolean, boolean, kotlin.jvm.functions.Function2, int, androidx.compose.runtime.Composer, int);
+     Code:
+          0: iload_0
+          1: iload_1
+          2: aload_2
+-         3: aload         5
++         3: aload         4
+          5: iload_3
+          6: iconst_1
+          7: ior
+-         8: invokestatic  #221                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+-        11: iload         4
+-        13: invokestatic  #223                // Method JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+-        16: getstatic     #229                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-        19: areturn
++         8: invokestatic  #89                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
++        11: invokestatic  #91                 // Method JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
++        14: getstatic     #97                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
++        17: areturn
+ 
+-  static {};
++  public static void JetchatTheme$default(boolean, boolean, kotlin.jvm.functions.Function2, androidx.compose.runtime.Composer, int, int, java.lang.Object);
+     Code:
+-         0: invokestatic  #242                // Method com/example/compose/jetchat/theme/ColorKt.getBlue80:()J
+-         3: lstore_0
+-         4: invokestatic  #245                // Method com/example/compose/jetchat/theme/ColorKt.getBlue20:()J
+-         7: lstore_2
+-         8: invokestatic  #248                // Method com/example/compose/jetchat/theme/ColorKt.getBlue30:()J
+-        11: lstore        4
+-        13: invokestatic  #251                // Method com/example/compose/jetchat/theme/ColorKt.getBlue90:()J
+-        16: lstore        6
+-        18: invokestatic  #254                // Method com/example/compose/jetchat/theme/ColorKt.getBlue40:()J
+-        21: lstore        8
+-        23: invokestatic  #257                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue80:()J
+-        26: lstore        10
+-        28: invokestatic  #260                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue20:()J
+-        31: lstore        12
+-        33: invokestatic  #263                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue30:()J
+-        36: lstore        14
+-        38: invokestatic  #266                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue90:()J
+-        41: lstore        16
+-        43: invokestatic  #269                // Method com/example/compose/jetchat/theme/ColorKt.getYellow80:()J
+-        46: lstore        18
+-        48: invokestatic  #272                // Method com/example/compose/jetchat/theme/ColorKt.getYellow20:()J
+-        51: lstore        20
+-        53: invokestatic  #275                // Method com/example/compose/jetchat/theme/ColorKt.getYellow30:()J
+-        56: lstore        22
+-        58: invokestatic  #278                // Method com/example/compose/jetchat/theme/ColorKt.getYellow90:()J
+-        61: lstore        24
+-        63: invokestatic  #281                // Method com/example/compose/jetchat/theme/ColorKt.getRed80:()J
+-        66: lstore        26
+-        68: invokestatic  #284                // Method com/example/compose/jetchat/theme/ColorKt.getRed20:()J
+-        71: lstore        28
+-        73: invokestatic  #287                // Method com/example/compose/jetchat/theme/ColorKt.getRed30:()J
+-        76: lstore        30
+-        78: invokestatic  #290                // Method com/example/compose/jetchat/theme/ColorKt.getRed90:()J
+-        81: lstore        32
+-        83: invokestatic  #293                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()J
+-        86: lstore        34
+-        88: invokestatic  #296                // Method com/example/compose/jetchat/theme/ColorKt.getGrey90:()J
+-        91: lstore        36
+-        93: invokestatic  #293                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()J
+-        96: lstore        38
+-        98: invokestatic  #299                // Method com/example/compose/jetchat/theme/ColorKt.getGrey80:()J
+-       101: lstore        40
+-       103: invokestatic  #296                // Method com/example/compose/jetchat/theme/ColorKt.getGrey90:()J
+-       106: lstore        42
+-       108: invokestatic  #302                // Method com/example/compose/jetchat/theme/ColorKt.getGrey20:()J
+-       111: lstore        44
+-       113: invokestatic  #305                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey30:()J
+-       116: lstore        46
+-       118: invokestatic  #308                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey80:()J
+-       121: lstore        48
+-       123: invokestatic  #311                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey60:()J
+-       126: lstore        50
+-       128: lload_0
+-       129: lload_2
+-       130: lload         4
+-       132: lload         6
+-       134: lload         8
+-       136: lload         10
+-       138: lload         12
+-       140: lload         14
+-       142: lload         16
+-       144: lload         18
+-       146: lload         20
+-       148: lload         22
+-       150: lload         24
+-       152: lload         34
+-       154: lload         36
+-       156: lload         38
+-       158: lload         40
+-       160: lload         46
+-       162: lload         48
+-       164: lconst_0
+-       165: lload         42
+-       167: lload         44
+-       169: lload         26
+-       171: lload         28
+-       173: lload         30
+-       175: lload         32
+-       177: lload         50
+-       179: lconst_0
+-       180: lconst_0
+-       181: lconst_0
+-       182: lconst_0
+-       183: lconst_0
+-       184: lconst_0
+-       185: lconst_0
+-       186: lconst_0
+-       187: lconst_0
+-       188: lconst_0
+-       189: lconst_0
+-       190: lconst_0
+-       191: lconst_0
+-       192: lconst_0
+-       193: lconst_0
+-       194: lconst_0
+-       195: lconst_0
+-       196: lconst_0
+-       197: lconst_0
+-       198: lconst_0
+-       199: lconst_0
+-       200: ldc_w         #312                // int -133693440
+-       203: ldc_w         #313                // int 65535
+-       206: aconst_null
+-       207: invokestatic  #319                // Method androidx/compose/material3/ColorSchemeKt."darkColorScheme-_VG5OTI$default":(JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJIILjava/lang/Object;)Landroidx/compose/material3/ColorScheme;
+-       210: putstatic     #11                 // Field JetchatDarkColorScheme:Landroidx/compose/material3/ColorScheme;
+-       213: invokestatic  #254                // Method com/example/compose/jetchat/theme/ColorKt.getBlue40:()J
+-       216: lstore_0
+-       217: getstatic     #325                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
+-       220: invokevirtual #330                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
+-       223: lstore_2
+-       224: invokestatic  #251                // Method com/example/compose/jetchat/theme/ColorKt.getBlue90:()J
+-       227: lstore        4
+-       229: invokestatic  #333                // Method com/example/compose/jetchat/theme/ColorKt.getBlue10:()J
+-       232: lstore        6
+-       234: invokestatic  #242                // Method com/example/compose/jetchat/theme/ColorKt.getBlue80:()J
+-       237: lstore        8
+-       239: invokestatic  #336                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue40:()J
+-       242: lstore        10
+-       244: getstatic     #325                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
+-       247: invokevirtual #330                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
+-       250: lstore        12
+-       252: invokestatic  #266                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue90:()J
+-       255: lstore        14
+-       257: invokestatic  #339                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue10:()J
+-       260: lstore        16
+-       262: invokestatic  #342                // Method com/example/compose/jetchat/theme/ColorKt.getYellow40:()J
+-       265: lstore        18
+-       267: getstatic     #325                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
+-       270: invokevirtual #330                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
+-       273: lstore        20
+-       275: invokestatic  #278                // Method com/example/compose/jetchat/theme/ColorKt.getYellow90:()J
+-       278: lstore        22
+-       280: invokestatic  #345                // Method com/example/compose/jetchat/theme/ColorKt.getYellow10:()J
+-       283: lstore        24
+-       285: invokestatic  #348                // Method com/example/compose/jetchat/theme/ColorKt.getRed40:()J
+-       288: lstore        26
+-       290: getstatic     #325                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
+-       293: invokevirtual #330                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
+-       296: lstore        28
+-       298: invokestatic  #290                // Method com/example/compose/jetchat/theme/ColorKt.getRed90:()J
+-       301: lstore        30
+-       303: invokestatic  #351                // Method com/example/compose/jetchat/theme/ColorKt.getRed10:()J
+-       306: lstore        32
+-       308: invokestatic  #354                // Method com/example/compose/jetchat/theme/ColorKt.getGrey99:()J
+-       311: lstore        34
+-       313: invokestatic  #293                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()J
+-       316: lstore        36
+-       318: invokestatic  #354                // Method com/example/compose/jetchat/theme/ColorKt.getGrey99:()J
+-       321: lstore        38
+-       323: invokestatic  #293                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()J
+-       326: lstore        40
+-       328: invokestatic  #302                // Method com/example/compose/jetchat/theme/ColorKt.getGrey20:()J
+-       331: lstore        42
+-       333: invokestatic  #357                // Method com/example/compose/jetchat/theme/ColorKt.getGrey95:()J
+-       336: lstore        44
+-       338: invokestatic  #360                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey90:()J
+-       341: lstore        46
+-       343: invokestatic  #305                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey30:()J
+-       346: lstore        48
+-       348: invokestatic  #363                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey50:()J
+-       351: lstore        50
+-       353: lload_0
+-       354: lload_2
+-       355: lload         4
+-       357: lload         6
+-       359: lload         8
+-       361: lload         10
+-       363: lload         12
+-       365: lload         14
+-       367: lload         16
+-       369: lload         18
+-       371: lload         20
+-       373: lload         22
+-       375: lload         24
+-       377: lload         34
+-       379: lload         36
+-       381: lload         38
+-       383: lload         40
+-       385: lload         46
+-       387: lload         48
+-       389: lconst_0
+-       390: lload         42
+-       392: lload         44
+-       394: lload         26
+-       396: lload         28
+-       398: lload         30
+-       400: lload         32
+-       402: lload         50
+-       404: lconst_0
+-       405: lconst_0
+-       406: lconst_0
+-       407: lconst_0
+-       408: lconst_0
+-       409: lconst_0
+-       410: lconst_0
+-       411: lconst_0
+-       412: lconst_0
+-       413: lconst_0
+-       414: lconst_0
+-       415: lconst_0
+-       416: lconst_0
+-       417: lconst_0
+-       418: lconst_0
+-       419: lconst_0
+-       420: lconst_0
+-       421: lconst_0
+-       422: lconst_0
+-       423: lconst_0
+-       424: lconst_0
+-       425: ldc_w         #312                // int -133693440
+-       428: ldc_w         #313                // int 65535
+-       431: aconst_null
+-       432: invokestatic  #366                // Method androidx/compose/material3/ColorSchemeKt."lightColorScheme-_VG5OTI$default":(JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJIILjava/lang/Object;)Landroidx/compose/material3/ColorScheme;
+-       435: putstatic     #15                 // Field JetchatLightColorScheme:Landroidx/compose/material3/ColorScheme;
+-       438: return
++         0: iload         5
++         2: iconst_2
++         3: iand
++         4: ifeq          9
++         7: iconst_1
++         8: istore_1
++         9: iload_0
++        10: iload_1
++        11: aload_2
++        12: aload_3
++        13: iload         4
++        15: invokestatic  #91                 // Method JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
++        18: return
++
++  private static final {};
++    Code:
++         0: invokestatic  #106                // Method com/example/compose/jetchat/theme/ColorKt.getBlue80:()Ljava/lang/Object;
++         3: astore_0
++         4: invokestatic  #109                // Method com/example/compose/jetchat/theme/ColorKt.getBlue20:()Ljava/lang/Object;
++         7: astore_0
++         8: invokestatic  #112                // Method com/example/compose/jetchat/theme/ColorKt.getBlue30:()Ljava/lang/Object;
++        11: astore_0
++        12: invokestatic  #115                // Method com/example/compose/jetchat/theme/ColorKt.getBlue90:()Ljava/lang/Object;
++        15: astore_0
++        16: invokestatic  #118                // Method com/example/compose/jetchat/theme/ColorKt.getBlue40:()Ljava/lang/Object;
++        19: astore_0
++        20: invokestatic  #121                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue80:()Ljava/lang/Object;
++        23: astore_0
++        24: invokestatic  #124                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue20:()Ljava/lang/Object;
++        27: astore_0
++        28: invokestatic  #127                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue30:()Ljava/lang/Object;
++        31: astore_0
++        32: invokestatic  #130                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue90:()Ljava/lang/Object;
++        35: astore_0
++        36: invokestatic  #133                // Method com/example/compose/jetchat/theme/ColorKt.getYellow80:()Ljava/lang/Object;
++        39: astore_0
++        40: invokestatic  #136                // Method com/example/compose/jetchat/theme/ColorKt.getYellow20:()Ljava/lang/Object;
++        43: astore_0
++        44: invokestatic  #139                // Method com/example/compose/jetchat/theme/ColorKt.getYellow30:()Ljava/lang/Object;
++        47: astore_0
++        48: invokestatic  #142                // Method com/example/compose/jetchat/theme/ColorKt.getYellow90:()Ljava/lang/Object;
++        51: astore_0
++        52: invokestatic  #145                // Method com/example/compose/jetchat/theme/ColorKt.getRed80:()Ljava/lang/Object;
++        55: astore_0
++        56: invokestatic  #148                // Method com/example/compose/jetchat/theme/ColorKt.getRed20:()Ljava/lang/Object;
++        59: astore_0
++        60: invokestatic  #151                // Method com/example/compose/jetchat/theme/ColorKt.getRed30:()Ljava/lang/Object;
++        63: astore_0
++        64: invokestatic  #154                // Method com/example/compose/jetchat/theme/ColorKt.getRed90:()Ljava/lang/Object;
++        67: astore_0
++        68: invokestatic  #157                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()Ljava/lang/Object;
++        71: astore_0
++        72: invokestatic  #160                // Method com/example/compose/jetchat/theme/ColorKt.getGrey90:()Ljava/lang/Object;
++        75: astore_0
++        76: invokestatic  #157                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()Ljava/lang/Object;
++        79: astore_0
++        80: invokestatic  #163                // Method com/example/compose/jetchat/theme/ColorKt.getGrey80:()Ljava/lang/Object;
++        83: astore_0
++        84: invokestatic  #160                // Method com/example/compose/jetchat/theme/ColorKt.getGrey90:()Ljava/lang/Object;
++        87: astore_0
++        88: invokestatic  #166                // Method com/example/compose/jetchat/theme/ColorKt.getGrey20:()Ljava/lang/Object;
++        91: astore_0
++        92: invokestatic  #169                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey30:()Ljava/lang/Object;
++        95: astore_0
++        96: invokestatic  #172                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey80:()Ljava/lang/Object;
++        99: astore_0
++       100: invokestatic  #175                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey60:()Ljava/lang/Object;
++       103: astore_0
++       104: aconst_null
++       105: putstatic     #11                 // Field JetchatDarkColorScheme:Ljava/lang/Object;
++       108: invokestatic  #118                // Method com/example/compose/jetchat/theme/ColorKt.getBlue40:()Ljava/lang/Object;
++       111: astore_0
++       112: getstatic     #181                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
++       115: invokevirtual #187                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
++       118: pop2
++       119: invokestatic  #115                // Method com/example/compose/jetchat/theme/ColorKt.getBlue90:()Ljava/lang/Object;
++       122: astore_0
++       123: invokestatic  #190                // Method com/example/compose/jetchat/theme/ColorKt.getBlue10:()Ljava/lang/Object;
++       126: astore_0
++       127: invokestatic  #106                // Method com/example/compose/jetchat/theme/ColorKt.getBlue80:()Ljava/lang/Object;
++       130: astore_0
++       131: invokestatic  #193                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue40:()Ljava/lang/Object;
++       134: astore_0
++       135: getstatic     #181                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
++       138: invokevirtual #187                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
++       141: pop2
++       142: invokestatic  #130                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue90:()Ljava/lang/Object;
++       145: astore_0
++       146: invokestatic  #196                // Method com/example/compose/jetchat/theme/ColorKt.getDarkBlue10:()Ljava/lang/Object;
++       149: astore_0
++       150: invokestatic  #199                // Method com/example/compose/jetchat/theme/ColorKt.getYellow40:()Ljava/lang/Object;
++       153: astore_0
++       154: getstatic     #181                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
++       157: invokevirtual #187                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
++       160: pop2
++       161: invokestatic  #142                // Method com/example/compose/jetchat/theme/ColorKt.getYellow90:()Ljava/lang/Object;
++       164: astore_0
++       165: invokestatic  #202                // Method com/example/compose/jetchat/theme/ColorKt.getYellow10:()Ljava/lang/Object;
++       168: astore_0
++       169: invokestatic  #205                // Method com/example/compose/jetchat/theme/ColorKt.getRed40:()Ljava/lang/Object;
++       172: astore_0
++       173: getstatic     #181                // Field androidx/compose/ui/graphics/Color.Companion:Landroidx/compose/ui/graphics/Color$Companion;
++       176: invokevirtual #187                // Method androidx/compose/ui/graphics/Color$Companion."getWhite-0d7_KjU":()J
++       179: pop2
++       180: invokestatic  #154                // Method com/example/compose/jetchat/theme/ColorKt.getRed90:()Ljava/lang/Object;
++       183: astore_0
++       184: invokestatic  #208                // Method com/example/compose/jetchat/theme/ColorKt.getRed10:()Ljava/lang/Object;
++       187: astore_0
++       188: invokestatic  #211                // Method com/example/compose/jetchat/theme/ColorKt.getGrey99:()Ljava/lang/Object;
++       191: astore_0
++       192: invokestatic  #157                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()Ljava/lang/Object;
++       195: astore_0
++       196: invokestatic  #211                // Method com/example/compose/jetchat/theme/ColorKt.getGrey99:()Ljava/lang/Object;
++       199: astore_0
++       200: invokestatic  #157                // Method com/example/compose/jetchat/theme/ColorKt.getGrey10:()Ljava/lang/Object;
++       203: astore_0
++       204: invokestatic  #166                // Method com/example/compose/jetchat/theme/ColorKt.getGrey20:()Ljava/lang/Object;
++       207: astore_0
++       208: invokestatic  #214                // Method com/example/compose/jetchat/theme/ColorKt.getGrey95:()Ljava/lang/Object;
++       211: astore_0
++       212: invokestatic  #217                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey90:()Ljava/lang/Object;
++       215: astore_0
++       216: invokestatic  #169                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey30:()Ljava/lang/Object;
++       219: astore_0
++       220: invokestatic  #220                // Method com/example/compose/jetchat/theme/ColorKt.getBlueGrey50:()Ljava/lang/Object;
++       223: astore_0
++       224: aconst_null
++       225: putstatic     #16                 // Field JetchatLightColorScheme:Ljava/lang/Object;
++       228: return
+ }

@@ -1421,12 +1421,17 @@ pub fn lower_file(
             } else if !v.is_const {
                 // Non-const val whose initializer is a function call,
                 // construction, or other non-trivial expression. Register
-                // the field with a `Null` placeholder so it exists at the
-                // backend (the actual value is computed in the synthetic
-                // <clinit> emitted below — see deferred_val_inits).
+                // the field with the inferred initializer type (falls back
+                // to `Ty::Any` for unrecognized init shapes) so the
+                // synthesized `get<Name>()` accessor's return descriptor
+                // matches what cross-file call sites read from the same-
+                // package `ExternalValDecl` (which goes through resolve.rs's
+                // `infer_val_type_from_init`). The actual value is still
+                // computed in the synthetic <clinit> emitted below.
+                let inferred_ty = infer_top_level_val_ty(&v.init, file, interner);
                 module
                     .top_level_props
-                    .push((name_str.clone(), Ty::Any, MirConst::Null));
+                    .push((name_str.clone(), inferred_ty, MirConst::Null));
                 module.top_level_prop_names.insert(name_str.clone());
                 deferred_val_inits.push((name_str, &v.init));
             }
@@ -1565,7 +1570,80 @@ pub fn lower_file(
                     .iter()
                     .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
                     .collect();
-                let empty_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                // Populate the cross-file stub constructor with the
+                // class's full primary-ctor param types (val/var or not).
+                // Without this, every call site that crosses files sees
+                // a zero-arg `<init>` stub, the JVM backend infers the
+                // descriptor from only the user-supplied args, and the
+                // emitted `<init>` descriptor gets truncated — for
+                // example `Message("a","b","c")` (where Message declares
+                // 5 params, 2 with defaults) emits
+                // `<init>(String,String,String)V` instead of the real
+                // 5-arg signature, and the runtime can't find it.
+                //
+                // Prefer the full `ctor_params` list (declaration order,
+                // includes plain non-field params like
+                // `class ConversationUiState(channelName: String,
+                // channelMembers: Int, initialMessages: List<Message>)`)
+                // and only fall back to `fields` when the resolver
+                // didn't record it.
+                let ctor_param_tys: Vec<Ty> = if ext_class.ctor_params.is_empty() {
+                    ext_class.fields.iter().map(|(_, t)| t.clone()).collect()
+                } else {
+                    ext_class
+                        .ctor_params
+                        .iter()
+                        .map(|(_, t)| t.clone())
+                        .collect()
+                };
+                let ctor_param_names: Vec<String> = if ext_class.ctor_params.is_empty() {
+                    ext_class.fields.iter().map(|(n, _)| n.clone()).collect()
+                } else {
+                    ext_class
+                        .ctor_params
+                        .iter()
+                        .map(|(n, _)| n.clone())
+                        .collect()
+                };
+                let mut empty_ctor = stub_fn("<init>", &ctor_param_tys, &Ty::Unit);
+                // Populate `param_names` so named-arg reordering at the
+                // call site can map `Foo(name = ..., other = ...)` to the
+                // constructor's positional slots.
+                empty_ctor.param_names = ctor_param_names;
+                // If this cross-file class has a companion object, also
+                // push a stub MirClass for it so the call-site companion
+                // dispatcher (`OuterClass.method(...)`) at lib.rs:7746
+                // can resolve `OuterClass$Companion.method` virtually.
+                let companion_jvm_name = if ext_class.companion_methods.is_empty() {
+                    None
+                } else {
+                    let comp_name = format!("{}$Companion", ext_class.jvm_name);
+                    let comp_methods: Vec<MirFunction> = ext_class
+                        .companion_methods
+                        .iter()
+                        .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
+                        .collect();
+                    let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                    module.classes.push(MirClass {
+                        name: comp_name.clone(),
+                        super_class: None,
+                        is_open: false,
+                        is_abstract: false,
+                        is_interface: false,
+                        interfaces: Vec::new(),
+                        fields: Vec::new(),
+                        methods: comp_methods,
+                        constructor: comp_ctor,
+                        secondary_constructors: Vec::new(),
+                        is_suspend_lambda: false,
+                        is_cross_file_stub: true,
+                        annotations: Vec::new(),
+                        has_type_params: false,
+                        is_object_singleton: true,
+                        companion_class_name: None,
+                    });
+                    Some(comp_name)
+                };
                 module.classes.push(MirClass {
                     name: ext_class.jvm_name.clone(),
                     super_class: ext_class.super_class.clone(),
@@ -1582,7 +1660,7 @@ pub fn lower_file(
                     annotations: Vec::new(),
                     has_type_params: false,
                     is_object_singleton: false,
-                    companion_class_name: None,
+                    companion_class_name: companion_jvm_name,
                 });
             }
         }
@@ -1762,13 +1840,28 @@ pub fn lower_file(
                 diags,
                 None,
             ) {
+                // Use the descriptor that matches the static field's actual
+                // declared type (populated from `infer_top_level_val_ty`
+                // above). Hardcoding `Ljava/lang/Object;` here produced
+                // putstatic ops with descriptors that didn't match the
+                // field declaration — the JVM rejects this at <clinit>
+                // load time with `NoSuchFieldError: No static field <N>
+                // of type Ljava/lang/Object;` even when a same-named field
+                // with a different descriptor exists.
+                let field_ty = module
+                    .top_level_props
+                    .iter()
+                    .find(|(n, _, _)| n == &val_name)
+                    .map(|(_, t, _)| t.clone())
+                    .unwrap_or(Ty::Any);
+                let descriptor = jvm_type_string_for_ty(&field_ty);
                 let dummy = fb.new_local(Ty::Unit);
                 fb.push_stmt(MStmt::Assign {
                     dest: dummy,
                     value: Rvalue::PutStaticField {
                         class_name: wrapper_class.clone(),
                         field_name: val_name,
-                        descriptor: "Ljava/lang/Object;".to_string(),
+                        descriptor,
                         value: value_local,
                     },
                 });
@@ -1821,6 +1914,18 @@ pub fn lower_file(
                 if user_classes.contains(&class.name) {
                     class.name = format!("{prefix}/{}", class.name);
                 }
+                // Also prefix the companion-class pointer if it
+                // refers to a user-defined class. Without this, the
+                // outer class's `Companion` static field gets the
+                // wrong descriptor (`LContentMainBinding$Companion;`
+                // instead of the FQ form) and `NoSuchFieldError`
+                // surfaces at runtime.
+                if let Some(comp) = class.companion_class_name.clone() {
+                    let comp_simple = comp.split('$').next().unwrap_or(&comp);
+                    if user_classes.contains(comp_simple) {
+                        class.companion_class_name = Some(format!("{prefix}/{comp}"));
+                    }
+                }
             }
 
             // 3. Prefix enum names.
@@ -1862,11 +1967,30 @@ pub fn lower_file(
                             Rvalue::GetStaticField {
                                 ref mut class_name, ..
                             } => rewrite(class_name),
+                            Rvalue::PutStaticField {
+                                ref mut class_name, ..
+                            } => rewrite(class_name),
                             Rvalue::InstanceOf {
                                 ref mut type_descriptor,
                                 ..
                             } if user_classes.contains(type_descriptor.as_str()) => {
                                 *type_descriptor = format!("{prefix}/{type_descriptor}");
+                            }
+                            // CheckCast must be prefixed in lockstep with
+                            // InstanceOf — the synthesized data-class
+                            // `equals` does `instanceof Foo` followed by
+                            // `(Foo) other`. If only InstanceOf gets the
+                            // package prefix, the JVM verifier flags the
+                            // checkcast as targeting an unresolved
+                            // simple-named class and rejects field access
+                            // against it ("cannot access instance field
+                            // <T>.<field> from object of type Unresolved
+                            // Reference: <simple>").
+                            Rvalue::CheckCast {
+                                ref mut target_class,
+                                ..
+                            } if user_classes.contains(target_class.as_str()) => {
+                                *target_class = format!("{prefix}/{target_class}");
                             }
                             Rvalue::Call { ref mut kind, .. } => match kind {
                                 CallKind::Constructor(ref mut n)
@@ -1880,6 +2004,9 @@ pub fn lower_file(
                                 CallKind::Super {
                                     ref mut class_name, ..
                                 } => rewrite(class_name),
+                                CallKind::LambdaMetafactory {
+                                    ref mut impl_class, ..
+                                } => rewrite(impl_class),
                                 _ => {}
                             },
                             _ => {}
@@ -2548,6 +2675,260 @@ fn emit_throw_new(fb: &mut FnBuilder, exception_class: &str, message: Option<Loc
     fb.set_terminator(Terminator::Throw(exc));
 }
 
+/// Parse a JVM method descriptor and return the param classes/primitives
+/// as `Ty`s. Used to recover expected types for external static fn calls
+/// where we don't have a MirFunction.
+fn descriptor_arg_tys(desc: &str) -> Vec<Ty> {
+    let inner = match desc.split(')').next().and_then(|s| s.strip_prefix('(')) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        let ty = match c {
+            'B' => Ty::Byte,
+            'C' => Ty::Char,
+            'D' => Ty::Double,
+            'F' => Ty::Float,
+            'I' => Ty::Int,
+            'J' => Ty::Long,
+            'S' => Ty::Short,
+            'Z' => Ty::Bool,
+            'L' => {
+                let mut s = String::new();
+                for sc in chars.by_ref() {
+                    if sc == ';' {
+                        break;
+                    }
+                    s.push(sc);
+                }
+                Ty::Class(s)
+            }
+            '[' => {
+                // Skip the array descriptor and return Any — we don't
+                // need precise array typing for callable-ref expansion.
+                while let Some(&n) = chars.peek() {
+                    if n == '[' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(&n) = chars.peek() {
+                    if n == 'L' {
+                        chars.next();
+                        for sc in chars.by_ref() {
+                            if sc == ';' {
+                                break;
+                            }
+                        }
+                    } else {
+                        chars.next();
+                    }
+                }
+                Ty::Any
+            }
+            _ => continue,
+        };
+        out.push(ty);
+    }
+    out
+}
+
+/// Look up the JVM descriptor for an external static function call. Walks
+/// `static_method_imports` then `import_map`, and tries Pascal-cased Kt
+/// facade variants for package-level top-level functions like
+/// `AndroidViewBinding` (which actually lives in `AndroidViewBindingKt`).
+fn find_external_static_descriptor(
+    callee_str: &str,
+    module: &MirModule,
+    user_arg_count: usize,
+) -> Option<String> {
+    let try_lookup = |class_path: &str, method: &str| -> Option<String> {
+        // Try a range of arities — composable adds +2 ($composer +
+        // $changed), $default adds another +1 plus default placeholders.
+        for extra in 0..=8 {
+            if let Some(d) = skotch_classinfo::lookup_method_descriptor(
+                class_path,
+                method,
+                user_arg_count + extra,
+            ) {
+                return Some(d);
+            }
+        }
+        None
+    };
+    if let Some((class_path, method_name)) = module.static_method_imports.get(callee_str) {
+        if let Some(d) = try_lookup(class_path, method_name) {
+            return Some(d);
+        }
+    }
+    if let Some(jvm_class) = module.import_map.get(callee_str) {
+        let last_segment = jvm_class.rsplit('/').next().unwrap_or(jvm_class);
+        // Pascal-cased identifier means it's either a real class (rare)
+        // or a top-level Kotlin function whose owner is the file's Kt
+        // facade. Lowercase = package-level fn already named after the
+        // function.
+        if last_segment.starts_with(|c: char| c.is_lowercase()) {
+            let package_path = jvm_class
+                .rsplit_once('/')
+                .map(|(p, _)| p)
+                .unwrap_or(jvm_class);
+            if let Some(wrapper) =
+                skotch_classinfo::find_wrapper_class_for_function(package_path, callee_str)
+            {
+                if let Some(d) = try_lookup(&wrapper, callee_str) {
+                    return Some(d);
+                }
+            }
+        } else {
+            // Try direct first (real-class import), then fall back to
+            // the parent package's Kt facade.
+            if let Some(d) = try_lookup(jvm_class, callee_str) {
+                return Some(d);
+            }
+            let package_path = jvm_class
+                .rsplit_once('/')
+                .map(|(p, _)| p)
+                .unwrap_or(jvm_class);
+            if let Some(wrapper) =
+                skotch_classinfo::find_wrapper_class_for_function(package_path, callee_str)
+            {
+                if let Some(d) = try_lookup(&wrapper, callee_str) {
+                    return Some(d);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// If `arg` is a desugared callable-reference lambda (parser produces
+/// `{ $ref_arg -> Foo.member($ref_arg) }` for `Foo::member`) and the
+/// surrounding call expects a `FunctionN` with N != 1, expand the lambda
+/// to N params calling the underlying function with N args. This lets a
+/// method reference resolve against the N-arity overload (kotlinc does
+/// this via bidirectional inference at the use site).
+fn maybe_expand_callable_ref(
+    arg: &Expr,
+    expected_ty: &Ty,
+    interner: &mut Interner,
+) -> Option<Expr> {
+    let expected_arity = match expected_ty {
+        Ty::Function { params, .. } => params.len(),
+        Ty::Class(n) => {
+            let prefix = "kotlin/jvm/functions/Function";
+            let n_str = n.strip_prefix(prefix)?;
+            n_str.parse::<usize>().ok()?
+        }
+        Ty::Nullable(inner) => return maybe_expand_callable_ref(arg, inner, interner),
+        _ => return None,
+    };
+    if expected_arity == 1 {
+        return None;
+    }
+    let (params, body, is_suspend, lambda_span) = match arg {
+        Expr::Lambda {
+            params,
+            body,
+            is_suspend,
+            span,
+        } => (params, body, *is_suspend, *span),
+        _ => return None,
+    };
+    if params.len() != 1 {
+        return None;
+    }
+    let ref_arg_sym = interner.intern("$ref_arg");
+    if params[0].name != ref_arg_sym {
+        return None;
+    }
+    if body.stmts.len() != 1 {
+        return None;
+    }
+    let (inner_call, body_uses_return) = match &body.stmts[0] {
+        Stmt::Expr(e) => (e, false),
+        Stmt::Return { value: Some(e), .. } => (e, true),
+        _ => return None,
+    };
+    let (call_callee, call_args, call_type_args, call_span) = match inner_call {
+        Expr::Call {
+            callee,
+            args,
+            type_args,
+            span,
+        } => (callee, args, type_args, *span),
+        _ => return None,
+    };
+    if call_args.len() != 1 {
+        return None;
+    }
+    let single_arg_sym = match &call_args[0].expr {
+        Expr::Ident(s, _) => *s,
+        _ => return None,
+    };
+    if single_arg_sym != ref_arg_sym {
+        return None;
+    }
+    let any_sym = interner.intern("Any");
+    let any_ty = skotch_syntax::TypeRef {
+        name: any_sym,
+        nullable: false,
+        func_params: None,
+        type_args: Vec::new(),
+        is_suspend: false,
+        is_composable: false,
+        has_receiver: false,
+        span: params[0].span,
+    };
+    let mut new_params = Vec::with_capacity(expected_arity);
+    let mut new_call_args = Vec::with_capacity(expected_arity);
+    for i in 0..expected_arity {
+        let name_str = if i == 0 {
+            "$ref_arg".to_string()
+        } else {
+            format!("$ref_arg{}", i + 1)
+        };
+        let sym = interner.intern(&name_str);
+        new_params.push(skotch_syntax::Param {
+            name: sym,
+            ty: any_ty.clone(),
+            default: None,
+            is_vararg: false,
+            span: params[0].span,
+        });
+        new_call_args.push(skotch_syntax::CallArg {
+            name: None,
+            expr: Expr::Ident(sym, params[0].span),
+        });
+    }
+    let new_call = Expr::Call {
+        callee: call_callee.clone(),
+        args: new_call_args,
+        type_args: call_type_args.clone(),
+        span: call_span,
+    };
+    let new_stmt = if body_uses_return {
+        Stmt::Return {
+            value: Some(new_call),
+            label: None,
+            span: body.span,
+        }
+    } else {
+        Stmt::Expr(new_call)
+    };
+    Some(Expr::Lambda {
+        params: new_params,
+        body: skotch_syntax::Block {
+            stmts: vec![new_stmt],
+            span: body.span,
+        },
+        is_suspend,
+        span: lambda_span,
+    })
+}
+
 /// Detect whether a lambda body contains a call to a suspend function.
 /// Used to mark the lambda as a suspend lambda so future codegen can
 /// generate a `SuspendLambda`-extending class.
@@ -3037,6 +3418,67 @@ fn collect_free_in_expr(
             collect_free_in_block(inner_body, &extended_params, outer_scope, fb, free, seen);
         }
         _ => {}
+    }
+}
+
+/// Mirror of `skotch-resolve`'s `infer_val_type_from_init`, but consulting
+/// `file.imports` directly (the module-level `import_map` isn't built yet
+/// at this point in the lowering pipeline). Limited to the one-level
+/// pattern matches the resolver also recognizes — anything else returns
+/// `Ty::Any` so the existing fallback behavior is preserved.
+fn infer_top_level_val_ty(init: &Expr, file: &KtFile, interner: &Interner) -> Ty {
+    use skotch_syntax::ast::Expr as E;
+    let lookup_import = |simple: &str| -> Option<String> {
+        for imp in &file.imports {
+            if imp.is_wildcard {
+                continue;
+            }
+            if let Some(last) = imp.path.last() {
+                if interner.resolve(*last) == simple {
+                    let path: Vec<&str> = imp.path.iter().map(|s| interner.resolve(*s)).collect();
+                    return Some(path.join("/"));
+                }
+            }
+        }
+        None
+    };
+    match init {
+        E::Call { callee, .. } => match callee.as_ref() {
+            E::Ident(sym, _) => {
+                // Kotlin convention: type names start uppercase, function
+                // names start lowercase. Only treat the call as a class
+                // construction when the callee follows the type-name rule;
+                // otherwise we have no way to know the function's actual
+                // return type from this position and `Ty::Any` is correct.
+                let name = interner.resolve(*sym);
+                let starts_upper = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                if !starts_upper {
+                    return Ty::Any;
+                }
+                if let Some(fq) = lookup_import(name) {
+                    Ty::Class(fq)
+                } else if file.decls.iter().any(|d| {
+                    if let Decl::Class(c) = d {
+                        interner.resolve(c.name) == name
+                    } else {
+                        false
+                    }
+                }) {
+                    Ty::Class(name.to_string())
+                } else {
+                    Ty::Any
+                }
+            }
+            _ => Ty::Any,
+        },
+        E::StringLit(_, _) | E::StringTemplate(_, _) => Ty::String,
+        E::IntLit(_, _) => Ty::Int,
+        E::LongLit(_, _) => Ty::Long,
+        E::FloatLit(_, _) => Ty::Float,
+        E::DoubleLit(_, _) => Ty::Double,
+        E::BoolLit(_, _) => Ty::Bool,
+        E::CharLit(_, _) => Ty::Char,
+        _ => Ty::Any,
     }
 }
 
@@ -4650,9 +5092,9 @@ fn lower_stmt(
                 "java/lang/Object".to_string()
             };
             let field_name = interner.resolve(*field).to_string();
-            // Check for a custom setter method on the class.
+            // Check for a custom setter method on the class (user-defined).
             let setter_name = format!("set{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
-            let has_setter = if let Ty::Class(ref cn) = recv_ty {
+            let user_has_setter = if let Ty::Class(ref cn) = recv_ty {
                 module
                     .classes
                     .iter()
@@ -4661,8 +5103,22 @@ fn lower_stmt(
             } else {
                 false
             };
-            if has_setter {
-                // Invoke the setter method instead of direct field write.
+            // For external classes (Kotlin/JDK interfaces and classes that
+            // expose properties as setter methods), check classinfo for an
+            // instance `set<Field>(Type)V` method. Without this, code like
+            // `mutableStateFlow.value = true` lowers to
+            // `putfield MutableStateFlow.value:Z` — but MutableStateFlow is
+            // an interface with no field, only `setValue(Object)V`. The
+            // resulting bytecode passes verification (kotlin/jvm
+            // checking is structural) but crashes with
+            // IncompatibleClassChangeError at the first call.
+            let external_setter_desc: Option<String> =
+                if !user_has_setter && class_name.contains('/') {
+                    skotch_classinfo::lookup_method_descriptor(&class_name, &setter_name, 1)
+                } else {
+                    None
+                };
+            if user_has_setter {
                 let dummy = fb.new_local(Ty::Unit);
                 fb.push_stmt(MStmt::Assign {
                     dest: dummy,
@@ -4672,6 +5128,27 @@ fn lower_stmt(
                             method_name: setter_name,
                         },
                         args: vec![recv_local, val_local],
+                    },
+                });
+            } else if let Some(setter_desc) = external_setter_desc {
+                // Box primitives if the descriptor expects an Object
+                // (Kotlin generic-erased property setters take Object).
+                let val_ty = fb.mf.locals[val_local.0 as usize].clone();
+                let boxed_val = if setter_desc.contains("Ljava/lang/Object;") {
+                    mir_autobox(fb, val_local, &val_ty)
+                } else {
+                    val_local
+                };
+                let dummy = fb.new_local(Ty::Unit);
+                fb.push_stmt(MStmt::Assign {
+                    dest: dummy,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name,
+                            method_name: setter_name,
+                            descriptor: setter_desc,
+                        },
+                        args: vec![recv_local, boxed_val],
                     },
                 });
             } else {
@@ -7448,10 +7925,18 @@ fn lower_expr(
                     }
                     // Companion-object dispatch: receiver is an outer
                     // class name and the method lives on its companion.
+                    // In-module classes are stored by simple name
+                    // (`ContentMainBinding`); cross-file stubs by full
+                    // JVM name (`com/.../ContentMainBinding`). Match
+                    // either form so this fires for both call kinds.
                     let companion_match: Option<(String, String, Ty)> = module
                         .classes
                         .iter()
-                        .find(|c| c.name == recv_name && c.companion_class_name.is_some())
+                        .find(|c| {
+                            c.companion_class_name.is_some()
+                                && (c.name == recv_name
+                                    || c.name.rsplit('/').next() == Some(recv_name.as_str()))
+                        })
                         .and_then(|outer| {
                             let comp_name = outer.companion_class_name.clone().unwrap();
                             let comp = module.classes.iter().find(|c| c.name == comp_name)?;
@@ -10198,6 +10683,29 @@ fn lower_expr(
                 }
             };
 
+            // ─── Overload resolution by user arity ───────────────────
+            // The Pass-1 registration overwrites `name_to_func` per name,
+            // so when a file declares both `foo(x)` and `foo(x, y, z)`,
+            // the last one wins and a call `foo(x)` would dispatch to
+            // the 3-arg version (verifier error). Search `module.functions`
+            // for a same-name overload whose param count matches the
+            // call's user-arg count and pin `name_to_func` at it for the
+            // duration of this lowering. (Nested calls re-run this dance
+            // for themselves, so a transient mismatch doesn't matter.)
+            if let Some(&primary_fid) = name_to_func.get(&callee_name) {
+                let primary_arity = module.functions[primary_fid.0 as usize].params.len();
+                if primary_arity != args.len() {
+                    let target_name = interner.resolve(callee_name).to_string();
+                    if let Some(matching) = module
+                        .functions
+                        .iter()
+                        .find(|f| f.name == target_name && f.params.len() == args.len())
+                    {
+                        name_to_func.insert(callee_name, matching.id);
+                    }
+                }
+            }
+
             // ─── SAM conversion: Interface { lambda } ────────────────
             // When the callee names an interface with a single abstract
             // method, and the argument is a lambda, desugar to an
@@ -10456,7 +10964,16 @@ fn lower_expr(
                 let is_kotlin_object = class_exists
                     && skotch_classinfo::lookup_static_field_descriptor(&jvm_class, "INSTANCE")
                         .is_some();
-                let sibling_kt_fn = if is_kotlin_object {
+                // Interfaces can't be instantiated by `<init>`. When the
+                // imported name resolves to an interface (e.g.
+                // `MutableStateFlow`, which is BOTH an interface and a
+                // top-level factory function in `StateFlowKt`), we MUST
+                // route to the sibling Kt facade — falling into the
+                // constructor branch produces an aconst_null stub
+                // because no `<init>` exists.
+                let is_interface = class_exists
+                    && skotch_classinfo::check_is_interface(&jvm_class).unwrap_or(false);
+                let sibling_kt_fn = if is_kotlin_object || is_interface {
                     if let Some((pkg, _)) = jvm_class.rsplit_once('/') {
                         skotch_classinfo::find_wrapper_class_for_function(pkg, &callee_str)
                     } else {
@@ -10481,6 +10998,41 @@ fn lower_expr(
                         )?;
                         arg_locals.push(id);
                     }
+                    // `@JvmInline value class` detection: kotlinc emits an
+                    // accessible `static <C> box-impl(<inner>)` for every
+                    // value class so callers can construct a boxed instance
+                    // without touching the synthetic private `<init>`.
+                    // Compose uses this pattern for `Color`, `Dp`,
+                    // `TextUnit`, etc. — `Color(0xFFADC6FF)` MUST go through
+                    // `Color.box-impl(J)LColor;` or the JVM raises
+                    // IllegalAccessError on `invokespecial Color.<init>(J)V`
+                    // at runtime.
+                    //
+                    // The presence of `box-impl` is the cheapest reliable
+                    // marker for value classes — only the inline-class
+                    // compiler emits it. Routing through it also avoids
+                    // emitting `new + dup` for a class whose constructor we
+                    // can't actually call.
+                    let box_impl_desc = skotch_classinfo::lookup_method_descriptor(
+                        &jvm_class,
+                        "box-impl",
+                        arg_locals.len(),
+                    );
+                    if let Some(desc) = box_impl_desc {
+                        let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: jvm_class,
+                                    method_name: "box-impl".to_string(),
+                                    descriptor: desc,
+                                },
+                                args: arg_locals,
+                            },
+                        });
+                        return Some(dest);
+                    }
                     // Look up the actual constructor descriptor from the
                     // classpath. Use the typed lookup so overload resolution
                     // matches arg types — e.g. `File("/tmp")` picks the
@@ -10497,6 +11049,102 @@ fn lower_expr(
                                 arg_locals.len(),
                             )
                         });
+                    // Default-param dispatch for external Kotlin classes:
+                    // kotlinc generates a SYNTHETIC ctor with descriptor
+                    // ending in `Lkotlin/jvm/internal/DefaultConstructorMarker;)V`.
+                    // Its param count is `primary_count + 2` (mask + marker).
+                    // For `GoogleFont(name = "Montserrat")` user_arg=1,
+                    // the primary is `<init>(String, Z)` and the synthetic
+                    // is `<init>(String, Z, I, DefaultConstructorMarker)`.
+                    // We pad the user's args to primary_count with 0/null,
+                    // set the mask for unsupplied slots, push null marker,
+                    // and invokespecial the synthetic.
+                    if ctor_desc.is_none()
+                        || ctor_desc
+                            .as_ref()
+                            .map(|d| d.contains("Lkotlin/jvm/internal/DefaultConstructorMarker;)V"))
+                            .unwrap_or(false)
+                    {
+                        // Search for a synthetic default ctor that takes
+                        // more args than the user supplied.
+                        let synthetic_desc = (1..=12).find_map(|extra| {
+                            skotch_classinfo::lookup_method_descriptor(
+                                &jvm_class,
+                                "<init>",
+                                arg_locals.len() + extra,
+                            )
+                            .filter(|d| {
+                                d.contains("Lkotlin/jvm/internal/DefaultConstructorMarker;)V")
+                            })
+                        });
+                        if let Some(desc) = synthetic_desc {
+                            let total = skotch_classinfo::count_descriptor_params_pub(&desc);
+                            let primary_count = total.saturating_sub(2);
+                            let user_n = arg_locals.len();
+                            let param_chars = parse_descriptor_param_chars(&desc);
+                            // Pad slots from user_n..primary_count with zero/null.
+                            for i in user_n..primary_count {
+                                let kind = param_chars.get(i).copied().unwrap_or('L');
+                                let (slot_ty, value) = match kind {
+                                    'I' => (Ty::Int, Rvalue::Const(MirConst::Int(0))),
+                                    'J' => (Ty::Long, Rvalue::Const(MirConst::Long(0))),
+                                    'F' => (Ty::Float, Rvalue::Const(MirConst::Float(0.0))),
+                                    'D' => (Ty::Double, Rvalue::Const(MirConst::Double(0.0))),
+                                    _ => (Ty::Any, Rvalue::Const(MirConst::Null)),
+                                };
+                                let pad = fb.new_local(slot_ty);
+                                fb.push_stmt(MStmt::Assign { dest: pad, value });
+                                arg_locals.push(pad);
+                            }
+                            // Mask: bit `i` set for slots not supplied by the
+                            // user (the synthetic dispatcher uses these bits
+                            // to know which positions need its own defaults).
+                            let mut mask: i32 = 0;
+                            for i in user_n..primary_count {
+                                if i < 32 {
+                                    mask |= 1 << i;
+                                }
+                            }
+                            let mask_local = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest: mask_local,
+                                value: Rvalue::Const(MirConst::Int(mask)),
+                            });
+                            arg_locals.push(mask_local);
+                            // DefaultConstructorMarker is always null.
+                            let marker_local = fb.new_local(Ty::Class(
+                                "kotlin/jvm/internal/DefaultConstructorMarker".to_string(),
+                            ));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: marker_local,
+                                value: Rvalue::Const(MirConst::Null),
+                            });
+                            arg_locals.push(marker_local);
+                            let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::NewInstance(jvm_class.clone()),
+                            });
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::ConstructorJava {
+                                        class_name: jvm_class,
+                                        descriptor: desc,
+                                    },
+                                    args: arg_locals,
+                                },
+                            });
+                            return Some(dest);
+                        }
+                        // No synthetic available either — fall back to null.
+                        let dest = fb.new_local(Ty::Class(jvm_class));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
+                    }
                     let dest = fb.new_local(Ty::Class(jvm_class.clone()));
                     fb.push_stmt(MStmt::Assign {
                         dest,
@@ -10528,8 +11176,66 @@ fn lower_expr(
                 .get(&callee_str.to_string())
                 .cloned()
             {
+                // Reorder named args (`Foo(name = ..., other = ...)`) to
+                // positional order using the stub MirClass's
+                // `param_names`. Cross-file classes never participated in
+                // named-arg reordering before this — call sites went out
+                // in source order — and that broke data classes whose
+                // declaration order didn't match the source order at the
+                // call site (e.g. `ConversationUiState(initialMessages =
+                // ..., channelName = ..., channelMembers = ...)` was
+                // emitting `<init>(Object, String, int)` against a
+                // declared `<init>(String, int, List)`, triggering a
+                // verifier reject).
+                let stub_ctor_names: Vec<String> = module
+                    .classes
+                    .iter()
+                    .find(|c| c.name == jvm_class)
+                    .map(|c| c.constructor.param_names.clone())
+                    .unwrap_or_default();
+                let has_named = args.iter().any(|a| a.name.is_some());
+                let ordered_args: Vec<&skotch_syntax::CallArg> =
+                    if has_named && !stub_ctor_names.is_empty() {
+                        let mut by_name: Vec<Option<&skotch_syntax::CallArg>> =
+                            vec![None; stub_ctor_names.len()];
+                        let mut positional_cursor = 0usize;
+                        let mut failed = false;
+                        for a in args {
+                            if let Some(label_sym) = a.name {
+                                let label = interner.resolve(label_sym);
+                                if let Some(idx) =
+                                    stub_ctor_names.iter().position(|n| n.as_str() == label)
+                                {
+                                    by_name[idx] = Some(a);
+                                } else {
+                                    failed = true;
+                                    break;
+                                }
+                            } else {
+                                while positional_cursor < by_name.len()
+                                    && by_name[positional_cursor].is_some()
+                                {
+                                    positional_cursor += 1;
+                                }
+                                if positional_cursor < by_name.len() {
+                                    by_name[positional_cursor] = Some(a);
+                                    positional_cursor += 1;
+                                } else {
+                                    failed = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if failed {
+                            args.iter().collect()
+                        } else {
+                            by_name.into_iter().flatten().collect()
+                        }
+                    } else {
+                        args.iter().collect()
+                    };
                 let mut arg_locals = Vec::new();
-                for a in args {
+                for a in &ordered_args {
                     let id = lower_expr(
                         &a.expr,
                         fb,
@@ -10662,6 +11368,29 @@ fn lower_expr(
                         .clone()
                 })
                 .unwrap_or_default();
+            // Get the parameter types of the target so we can expand
+            // callable-reference desugars (e.g. `::inflate` lambdas need
+            // to match a Function3 slot, not Function1).
+            let mut param_tys: Vec<Ty> = name_to_func
+                .get(&callee_name)
+                .map(|fid| {
+                    let f = &module.functions[fid.0 as usize];
+                    f.params
+                        .iter()
+                        .map(|p| f.locals[p.0 as usize].clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            // External static functions (e.g. imported Kotlin Kt-facade
+            // calls) aren't in `name_to_func`, but we can still recover
+            // their param types from the classinfo descriptor.
+            if param_tys.is_empty() {
+                if let Some(desc) =
+                    find_external_static_descriptor(callee_str.as_str(), module, args.len())
+                {
+                    param_tys = descriptor_arg_tys(&desc);
+                }
+            }
             for (arg_idx, a) in args.iter().enumerate() {
                 // If this arg position has a receiver type and the arg
                 // is a lambda, set the receiver type flag.
@@ -10678,8 +11407,14 @@ fn lower_expr(
                         module.lambda_receiver_type = Some(recv_class.to_string());
                     }
                 }
+                // If the arg is a callable-reference desugar and the
+                // target expects a higher-arity FunctionN, expand it.
+                let expanded_arg = param_tys.get(arg_idx).and_then(|expected_ty| {
+                    maybe_expand_callable_ref(&a.expr, expected_ty, interner)
+                });
+                let arg_expr_ref: &Expr = expanded_arg.as_ref().unwrap_or(&a.expr);
                 let id = lower_expr(
-                    &a.expr,
+                    arg_expr_ref,
                     fb,
                     scope,
                     module,
@@ -13027,10 +13762,47 @@ fn lower_expr(
                                 .and_then(|l| fb.mf.locals.get(l.0 as usize))
                                 .map(is_fn_slot)
                                 .unwrap_or(false);
+                            // Don't shift a positional first arg to the
+                            // trailing slot when its arity matches slot 0
+                            // better than the last slot. Example:
+                            // `AndroidViewBinding(::inflate)` →
+                            // arg_locals=[Function3], slot 0 is Function3,
+                            // last slot is Function1. Without this check
+                            // we'd null out slot 0 and put the Function3
+                            // in slot 2, then crash at runtime when slot 0
+                            // is invoked as the factory.
+                            let fn_arity = |ty: &Ty| -> Option<usize> {
+                                match ty {
+                                    Ty::Function { params, .. } => Some(params.len()),
+                                    Ty::Class(n) => n
+                                        .strip_prefix("kotlin/jvm/functions/Function")
+                                        .and_then(|s| s.parse::<usize>().ok()),
+                                    _ => None,
+                                }
+                            };
+                            let user_first_arg_arity = arg_locals
+                                .first()
+                                .and_then(|l| fb.mf.locals.get(l.0 as usize))
+                                .and_then(fn_arity);
+                            let user_first_slot_arity = desc_param_tys.first().and_then(fn_arity);
+                            let user_last_slot_arity = composer_pos
+                                .checked_sub(1)
+                                .and_then(|i| desc_param_tys.get(i))
+                                .and_then(fn_arity);
+                            let positional_fit = match (
+                                user_first_arg_arity,
+                                user_first_slot_arity,
+                                user_last_slot_arity,
+                            ) {
+                                (Some(a), Some(first), Some(last)) => a == first && a != last,
+                                (Some(a), Some(first), None) => a == first,
+                                _ => false,
+                            };
                             if last_user_arg_is_fn
                                 && last_user_slot_is_fn
                                 && arg_locals.len() < user_slot_count
                                 && user_slot_count >= 2
+                                && !positional_fit
                             {
                                 let trailing = arg_locals.pop().expect("non-empty checked above");
                                 let pad_until = user_slot_count - 1;
@@ -13119,9 +13891,20 @@ fn lower_expr(
                             }
                         }
                     }
+                    // The actual JVM method name may be mangled
+                    // (`Font-wCLgNak` for source-level `Font`) when the
+                    // return type is a value class. Query for the real
+                    // name so the invokestatic targets a real method.
+                    let actual_method_name = skotch_classinfo::lookup_method_name_and_descriptor(
+                        &owner,
+                        callee_str,
+                        arg_locals.len(),
+                    )
+                    .map(|(n, _)| n)
+                    .unwrap_or_else(|| callee_str.to_string());
                     CallKind::StaticJava {
                         class_name: owner,
-                        method_name: callee_str.to_string(),
+                        method_name: actual_method_name,
                         descriptor: desc,
                     }
                 } else if let Some((class_path, method_name)) =
@@ -13234,20 +14017,175 @@ fn lower_expr(
                     //   +3: $composer + $changed + $default
                     //   +N: default params + $composer + $changed + $default
                     // Search with a preference for descriptors containing "Composer".
-                    let desc =
-                        lookup_composable_descriptor(&wrapper_class, callee_str, arg_locals.len())
-                            .unwrap_or_else(|| {
-                                let arg_types: Vec<Ty> = arg_locals
-                                    .iter()
-                                    .map(|l| fb.mf.locals[l.0 as usize].clone())
-                                    .collect();
-                                let mut d = String::from("(");
-                                for ty in &arg_types {
-                                    d.push_str(&jvm_type_string_for_ty(ty));
+                    let lookup_desc =
+                        lookup_composable_descriptor(&wrapper_class, callee_str, arg_locals.len());
+                    // If classinfo can't find a real method matching the
+                    // callee + arg count, refuse the call instead of
+                    // falling back to a synthesized `(Object^N)Object`
+                    // descriptor — that fake descriptor doesn't match any
+                    // real method on the target class and produces a
+                    // NoSuchMethodError at runtime (e.g. Compose's
+                    // `darkColorScheme(...)` has heavily mangled
+                    // value-class overloads `darkColorScheme-_VG5OTI(long
+                    // × 48)` with $default suffix variants that take more
+                    // args + mask + null marker — skotch can't match
+                    // those without full default-param dispatch
+                    // infrastructure). Returning a null placeholder
+                    // keeps clinit running so later vals load.
+                    if lookup_desc.is_none() {
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
+                    }
+                    let desc = lookup_desc.unwrap();
+                    // Named-arg + defaults: when user has named args AND
+                    // the descriptor has more user-slots than user-args,
+                    // positional padding produces wrong-slot assignment
+                    // (e.g. `MaterialTheme(colorScheme=…, typography=…,
+                    // content=…)` lands `typography` in the `Shapes`
+                    // slot because skotch can't reorder by name without
+                    // the target's param names — which kotlinc emits via
+                    // `@Metadata`, not parsed yet). Until #295 is real,
+                    // refuse the call and emit null. JetchatTheme's
+                    // MaterialTheme call ends up no-op (UI doesn't
+                    // render) instead of throwing ClassCastException.
+                    let has_named = args.iter().any(|a| a.name.is_some());
+                    let composer_abs_pos = composer_position_in_descriptor(&desc);
+                    let user_slot_count = composer_abs_pos
+                        .unwrap_or_else(|| skotch_classinfo::count_descriptor_params_pub(&desc));
+                    if has_named && arg_locals.len() < user_slot_count {
+                        // Tactical fallback: if one of the named args is
+                        // called "content" and points at a Function2-shaped
+                        // lambda (the conventional Compose content slot),
+                        // invoke it with placeholder $composer/$changed
+                        // before we give up on the wrapped call.
+                        //
+                        // The actual composer/changed locals don't exist
+                        // at MIR-lower time — they're injected later by
+                        // skotch-compose. We emit `MirConst::Null` and
+                        // `MirConst::Int(0)` placeholders here; the
+                        // existing `thread_composer_args` pass in
+                        // skotch-compose patches matching call sites with
+                        // the real values when it sees a VirtualJava call
+                        // whose descriptor contains "Composer;".
+                        //
+                        // This lets the composition tree walk down even
+                        // though the wrapper (MaterialTheme, Scaffold,
+                        // etc.) is null-stubbed — at least some content
+                        // composables get a chance to run.
+                        let content_idx = args
+                            .iter()
+                            .position(|a| a.name.is_some_and(|n| interner.resolve(n) == "content"));
+                        if let Some(idx) = content_idx {
+                            if let Some(&content_local) = arg_locals.get(idx) {
+                                let composer_ph = fb.new_local(Ty::Class(
+                                    "androidx/compose/runtime/Composer".to_string(),
+                                ));
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: composer_ph,
+                                    value: Rvalue::Const(MirConst::Null),
+                                });
+                                let changed_ph = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: changed_ph,
+                                    value: Rvalue::Const(MirConst::Int(0)),
+                                });
+                                let dest = fb.new_local(Ty::Any);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::Virtual {
+                                            class_name: "kotlin/jvm/functions/Function2"
+                                                .to_string(),
+                                            method_name: "invoke".to_string(),
+                                        },
+                                        args: vec![content_local, composer_ph, changed_ph],
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        return Some(dest);
+                    }
+                    // Disambiguation check: when a class has only one
+                    // overload matching the user's arg count, but the
+                    // user's first arg type is a primitive while the
+                    // descriptor's first slot is a reference type (or
+                    // vice versa), it's almost certainly a wrong-import
+                    // case — JetChat imports `Font` from BOTH
+                    // `androidx.compose.ui.text.font` (the int-resId
+                    // overload) and `androidx.compose.ui.text.googlefonts`
+                    // (the GoogleFont-taking overload). Skotch's
+                    // single-entry import_map routes all calls to one
+                    // wrapper, then padding produces wrong-typed args
+                    // that crash JVM verification. Detect the
+                    // primitive-vs-reference mismatch on the first user
+                    // arg and emit null. The clinit completes; the
+                    // affected val ends up null at runtime.
+                    let desc_param_kinds = parse_descriptor_param_chars(&desc);
+                    // Extract the first slot's full descriptor name (for L
+                    // params) so we can distinguish "generic T erased to
+                    // Object" (autoboxing OK) from "specific reference
+                    // type" (the wrong-import case we want to refuse).
+                    let first_slot_class: Option<String> = {
+                        let inner = desc
+                            .strip_prefix('(')
+                            .and_then(|s| s.split(')').next())
+                            .unwrap_or("");
+                        let mut chars = inner.chars();
+                        match chars.next() {
+                            Some('L') => {
+                                let mut s = String::new();
+                                for c in chars.by_ref() {
+                                    if c == ';' {
+                                        break;
+                                    }
+                                    s.push(c);
                                 }
-                                d.push_str(")Ljava/lang/Object;");
-                                d
+                                Some(s)
+                            }
+                            _ => None,
+                        }
+                    };
+                    if let (Some(first_user), Some(first_kind)) =
+                        (arg_locals.first(), desc_param_kinds.first())
+                    {
+                        let user_ty = &fb.mf.locals[first_user.0 as usize];
+                        let user_is_int = matches!(
+                            user_ty,
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool
+                        );
+                        let user_is_ref = matches!(user_ty, Ty::Class(_) | Ty::String | Ty::Any);
+                        // Slot is "generic T erased to Object" — autoboxing
+                        // is always valid. Don't refuse this case.
+                        let slot_is_object_generic = first_slot_class
+                            .as_deref()
+                            .map(|c| {
+                                c == "java/lang/Object"
+                                    || c == "kotlin/Any"
+                                    || c == "java/lang/Number"
+                                    || c == "java/lang/Comparable"
+                            })
+                            .unwrap_or(false);
+                        let slot_is_ref = *first_kind == 'L' && !slot_is_object_generic;
+                        let slot_is_int = *first_kind == 'I';
+                        if (user_is_int && slot_is_ref) || (user_is_ref && slot_is_int) {
+                            let dest = fb.new_local(Ty::Any);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Const(MirConst::Null),
                             });
+                            return Some(dest);
+                        }
+                    }
                     // Vararg wrapping: when the descriptor's last param is
                     // an array (`[L<elem>;`) and the user supplied
                     // individual element-typed args (not an array),
@@ -13383,10 +14321,47 @@ fn lower_expr(
                                 .and_then(|l| fb.mf.locals.get(l.0 as usize))
                                 .map(is_fn_slot)
                                 .unwrap_or(false);
+                            // Don't shift a positional first arg to the
+                            // trailing slot when its arity matches slot 0
+                            // better than the last slot. Example:
+                            // `AndroidViewBinding(::inflate)` →
+                            // arg_locals=[Function3], slot 0 is Function3,
+                            // last slot is Function1. Without this check
+                            // we'd null out slot 0 and put the Function3
+                            // in slot 2, then crash at runtime when slot 0
+                            // is invoked as the factory.
+                            let fn_arity = |ty: &Ty| -> Option<usize> {
+                                match ty {
+                                    Ty::Function { params, .. } => Some(params.len()),
+                                    Ty::Class(n) => n
+                                        .strip_prefix("kotlin/jvm/functions/Function")
+                                        .and_then(|s| s.parse::<usize>().ok()),
+                                    _ => None,
+                                }
+                            };
+                            let user_first_arg_arity = arg_locals
+                                .first()
+                                .and_then(|l| fb.mf.locals.get(l.0 as usize))
+                                .and_then(fn_arity);
+                            let user_first_slot_arity = desc_param_tys.first().and_then(fn_arity);
+                            let user_last_slot_arity = composer_pos
+                                .checked_sub(1)
+                                .and_then(|i| desc_param_tys.get(i))
+                                .and_then(fn_arity);
+                            let positional_fit = match (
+                                user_first_arg_arity,
+                                user_first_slot_arity,
+                                user_last_slot_arity,
+                            ) {
+                                (Some(a), Some(first), Some(last)) => a == first && a != last,
+                                (Some(a), Some(first), None) => a == first,
+                                _ => false,
+                            };
                             if last_user_arg_is_fn
                                 && last_user_slot_is_fn
                                 && arg_locals.len() < user_slot_count
                                 && user_slot_count >= 2
+                                && !positional_fit
                             {
                                 let trailing = arg_locals.pop().expect("non-empty checked above");
                                 // Pad positions arg_locals.len()..(user_slot_count-1) with
@@ -13501,9 +14476,20 @@ fn lower_expr(
                             }
                         }
                     }
+                    // The actual JVM method name may be mangled like
+                    // `Font-wCLgNak` (Kotlin value-class returns get a
+                    // 7-char hash suffix). Query for the real name so
+                    // the invokestatic targets a real method.
+                    let actual_method_name = skotch_classinfo::lookup_method_name_and_descriptor(
+                        &wrapper_class,
+                        callee_str,
+                        arg_locals.len(),
+                    )
+                    .map(|(n, _)| n)
+                    .unwrap_or_else(|| callee_str.to_string());
                     CallKind::StaticJava {
                         class_name: wrapper_class,
-                        method_name: callee_str.to_string(),
+                        method_name: actual_method_name,
                         descriptor: desc,
                     }
                 } else {
@@ -15020,6 +16006,49 @@ fn lower_expr(
                             });
                             return Some(dest);
                         }
+                        // Android R class — `R.<type>.<name>` always
+                        // resolves to a static `int` constant on
+                        // `<Pkg>/R$<type>.<name>:I`. The R classes
+                        // themselves are generated during the build
+                        // pipeline so classinfo can't find them yet —
+                        // hardcode the descriptor based on the well-known
+                        // Android resource-type taxonomy. `styleable` is
+                        // the exception (int[] arrays) but those aren't
+                        // accessed as `R.styleable.X` in this form (those
+                        // appear as `R.styleable.AppCompatTheme_X` and
+                        // are still ints).
+                        if outer_jvm.ends_with("/R") || outer_jvm == "R" {
+                            let dest = fb.new_local(Ty::Int);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::GetStaticField {
+                                    class_name: nested_class,
+                                    field_name: field_str,
+                                    descriptor: "I".to_string(),
+                                },
+                            });
+                            return Some(dest);
+                        }
+                        // Generic nested-static lookup via classinfo.
+                        // Covers JDK enum-style inner classes whose
+                        // fields actually exist in the loaded class
+                        // registry (e.g. `KeyEvent.KEYCODE.X`).
+                        if let Some(field_desc) = skotch_classinfo::lookup_static_field_descriptor(
+                            &nested_class,
+                            &field_str,
+                        ) {
+                            let field_ty = ty_from_descriptor_return(&field_desc);
+                            let dest = fb.new_local(field_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::GetStaticField {
+                                    class_name: nested_class,
+                                    field_name: field_str,
+                                    descriptor: field_desc,
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                 }
             }
@@ -15552,6 +16581,53 @@ fn lower_expr(
                             },
                         });
                         return Some(dest);
+                    }
+                    // External class companion-property access: e.g.
+                    // `Color.White` lowers to
+                    //   `getstatic Color.Companion:Color$Companion;
+                    //    invokevirtual Color$Companion.getWhite-0d7_KjU()J`
+                    // when `Color` is an external class whose companion
+                    // declares the property as a getter. The getter may be
+                    // mangled (`getWhite-XXXXXXX`) for value-class returns,
+                    // so route through the mangled-aware helper. Without
+                    // this, we fall to the generic `Rvalue::GetField`
+                    // below and emit `getfield Color.White:Object` on a
+                    // null receiver — runtime fails with `NoSuchFieldError`.
+                    if declaring_class.contains('/') {
+                        let companion_class = format!("{declaring_class}$Companion");
+                        let getter_name =
+                            format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
+                        if let Some((actual_method, getter_desc)) =
+                            skotch_classinfo::lookup_method_name_and_descriptor(
+                                &companion_class,
+                                &getter_name,
+                                0,
+                            )
+                        {
+                            let ret_ty = ty_from_descriptor_return(&getter_desc);
+                            let companion_local = fb.new_local(Ty::Class(companion_class.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: companion_local,
+                                value: Rvalue::GetStaticField {
+                                    class_name: declaring_class.clone(),
+                                    field_name: "Companion".to_string(),
+                                    descriptor: format!("L{companion_class};"),
+                                },
+                            });
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: companion_class,
+                                        method_name: actual_method,
+                                        descriptor: getter_desc,
+                                    },
+                                    args: vec![companion_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                     let dest = fb.new_local(field_ty);
                     fb.push_stmt(MStmt::Assign {
@@ -16312,22 +17388,33 @@ fn lower_expr(
                 loop_ctx,
             )?;
             let type_str = interner.resolve(*type_name);
+            // Resolve `as <Type>` against the file's imports so that an
+            // imported FQ name like `import android.widget.FrameLayout` lets
+            // `as FrameLayout` produce `Ty::Class("android/widget/FrameLayout")`
+            // instead of falling back to `Ty::Any`. The fallback erases the
+            // dest local's type, which then forces every downstream user
+            // (constructor call sites, descriptor inference, etc.) to use
+            // `Ljava/lang/Object;` and breaks `<init>` lookups at runtime.
+            let imported_fq = module.import_map.get(type_str).cloned();
             let target_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
                 if module.classes.iter().any(|c| c.name == type_str) {
                     Ty::Class(type_str.to_string())
+                } else if let Some(fq) = &imported_fq {
+                    Ty::Class(fq.clone())
                 } else {
                     Ty::Any
                 }
             });
-            let jvm_type = match type_str {
-                "String" => "java/lang/String",
-                "Int" => "java/lang/Integer",
-                "Long" => "java/lang/Long",
-                "Double" => "java/lang/Double",
-                "Boolean" => "java/lang/Boolean",
-                "Char" => "java/lang/Character",
-                other => other,
+            let default_jvm: String = match type_str {
+                "String" => "java/lang/String".to_string(),
+                "Int" => "java/lang/Integer".to_string(),
+                "Long" => "java/lang/Long".to_string(),
+                "Double" => "java/lang/Double".to_string(),
+                "Boolean" => "java/lang/Boolean".to_string(),
+                "Char" => "java/lang/Character".to_string(),
+                other => imported_fq.clone().unwrap_or_else(|| other.to_string()),
             };
+            let jvm_type = default_jvm.as_str();
             if *safe {
                 // `as?` — emit instanceof check: returns T? (null if not match)
                 let check = fb.new_local(Ty::Bool);
@@ -16587,7 +17674,15 @@ fn lower_expr(
             if free_vars.is_empty() && !is_suspend_lambda && !params.is_empty() {
                 let arity = params.len() as u8;
                 let outer_name = fb.mf.name.clone();
-                let helper_prefix = format!("{}$lambda$", outer_name);
+                // DEX format only allows angle brackets in the special
+                // method names `<init>` and `<clinit>` themselves — any
+                // other method whose name contains `<` or `>` makes d8
+                // reject the whole class with "cannot be represented in
+                // dex format". Strip the brackets when the enclosing
+                // function is `<clinit>` (or another special name) so the
+                // synthesized helper still d8s cleanly.
+                let sanitized_outer = outer_name.trim_matches(|c| c == '<' || c == '>');
+                let helper_prefix = format!("{sanitized_outer}$lambda$");
                 let inner_idx = module
                     .functions
                     .iter()
@@ -16596,7 +17691,12 @@ fn lower_expr(
                 let helper_name = format!("{}{}", helper_prefix, inner_idx);
                 let lambda_idx = module.functions.len();
                 let mut helper_fb = FnBuilder::new(lambda_idx, helper_name.clone(), Ty::Any);
-                helper_fb.mf.is_private = true;
+                // Leave the helper method package-private (no ACC_PRIVATE).
+                // d8 desugars LambdaMetafactory into a sibling synthetic
+                // class; an ACC_PRIVATE helper would trigger
+                // IllegalAccessError when the desugared lambda invokes the
+                // helper from outside the original class. kotlinc dodges
+                // this by not using LambdaMetafactory at all on Android.
                 let mut helper_scope: Vec<(Symbol, LocalId)> = Vec::new();
                 // Capture params come first.
                 for (sym, _outer_lid, ty) in &free_vars {
@@ -19096,17 +20196,36 @@ fn lower_class(
     }
 
     // (val/var constructor params already added above)
-    // Initialize body properties with default values.
-    // Properties with `by lazy { ... }` delegates are lowered eagerly:
-    // the lambda body is evaluated during construction and stored in the field.
+    // Initialize body properties with their initializer expressions.
+    //
+    // Properties with `by lazy { ... }` delegates are collected separately
+    // and lowered later (the lazy delegate evaluates eagerly during
+    // construction in our simplified model).
+    //
+    // For each `val foo = <expr>` declaration we want to run `<expr>` in
+    // the constructor body and store the result via `putfield`. Literal
+    // initializers (Int/Long/Bool/String/etc.) take a fast path that
+    // emits a `Const` rvalue directly. Anything else — function calls,
+    // qualified accesses, complex expressions — needs a full FnBuilder
+    // pass through `lower_expr` so the surrounding scope (this, ctor
+    // params) is visible and downstream lowering (call dispatch,
+    // value-class boxing, etc.) all kicks in.
+    //
+    // Without this, `class MainViewModel { val flow = MutableStateFlow(false) }`
+    // would leave `flow` uninitialized and every read returns null at
+    // runtime — see the jetchat-vs-kotlinc diff.
     let mut delegate_props: Vec<&skotch_syntax::PropertyDecl> = Vec::new();
-    for prop in &c.properties {
-        if prop.delegate.is_some() {
-            delegate_props.push(prop);
-            continue;
-        }
-        let (val, ty) = if let Some(init) = &prop.init {
-            match init {
+    let non_literal_props: Vec<&skotch_syntax::PropertyDecl> = {
+        let mut out = Vec::new();
+        for prop in &c.properties {
+            if prop.delegate.is_some() {
+                delegate_props.push(prop);
+                continue;
+            }
+            let Some(init) = &prop.init else {
+                continue;
+            };
+            let (val, ty) = match init {
                 Expr::IntLit(v, _) => (Some(MirConst::Int(*v as i32)), Ty::Int),
                 Expr::LongLit(v, _) => (Some(MirConst::Long(*v)), Ty::Long),
                 Expr::DoubleLit(v, _) => (Some(MirConst::Double(*v)), Ty::Double),
@@ -19117,18 +20236,61 @@ fn lower_class(
                     (Some(MirConst::String(sid)), Ty::String)
                 }
                 _ => (None, Ty::Int),
+            };
+            if let Some(c_val) = val {
+                let val_id = init_fn.new_local(ty);
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: val_id,
+                    value: Rvalue::Const(c_val),
+                });
+                let field_name = interner.resolve(prop.name).to_string();
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: this_id, // dummy
+                    value: Rvalue::PutField {
+                        receiver: this_id,
+                        class_name: class_name.clone(),
+                        field_name,
+                        value: val_id,
+                    },
+                });
+            } else {
+                out.push(prop);
             }
-        } else {
-            (None, Ty::Int)
-        };
-        if let Some(c_val) = val {
-            let val_id = init_fn.new_local(ty);
-            init_fn.blocks[0].stmts.push(MStmt::Assign {
-                dest: val_id,
-                value: Rvalue::Const(c_val),
-            });
+        }
+        out
+    };
+    if !non_literal_props.is_empty() {
+        let tmp_idx = module.functions.len() + 2000;
+        let mut fb = FnBuilder::new(tmp_idx, "<init>".to_string(), Ty::Unit);
+        fb.mf.locals = init_fn.locals.clone();
+        fb.mf.params = init_fn.params.clone();
+        fb.mf.blocks[0].stmts = std::mem::take(&mut init_fn.blocks[0].stmts);
+        let this_sym = interner.intern("this");
+        let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_id)];
+        // Constructor params (val/var or plain) are in scope inside the
+        // initializer of any property declared after them.
+        for (param_idx, p) in (1usize..).zip(c.constructor_params.iter()) {
+            if param_idx < fb.mf.params.len() {
+                scope.push((p.name, fb.mf.params[param_idx]));
+            }
+        }
+        for prop in non_literal_props {
+            let Some(init) = &prop.init else { continue };
+            let Some(val_id) = lower_expr(
+                init,
+                &mut fb,
+                &mut scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                None,
+            ) else {
+                continue;
+            };
             let field_name = interner.resolve(prop.name).to_string();
-            init_fn.blocks[0].stmts.push(MStmt::Assign {
+            fb.push_stmt(MStmt::Assign {
                 dest: this_id, // dummy
                 value: Rvalue::PutField {
                     receiver: this_id,
@@ -19138,6 +20300,8 @@ fn lower_class(
                 },
             });
         }
+        init_fn.locals = fb.mf.locals;
+        init_fn.blocks[0].stmts = std::mem::take(&mut fb.mf.blocks[0].stmts);
     }
 
     // Lower init blocks — execute statements in the constructor.
@@ -19239,10 +20403,26 @@ fn lower_class(
             }
         })
         .collect();
+    // Resolve interface simple names to FQ JVM names via the import
+    // map so the parent class's `interfaces` table holds the real
+    // `androidx/viewbinding/ViewBinding`-style entries — without this
+    // the class file's interface_table holds bare `ViewBinding` and
+    // ClassLoader fails resolution at load time.
     let iface_names: Vec<String> = c
         .interfaces
         .iter()
-        .map(|s| interner.resolve(*s).to_string())
+        .map(|s| {
+            let simple = interner.resolve(*s).to_string();
+            if simple.contains('/') {
+                simple
+            } else if let Some(fq) = module.import_map.get(&simple) {
+                fq.clone()
+            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+                fq.clone()
+            } else {
+                simple
+            }
+        })
         .collect();
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
@@ -19380,7 +20560,51 @@ fn lower_class(
                 }
             }
             // Store result into backing field.
-            if let Some(val) = result_local {
+            //
+            // For `by lazy { body }` the body's result IS the value.
+            // For `by <expr>` (e.g. `by viewModels()`) the expression
+            // produces a *delegate object* (`Lazy<T>`-shaped); the
+            // property's value is `delegate.getValue(...)`. Without this
+            // unwrap, skotch would putfield a `Lazy<T>` into a field
+            // declared as `T` and the verifier rejects the class.
+            let stored_val = if prop.delegate_is_lazy_block {
+                result_local
+            } else if let Some(val) = result_local {
+                // Call `Lazy.getValue()` to extract T from the delegate.
+                // The return type is `Object`; checkcast to the property
+                // type before storing so the putfield's descriptor and
+                // the value's static type match (verifier requires this
+                // when the field is declared as a specific class).
+                let raw = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest: raw,
+                    value: Rvalue::Call {
+                        kind: CallKind::VirtualJava {
+                            class_name: "kotlin/Lazy".to_string(),
+                            method_name: "getValue".to_string(),
+                            descriptor: "()Ljava/lang/Object;".to_string(),
+                        },
+                        args: vec![val],
+                    },
+                });
+                let casted = if let Ty::Class(target) = &prop_ty {
+                    let c = fb.new_local(prop_ty.clone());
+                    fb.push_stmt(MStmt::Assign {
+                        dest: c,
+                        value: Rvalue::CheckCast {
+                            obj: raw,
+                            target_class: target.clone(),
+                        },
+                    });
+                    c
+                } else {
+                    raw
+                };
+                Some(casted)
+            } else {
+                None
+            };
+            if let Some(val) = stored_val {
                 let dummy = fb.new_local(Ty::Unit);
                 fb.push_stmt(MStmt::Assign {
                     dest: dummy,
@@ -19967,6 +21191,14 @@ fn lower_class(
         } else {
             None
         };
+    // Wire the parent MirClass to its companion so the call-site
+    // dispatcher (`OuterClass.methodOnCompanion(...)`) can find the
+    // companion's MirClass via `companion_class_name`.
+    if let Some(ref companion_cls) = companion_class_name_opt {
+        if let Some(parent) = module.classes.get_mut(class_idx) {
+            parent.companion_class_name = Some(companion_cls.clone());
+        }
+    }
     if let Some(ref companion_cls) = companion_class_name_opt {
         // Build private `<init>()V` constructor for the companion.
         let mut comp_init = MirFunction {

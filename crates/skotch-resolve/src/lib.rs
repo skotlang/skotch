@@ -136,8 +136,22 @@ pub struct ExternalClassDecl {
     pub kind: ExternalClassKind,
     /// Constructor parameter fields (val/var in primary constructor).
     pub fields: Vec<(String, Ty)>,
+    /// All primary-constructor parameters in declaration order — name +
+    /// type for every param, val/var or not. Cross-file call sites use
+    /// this to (a) build a complete `<init>` descriptor when the class
+    /// has plain (non-field) constructor params, and (b) reorder named
+    /// args to positional order. `fields` is a subset (val/var only),
+    /// kept for callers that just need the storage layout.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ctor_params: Vec<(String, Ty)>,
     /// Method signatures: (name, param_tys, return_ty).
     pub methods: Vec<(String, Vec<Ty>, Ty)>,
+    /// Companion-object method signatures, used so call sites that go
+    /// through `OuterClass.method(...)` can resolve to the companion's
+    /// virtual method via `OuterClass$Companion`. Empty when the class
+    /// has no `companion object`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub companion_methods: Vec<(String, Vec<Ty>, Ty)>,
     /// Superclass name (simple, not FQ).
     pub super_class: Option<String>,
     /// Whether the class is open.
@@ -278,9 +292,75 @@ fn infer_body_return_ty(body: &skotch_syntax::Block, interner: &Interner) -> Ty 
 }
 
 /// Map an AST `TypeRef` to a `Ty` for the typechecker.
-fn type_ref_to_ty(tr: &TypeRef, interner: &Interner) -> Ty {
+/// Best-effort type inference for a `val foo = <init>` without an explicit
+/// type annotation. We only look one level deep — the goal is to recover the
+/// JVM descriptor of the getter accessor (which cross-file `name` lookups
+/// turn into `getFoo()<descriptor>`), not full type inference.
+///
+/// Recognized patterns:
+/// * `val foo = Bar(...)` where `Bar` resolves to a class in `imports` →
+///   `Ty::Class(<fq>)`.
+/// * `val foo = "literal"` / number / bool → matching primitive `Ty`.
+///
+/// Everything else falls back to `Ty::Any`, matching the previous behavior.
+fn infer_val_type_from_init(
+    init: &skotch_syntax::ast::Expr,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+) -> Ty {
+    use skotch_syntax::ast::Expr;
+    match init {
+        Expr::Call { callee, .. } => match callee.as_ref() {
+            Expr::Ident(sym, _) => {
+                // Only treat the call as a constructor when the callee name
+                // starts uppercase (Kotlin convention). Lowercase Ident calls
+                // are top-level functions whose return type we can't recover
+                // here, and pretending the function name IS its return type
+                // produces fields like `ThemesKt.JetchatDarkColorScheme:
+                // Landroidx/compose/material3/darkColorScheme;` (the
+                // function path stuffed into a class-type slot).
+                let name = interner.resolve(*sym);
+                let starts_upper = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                if starts_upper {
+                    if let Some(fq) = imports.get(name) {
+                        Ty::Class(fq.clone())
+                    } else {
+                        Ty::Any
+                    }
+                } else {
+                    Ty::Any
+                }
+            }
+            _ => Ty::Any,
+        },
+        Expr::StringLit(_, _) | Expr::StringTemplate(_, _) => {
+            Ty::Class("java/lang/String".to_string())
+        }
+        Expr::IntLit(_, _) => Ty::Int,
+        Expr::LongLit(_, _) => Ty::Long,
+        Expr::FloatLit(_, _) => Ty::Float,
+        Expr::DoubleLit(_, _) => Ty::Double,
+        Expr::BoolLit(_, _) => Ty::Bool,
+        Expr::CharLit(_, _) => Ty::Char,
+        _ => Ty::Any,
+    }
+}
+
+fn type_ref_to_ty(tr: &TypeRef, interner: &Interner, imports: &FxHashMap<String, String>) -> Ty {
     let name = interner.resolve(tr.name);
-    let base = skotch_types::ty_from_name(name).unwrap_or(Ty::Any);
+    let base = skotch_types::ty_from_name(name).unwrap_or_else(|| {
+        // Fall back to the file's import_map so a cross-file call site
+        // sees the right param/return type (e.g. `LayoutInflater` →
+        // `Ty::Class("android/view/LayoutInflater")`). Without this,
+        // `gather_declarations` erases everything non-builtin to `Any`
+        // and downstream methodref descriptors become
+        // `(Object,Object,…)Object`, breaking JVM resolution.
+        if let Some(fq) = imports.get(name) {
+            Ty::Class(fq.clone())
+        } else {
+            Ty::Any
+        }
+    });
     if tr.nullable {
         Ty::Nullable(Box::new(base))
     } else {
@@ -412,12 +492,12 @@ pub fn gather_declarations(
                     let return_ty = f
                         .return_ty
                         .as_ref()
-                        .map(|tr| type_ref_to_ty(tr, interner))
+                        .map(|tr| type_ref_to_ty(tr, interner, imports))
                         .unwrap_or(Ty::Unit);
                     let param_tys: Vec<Ty> = f
                         .params
                         .iter()
-                        .map(|p| type_ref_to_ty(&p.ty, interner))
+                        .map(|p| type_ref_to_ty(&p.ty, interner, imports))
                         .collect();
                     let param_count = if is_composable {
                         f.params.len() + 2 // +$composer +$changed
@@ -440,10 +520,10 @@ pub fn gather_declarations(
                         continue;
                     }
                     let name = interner.resolve(v.name).to_string();
-                    let ty =
-                        v.ty.as_ref()
-                            .map(|tr| type_ref_to_ty(tr, interner))
-                            .unwrap_or(Ty::Any);
+                    let ty = match v.ty.as_ref() {
+                        Some(tr) => type_ref_to_ty(tr, interner, imports),
+                        None => infer_val_type_from_init(&v.init, interner, imports),
+                    };
                     table.vals.insert(
                         name,
                         ExternalValDecl {
@@ -469,8 +549,21 @@ pub fn gather_declarations(
                         .filter(|p| p.is_val || p.is_var)
                         .map(|p| {
                             let fname = interner.resolve(p.name).to_string();
-                            let fty = type_ref_to_ty(&p.ty, interner);
+                            let fty = type_ref_to_ty(&p.ty, interner, imports);
                             (fname, fty)
+                        })
+                        .collect();
+                    // ALL primary-constructor params in declaration order
+                    // (val/var or plain) — needed cross-file to (a) build
+                    // a full `<init>` descriptor and (b) reorder named
+                    // args to positional. `fields` is a subset.
+                    let ctor_params: Vec<(String, Ty)> = c
+                        .constructor_params
+                        .iter()
+                        .map(|p| {
+                            let pname = interner.resolve(p.name).to_string();
+                            let pty = type_ref_to_ty(&p.ty, interner, imports);
+                            (pname, pty)
                         })
                         .collect();
                     // Collect method signatures.
@@ -482,12 +575,35 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .map(|tr| type_ref_to_ty(tr, interner, imports))
+                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
+                            (mname, ptys, rty)
+                        })
+                        .collect();
+                    // Companion-object methods are invisible cross-file
+                    // unless we surface them here. Call sites like
+                    // `OuterClass.method(...)` resolve via the companion
+                    // dispatch in mir-lower, which needs to know the
+                    // companion class exists.
+                    let companion_methods: Vec<(String, Vec<Ty>, Ty)> = c
+                        .companion_methods
+                        .iter()
+                        .map(|m| {
+                            let mname = interner.resolve(m.name).to_string();
+                            let ptys: Vec<Ty> = m
+                                .params
+                                .iter()
+                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                                .collect();
+                            let rty = m
+                                .return_ty
+                                .as_ref()
+                                .map(|tr| type_ref_to_ty(tr, interner, imports))
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
@@ -502,7 +618,9 @@ pub fn gather_declarations(
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(c.name)),
                             kind,
                             fields,
+                            ctor_params,
                             methods,
+                            companion_methods,
                             super_class,
                             is_open: c.is_open,
                             is_abstract: c.is_abstract,
@@ -519,12 +637,12 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .map(|tr| type_ref_to_ty(tr, interner, imports))
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
@@ -535,7 +653,9 @@ pub fn gather_declarations(
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(o.name)),
                             kind: ExternalClassKind::Object,
                             fields: Vec::new(),
+                            ctor_params: Vec::new(),
                             methods,
+                            companion_methods: Vec::new(),
                             super_class: None,
                             is_open: false,
                             is_abstract: false,
@@ -550,7 +670,9 @@ pub fn gather_declarations(
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(e.name)),
                             kind: ExternalClassKind::Enum,
                             fields: Vec::new(),
+                            ctor_params: Vec::new(),
                             methods: Vec::new(),
+                            companion_methods: Vec::new(),
                             super_class: None,
                             is_open: false,
                             is_abstract: false,
@@ -567,12 +689,12 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner))
+                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner))
+                                .map(|tr| type_ref_to_ty(tr, interner, imports))
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
@@ -583,7 +705,9 @@ pub fn gather_declarations(
                             jvm_name: format!("{pkg_prefix}{}", interner.resolve(iface.name)),
                             kind: ExternalClassKind::Interface,
                             fields: Vec::new(),
+                            ctor_params: Vec::new(),
                             methods,
+                            companion_methods: Vec::new(),
                             super_class: None,
                             is_open: false,
                             is_abstract: true,

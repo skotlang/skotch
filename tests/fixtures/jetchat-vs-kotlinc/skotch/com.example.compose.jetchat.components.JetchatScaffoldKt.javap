@@ -1,0 +1,70 @@
+Compiled from "com/example/compose/jetchat/components/JetchatScaffold.kt"
+public final class com.example.compose.jetchat.components.JetchatScaffoldKt {
+  public static final <T> void JetchatDrawer(androidx.compose.material3.DrawerState, java.lang.String, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function2, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         5
+         2: ldc           #33                 // int -1097092181
+         4: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore        5
+        11: aload         5
+        13: iload         6
+        15: ifeq          22
+        18: iconst_1
+        19: goto          23
+        22: iconst_0
+        23: iload         6
+        25: iconst_1
+        26: iand
+        27: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        32: ifne          45
+        35: aload         5
+        37: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        42: goto          74
+        45: new           #35                 // class com/example/compose/jetchat/components/JetchatScaffoldKt$Lambda$23
+        48: dup
+        49: aload_0
+        50: aload_2
+        51: aload_3
+        52: aload_1
+        53: aload         4
+        55: invokespecial #39                 // Method com/example/compose/jetchat/components/JetchatScaffoldKt$Lambda$23."<init>":(Landroidx/compose/material3/DrawerState;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
+        58: astore        7
+        60: iconst_0
+        61: iconst_0
+        62: aload         7
+        64: checkcast     #41                 // class kotlin/jvm/functions/Function2
+        67: aload         5
+        69: iload         6
+        71: invokestatic  #47                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        74: aload         5
+        76: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        81: dup
+        82: ifnull        106
+        85: aload_0
+        86: aload_1
+        87: aload_2
+        88: aload_3
+        89: aload         4
+        91: iload         6
+        93: invokedynamic #67,  0             // InvokeDynamic #0:invoke:(Landroidx/compose/material3/DrawerState;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;I)Lkotlin/jvm/functions/Function2;
+        98: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       103: goto          107
+       106: pop
+       107: return
+
+  private static final kotlin.Unit JetchatDrawer$lambda$0(androidx.compose.material3.DrawerState, java.lang.String, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function2, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: aload_3
+         4: aload         4
+         6: aload         6
+         8: iload         5
+        10: iconst_1
+        11: ior
+        12: invokestatic  #84                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        15: invokestatic  #86                 // Method JetchatDrawer:(Landroidx/compose/material3/DrawerState;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+        18: getstatic     #92                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        21: areturn
+}

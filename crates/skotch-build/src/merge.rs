@@ -37,8 +37,27 @@ pub fn merge_modules(into: &mut MirModule, other: MirModule) {
         into.functions.push(f);
     }
 
-    // Merge classes (with string remapping).
+    // Merge classes (with string remapping). When the same class name
+    // appears in both modules (e.g. one as a real declaration and one
+    // as a cross-file stub), keep the real one and drop the stub —
+    // field types resolved from constructor params on the home file
+    // win over the erased shapes recovered from a `PackageSymbolTable`.
     for mut cls in other.classes {
+        if let Some(existing) = into.classes.iter().position(|c| c.name == cls.name) {
+            let existing_is_stub = into.classes[existing].is_cross_file_stub;
+            let new_is_stub = cls.is_cross_file_stub;
+            match (existing_is_stub, new_is_stub) {
+                (true, false) => {
+                    into.classes.remove(existing);
+                }
+                (false, _) => {
+                    continue;
+                }
+                (true, true) => {
+                    continue;
+                }
+            }
+        }
         // Remap strings in constructor and methods.
         for f in std::iter::once(&mut cls.constructor)
             .chain(cls.methods.iter_mut())

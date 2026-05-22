@@ -1,0 +1,27 @@
+Compiled from "com/example/compose/jetchat/conversation/SymbolAnnotationType.kt"
+public final class com.example.compose.jetchat.conversation.SymbolAnnotationType {
+  public java.lang.String name;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.conversation.SymbolAnnotationType(java.lang.String);
+    Code:
+         0: aload_0
+         1: invokespecial #16                 // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: aload_1
+         6: putfield      #18                 // Field name:Ljava/lang/String;
+         9: return
+
+  public java.lang.String toString();
+    Code:
+         0: aload_0
+         1: getfield      #18                 // Field name:Ljava/lang/String;
+         4: areturn
+
+  public final java.lang.String getName();
+    Code:
+         0: aload_0
+         1: getfield      #18                 // Field name:Ljava/lang/String;
+         4: areturn
+}

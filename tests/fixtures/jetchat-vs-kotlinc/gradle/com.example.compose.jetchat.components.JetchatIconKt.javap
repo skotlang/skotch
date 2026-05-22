@@ -1,0 +1,411 @@
+Compiled from "JetchatIcon.kt"
+public final class com.example.compose.jetchat.components.JetchatIconKt {
+  public static final void JetchatIcon(java.lang.String, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int, int);
+    Code:
+         0: aload_2
+         1: ldc           #12                 // int -254081512
+         3: invokeinterface #18,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_2
+         9: aload_2
+        10: ldc           #20                 // String C(JetchatIcon)N(contentDescription,modifier)40@1464L436:JetchatIcon.kt#o9oqao
+        12: invokestatic  #26                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: iload_3
+        16: istore        5
+        18: iload_3
+        19: bipush        6
+        21: iand
+        22: ifne          45
+        25: iload         5
+        27: aload_2
+        28: aload_0
+        29: invokeinterface #30,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+        34: ifeq          41
+        37: iconst_4
+        38: goto          42
+        41: iconst_2
+        42: ior
+        43: istore        5
+        45: iload         4
+        47: iconst_2
+        48: iand
+        49: ifeq          62
+        52: iload         5
+        54: bipush        48
+        56: ior
+        57: istore        5
+        59: goto          91
+        62: iload_3
+        63: bipush        48
+        65: iand
+        66: ifne          91
+        69: iload         5
+        71: aload_2
+        72: aload_1
+        73: invokeinterface #30,  2           // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+        78: ifeq          86
+        81: bipush        32
+        83: goto          88
+        86: bipush        16
+        88: ior
+        89: istore        5
+        91: aload_2
+        92: iload         5
+        94: bipush        19
+        96: iand
+        97: bipush        18
+        99: if_icmpeq     106
+       102: iconst_1
+       103: goto          107
+       106: iconst_0
+       107: iload         5
+       109: iconst_1
+       110: iand
+       111: invokeinterface #34,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+       116: ifeq          790
+       119: iload         4
+       121: iconst_2
+       122: iand
+       123: ifeq          133
+       126: getstatic     #40                 // Field androidx/compose/ui/Modifier.Companion:Landroidx/compose/ui/Modifier$Companion;
+       129: checkcast     #36                 // class androidx/compose/ui/Modifier
+       132: astore_1
+       133: invokestatic  #44                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+       136: ifeq          149
+       139: ldc           #12                 // int -254081512
+       141: iload         5
+       143: iconst_m1
+       144: ldc           #46                 // String com.example.compose.jetchat.components.JetchatIcon (JetchatIcon.kt:31)
+       146: invokestatic  #50                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+       149: aload_0
+       150: ifnull        302
+       153: aload_2
+       154: ldc           #51                 // int -1609815200
+       156: invokeinterface #55,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+       161: aload_2
+       162: ldc           #57                 // String 33@1320L103
+       164: invokestatic  #26                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+       167: getstatic     #40                 // Field androidx/compose/ui/Modifier.Companion:Landroidx/compose/ui/Modifier$Companion;
+       170: checkcast     #36                 // class androidx/compose/ui/Modifier
+       173: iconst_0
+       174: aload_2
+       175: ldc           #58                 // int 640808031
+       177: ldc           #60                 // String CC(remember):JetchatIcon.kt#9igjgp
+       179: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       182: aload_2
+       183: astore        9
+       185: iload         5
+       187: bipush        14
+       189: iand
+       190: iconst_4
+       191: if_icmpne     198
+       194: iconst_1
+       195: goto          199
+       198: iconst_0
+       199: istore        10
+       201: iconst_0
+       202: istore        11
+       204: aload         9
+       206: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+       211: astore        12
+       213: iconst_0
+       214: istore        13
+       216: iload         10
+       218: ifne          232
+       221: aload         12
+       223: getstatic     #71                 // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+       226: invokevirtual #76                 // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+       229: if_acmpne     269
+       232: istore        36
+       234: astore        35
+       236: iconst_0
+       237: istore        14
+       239: aload_0
+       240: invokedynamic #96,  0             // InvokeDynamic #0:invoke:(Ljava/lang/String;)Lkotlin/jvm/functions/Function1;
+       245: astore        37
+       247: aload         35
+       249: iload         36
+       251: aload         37
+       253: astore        15
+       255: aload         9
+       257: aload         15
+       259: invokeinterface #100,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+       264: aload         15
+       266: goto          271
+       269: aload         12
+       271: nop
+       272: nop
+       273: checkcast     #102                // class kotlin/jvm/functions/Function1
+       276: astore        8
+       278: aload_2
+       279: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       282: aload         8
+       284: iconst_1
+       285: aconst_null
+       286: invokestatic  #112                // Method androidx/compose/ui/semantics/SemanticsModifierKt.semantics$default:(Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function1;ILjava/lang/Object;)Landroidx/compose/ui/Modifier;
+       289: astore        7
+       291: aload_2
+       292: invokeinterface #116,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+       297: aload         7
+       299: goto          322
+       302: aload_2
+       303: ldc           #117                // int -1609675886
+       305: invokeinterface #55,  2           // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+       310: aload_2
+       311: invokeinterface #116,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+       316: getstatic     #40                 // Field androidx/compose/ui/Modifier.Companion:Landroidx/compose/ui/Modifier$Companion;
+       319: checkcast     #36                 // class androidx/compose/ui/Modifier
+       322: astore        6
+       324: aload_1
+       325: aload         6
+       327: invokeinterface #121,  2          // InterfaceMethod androidx/compose/ui/Modifier.then:(Landroidx/compose/ui/Modifier;)Landroidx/compose/ui/Modifier;
+       332: astore        7
+       334: aload_2
+       335: astore        10
+       337: iconst_0
+       338: istore        11
+       340: iconst_0
+       341: istore        12
+       343: aload         10
+       345: ldc           #122                // int 1042775818
+       347: ldc           #124                // String CC(Box)N(modifier,contentAlignment,propagateMinConstraints,content)71@3424L131:Box.kt#2w3rfo
+       349: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       352: getstatic     #129                // Field androidx/compose/ui/Alignment.Companion:Landroidx/compose/ui/Alignment$Companion;
+       355: invokevirtual #135                // Method androidx/compose/ui/Alignment$Companion.getTopStart:()Landroidx/compose/ui/Alignment;
+       358: astore        8
+       360: iconst_0
+       361: istore        9
+       363: aload         8
+       365: iload         9
+       367: invokestatic  #141                // Method androidx/compose/foundation/layout/BoxKt.maybeCachedBoxMeasurePolicy:(Landroidx/compose/ui/Alignment;Z)Landroidx/compose/ui/layout/MeasurePolicy;
+       370: astore        13
+       372: aload         7
+       374: astore        14
+       376: aload         13
+       378: astore        15
+       380: aload         10
+       382: astore        16
+       384: bipush        112
+       386: iload         11
+       388: iconst_3
+       389: ishl
+       390: iand
+       391: istore        17
+       393: nop
+       394: iconst_0
+       395: istore        18
+       397: aload         16
+       399: ldc           #142                // int -1159599143
+       401: ldc           #144                // String CC(Layout)P(!1,2)81@3355L27,84@3521L416:Layout.kt#80mrfh
+       403: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       406: aload         16
+       408: iconst_0
+       409: invokestatic  #150                // Method androidx/compose/runtime/ComposablesKt.getCurrentCompositeKeyHashCode:(Landroidx/compose/runtime/Composer;I)J
+       412: invokestatic  #156                // Method java/lang/Long.hashCode:(J)I
+       415: istore        19
+       417: aload         16
+       419: invokeinterface #160,  1          // InterfaceMethod androidx/compose/runtime/Composer.getCurrentCompositionLocalMap:()Landroidx/compose/runtime/CompositionLocalMap;
+       424: astore        20
+       426: aload         16
+       428: aload         14
+       430: invokestatic  #166                // Method androidx/compose/ui/ComposedModifierKt.materializeModifier:(Landroidx/compose/runtime/Composer;Landroidx/compose/ui/Modifier;)Landroidx/compose/ui/Modifier;
+       433: astore        21
+       435: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       438: invokevirtual #177                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getConstructor:()Lkotlin/jvm/functions/Function0;
+       441: astore        22
+       443: aload         16
+       445: astore        23
+       447: bipush        6
+       449: sipush        896
+       452: iload         17
+       454: bipush        6
+       456: ishl
+       457: iand
+       458: ior
+       459: istore        24
+       461: nop
+       462: iconst_0
+       463: istore        25
+       465: aload         23
+       467: ldc           #178                // int -553112988
+       469: ldc           #180                // String CC(ReusableComposeNode)N(factory,update,content)399@15590L9:Composables.kt#9igjgp
+       471: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       474: aload         23
+       476: invokeinterface #184,  1          // InterfaceMethod androidx/compose/runtime/Composer.getApplier:()Landroidx/compose/runtime/Applier;
+       481: instanceof    #186                // class androidx/compose/runtime/Applier
+       484: ifne          490
+       487: invokestatic  #189                // Method androidx/compose/runtime/ComposablesKt.invalidApplier:()V
+       490: aload         23
+       492: invokeinterface #192,  1          // InterfaceMethod androidx/compose/runtime/Composer.startReusableNode:()V
+       497: aload         23
+       499: invokeinterface #195,  1          // InterfaceMethod androidx/compose/runtime/Composer.getInserting:()Z
+       504: ifeq          519
+       507: aload         23
+       509: aload         22
+       511: invokeinterface #199,  2          // InterfaceMethod androidx/compose/runtime/Composer.createNode:(Lkotlin/jvm/functions/Function0;)V
+       516: goto          526
+       519: aload         23
+       521: invokeinterface #202,  1          // InterfaceMethod androidx/compose/runtime/Composer.useNode:()V
+       526: aload         23
+       528: invokestatic  #208                // Method androidx/compose/runtime/Updater."constructor-impl":(Landroidx/compose/runtime/Composer;)Landroidx/compose/runtime/Composer;
+       531: astore        26
+       533: iconst_0
+       534: istore        27
+       536: aload         26
+       538: aload         15
+       540: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       543: invokevirtual #212                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getSetMeasurePolicy:()Lkotlin/jvm/functions/Function2;
+       546: invokestatic  #216                // Method androidx/compose/runtime/Updater."set-impl":(Landroidx/compose/runtime/Composer;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)V
+       549: aload         26
+       551: aload         20
+       553: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       556: invokevirtual #219                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getSetResolvedCompositionLocals:()Lkotlin/jvm/functions/Function2;
+       559: invokestatic  #216                // Method androidx/compose/runtime/Updater."set-impl":(Landroidx/compose/runtime/Composer;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)V
+       562: aload         26
+       564: iload         19
+       566: invokestatic  #225                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+       569: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       572: invokevirtual #228                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getSetCompositeKeyHash:()Lkotlin/jvm/functions/Function2;
+       575: invokestatic  #231                // Method androidx/compose/runtime/Updater."init-impl":(Landroidx/compose/runtime/Composer;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)V
+       578: aload         26
+       580: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       583: invokevirtual #235                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getApplyOnDeactivatedNodeAssertion:()Lkotlin/jvm/functions/Function1;
+       586: invokestatic  #239                // Method androidx/compose/runtime/Updater."reconcile-impl":(Landroidx/compose/runtime/Composer;Lkotlin/jvm/functions/Function1;)V
+       589: aload         26
+       591: aload         21
+       593: getstatic     #171                // Field androidx/compose/ui/node/ComposeUiNode.Companion:Landroidx/compose/ui/node/ComposeUiNode$Companion;
+       596: invokevirtual #242                // Method androidx/compose/ui/node/ComposeUiNode$Companion.getSetModifier:()Lkotlin/jvm/functions/Function2;
+       599: invokestatic  #216                // Method androidx/compose/runtime/Updater."set-impl":(Landroidx/compose/runtime/Composer;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)V
+       602: nop
+       603: nop
+       604: aload         23
+       606: bipush        14
+       608: iload         24
+       610: bipush        6
+       612: ishr
+       613: iand
+       614: istore        28
+       616: astore        29
+       618: iconst_0
+       619: istore        30
+       621: aload         29
+       623: ldc           #243                // int 1833054614
+       625: ldc           #245                // String C72@3469L9:Box.kt#2w3rfo
+       627: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       630: getstatic     #251                // Field androidx/compose/foundation/layout/BoxScopeInstance.INSTANCE:Landroidx/compose/foundation/layout/BoxScopeInstance;
+       633: aload         29
+       635: bipush        6
+       637: bipush        112
+       639: iload         11
+       641: bipush        6
+       643: ishr
+       644: iand
+       645: ior
+       646: istore        31
+       648: astore        32
+       650: checkcast     #253                // class androidx/compose/foundation/layout/BoxScope
+       653: astore        33
+       655: iconst_0
+       656: istore        34
+       658: aload         32
+       660: ldc           #254                // int -1391340470
+       662: ldc_w         #256                // String C42@1543L48,44@1665L11,41@1515L189,47@1741L49,49@1864L11,46@1713L181:JetchatIcon.kt#o9oqao
+       665: invokestatic  #64                 // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+       668: getstatic     #262                // Field com/example/compose/jetchat/R$drawable.ic_jetchat_back:I
+       671: aload         32
+       673: iconst_0
+       674: invokestatic  #268                // Method androidx/compose/ui/res/PainterResources_androidKt.painterResource:(ILandroidx/compose/runtime/Composer;I)Landroidx/compose/ui/graphics/painter/Painter;
+       677: aconst_null
+       678: aconst_null
+       679: getstatic     #273                // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+       682: aload         32
+       684: getstatic     #276                // Field androidx/compose/material3/MaterialTheme.$stable:I
+       687: invokevirtual #280                // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+       690: invokevirtual #286                // Method androidx/compose/material3/ColorScheme."getPrimaryContainer-0d7_KjU":()J
+       693: aload         32
+       695: bipush        48
+       697: getstatic     #289                // Field androidx/compose/ui/graphics/painter/Painter.$stable:I
+       700: ior
+       701: iconst_4
+       702: invokestatic  #295                // Method androidx/compose/material3/IconKt."Icon-ww6aTOc":(Landroidx/compose/ui/graphics/painter/Painter;Ljava/lang/String;Landroidx/compose/ui/Modifier;JLandroidx/compose/runtime/Composer;II)V
+       705: getstatic     #298                // Field com/example/compose/jetchat/R$drawable.ic_jetchat_front:I
+       708: aload         32
+       710: iconst_0
+       711: invokestatic  #268                // Method androidx/compose/ui/res/PainterResources_androidKt.painterResource:(ILandroidx/compose/runtime/Composer;I)Landroidx/compose/ui/graphics/painter/Painter;
+       714: aconst_null
+       715: aconst_null
+       716: getstatic     #273                // Field androidx/compose/material3/MaterialTheme.INSTANCE:Landroidx/compose/material3/MaterialTheme;
+       719: aload         32
+       721: getstatic     #276                // Field androidx/compose/material3/MaterialTheme.$stable:I
+       724: invokevirtual #280                // Method androidx/compose/material3/MaterialTheme.getColorScheme:(Landroidx/compose/runtime/Composer;I)Landroidx/compose/material3/ColorScheme;
+       727: invokevirtual #301                // Method androidx/compose/material3/ColorScheme."getPrimary-0d7_KjU":()J
+       730: aload         32
+       732: bipush        48
+       734: getstatic     #289                // Field androidx/compose/ui/graphics/painter/Painter.$stable:I
+       737: ior
+       738: iconst_4
+       739: invokestatic  #295                // Method androidx/compose/material3/IconKt."Icon-ww6aTOc":(Landroidx/compose/ui/graphics/painter/Painter;Ljava/lang/String;Landroidx/compose/ui/Modifier;JLandroidx/compose/runtime/Composer;II)V
+       742: aload         32
+       744: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       747: nop
+       748: aload         29
+       750: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       753: aload         23
+       755: invokeinterface #304,  1          // InterfaceMethod androidx/compose/runtime/Composer.endNode:()V
+       760: aload         23
+       762: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       765: nop
+       766: aload         16
+       768: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       771: nop
+       772: aload         10
+       774: invokestatic  #106                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+       777: nop
+       778: invokestatic  #44                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+       781: ifeq          796
+       784: invokestatic  #307                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+       787: goto          796
+       790: aload_2
+       791: invokeinterface #310,  1          // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+       796: aload_2
+       797: invokeinterface #314,  1          // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+       802: dup
+       803: ifnull        824
+       806: aload_0
+       807: aload_1
+       808: iload_3
+       809: iload         4
+       811: invokedynamic #326,  0            // InvokeDynamic #1:invoke:(Ljava/lang/String;Landroidx/compose/ui/Modifier;II)Lkotlin/jvm/functions/Function2;
+       816: invokeinterface #332,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       821: goto          825
+       824: pop
+       825: return
+
+  private static final kotlin.Unit JetchatIcon$lambda$0$0(java.lang.String, androidx.compose.ui.semantics.SemanticsPropertyReceiver);
+    Code:
+         0: aload_1
+         1: ldc_w         #393                // String $this$semantics
+         4: invokestatic  #399                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         7: aload_1
+         8: aload_0
+         9: invokestatic  #405                // Method androidx/compose/ui/semantics/SemanticsPropertiesKt.setContentDescription:(Landroidx/compose/ui/semantics/SemanticsPropertyReceiver;Ljava/lang/String;)V
+        12: aload_1
+        13: getstatic     #410                // Field androidx/compose/ui/semantics/Role.Companion:Landroidx/compose/ui/semantics/Role$Companion;
+        16: invokevirtual #416                // Method androidx/compose/ui/semantics/Role$Companion."getImage-o7Vup1c":()I
+        19: invokestatic  #420                // Method androidx/compose/ui/semantics/SemanticsPropertiesKt."setRole-kuIjeqM":(Landroidx/compose/ui/semantics/SemanticsPropertyReceiver;I)V
+        22: getstatic     #425                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        25: areturn
+
+  private static final kotlin.Unit JetchatIcon$lambda$2(java.lang.String, androidx.compose.ui.Modifier, int, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload         4
+         4: iload_2
+         5: iconst_1
+         6: ior
+         7: invokestatic  #433                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        10: iload_3
+        11: invokestatic  #435                // Method JetchatIcon:(Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+        14: getstatic     #425                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        17: areturn
+}

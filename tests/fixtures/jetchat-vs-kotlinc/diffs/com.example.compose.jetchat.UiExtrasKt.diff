@@ -1,0 +1,202 @@
+--- ./gradle/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-21 07:24:33
++++ ./skotch/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-21 07:24:33
+@@ -1,162 +1,55 @@
+-Compiled from "UiExtras.kt"
++Compiled from "com/example/compose/jetchat/UiExtras.kt"
+ public final class com.example.compose.jetchat.UiExtrasKt {
+-  public static final void FunctionalityNotAvailablePopup(kotlin.jvm.functions.Function0<kotlin.Unit>, androidx.compose.runtime.Composer, int);
++  public static final <T> void FunctionalityNotAvailablePopup(kotlin.jvm.functions.Function0, androidx.compose.runtime.Composer, int);
+     Code:
+-         0: aload_0
+-         1: ldc           #15                 // String onDismiss
+-         3: invokestatic  #21                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         6: aload_1
+-         7: ldc           #22                 // int -147944730
+-         9: invokeinterface #28,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+-        14: astore_1
+-        15: aload_1
+-        16: ldc           #30                 // String C(FunctionalityNotAvailablePopup)N(onDismiss)34@1215L108,26@952L378:UiExtras.kt#ddwtno
+-        18: invokestatic  #36                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-        21: iload_2
+-        22: istore_3
+-        23: iload_2
+-        24: bipush        6
+-        26: iand
+-        27: ifne          48
+-        30: iload_3
+-        31: aload_1
+-        32: aload_0
+-        33: invokeinterface #40,  2           // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-        38: ifeq          45
+-        41: iconst_4
+-        42: goto          46
+-        45: iconst_2
+-        46: ior
+-        47: istore_3
+-        48: aload_1
+-        49: iload_3
+-        50: iconst_3
+-        51: iand
+-        52: iconst_2
+-        53: if_icmpeq     60
+-        56: iconst_1
+-        57: goto          61
+-        60: iconst_0
+-        61: iload_3
+-        62: iconst_1
+-        63: iand
+-        64: invokeinterface #44,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+-        69: ifeq          150
+-        72: invokestatic  #48                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-        75: ifeq          87
+-        78: ldc           #22                 // int -147944730
+-        80: iload_3
+-        81: iconst_m1
+-        82: ldc           #50                 // String com.example.compose.jetchat.FunctionalityNotAvailablePopup (UiExtras.kt:25)
+-        84: invokestatic  #54                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+-        87: aload_0
+-        88: ldc           #55                 // int 2032952622
+-        90: iconst_1
+-        91: aload_0
+-        92: invokedynamic #75,  0             // InvokeDynamic #0:invoke:(Lkotlin/jvm/functions/Function0;)Lkotlin/jvm/functions/Function2;
+-        97: aload_1
+-        98: bipush        54
+-       100: invokestatic  #81                 // Method androidx/compose/runtime/internal/ComposableLambdaKt.rememberComposableLambda:(IZLjava/lang/Object;Landroidx/compose/runtime/Composer;I)Landroidx/compose/runtime/internal/ComposableLambda;
+-       103: checkcast     #83                 // class kotlin/jvm/functions/Function2
+-       106: aconst_null
+-       107: aconst_null
+-       108: aconst_null
+-       109: aconst_null
+-       110: getstatic     #89                 // Field com/example/compose/jetchat/ComposableSingletons$UiExtrasKt.INSTANCE:Lcom/example/compose/jetchat/ComposableSingletons$UiExtrasKt;
+-       113: invokevirtual #93                 // Method com/example/compose/jetchat/ComposableSingletons$UiExtrasKt."getLambda$-124570445$app":()Lkotlin/jvm/functions/Function2;
+-       116: aconst_null
+-       117: lconst_0
+-       118: lconst_0
+-       119: lconst_0
+-       120: lconst_0
+-       121: fconst_0
+-       122: aconst_null
+-       123: aload_1
+-       124: ldc           #94                 // int 1572912
+-       126: bipush        14
+-       128: iload_3
+-       129: iand
+-       130: ior
+-       131: iconst_0
+-       132: sipush        16316
+-       135: invokestatic  #100                // Method androidx/compose/material3/AndroidAlertDialog_androidKt."AlertDialog-Oix01E0":(Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Landroidx/compose/ui/graphics/Shape;JJJJFLandroidx/compose/ui/window/DialogProperties;Landroidx/compose/runtime/Composer;III)V
+-       138: invokestatic  #48                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-       141: ifeq          156
+-       144: invokestatic  #104                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+-       147: goto          156
+-       150: aload_1
+-       151: invokeinterface #107,  1          // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+-       156: aload_1
+-       157: invokeinterface #111,  1          // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+-       162: dup
+-       163: ifnull        181
+-       166: aload_0
+-       167: iload_2
+-       168: invokedynamic #119,  0            // InvokeDynamic #1:invoke:(Lkotlin/jvm/functions/Function0;I)Lkotlin/jvm/functions/Function2;
+-       173: invokeinterface #125,  2          // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+-       178: goto          182
+-       181: pop
+-       182: return
+-
+-  private static final kotlin.Unit FunctionalityNotAvailablePopup$lambda$0(kotlin.jvm.functions.Function0, androidx.compose.runtime.Composer, int);
+-    Code:
+          0: aload_1
+-         1: ldc           #135                // String C35@1229L84:UiExtras.kt#ddwtno
+-         3: invokestatic  #36                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-         6: aload_1
+-         7: iload_2
+-         8: iconst_3
+-         9: iand
+-        10: iconst_2
+-        11: if_icmpeq     18
++         1: ldc           #33                 // int -644209954
++         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
++         8: astore_1
++         9: aload_1
++        10: iload_2
++        11: ifeq          18
+         14: iconst_1
+         15: goto          19
+         18: iconst_0
+         19: iload_2
+         20: iconst_1
+         21: iand
+-        22: invokeinterface #44,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+-        27: ifeq          81
+-        30: invokestatic  #48                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-        33: ifeq          45
+-        36: ldc           #55                 // int 2032952622
+-        38: iload_2
+-        39: iconst_m1
+-        40: ldc           #137                // String com.example.compose.jetchat.FunctionalityNotAvailablePopup.<anonymous> (UiExtras.kt:35)
+-        42: invokestatic  #54                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+-        45: aload_0
+-        46: aconst_null
+-        47: iconst_0
+-        48: aconst_null
+-        49: aconst_null
+-        50: aconst_null
+-        51: aconst_null
+-        52: aconst_null
+-        53: aconst_null
+-        54: getstatic     #89                 // Field com/example/compose/jetchat/ComposableSingletons$UiExtrasKt.INSTANCE:Lcom/example/compose/jetchat/ComposableSingletons$UiExtrasKt;
+-        57: invokevirtual #141                // Method com/example/compose/jetchat/ComposableSingletons$UiExtrasKt.getLambda$2058599467$app:()Lkotlin/jvm/functions/Function3;
+-        60: aload_1
+-        61: ldc           #142                // int 805306368
+-        63: sipush        510
+-        66: invokestatic  #148                // Method androidx/compose/material3/ButtonKt.TextButton:(Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;ZLandroidx/compose/ui/graphics/Shape;Landroidx/compose/material3/ButtonColors;Landroidx/compose/material3/ButtonElevation;Landroidx/compose/foundation/BorderStroke;Landroidx/compose/foundation/layout/PaddingValues;Landroidx/compose/foundation/interaction/MutableInteractionSource;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
+-        69: invokestatic  #48                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-        72: ifeq          87
+-        75: invokestatic  #104                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+-        78: goto          87
+-        81: aload_1
+-        82: invokeinterface #107,  1          // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+-        87: getstatic     #153                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-        90: areturn
++        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
++        27: ifne          39
++        30: aload_1
++        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
++        36: goto          56
++        39: new           #35                 // class com/example/compose/jetchat/UiExtrasKt$Lambda$23
++        42: dup
++        43: invokespecial #38                 // Method com/example/compose/jetchat/UiExtrasKt$Lambda$23."<init>":()V
++        46: pop
++        47: new           #40                 // class com/example/compose/jetchat/UiExtrasKt$Lambda$24
++        50: dup
++        51: aload_0
++        52: invokespecial #43                 // Method com/example/compose/jetchat/UiExtrasKt$Lambda$24."<init>":(Lkotlin/jvm/functions/Function0;)V
++        55: pop
++        56: aload_1
++        57: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
++        62: dup
++        63: ifnull        81
++        66: aload_0
++        67: iload_2
++        68: invokedynamic #63,  0             // InvokeDynamic #0:invoke:(Lkotlin/jvm/functions/Function0;I)Lkotlin/jvm/functions/Function2;
++        73: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
++        78: goto          82
++        81: pop
++        82: return
+ 
+-  private static final kotlin.Unit FunctionalityNotAvailablePopup$lambda$1(kotlin.jvm.functions.Function0, int, androidx.compose.runtime.Composer, int);
++  private static final kotlin.Unit FunctionalityNotAvailablePopup$lambda$0(kotlin.jvm.functions.Function0, int, androidx.compose.runtime.Composer, int);
+     Code:
+          0: aload_0
+          1: aload_2
+          2: iload_1
+          3: iconst_1
+          4: ior
+-         5: invokestatic  #160                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+-         8: invokestatic  #162                // Method FunctionalityNotAvailablePopup:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+-        11: getstatic     #153                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
++         5: invokestatic  #78                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
++         8: invokestatic  #80                 // Method FunctionalityNotAvailablePopup:(Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
++        11: getstatic     #86                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+         14: areturn
+ }

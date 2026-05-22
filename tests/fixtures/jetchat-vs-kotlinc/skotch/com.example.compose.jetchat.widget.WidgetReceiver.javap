@@ -1,0 +1,22 @@
+Compiled from "com/example/compose/jetchat/widget/WidgetReceiver.kt"
+public final class com.example.compose.jetchat.widget.WidgetReceiver extends androidx.glance.appwidget.GlanceAppWidgetReceiver {
+  public androidx.glance.appwidget.GlanceAppWidget glanceAppWidget;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.widget.WidgetReceiver();
+    Code:
+         0: aload_0
+         1: invokespecial #15                 // Method androidx/glance/appwidget/GlanceAppWidgetReceiver."<init>":()V
+         4: return
+
+  public androidx.glance.appwidget.GlanceAppWidget getGlanceAppWidget();
+    Code:
+         0: aload_0
+         1: getfield      #19                 // Field glanceAppWidget:Landroidx/glance/appwidget/GlanceAppWidget;
+         4: astore_1
+         5: new           #21                 // class com/example/compose/jetchat/widget/JetChatWidget
+         8: dup
+         9: invokespecial #22                 // Method com/example/compose/jetchat/widget/JetChatWidget."<init>":()V
+        12: areturn
+}

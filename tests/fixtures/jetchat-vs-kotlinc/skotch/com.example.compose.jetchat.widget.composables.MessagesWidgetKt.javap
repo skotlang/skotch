@@ -1,0 +1,218 @@
+Compiled from "com/example/compose/jetchat/widget/composables/MessagesWidget.kt"
+public final class com.example.compose.jetchat.widget.composables.MessagesWidgetKt {
+  public static final <T> void MessagesWidget(java.util.List, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: ldc           #33                 // int -503290507
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_1
+         9: aload_1
+        10: iload_2
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_2
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          36
+        30: aload_1
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: aload_1
+        37: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        42: dup
+        43: ifnull        61
+        46: aload_0
+        47: iload_2
+        48: invokedynamic #53,  0             // InvokeDynamic #0:invoke:(Ljava/util/List;I)Lkotlin/jvm/functions/Function2;
+        53: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        58: goto          62
+        61: pop
+        62: return
+
+  private static final kotlin.Unit MessagesWidget$lambda$0(java.util.List, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_2
+         2: iload_1
+         3: iconst_1
+         4: ior
+         5: invokestatic  #68                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         8: invokestatic  #70                 // Method MessagesWidget:(Ljava/util/List;Landroidx/compose/runtime/Composer;I)V
+        11: getstatic     #76                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        14: areturn
+
+  public static final void MessageItem(com.example.compose.jetchat.conversation.Message, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: ldc           #79                 // int 1052538875
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_1
+         9: aload_1
+        10: iload_2
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_2
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_1
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          59
+        39: aconst_null
+        40: invokestatic  #85                 // Method androidx/glance/action/StartActivityActionKt.actionStartActivity:(Landroidx/glance/action/ActionParameters;)Landroidx/glance/action/Action;
+        43: astore_3
+        44: aconst_null
+        45: invokestatic  #85                 // Method androidx/glance/action/StartActivityActionKt.actionStartActivity:(Landroidx/glance/action/ActionParameters;)Landroidx/glance/action/Action;
+        48: astore        4
+        50: new           #87                 // class com/example/compose/jetchat/widget/composables/MessagesWidgetKt$Lambda$24
+        53: dup
+        54: aload_0
+        55: invokespecial #91                 // Method com/example/compose/jetchat/widget/composables/MessagesWidgetKt$Lambda$24."<init>":(Lcom/example/compose/jetchat/conversation/Message;)V
+        58: pop
+        59: aload_1
+        60: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        84
+        69: aload_0
+        70: iload_2
+        71: invokedynamic #99,  0             // InvokeDynamic #1:invoke:(Lcom/example/compose/jetchat/conversation/Message;I)Lkotlin/jvm/functions/Function2;
+        76: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        81: goto          85
+        84: pop
+        85: return
+
+  private static final kotlin.Unit MessageItem$lambda$0(com.example.compose.jetchat.conversation.Message, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_2
+         2: iload_1
+         3: iconst_1
+         4: ior
+         5: invokestatic  #68                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         8: invokestatic  #103                // Method MessageItem:(Lcom/example/compose/jetchat/conversation/Message;Landroidx/compose/runtime/Composer;I)V
+        11: getstatic     #76                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        14: areturn
+
+  public static final void MessageItemPreview(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #106                // int -2019629011
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: iload_1
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_1
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_0
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          59
+        39: new           #101                // class com/example/compose/jetchat/conversation/Message
+        42: dup
+        43: ldc           #108                // String John
+        45: ldc           #110                // String This is a preview of the message Item
+        47: ldc           #112                // String 8:02PM
+        49: invokespecial #115                // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+        52: astore_2
+        53: aload_2
+        54: aload_0
+        55: iconst_0
+        56: invokestatic  #103                // Method MessageItem:(Lcom/example/compose/jetchat/conversation/Message;Landroidx/compose/runtime/Composer;I)V
+        59: aload_0
+        60: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        65: dup
+        66: ifnull        83
+        69: iload_1
+        70: invokedynamic #123,  0            // InvokeDynamic #2:invoke:(I)Lkotlin/jvm/functions/Function2;
+        75: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+        80: goto          84
+        83: pop
+        84: return
+
+  private static final kotlin.Unit MessageItemPreview$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #68                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #127                // Method MessageItemPreview:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #76                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  public static final void WidgetPreview(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #129                // int -1563054185
+         3: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: iload_1
+        11: ifeq          18
+        14: iconst_1
+        15: goto          19
+        18: iconst_0
+        19: iload_1
+        20: iconst_1
+        21: iand
+        22: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        27: ifne          39
+        30: aload_0
+        31: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        36: goto          80
+        39: new           #101                // class com/example/compose/jetchat/conversation/Message
+        42: dup
+        43: ldc           #108                // String John
+        45: ldc           #110                // String This is a preview of the message Item
+        47: ldc           #112                // String 8:02PM
+        49: invokespecial #115                // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+        52: astore_2
+        53: iconst_1
+        54: istore_3
+        55: iload_3
+        56: anewarray     #4                  // class java/lang/Object
+        59: astore        4
+        61: aload         4
+        63: iconst_0
+        64: aload_2
+        65: aastore
+        66: aload         4
+        68: invokestatic  #135                // Method kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;
+        71: astore        5
+        73: aload         5
+        75: aload_0
+        76: iconst_0
+        77: invokestatic  #70                 // Method MessagesWidget:(Ljava/util/List;Landroidx/compose/runtime/Composer;I)V
+        80: aload_0
+        81: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        86: dup
+        87: ifnull        104
+        90: iload_1
+        91: invokedynamic #140,  0            // InvokeDynamic #3:invoke:(I)Lkotlin/jvm/functions/Function2;
+        96: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       101: goto          105
+       104: pop
+       105: return
+
+  private static final kotlin.Unit WidgetPreview$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #68                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #142                // Method WidgetPreview:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #76                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+}

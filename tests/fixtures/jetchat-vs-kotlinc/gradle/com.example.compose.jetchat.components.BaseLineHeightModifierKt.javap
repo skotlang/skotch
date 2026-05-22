@@ -1,0 +1,17 @@
+Compiled from "BaseLineHeightModifier.kt"
+public final class com.example.compose.jetchat.components.BaseLineHeightModifierKt {
+  public static final androidx.compose.ui.Modifier baselineHeight-3ABfNKs(androidx.compose.ui.Modifier, float);
+    Code:
+         0: aload_0
+         1: ldc           #9                  // String $this$baselineHeight
+         3: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_0
+         7: new           #17                 // class com/example/compose/jetchat/components/BaselineHeightModifier
+        10: dup
+        11: fload_1
+        12: aconst_null
+        13: invokespecial #21                 // Method com/example/compose/jetchat/components/BaselineHeightModifier."<init>":(FLkotlin/jvm/internal/DefaultConstructorMarker;)V
+        16: checkcast     #23                 // class androidx/compose/ui/Modifier
+        19: invokeinterface #27,  2           // InterfaceMethod androidx/compose/ui/Modifier.then:(Landroidx/compose/ui/Modifier;)Landroidx/compose/ui/Modifier;
+        24: areturn
+}

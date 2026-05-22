@@ -1,0 +1,45 @@
+Compiled from "com/example/compose/jetchat/components/JetchatIcon.kt"
+public final class com.example.compose.jetchat.components.JetchatIconKt {
+  public static final void JetchatIcon(java.lang.String, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: ldc           #9                  // String modifier
+         3: invokestatic  #15                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_0
+         7: ifnull        32
+        10: new           #17                 // class com/example/compose/jetchat/components/JetchatIconKt$Lambda$23
+        13: dup
+        14: invokespecial #21                 // Method com/example/compose/jetchat/components/JetchatIconKt$Lambda$23."<init>":()V
+        17: pop
+        18: new           #23                 // class com/example/compose/jetchat/components/JetchatIconKt$Lambda$24
+        21: dup
+        22: invokespecial #24                 // Method com/example/compose/jetchat/components/JetchatIconKt$Lambda$24."<init>":()V
+        25: pop
+        26: aconst_null
+        27: astore        4
+        29: goto          35
+        32: aconst_null
+        33: astore        4
+        35: aload_1
+        36: aload         4
+        38: invokeinterface #30,  2           // InterfaceMethod androidx/compose/ui/Modifier.then:(Landroidx/compose/ui/Modifier;)Landroidx/compose/ui/Modifier;
+        43: pop
+        44: new           #32                 // class com/example/compose/jetchat/components/JetchatIconKt$Lambda$25
+        47: dup
+        48: invokespecial #33                 // Method com/example/compose/jetchat/components/JetchatIconKt$Lambda$25."<init>":()V
+        51: pop
+        52: return
+
+  private static final kotlin.Unit JetchatIcon$lambda$0(java.lang.String, androidx.compose.ui.Modifier, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_3
+         3: iload_2
+         4: iconst_1
+         5: ior
+         6: invokestatic  #50                 // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         9: invokestatic  #52                 // Method JetchatIcon:(Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)V
+        12: getstatic     #58                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        15: areturn
+}

@@ -2029,6 +2029,22 @@ fn compile_multi_module_classes(
         for subdir in &["src/main/kotlin", "src/main/java"] {
             src_files.extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
         }
+        // Include generated stub data-binding sources so the symbol
+        // table sees `ContentMainBinding` et al. before lowering.
+        if let Some(pkg) = module
+            .project
+            .namespace
+            .as_deref()
+            .or(module.project.application_id.as_deref())
+        {
+            let res_dir = module.dir.join("src/main/res");
+            let gen_dir = module.dir.join("build/generated/source/skotch-databinding");
+            if let Ok(generated) =
+                crate::databinding::generate_binding_stubs(&res_dir, pkg, &gen_dir)
+            {
+                src_files.extend(generated);
+            }
+        }
 
         if src_files.is_empty() {
             modules_info.push((module.dir.clone(), module.project.is_android));
@@ -2612,12 +2628,19 @@ fn generate_r_classes_from_aar(
             }
         }
     }
-    // Replace the 0x0 placeholder ids inside each `int[] styleable` array
-    // with the real ones from aapt2's R.txt. AppCompat's TintTypedArray
-    // reads `R$styleable.AppCompatTheme[i]` and resolves the resulting
-    // resource id; without this substitution it gets 0 and crashes.
-    if let Some(arrays) = styleable_arrays {
-        crate::r_class::apply_styleable_arrays(&mut table, arrays);
+    // Re-derive each `int[] styleable` array AND the per-attribute
+    // index constants from aapt2's link output. AARs ship R.txt with
+    // both indices and arrays in their original declaration order, but
+    // at app build time aapt2 sorts each `int[] styleable` ascending by
+    // attribute id AND emits the per-package R.java with matching
+    // sorted indices. The AAR's pre-compiled bytecode looks up
+    // `R$styleable.<S>_<attr>` dynamically at runtime, so the values
+    // in our generated `R$styleable.class` must match aapt2's sorted
+    // ordering — otherwise `TypedArray.getString(index)` returns the
+    // wrong attribute (e.g. `NavArgument_android_name=1` pointing at
+    // `android:defaultValue` instead of `android:name`).
+    if let (Some(ids), Some(arrays)) = (symbol_ids, styleable_arrays) {
+        crate::r_class::apply_styleable_arrays_for_lib(&mut table, ids, arrays);
     }
     Ok(crate::r_class::generate_r_class(&package, &table))
 }
@@ -2771,6 +2794,26 @@ fn build_multi_module(
     // `()V` return types, breaking `||` chains and any code that consumes
     // the result. The single-module pipeline does this in `build_project`
     // around line 117; the multi-module pipeline previously skipped it.
+    // Add android.jar to CLASSPATH first when any module is Android —
+    // mir-lower's `lookup_java_instance` consults classinfo's registry,
+    // which falls back to `load_jdk_class` (CLASSPATH-search). Without
+    // android.jar on CLASSPATH, calls like `LayoutInflater.inflate(...)`
+    // fall through every lookup path and skotch synthesises a stub
+    // `(I,ViewGroup,Z)V` descriptor — d8 then rejects the class with
+    // "Invalid stack map table: Unexpected pop from empty stack".
+    let android_jar_path = find_android_jar();
+    if modules.iter().any(|m| m.project.is_android) {
+        if let Some(ref jar) = android_jar_path {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            let mut cp = std::env::var("CLASSPATH").unwrap_or_default();
+            if !cp.is_empty() {
+                cp.push_str(sep);
+            }
+            cp.push_str(&jar.to_string_lossy());
+            std::env::set_var("CLASSPATH", &cp);
+            skotch_mir_lower::preload_registry_jars(std::slice::from_ref(jar));
+        }
+    }
     for module in &modules {
         if let Ok(dep_jars) = resolve_external_deps(&module.project, root_dir) {
             if !dep_jars.is_empty() {
@@ -2855,6 +2898,26 @@ fn build_multi_module(
                 for subdir in &["src/main/kotlin", "src/main/java"] {
                     src_files
                         .extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
+                }
+                // Generate stub data-binding sources from layout XMLs and
+                // add them to the compilation set. Without this, calls
+                // through `androidx.viewbinding.ViewBinding` (e.g.
+                // `AndroidViewBinding(MyBinding::inflate)`) crash with
+                // NoClassDefFoundError because skotch doesn't run aapt2's
+                // binding generator.
+                if let Some(pkg) = module
+                    .project
+                    .namespace
+                    .as_deref()
+                    .or(module.project.application_id.as_deref())
+                {
+                    let res_dir = module.dir.join("src/main/res");
+                    let gen_dir = module.dir.join("build/generated/source/skotch-databinding");
+                    if let Ok(generated) =
+                        crate::databinding::generate_binding_stubs(&res_dir, pkg, &gen_dir)
+                    {
+                        src_files.extend(generated);
+                    }
                 }
                 if src_files.is_empty() {
                     return (idx, Vec::new(), Vec::new(), false, String::new());
@@ -3062,7 +3125,7 @@ fn build_multi_module(
         );
     }
 
-    let mut project = app_project.unwrap_or_default();
+    let mut project = app_project.clone().unwrap_or_default();
     if let Some(t) = opts.target_override.clone() {
         project.target = Some(t);
     }
@@ -3404,6 +3467,44 @@ fn build_multi_module(
         }
         if r_class_count > 0 {
             eprintln!("  R classes generated for AARs: {}", r_class_count);
+        }
+        // Generate R classes for the APPLICATION'S OWN package. JetChat's
+        // Typography.kt references `R.font.montserrat_regular` and
+        // `R.array.com_google_android_gms_fonts_certs`, both via
+        // `com.example.compose.jetchat.R` — without this loop the class
+        // doesn't exist in the APK and the activity crashes at <clinit>
+        // with `NoClassDefFoundError`. We synthesize the same kind of
+        // resource table the AAR path uses, but seeded directly from
+        // aapt2's symbol_ids (which already covers the app's res/ tree).
+        if let (Some(linked_ref), Some(app_proj)) = (linked.as_ref(), app_project.as_ref()) {
+            let app_pkg = app_proj
+                .namespace
+                .as_deref()
+                .or(app_proj.application_id.as_deref())
+                .unwrap_or("");
+            if !app_pkg.is_empty() {
+                let mut table = crate::r_class::ResourceTable::default();
+                for ((res_type, name), id) in &linked_ref.symbol_ids {
+                    table.entries.entry(res_type.clone()).or_default().push(
+                        crate::r_class::ResourceEntry {
+                            name: name.clone(),
+                            id: *id,
+                        },
+                    );
+                }
+                crate::r_class::apply_styleable_arrays(&mut table, &linked_ref.styleable_arrays);
+                let app_r_classes = crate::r_class::generate_r_class(app_pkg, &table);
+                let app_r_count = app_r_classes.len();
+                for (name, bytes) in app_r_classes {
+                    all_classes.push((name, bytes));
+                }
+                if app_r_count > 0 {
+                    eprintln!(
+                        "  R classes generated for app package {}: {}",
+                        app_pkg, app_r_count
+                    );
+                }
+            }
         }
         // Convert .class files to DEX using Android SDK's d8 if available.
         // d8 produces optimized DEX from JVM bytecode — much better than

@@ -1,0 +1,739 @@
+--- ./gradle/com.example.compose.jetchat.NavActivity.javap	2026-05-21 07:24:30
++++ ./skotch/com.example.compose.jetchat.NavActivity.javap	2026-05-21 07:24:30
+@@ -1,639 +1,125 @@
+-Compiled from "NavActivity.kt"
++Compiled from "com/example/compose/jetchat/NavActivity.kt"
+ public final class com.example.compose.jetchat.NavActivity extends androidx.appcompat.app.AppCompatActivity {
+-  private final kotlin.Lazy viewModel$delegate;
++  public com.example.compose.jetchat.MainViewModel viewModel;
+ 
++  public boolean viewModel$initialized;
++
+   public static final int $stable;
+ 
+   public com.example.compose.jetchat.NavActivity();
+     Code:
+          0: aload_0
+-         1: invokespecial #8                  // Method androidx/appcompat/app/AppCompatActivity."<init>":()V
+-         4: aload_0
+-         5: aload_0
+-         6: checkcast     #10                 // class androidx/activity/ComponentActivity
+-         9: astore_1
+-        10: aconst_null
+-        11: astore_2
+-        12: aconst_null
+-        13: astore_3
+-        14: iconst_0
+-        15: istore        4
+-        17: new           #12                 // class com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$1
+-        20: dup
+-        21: aload_1
+-        22: invokespecial #15                 // Method com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$1."<init>":(Landroidx/activity/ComponentActivity;)V
+-        25: checkcast     #17                 // class kotlin/jvm/functions/Function0
+-        28: astore        5
+-        30: new           #19                 // class androidx/lifecycle/ViewModelLazy
+-        33: dup
+-        34: ldc           #21                 // class com/example/compose/jetchat/MainViewModel
+-        36: invokestatic  #27                 // Method kotlin/jvm/internal/Reflection.getOrCreateKotlinClass:(Ljava/lang/Class;)Lkotlin/reflect/KClass;
+-        39: new           #29                 // class com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$2
+-        42: dup
+-        43: aload_1
+-        44: invokespecial #30                 // Method com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$2."<init>":(Landroidx/activity/ComponentActivity;)V
+-        47: checkcast     #17                 // class kotlin/jvm/functions/Function0
+-        50: aload         5
+-        52: new           #32                 // class com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$3
+-        55: dup
+-        56: aload_2
+-        57: aload_1
+-        58: invokespecial #35                 // Method com/example/compose/jetchat/NavActivity$special$$inlined$viewModels$default$3."<init>":(Lkotlin/jvm/functions/Function0;Landroidx/activity/ComponentActivity;)V
+-        61: checkcast     #17                 // class kotlin/jvm/functions/Function0
+-        64: invokespecial #38                 // Method androidx/lifecycle/ViewModelLazy."<init>":(Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
+-        67: checkcast     #40                 // class kotlin/Lazy
+-        70: putfield      #44                 // Field viewModel$delegate:Lkotlin/Lazy;
+-        73: return
++         1: invokespecial #17                 // Method androidx/appcompat/app/AppCompatActivity."<init>":()V
++         4: return
+ 
+-  private final com.example.compose.jetchat.MainViewModel getViewModel();
++  public com.example.compose.jetchat.MainViewModel getViewModel();
+     Code:
+          0: aload_0
+-         1: getfield      #44                 // Field viewModel$delegate:Lkotlin/Lazy;
+-         4: astore_1
+-         5: aload_1
+-         6: invokeinterface #60,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+-        11: checkcast     #21                 // class com/example/compose/jetchat/MainViewModel
+-        14: areturn
+-
+-  protected void onCreate(android.os.Bundle);
+-    Code:
+-         0: aload_0
+-         1: checkcast     #10                 // class androidx/activity/ComponentActivity
+-         4: aconst_null
+-         5: aconst_null
+-         6: iconst_3
++         1: getfield      #21                 // Field viewModel$initialized:Z
++         4: ifne          35
+          7: aconst_null
+-         8: invokestatic  #69                 // Method androidx/activity/EdgeToEdge.enable$default:(Landroidx/activity/ComponentActivity;Landroidx/activity/SystemBarStyle;Landroidx/activity/SystemBarStyle;ILjava/lang/Object;)V
+-        11: aload_0
+-        12: aload_1
+-        13: invokespecial #71                 // Method androidx/appcompat/app/AppCompatActivity.onCreate:(Landroid/os/Bundle;)V
+-        16: aload_0
+-        17: invokevirtual #75                 // Method getWindow:()Landroid/view/Window;
+-        20: invokevirtual #81                 // Method android/view/Window.getDecorView:()Landroid/view/View;
+-        23: invokedynamic #98,  0             // InvokeDynamic #0:onApplyWindowInsets:()Landroidx/core/view/OnApplyWindowInsetsListener;
+-        28: invokestatic  #104                // Method androidx/core/view/ViewCompat.setOnApplyWindowInsetsListener:(Landroid/view/View;Landroidx/core/view/OnApplyWindowInsetsListener;)V
+-        31: aload_0
+-        32: new           #106                // class androidx/compose/ui/platform/ComposeView
+-        35: dup
+-        36: aload_0
+-        37: checkcast     #108                // class android/content/Context
+-        40: aconst_null
+-        41: iconst_0
+-        42: bipush        6
+-        44: aconst_null
+-        45: invokespecial #111                // Method androidx/compose/ui/platform/ComposeView."<init>":(Landroid/content/Context;Landroid/util/AttributeSet;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+-        48: astore_2
+-        49: aload_2
+-        50: astore_3
+-        51: astore        5
+-        53: iconst_0
+-        54: istore        4
+-        56: aload_3
+-        57: checkcast     #113                // class androidx/compose/ui/platform/AbstractComposeView
+-        60: iconst_0
+-        61: invokestatic  #119                // Method androidx/compose/foundation/layout/WindowInsets_androidKt.setConsumeWindowInsets:(Landroidx/compose/ui/platform/AbstractComposeView;Z)V
+-        64: aload_3
+-        65: ldc           #120                // int 1722743353
+-        67: iconst_1
+-        68: aload_0
+-        69: invokedynamic #133,  0            // InvokeDynamic #1:invoke:(Lcom/example/compose/jetchat/NavActivity;)Lkotlin/jvm/functions/Function2;
+-        74: invokestatic  #139                // Method androidx/compose/runtime/internal/ComposableLambdaKt.composableLambdaInstance:(IZLjava/lang/Object;)Landroidx/compose/runtime/internal/ComposableLambda;
+-        77: checkcast     #141                // class kotlin/jvm/functions/Function2
+-        80: invokevirtual #145                // Method androidx/compose/ui/platform/ComposeView.setContent:(Lkotlin/jvm/functions/Function2;)V
+-        83: nop
+-        84: aload         5
+-        86: aload_2
+-        87: checkcast     #147                // class android/view/View
+-        90: invokevirtual #151                // Method setContentView:(Landroid/view/View;)V
+-        93: return
++         8: aconst_null
++         9: invokestatic  #27                 // Method androidx/activity/ActivityViewModelLazyKt.viewModels:(Landroidx/activity/ComponentActivity;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
++        12: checkcast     #29                 // class kotlin/Lazy
++        15: invokeinterface #33,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
++        20: checkcast     #35                 // class com/example/compose/jetchat/MainViewModel
++        23: aload_0
++        24: swap
++        25: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++        28: iconst_1
++        29: istore_1
++        30: aload_0
++        31: iload_1
++        32: putfield      #21                 // Field viewModel$initialized:Z
++        35: aload_0
++        36: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++        39: areturn
+ 
+-  public boolean onSupportNavigateUp();
++  public void onCreate(android.os.Bundle);
+     Code:
+          0: aload_0
+-         1: invokespecial #162                // Method findNavController:()Landroidx/navigation/NavController;
+-         4: invokevirtual #167                // Method androidx/navigation/NavController.navigateUp:()Z
+-         7: ifne          17
++         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++         4: astore_2
++         5: aload_0
++         6: getfield      #21                 // Field viewModel$initialized:Z
++         9: istore_3
+         10: aload_0
+-        11: invokespecial #169                // Method androidx/appcompat/app/AppCompatActivity.onSupportNavigateUp:()Z
+-        14: ifeq          21
+-        17: iconst_1
+-        18: goto          22
+-        21: iconst_0
+-        22: ireturn
++        11: aload_1
++        12: invokespecial #44                 // Method androidx/appcompat/app/AppCompatActivity.onCreate:(Landroid/os/Bundle;)V
++        15: invokedynamic #63,  0             // InvokeDynamic #0:invoke:()Lkotlin/jvm/functions/Function2;
++        20: astore        4
++        22: new           #65                 // class androidx/compose/ui/platform/ComposeView
++        25: dup
++        26: aload_0
++        27: checkcast     #67                 // class android/content/Context
++        30: invokespecial #70                 // Method androidx/compose/ui/platform/ComposeView."<init>":(Landroid/content/Context;)V
++        33: astore        5
++        35: new           #72                 // class com/example/compose/jetchat/NavActivityKt$Lambda$24
++        38: dup
++        39: aload_2
++        40: invokespecial #75                 // Method com/example/compose/jetchat/NavActivityKt$Lambda$24."<init>":(Lcom/example/compose/jetchat/MainViewModel;)V
++        43: aload         5
++        45: invokevirtual #78                 // Method com/example/compose/jetchat/NavActivityKt$Lambda$24.invoke:(Ljava/lang/Object;)Ljava/lang/Object;
++        48: pop
++        49: aload_0
++        50: aload         5
++        52: invokevirtual #82                 // Method androidx/appcompat/app/AppCompatActivity.setContentView:(Landroid/view/View;)V
++        55: aload_0
++        56: aload_2
++        57: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++        60: aload_0
++        61: iload_3
++        62: putfield      #21                 // Field viewModel$initialized:Z
++        65: return
+ 
+-  private final androidx.navigation.NavController findNavController();
++  public boolean onSupportNavigateUp();
+     Code:
+          0: aload_0
+-         1: invokevirtual #173                // Method getSupportFragmentManager:()Landroidx/fragment/app/FragmentManager;
+-         4: getstatic     #178                // Field com/example/compose/jetchat/R$id.nav_host_fragment:I
+-         7: invokevirtual #184                // Method androidx/fragment/app/FragmentManager.findFragmentById:(I)Landroidx/fragment/app/Fragment;
+-        10: dup
+-        11: ldc           #186                // String null cannot be cast to non-null type androidx.navigation.fragment.NavHostFragment
+-        13: invokestatic  #192                // Method kotlin/jvm/internal/Intrinsics.checkNotNull:(Ljava/lang/Object;Ljava/lang/String;)V
+-        16: checkcast     #194                // class androidx/navigation/fragment/NavHostFragment
+-        19: astore_1
+-        20: aload_1
+-        21: invokevirtual #197                // Method androidx/navigation/fragment/NavHostFragment.getNavController:()Landroidx/navigation/NavController;
+-        24: areturn
+-
+-  private static final kotlin.Unit onCreate$lambda$1$0$5$0(com.example.compose.jetchat.NavActivity, kotlinx.coroutines.CoroutineScope, androidx.compose.material3.DrawerState, androidx.compose.runtime.MutableState, java.lang.String);
+-    Code:
+-         0: aload         4
+-         2: ldc           #203                // String it
+-         4: invokestatic  #206                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         7: iconst_1
+-         8: anewarray     #208                // class kotlin/Pair
+-        11: astore        6
+-        13: aload         6
+-        15: iconst_0
+-        16: ldc           #210                // String userId
+-        18: aload         4
+-        20: invokestatic  #216                // Method kotlin/TuplesKt.to:(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;
+-        23: aastore
+-        24: aload         6
+-        26: invokestatic  #222                // Method androidx/core/os/BundleKt.bundleOf:([Lkotlin/Pair;)Landroid/os/Bundle;
+-        29: astore        5
++         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++         4: astore_1
++         5: aload_0
++         6: getfield      #21                 // Field viewModel$initialized:Z
++         9: istore_2
++        10: aload_0
++        11: invokevirtual #90                 // Method findNavController:()Landroidx/navigation/NavController;
++        14: invokevirtual #95                 // Method androidx/navigation/NavController.navigateUp:()Z
++        17: istore_3
++        18: iconst_1
++        19: istore        4
++        21: iload_3
++        22: ifne          31
++        25: aload_0
++        26: invokespecial #97                 // Method androidx/appcompat/app/AppCompatActivity.onSupportNavigateUp:()Z
++        29: istore        4
+         31: aload_0
+-        32: invokespecial #162                // Method findNavController:()Landroidx/navigation/NavController;
+-        35: getstatic     #225                // Field com/example/compose/jetchat/R$id.nav_profile:I
+-        38: aload         5
+-        40: invokevirtual #229                // Method androidx/navigation/NavController.navigate:(ILandroid/os/Bundle;)V
+-        43: aload_1
+-        44: aconst_null
+-        45: aconst_null
+-        46: new           #231                // class com/example/compose/jetchat/NavActivity$onCreate$2$1$2$1$1
+-        49: dup
+-        50: aload_2
+-        51: aconst_null
+-        52: invokespecial #234                // Method com/example/compose/jetchat/NavActivity$onCreate$2$1$2$1$1."<init>":(Landroidx/compose/material3/DrawerState;Lkotlin/coroutines/Continuation;)V
+-        55: checkcast     #141                // class kotlin/jvm/functions/Function2
+-        58: iconst_3
+-        59: aconst_null
+-        60: invokestatic  #240                // Method kotlinx/coroutines/BuildersKt.launch$default:(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
+-        63: pop
+-        64: aload_3
+-        65: aload         4
+-        67: invokestatic  #244                // Method onCreate$lambda$1$0$3:(Landroidx/compose/runtime/MutableState;Ljava/lang/String;)V
+-        70: getstatic     #250                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-        73: areturn
++        32: aload_1
++        33: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++        36: aload_0
++        37: iload_2
++        38: putfield      #21                 // Field viewModel$initialized:Z
++        41: iload         4
++        43: ireturn
+ 
+-  private static final kotlin.Unit onCreate$lambda$1$0$6$0(com.example.compose.jetchat.NavActivity, kotlinx.coroutines.CoroutineScope, androidx.compose.material3.DrawerState, androidx.compose.runtime.MutableState, java.lang.String);
++  public androidx.navigation.NavController findNavController();
+     Code:
+-         0: aload         4
+-         2: ldc           #203                // String it
+-         4: invokestatic  #206                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         7: aload_0
+-         8: invokespecial #162                // Method findNavController:()Landroidx/navigation/NavController;
+-        11: getstatic     #263                // Field com/example/compose/jetchat/R$id.nav_home:I
+-        14: iconst_0
+-        15: invokevirtual #267                // Method androidx/navigation/NavController.popBackStack:(IZ)Z
+-        18: pop
+-        19: aload_1
+-        20: aconst_null
+-        21: aconst_null
+-        22: new           #269                // class com/example/compose/jetchat/NavActivity$onCreate$2$1$3$1$1
+-        25: dup
+-        26: aload_2
+-        27: aconst_null
+-        28: invokespecial #270                // Method com/example/compose/jetchat/NavActivity$onCreate$2$1$3$1$1."<init>":(Landroidx/compose/material3/DrawerState;Lkotlin/coroutines/Continuation;)V
+-        31: checkcast     #141                // class kotlin/jvm/functions/Function2
+-        34: iconst_3
+-        35: aconst_null
+-        36: invokestatic  #240                // Method kotlinx/coroutines/BuildersKt.launch$default:(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Job;
+-        39: pop
+-        40: aload_3
+-        41: aload         4
+-        43: invokestatic  #244                // Method onCreate$lambda$1$0$3:(Landroidx/compose/runtime/MutableState;Ljava/lang/String;)V
+-        46: getstatic     #250                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-        49: areturn
+-
+-  private static final boolean onCreate$lambda$1$0$0(androidx.compose.runtime.State<java.lang.Boolean>);
+-    Code:
+          0: aload_0
+-         1: astore_1
+-         2: aconst_null
+-         3: astore_2
+-         4: aconst_null
+-         5: astore_3
+-         6: iconst_0
+-         7: istore        4
+-         9: aload_1
+-        10: invokeinterface #276,  1          // InterfaceMethod androidx/compose/runtime/State.getValue:()Ljava/lang/Object;
+-        15: checkcast     #278                // class java/lang/Boolean
+-        18: invokevirtual #281                // Method java/lang/Boolean.booleanValue:()Z
+-        21: ireturn
+-
+-  private static final java.lang.String onCreate$lambda$1$0$2(androidx.compose.runtime.MutableState<java.lang.String>);
+-    Code:
+-         0: aload_0
+-         1: checkcast     #275                // class androidx/compose/runtime/State
++         1: getfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
+          4: astore_1
+-         5: aconst_null
+-         6: astore_2
+-         7: aconst_null
+-         8: astore_3
+-         9: iconst_0
+-        10: istore        4
+-        12: aload_1
+-        13: invokeinterface #276,  1          // InterfaceMethod androidx/compose/runtime/State.getValue:()Ljava/lang/Object;
+-        18: checkcast     #294                // class java/lang/String
++         5: aload_0
++         6: getfield      #21                 // Field viewModel$initialized:Z
++         9: istore_2
++        10: aload_0
++        11: aload_1
++        12: putfield      #37                 // Field viewModel:Lcom/example/compose/jetchat/MainViewModel;
++        15: aload_0
++        16: iload_2
++        17: putfield      #21                 // Field viewModel$initialized:Z
++        20: aconst_null
+         21: areturn
+ 
+-  private static final void onCreate$lambda$1$0$3(androidx.compose.runtime.MutableState<java.lang.String>, java.lang.String);
+-    Code:
+-         0: aload_0
+-         1: astore_2
+-         2: aconst_null
+-         3: astore_3
+-         4: aconst_null
+-         5: astore        4
+-         7: aload_1
+-         8: astore        5
+-        10: iconst_0
+-        11: istore        6
+-        13: aload_2
+-        14: aload         5
+-        16: invokeinterface #302,  2          // InterfaceMethod androidx/compose/runtime/MutableState.setValue:(Ljava/lang/Object;)V
+-        21: nop
+-        22: return
+-
+-  private static final kotlin.Unit onCreate$lambda$1$0(com.example.compose.jetchat.NavActivity, androidx.compose.runtime.Composer, int);
+-    Code:
+-         0: aload_1
+-         1: ldc_w         #312                // String C59@2371L42,61@2508L29,63@2579L40,76@3165L24,88@3696L347,81@3370L281,78@3211L951:NavActivity.kt#ddwtno
+-         4: invokestatic  #318                // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-         7: aload_1
+-         8: iload_2
+-         9: iconst_3
+-        10: iand
+-        11: iconst_2
+-        12: if_icmpeq     19
+-        15: iconst_1
+-        16: goto          20
+-        19: iconst_0
+-        20: iload_2
+-        21: iconst_1
+-        22: iand
+-        23: invokeinterface #324,  3          // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+-        28: ifeq          759
+-        31: invokestatic  #327                // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-        34: ifeq          47
+-        37: ldc           #120                // int 1722743353
+-        39: iload_2
+-        40: iconst_m1
+-        41: ldc_w         #329                // String com.example.compose.jetchat.NavActivity.onCreate.<anonymous>.<anonymous> (NavActivity.kt:59)
+-        44: invokestatic  #333                // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+-        47: getstatic     #339                // Field androidx/compose/material3/DrawerValue.Closed:Landroidx/compose/material3/DrawerValue;
+-        50: aconst_null
+-        51: aload_1
+-        52: bipush        6
+-        54: iconst_2
+-        55: invokestatic  #345                // Method androidx/compose/material3/NavigationDrawerKt.rememberDrawerState:(Landroidx/compose/material3/DrawerValue;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)Landroidx/compose/material3/DrawerState;
+-        58: astore_3
+-        59: aload_0
+-        60: invokespecial #347                // Method getViewModel:()Lcom/example/compose/jetchat/MainViewModel;
+-        63: invokevirtual #351                // Method com/example/compose/jetchat/MainViewModel.getDrawerShouldBeOpened:()Lkotlinx/coroutines/flow/StateFlow;
+-        66: aconst_null
+-        67: aconst_null
+-        68: aconst_null
+-        69: aload_1
+-        70: iconst_0
+-        71: bipush        7
+-        73: invokestatic  #357                // Method androidx/lifecycle/compose/FlowExtKt.collectAsStateWithLifecycle:(Lkotlinx/coroutines/flow/StateFlow;Landroidx/lifecycle/LifecycleOwner;Landroidx/lifecycle/Lifecycle$State;Lkotlin/coroutines/CoroutineContext;Landroidx/compose/runtime/Composer;II)Landroidx/compose/runtime/State;
+-        76: astore        4
+-        78: aload_1
+-        79: ldc_w         #358                // int 1993961249
+-        82: ldc_w         #360                // String CC(remember):NavActivity.kt#9igjgp
+-        85: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-        88: aload_1
+-        89: astore        7
+-        91: iconst_0
+-        92: istore        8
+-        94: iconst_0
+-        95: istore        9
+-        97: aload         7
+-        99: invokeinterface #367,  1          // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+-       104: astore        10
+-       106: iconst_0
+-       107: istore        11
+-       109: aload         10
+-       111: getstatic     #371                // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+-       114: invokevirtual #376                // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+-       117: if_acmpne     148
+-       120: iconst_0
+-       121: istore        12
+-       123: ldc_w         #378                // String composers
+-       126: aconst_null
+-       127: iconst_2
+-       128: aconst_null
+-       129: invokestatic  #384                // Method androidx/compose/runtime/SnapshotStateKt.mutableStateOf$default:(Ljava/lang/Object;Landroidx/compose/runtime/SnapshotMutationPolicy;ILjava/lang/Object;)Landroidx/compose/runtime/MutableState;
+-       132: astore        12
+-       134: aload         7
+-       136: aload         12
+-       138: invokeinterface #387,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+-       143: aload         12
+-       145: goto          150
+-       148: aload         10
+-       150: nop
+-       151: nop
+-       152: checkcast     #298                // class androidx/compose/runtime/MutableState
+-       155: astore        6
+-       157: aload_1
+-       158: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       161: aload         6
+-       163: astore        5
+-       165: aload         4
+-       167: invokestatic  #393                // Method onCreate$lambda$1$0$0:(Landroidx/compose/runtime/State;)Z
+-       170: ifeq          320
+-       173: aload_1
+-       174: ldc_w         #394                // int 1683346446
+-       177: invokeinterface #398,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       182: aload_1
+-       183: ldc_w         #400                // String 66@2765L344,66@2744L365
+-       186: invokestatic  #318                // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+-       189: getstatic     #250                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-       192: aload_1
+-       193: ldc_w         #401                // int 1993967505
+-       196: ldc_w         #360                // String CC(remember):NavActivity.kt#9igjgp
+-       199: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       202: aload_1
+-       203: astore        7
+-       205: aload_1
+-       206: aload_3
+-       207: invokeinterface #405,  2          // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+-       212: aload_1
+-       213: aload_0
+-       214: invokeinterface #408,  2          // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       219: ior
+-       220: istore        8
+-       222: iconst_0
+-       223: istore        9
+-       225: aload         7
+-       227: invokeinterface #367,  1          // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+-       232: astore        10
+-       234: iconst_0
+-       235: istore        11
+-       237: iload         8
+-       239: ifne          253
+-       242: aload         10
+-       244: getstatic     #371                // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+-       247: invokevirtual #376                // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+-       250: if_acmpne     290
+-       253: astore        21
+-       255: iconst_0
+-       256: istore        12
+-       258: new           #410                // class com/example/compose/jetchat/NavActivity$onCreate$2$1$1$1
+-       261: dup
+-       262: aload_3
+-       263: aload_0
+-       264: aconst_null
+-       265: invokespecial #413                // Method com/example/compose/jetchat/NavActivity$onCreate$2$1$1$1."<init>":(Landroidx/compose/material3/DrawerState;Lcom/example/compose/jetchat/NavActivity;Lkotlin/coroutines/Continuation;)V
+-       268: checkcast     #141                // class kotlin/jvm/functions/Function2
+-       271: aload         21
+-       273: swap
+-       274: astore        13
+-       276: aload         7
+-       278: aload         13
+-       280: invokeinterface #387,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+-       285: aload         13
+-       287: goto          292
+-       290: aload         10
+-       292: nop
+-       293: nop
+-       294: checkcast     #141                // class kotlin/jvm/functions/Function2
+-       297: astore        6
+-       299: aload_1
+-       300: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       303: aload         6
+-       305: aload_1
+-       306: bipush        6
+-       308: invokestatic  #419                // Method androidx/compose/runtime/EffectsKt.LaunchedEffect:(Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+-       311: aload_1
+-       312: invokeinterface #422,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       317: goto          335
+-       320: aload_1
+-       321: ldc_w         #423                // int 1683802921
+-       324: invokeinterface #398,  2          // InterfaceMethod androidx/compose/runtime/Composer.startReplaceGroup:(I)V
+-       329: aload_1
+-       330: invokeinterface #422,  1          // InterfaceMethod androidx/compose/runtime/Composer.endReplaceGroup:()V
+-       335: aload_1
+-       336: astore        8
+-       338: iconst_0
+-       339: istore        9
+-       341: nop
+-       342: iconst_0
+-       343: istore        10
+-       345: aload         8
+-       347: ldc_w         #424                // int 773894976
+-       350: ldc_w         #426                // String CC(rememberCoroutineScope)N(getContext)600@27430L68:Effects.kt#9igjgp
+-       353: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       356: aload         8
+-       358: astore        11
+-       360: aload         8
+-       362: ldc_w         #427                // int 683736516
+-       365: ldc_w         #429                // String CC(remember):Effects.kt#9igjgp
+-       368: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       371: aload         8
+-       373: astore        12
+-       375: iconst_0
+-       376: istore        13
+-       378: iconst_0
+-       379: istore        14
+-       381: aload         12
+-       383: invokeinterface #367,  1          // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+-       388: astore        15
+-       390: iconst_0
+-       391: istore        16
+-       393: aload         15
+-       395: getstatic     #371                // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+-       398: invokevirtual #376                // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+-       401: if_acmpne     437
+-       404: iconst_0
+-       405: istore        17
+-       407: iconst_0
+-       408: istore        18
+-       410: getstatic     #434                // Field kotlin/coroutines/EmptyCoroutineContext.INSTANCE:Lkotlin/coroutines/EmptyCoroutineContext;
+-       413: checkcast     #436                // class kotlin/coroutines/CoroutineContext
+-       416: aload         11
+-       418: invokestatic  #440                // Method androidx/compose/runtime/EffectsKt.createCompositionCoroutineScope:(Lkotlin/coroutines/CoroutineContext;Landroidx/compose/runtime/Composer;)Lkotlinx/coroutines/CoroutineScope;
+-       421: astore        18
+-       423: aload         12
+-       425: aload         18
+-       427: invokeinterface #387,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+-       432: aload         18
+-       434: goto          439
+-       437: aload         15
+-       439: nop
+-       440: nop
+-       441: checkcast     #442                // class kotlinx/coroutines/CoroutineScope
+-       444: astore        19
+-       446: aload         8
+-       448: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       451: aload         19
+-       453: astore        20
+-       455: aload         8
+-       457: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       460: aload         20
+-       462: nop
+-       463: astore        6
+-       465: aload         5
+-       467: invokestatic  #444                // Method onCreate$lambda$1$0$2:(Landroidx/compose/runtime/MutableState;)Ljava/lang/String;
+-       470: astore        7
+-       472: aload_3
+-       473: aload         7
+-       475: aload_1
+-       476: ldc_w         #445                // int 1993997300
+-       479: ldc_w         #360                // String CC(remember):NavActivity.kt#9igjgp
+-       482: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       485: aload_1
+-       486: astore        9
+-       488: aload_1
+-       489: aload_0
+-       490: invokeinterface #408,  2          // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       495: aload_1
+-       496: aload         6
+-       498: invokeinterface #408,  2          // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       503: ior
+-       504: aload_1
+-       505: aload_3
+-       506: invokeinterface #405,  2          // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+-       511: ior
+-       512: istore        10
+-       514: iconst_0
+-       515: istore        11
+-       517: aload         9
+-       519: invokeinterface #367,  1          // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+-       524: astore        12
+-       526: iconst_0
+-       527: istore        13
+-       529: iload         10
+-       531: ifne          545
+-       534: aload         12
+-       536: getstatic     #371                // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+-       539: invokevirtual #376                // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+-       542: if_acmpne     587
+-       545: astore        22
+-       547: astore        21
+-       549: iconst_0
+-       550: istore        14
+-       552: aload_0
+-       553: aload         6
+-       555: aload_3
+-       556: aload         5
+-       558: invokedynamic #455,  0            // InvokeDynamic #2:invoke:(Lcom/example/compose/jetchat/NavActivity;Lkotlinx/coroutines/CoroutineScope;Landroidx/compose/material3/DrawerState;Landroidx/compose/runtime/MutableState;)Lkotlin/jvm/functions/Function1;
+-       563: astore        23
+-       565: aload         21
+-       567: aload         22
+-       569: aload         23
+-       571: astore        15
+-       573: aload         9
+-       575: aload         15
+-       577: invokeinterface #387,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+-       582: aload         15
+-       584: goto          589
+-       587: aload         12
+-       589: nop
+-       590: nop
+-       591: checkcast     #457                // class kotlin/jvm/functions/Function1
+-       594: astore        8
+-       596: aload_1
+-       597: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       600: aload         8
+-       602: aload_1
+-       603: ldc_w         #458                // int 1993986802
+-       606: ldc_w         #360                // String CC(remember):NavActivity.kt#9igjgp
+-       609: invokestatic  #364                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerStart:(Landroidx/compose/runtime/Composer;ILjava/lang/String;)V
+-       612: aload_1
+-       613: astore        9
+-       615: aload_1
+-       616: aload_0
+-       617: invokeinterface #408,  2          // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       622: aload_1
+-       623: aload         6
+-       625: invokeinterface #408,  2          // InterfaceMethod androidx/compose/runtime/Composer.changedInstance:(Ljava/lang/Object;)Z
+-       630: ior
+-       631: aload_1
+-       632: aload_3
+-       633: invokeinterface #405,  2          // InterfaceMethod androidx/compose/runtime/Composer.changed:(Ljava/lang/Object;)Z
+-       638: ior
+-       639: istore        10
+-       641: iconst_0
+-       642: istore        11
+-       644: aload         9
+-       646: invokeinterface #367,  1          // InterfaceMethod androidx/compose/runtime/Composer.rememberedValue:()Ljava/lang/Object;
+-       651: astore        12
+-       653: iconst_0
+-       654: istore        13
+-       656: iload         10
+-       658: ifne          672
+-       661: aload         12
+-       663: getstatic     #371                // Field androidx/compose/runtime/Composer.Companion:Landroidx/compose/runtime/Composer$Companion;
+-       666: invokevirtual #376                // Method androidx/compose/runtime/Composer$Companion.getEmpty:()Ljava/lang/Object;
+-       669: if_acmpne     718
+-       672: astore        23
+-       674: astore        22
+-       676: astore        21
+-       678: iconst_0
+-       679: istore        14
+-       681: aload_0
+-       682: aload         6
+-       684: aload_3
+-       685: aload         5
+-       687: invokedynamic #462,  0            // InvokeDynamic #3:invoke:(Lcom/example/compose/jetchat/NavActivity;Lkotlinx/coroutines/CoroutineScope;Landroidx/compose/material3/DrawerState;Landroidx/compose/runtime/MutableState;)Lkotlin/jvm/functions/Function1;
+-       692: astore        24
+-       694: aload         21
+-       696: aload         22
+-       698: aload         23
+-       700: aload         24
+-       702: astore        15
+-       704: aload         9
+-       706: aload         15
+-       708: invokeinterface #387,  2          // InterfaceMethod androidx/compose/runtime/Composer.updateRememberedValue:(Ljava/lang/Object;)V
+-       713: aload         15
+-       715: goto          720
+-       718: aload         12
+-       720: nop
+-       721: nop
+-       722: checkcast     #457                // class kotlin/jvm/functions/Function1
+-       725: astore        8
+-       727: aload_1
+-       728: invokestatic  #391                // Method androidx/compose/runtime/ComposerKt.sourceInformationMarkerEnd:(Landroidx/compose/runtime/Composer;)V
+-       731: aload         8
+-       733: getstatic     #467                // Field com/example/compose/jetchat/ComposableSingletons$NavActivityKt.INSTANCE:Lcom/example/compose/jetchat/ComposableSingletons$NavActivityKt;
+-       736: invokevirtual #471                // Method com/example/compose/jetchat/ComposableSingletons$NavActivityKt."getLambda$-1891046836$app":()Lkotlin/jvm/functions/Function2;
+-       739: aload_1
+-       740: sipush        24576
+-       743: iconst_0
+-       744: invokestatic  #477                // Method com/example/compose/jetchat/components/JetchatScaffoldKt.JetchatDrawer:(Landroidx/compose/material3/DrawerState;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+-       747: invokestatic  #327                // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+-       750: ifeq          765
+-       753: invokestatic  #480                // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+-       756: goto          765
+-       759: aload_1
+-       760: invokeinterface #483,  1          // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+-       765: getstatic     #250                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+-       768: areturn
+-
+-  private static final androidx.core.view.WindowInsetsCompat onCreate$lambda$0(android.view.View, androidx.core.view.WindowInsetsCompat);
++  public final boolean getViewModel$initialized();
+     Code:
+          0: aload_0
+-         1: ldc_w         #537                // String <unused var>
+-         4: invokestatic  #206                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-         7: aload_1
+-         8: ldc_w         #539                // String insets
+-        11: invokestatic  #206                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+-        14: aload_1
+-        15: areturn
+-
+-  public static final com.example.compose.jetchat.MainViewModel access$getViewModel(com.example.compose.jetchat.NavActivity);
+-    Code:
+-         0: aload_0
+-         1: invokespecial #347                // Method getViewModel:()Lcom/example/compose/jetchat/MainViewModel;
+-         4: areturn
+-
+-  static {};
+-    Code:
+-         0: bipush        8
+-         2: putstatic     #547                // Field $stable:I
+-         5: return
++         1: getfield      #21                 // Field viewModel$initialized:Z
++         4: ireturn
+ }

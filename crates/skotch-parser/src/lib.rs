@@ -1394,34 +1394,35 @@ impl<'a> Parser<'a> {
         // Check for `by <delegate>` delegation.
         // Supports: `by lazy { ... }`, `by Cached { ... }`, `by MyDelegate()`
         self.skip_trivia();
-        let delegate = if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
-        {
-            self.bump(); // consume `by`
-            self.skip_trivia();
-            // Parse the delegate expression. For `lazy { ... }` this is
-            // just the block. For `Cached { ... }` it's a constructor call
-            // with trailing lambda. For any other expression, parse it.
-            if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "lazy" {
-                self.bump(); // consume `lazy`
+        let (delegate, delegate_is_lazy_block) =
+            if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by" {
+                self.bump(); // consume `by`
                 self.skip_trivia();
-                if self.peek_kind() == TokenKind::LBrace {
-                    Some(Box::new(self.parse_block()))
+                // Parse the delegate expression. For `lazy { ... }` this is
+                // just the block. For `Cached { ... }` it's a constructor call
+                // with trailing lambda. For any other expression, parse it.
+                if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "lazy" {
+                    self.bump(); // consume `lazy`
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::LBrace {
+                        (Some(Box::new(self.parse_block())), true)
+                    } else {
+                        (None, false)
+                    }
                 } else {
-                    None
+                    // Generic delegate: parse a postfix expression only.
+                    // Don't use parse_expr() which crosses newlines.
+                    let expr = self.parse_postfix();
+                    // Wrap in a synthetic block with a single expression stmt.
+                    let block = Block {
+                        stmts: vec![Stmt::Expr(expr)],
+                        span: self.peek_span(),
+                    };
+                    (Some(Box::new(block)), false)
                 }
             } else {
-                // Generic delegate: parse a postfix expression only.
-                // Don't use parse_expr() which crosses newlines.
-                let expr = self.parse_postfix();
-                // Wrap in a synthetic block with a single expression stmt.
-                Some(Box::new(Block {
-                    stmts: vec![Stmt::Expr(expr)],
-                    span: self.peek_span(),
-                }))
-            }
-        } else {
-            None
-        };
+                (None, false)
+            };
         self.skip_trivia();
         let init = if self.eat(TokenKind::Eq) {
             self.skip_trivia();
@@ -1514,6 +1515,7 @@ impl<'a> Parser<'a> {
             ty,
             init,
             delegate,
+            delegate_is_lazy_block,
             getter,
             setter,
             span: start.merge(name_span),
@@ -3507,7 +3509,20 @@ impl<'a> Parser<'a> {
                                 span: fn_span,
                             }],
                             body: Block {
-                                stmts: vec![Stmt::Expr(call)],
+                                // Use Stmt::Return so the lambda's
+                                // helper inherits the call's return type
+                                // (mir-lower's helper infers ret_ty
+                                // from the last block's terminator —
+                                // a plain Stmt::Expr would discard the
+                                // result and force the helper's return
+                                // type to Unit, breaking
+                                // `Foo::method` callable refs where the
+                                // method returns a value).
+                                stmts: vec![Stmt::Return {
+                                    value: Some(call),
+                                    label: None,
+                                    span,
+                                }],
                                 span,
                             },
                             is_suspend: false,

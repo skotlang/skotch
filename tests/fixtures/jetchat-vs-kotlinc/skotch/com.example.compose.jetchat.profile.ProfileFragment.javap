@@ -1,0 +1,179 @@
+Compiled from "com/example/compose/jetchat/profile/ProfileFragment.kt"
+public final class com.example.compose.jetchat.profile.ProfileFragment extends androidx.fragment.app.Fragment {
+  public com.example.compose.jetchat.profile.ProfileViewModel viewModel;
+
+  public com.example.compose.jetchat.MainViewModel activityViewModel;
+
+  public boolean viewModel$initialized;
+
+  public boolean activityViewModel$initialized;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.profile.ProfileFragment();
+    Code:
+         0: aload_0
+         1: invokespecial #20                 // Method androidx/fragment/app/Fragment."<init>":()V
+         4: return
+
+  public com.example.compose.jetchat.profile.ProfileViewModel getViewModel();
+    Code:
+         0: aload_0
+         1: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+         4: astore_1
+         5: aload_0
+         6: getfield      #26                 // Field viewModel$initialized:Z
+         9: ifne          41
+        12: aconst_null
+        13: aconst_null
+        14: aconst_null
+        15: invokestatic  #32                 // Method androidx/fragment/app/FragmentViewModelLazyKt.viewModels:(Landroidx/fragment/app/Fragment;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
+        18: checkcast     #34                 // class kotlin/Lazy
+        21: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+        26: checkcast     #40                 // class com/example/compose/jetchat/profile/ProfileViewModel
+        29: aload_0
+        30: swap
+        31: putfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        34: iconst_1
+        35: istore_2
+        36: aload_0
+        37: iload_2
+        38: putfield      #26                 // Field viewModel$initialized:Z
+        41: aload_0
+        42: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        45: areturn
+
+  public com.example.compose.jetchat.MainViewModel getActivityViewModel();
+    Code:
+         0: aload_0
+         1: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+         4: astore_1
+         5: aload_0
+         6: getfield      #26                 // Field viewModel$initialized:Z
+         9: istore_2
+        10: aload_0
+        11: getfield      #51                 // Field activityViewModel$initialized:Z
+        14: ifne          45
+        17: aconst_null
+        18: aconst_null
+        19: invokestatic  #55                 // Method androidx/fragment/app/FragmentViewModelLazyKt.activityViewModels:(Landroidx/fragment/app/Fragment;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
+        22: checkcast     #34                 // class kotlin/Lazy
+        25: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+        30: checkcast     #44                 // class com/example/compose/jetchat/MainViewModel
+        33: aload_0
+        34: swap
+        35: putfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        38: iconst_1
+        39: istore_3
+        40: aload_0
+        41: iload_3
+        42: putfield      #51                 // Field activityViewModel$initialized:Z
+        45: aload_0
+        46: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        49: areturn
+
+  public void onAttach(android.app.Activity);
+    Code:
+         0: aload_0
+         1: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+         4: astore_2
+         5: aload_0
+         6: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+         9: astore_3
+        10: aload_0
+        11: getfield      #26                 // Field viewModel$initialized:Z
+        14: istore        4
+        16: aload_0
+        17: getfield      #51                 // Field activityViewModel$initialized:Z
+        20: istore        5
+        22: aload_0
+        23: aload_1
+        24: invokespecial #59                 // Method androidx/fragment/app/Fragment.onAttach:(Landroid/app/Activity;)V
+        27: aconst_null
+        28: ifnull        37
+        31: aconst_null
+        32: astore        6
+        34: goto          40
+        37: aconst_null
+        38: astore        6
+        40: aload_2
+        41: aload         6
+        43: checkcast     #61                 // class java/lang/String
+        46: invokevirtual #65                 // Method com/example/compose/jetchat/profile/ProfileViewModel.setUserId:(Ljava/lang/String;)Ljava/lang/Object;
+        49: pop
+        50: aload_0
+        51: aload_2
+        52: putfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        55: aload_0
+        56: aload_3
+        57: putfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        60: aload_0
+        61: iload         4
+        63: putfield      #26                 // Field viewModel$initialized:Z
+        66: aload_0
+        67: iload         5
+        69: putfield      #51                 // Field activityViewModel$initialized:Z
+        72: return
+
+  public android.view.View onCreateView(android.view.LayoutInflater, android.view.ViewGroup, android.os.Bundle);
+    Code:
+         0: aload_0
+         1: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+         4: astore        4
+         6: aload_0
+         7: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        10: astore        5
+        12: aload_0
+        13: getfield      #26                 // Field viewModel$initialized:Z
+        16: istore        6
+        18: aload_0
+        19: getfield      #51                 // Field activityViewModel$initialized:Z
+        22: istore        7
+        24: aload_1
+        25: getstatic     #76                 // Field com/example/compose/jetchat/R$layout.fragment_profile:I
+        28: aload_2
+        29: iconst_0
+        30: invokevirtual #82                 // Method android/view/LayoutInflater.inflate:(ILandroid/view/ViewGroup;Z)Landroid/view/View;
+        33: astore        8
+        35: new           #84                 // class com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$24
+        38: dup
+        39: aload         5
+        41: invokespecial #87                 // Method com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$24."<init>":(Lcom/example/compose/jetchat/MainViewModel;)V
+        44: aconst_null
+        45: invokevirtual #91                 // Method com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$24.invoke:(Ljava/lang/Object;)Ljava/lang/Object;
+        48: pop
+        49: new           #93                 // class com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$32
+        52: dup
+        53: aload         4
+        55: invokespecial #96                 // Method com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$32."<init>":(Lcom/example/compose/jetchat/profile/ProfileViewModel;)V
+        58: aconst_null
+        59: invokevirtual #97                 // Method com/example/compose/jetchat/profile/ProfileFragmentKt$Lambda$32.invoke:(Ljava/lang/Object;)Ljava/lang/Object;
+        62: pop
+        63: aload_0
+        64: aload         4
+        66: putfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        69: aload_0
+        70: aload         5
+        72: putfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        75: aload_0
+        76: iload         6
+        78: putfield      #26                 // Field viewModel$initialized:Z
+        81: aload_0
+        82: iload         7
+        84: putfield      #51                 // Field activityViewModel$initialized:Z
+        87: aload         8
+        89: checkcast     #99                 // class android/view/View
+        92: areturn
+
+  public final boolean getViewModel$initialized();
+    Code:
+         0: aload_0
+         1: getfield      #26                 // Field viewModel$initialized:Z
+         4: ireturn
+
+  public final boolean getActivityViewModel$initialized();
+    Code:
+         0: aload_0
+         1: getfield      #51                 // Field activityViewModel$initialized:Z
+         4: ireturn
+}

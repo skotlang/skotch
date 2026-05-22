@@ -1,0 +1,30 @@
+Compiled from "FakeData.kt"
+public final class com.example.compose.jetchat.data.EMOJIS {
+  public static final com.example.compose.jetchat.data.EMOJIS INSTANCE;
+
+  public static final java.lang.String EMOJI_PINK_HEART;
+
+  public static final java.lang.String EMOJI_MELTING;
+
+  public static final java.lang.String EMOJI_CLOUDS;
+
+  public static final java.lang.String EMOJI_FLAMINGO;
+
+  public static final java.lang.String EMOJI_POINTS;
+
+  public static final int $stable;
+
+  private com.example.compose.jetchat.data.EMOJIS();
+    Code:
+         0: aload_0
+         1: invokespecial #8                  // Method java/lang/Object."<init>":()V
+         4: return
+
+  static {};
+    Code:
+         0: new           #2                  // class com/example/compose/jetchat/data/EMOJIS
+         3: dup
+         4: invokespecial #12                 // Method "<init>":()V
+         7: putstatic     #15                 // Field INSTANCE:Lcom/example/compose/jetchat/data/EMOJIS;
+        10: return
+}

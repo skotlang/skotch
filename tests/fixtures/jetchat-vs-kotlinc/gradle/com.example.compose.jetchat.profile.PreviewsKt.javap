@@ -1,0 +1,380 @@
+Compiled from "Previews.kt"
+public final class com.example.compose.jetchat.profile.PreviewsKt {
+  public static final void ProfilePreview340(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #17                 // int -13308972
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #25                 // String C(ProfilePreview340)27@1009L53:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #17                 // int -13308972
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #41                 // String com.example.compose.jetchat.profile.ProfilePreview340 (Previews.kt:26)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_0
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #55                 // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt."getLambda$-665334195$app":()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        384
+        63: iconst_3
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #92,  0             // InvokeDynamic #0:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  public static final void ProfilePreview480Me(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #106                // int 1849044735
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #108                // String C(ProfilePreview480Me)35@1159L53:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #106                // int 1849044735
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #110                // String com.example.compose.jetchat.profile.ProfilePreview480Me (Previews.kt:34)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_0
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #113                // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt."getLambda$-1976936648$app":()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        384
+        63: iconst_3
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #118,  0            // InvokeDynamic #1:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  public static final void ProfilePreview480Other(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #121                // int 1036566885
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #123                // String C(ProfilePreview480Other)43@1315L60:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #121                // int 1036566885
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #125                // String com.example.compose.jetchat.profile.ProfilePreview480Other (Previews.kt:42)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_0
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #128                // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.getLambda$1067287180$app:()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        384
+        63: iconst_3
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #133,  0            // InvokeDynamic #2:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  public static final void ProfilePreview340MeDark(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #136                // int -1832127930
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #138                // String C(ProfilePreview340MeDark)50@1482L73:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #136                // int -1832127930
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #140                // String com.example.compose.jetchat.profile.ProfilePreview340MeDark (Previews.kt:49)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_1
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #143                // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt."getLambda$-879798785$app":()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        390
+        63: iconst_2
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #148,  0            // InvokeDynamic #3:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  public static final void ProfilePreview480MeDark(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #151                // int -1580895191
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #153                // String C(ProfilePreview480MeDark)58@1663L73:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #151                // int -1580895191
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #155                // String com.example.compose.jetchat.profile.ProfilePreview480MeDark (Previews.kt:57)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_1
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #158                // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt."getLambda$-628566046$app":()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        390
+        63: iconst_2
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #163,  0            // InvokeDynamic #4:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  public static final void ProfilePreview480OtherDark(androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_0
+         1: ldc           #166                // int 1734108047
+         3: invokeinterface #23,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         8: astore_0
+         9: aload_0
+        10: ldc           #168                // String C(ProfilePreview480OtherDark)66@1850L80:Previews.kt#91f0f3
+        12: invokestatic  #31                 // Method androidx/compose/runtime/ComposerKt.sourceInformation:(Landroidx/compose/runtime/Composer;Ljava/lang/String;)V
+        15: aload_0
+        16: iload_1
+        17: ifeq          24
+        20: iconst_1
+        21: goto          25
+        24: iconst_0
+        25: iload_1
+        26: iconst_1
+        27: iand
+        28: invokeinterface #35,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        33: ifeq          79
+        36: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        39: ifeq          51
+        42: ldc           #166                // int 1734108047
+        44: iload_1
+        45: iconst_m1
+        46: ldc           #170                // String com.example.compose.jetchat.profile.ProfilePreview480OtherDark (Previews.kt:65)
+        48: invokestatic  #45                 // Method androidx/compose/runtime/ComposerKt.traceEventStart:(IIILjava/lang/String;)V
+        51: iconst_1
+        52: iconst_0
+        53: getstatic     #51                 // Field com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.INSTANCE:Lcom/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt;
+        56: invokevirtual #173                // Method com/example/compose/jetchat/profile/ComposableSingletons$PreviewsKt.getLambda$17709366$app:()Lkotlin/jvm/functions/Function2;
+        59: aload_0
+        60: sipush        390
+        63: iconst_2
+        64: invokestatic  #61                 // Method com/example/compose/jetchat/theme/ThemesKt.JetchatTheme:(ZZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+        67: invokestatic  #39                 // Method androidx/compose/runtime/ComposerKt.isTraceInProgress:()Z
+        70: ifeq          85
+        73: invokestatic  #65                 // Method androidx/compose/runtime/ComposerKt.traceEventEnd:()V
+        76: goto          85
+        79: aload_0
+        80: invokeinterface #68,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        85: aload_0
+        86: invokeinterface #72,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+        91: dup
+        92: ifnull        109
+        95: iload_1
+        96: invokedynamic #178,  0            // InvokeDynamic #5:invoke:(I)Lkotlin/jvm/functions/Function2;
+       101: invokeinterface #98,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       106: goto          110
+       109: pop
+       110: return
+
+  private static final kotlin.Unit ProfilePreview340$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #186                // Method ProfilePreview340:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  private static final kotlin.Unit ProfilePreview480Me$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #195                // Method ProfilePreview480Me:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  private static final kotlin.Unit ProfilePreview480Other$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #197                // Method ProfilePreview480Other:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  private static final kotlin.Unit ProfilePreview340MeDark$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #199                // Method ProfilePreview340MeDark:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  private static final kotlin.Unit ProfilePreview480MeDark$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #201                // Method ProfilePreview480MeDark:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+
+  private static final kotlin.Unit ProfilePreview480OtherDark$lambda$0(int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload_1
+         1: iload_0
+         2: iconst_1
+         3: ior
+         4: invokestatic  #184                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+         7: invokestatic  #203                // Method ProfilePreview480OtherDark:(Landroidx/compose/runtime/Composer;I)V
+        10: getstatic     #191                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        13: areturn
+}

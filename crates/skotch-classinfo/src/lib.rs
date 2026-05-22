@@ -193,15 +193,53 @@ pub fn lookup_method_descriptor(
     None
 }
 
+/// Look up a method allowing mangled matches, returning both the actual
+/// JVM method name (which may be mangled like `measure-BRTryo0`) and the
+/// descriptor. Useful when the caller needs to emit an invokevirtual with
+/// the real method name. Wraps `lookup_method_descriptor` semantics.
+pub fn lookup_method_name_and_descriptor(
+    class_path: &str,
+    method_name: &str,
+    param_count: usize,
+) -> Option<(String, String)> {
+    let scan = |ci: &ClassInfo| -> Option<(String, String)> {
+        let mut best: Option<(String, String)> = None;
+        for m in &ci.methods {
+            if (m.name == method_name || matches_mangled(&m.name, method_name))
+                && count_descriptor_params(&m.descriptor) == param_count
+                && (best.is_none() || has_object_params(&m.descriptor))
+            {
+                best = Some((m.name.clone(), m.descriptor.clone()));
+            }
+        }
+        best
+    };
+    if let Some(ci) = cached_class_lookup(class_path) {
+        if let Some(r) = scan(&ci) {
+            return Some(r);
+        }
+    }
+    if let Ok(ci) = load_jdk_class(class_path) {
+        if let Some(r) = scan(&ci) {
+            return Some(r);
+        }
+    }
+    None
+}
+
 /// Whether `mangled` looks like a kotlinc-mangled form of `unmangled`:
-/// `unmangled-XXXXXXX` where `XXXXXXX` is a 7-char alphanumeric hash.
-/// Used to match `measure-BRTryo0` against the source-level `measure`.
+/// `unmangled-XXXXXXX` where `XXXXXXX` is a 7-char hash. Kotlin's hash
+/// alphabet includes ASCII alphanumeric chars AND `_` — names like
+/// `getWhite-0d7_KjU` (Compose's `Color.Companion.White` getter) MUST
+/// match against the source-level `getWhite`. Used both for value-class
+/// method calls (`measure-BRTryo0` ↔ `measure`) and for companion-
+/// property getters returning a value-class type.
 fn matches_mangled(mangled: &str, unmangled: &str) -> bool {
     if let Some(rest) = mangled
         .strip_prefix(unmangled)
         .and_then(|r| r.strip_prefix('-'))
     {
-        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric())
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
     } else {
         false
     }
@@ -270,8 +308,19 @@ pub fn find_wrapper_class_for_function(package_path: &str, method_name: &str) ->
                         let mut bytes = Vec::new();
                         if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
                             if let Ok(ci) = parse_class(&bytes) {
+                                // Also accept kotlinc-mangled names like
+                                // `Font-wCLgNak` for the source-level `Font`
+                                // — value-class returns produce mangled
+                                // suffixes. Without this, `GoogleFontKt`
+                                // (which only has `Font-wCLgNak` and
+                                // `Font-wCLgNak$default`) is missed and the
+                                // resolver falls back to a non-existent
+                                // `Font.Font(...)` call that crashes at
+                                // load-time with NoClassDefFoundError.
                                 if ci.methods.iter().any(|m| {
-                                    m.name == method_name && m.is_static() && m.is_public()
+                                    (m.name == method_name || matches_mangled(&m.name, method_name))
+                                        && m.is_static()
+                                        && m.is_public()
                                 }) {
                                     let class_name =
                                         class_file.strip_suffix(".class").unwrap_or(class_file);

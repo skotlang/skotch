@@ -1,0 +1,547 @@
+Compiled from "com/example/compose/jetchat/profile/ProfileScreenState.kt"
+public final class com.example.compose.jetchat.profile.ProfileScreenState {
+  public java.lang.String userId;
+
+  public java.lang.Integer photo;
+
+  public java.lang.String name;
+
+  public java.lang.String status;
+
+  public java.lang.String displayName;
+
+  public java.lang.String position;
+
+  public java.lang.String twitter;
+
+  public java.lang.String timeZone;
+
+  public java.lang.String commonChannels;
+
+  public static final int $stable;
+
+  public com.example.compose.jetchat.profile.ProfileScreenState(java.lang.String, java.lang.Integer, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+         0: aload_0
+         1: invokespecial #25                 // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: aload_1
+         6: putfield      #27                 // Field userId:Ljava/lang/String;
+         9: aload_0
+        10: aload_2
+        11: putfield      #29                 // Field photo:Ljava/lang/Integer;
+        14: aload_0
+        15: aload_3
+        16: putfield      #31                 // Field name:Ljava/lang/String;
+        19: aload_0
+        20: aload         4
+        22: putfield      #33                 // Field status:Ljava/lang/String;
+        25: aload_0
+        26: aload         5
+        28: putfield      #35                 // Field displayName:Ljava/lang/String;
+        31: aload_0
+        32: aload         6
+        34: putfield      #37                 // Field position:Ljava/lang/String;
+        37: aload_0
+        38: aload         7
+        40: putfield      #39                 // Field twitter:Ljava/lang/String;
+        43: aload_0
+        44: aload         8
+        46: putfield      #41                 // Field timeZone:Ljava/lang/String;
+        49: aload_0
+        50: aload         9
+        52: putfield      #43                 // Field commonChannels:Ljava/lang/String;
+        55: return
+
+  public void isMe();
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field userId:Ljava/lang/String;
+         4: astore_1
+         5: aload_0
+         6: getfield      #29                 // Field photo:Ljava/lang/Integer;
+         9: astore_2
+        10: aload_0
+        11: getfield      #31                 // Field name:Ljava/lang/String;
+        14: astore_3
+        15: aload_0
+        16: getfield      #33                 // Field status:Ljava/lang/String;
+        19: astore        4
+        21: aload_0
+        22: getfield      #35                 // Field displayName:Ljava/lang/String;
+        25: astore        5
+        27: aload_0
+        28: getfield      #37                 // Field position:Ljava/lang/String;
+        31: astore        6
+        33: aload_0
+        34: getfield      #39                 // Field twitter:Ljava/lang/String;
+        37: astore        7
+        39: aload_0
+        40: getfield      #41                 // Field timeZone:Ljava/lang/String;
+        43: astore        8
+        45: aload_0
+        46: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+        49: astore        9
+        51: invokestatic  #54                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Ljava/lang/Object;
+        54: astore        10
+        56: aload_0
+        57: aload_1
+        58: putfield      #27                 // Field userId:Ljava/lang/String;
+        61: aload_0
+        62: aload_2
+        63: putfield      #29                 // Field photo:Ljava/lang/Integer;
+        66: aload_0
+        67: aload_3
+        68: putfield      #31                 // Field name:Ljava/lang/String;
+        71: aload_0
+        72: aload         4
+        74: putfield      #33                 // Field status:Ljava/lang/String;
+        77: aload_0
+        78: aload         5
+        80: putfield      #35                 // Field displayName:Ljava/lang/String;
+        83: aload_0
+        84: aload         6
+        86: putfield      #37                 // Field position:Ljava/lang/String;
+        89: aload_0
+        90: aload         7
+        92: putfield      #39                 // Field twitter:Ljava/lang/String;
+        95: aload_0
+        96: aload         8
+        98: putfield      #41                 // Field timeZone:Ljava/lang/String;
+       101: aload_0
+       102: aload         9
+       104: putfield      #43                 // Field commonChannels:Ljava/lang/String;
+       107: return
+
+  public java.lang.String getUserId();
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field userId:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.Integer getPhoto();
+    Code:
+         0: aload_0
+         1: getfield      #29                 // Field photo:Ljava/lang/Integer;
+         4: areturn
+
+  public java.lang.String getName();
+    Code:
+         0: aload_0
+         1: getfield      #31                 // Field name:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getStatus();
+    Code:
+         0: aload_0
+         1: getfield      #33                 // Field status:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getDisplayName();
+    Code:
+         0: aload_0
+         1: getfield      #35                 // Field displayName:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getPosition();
+    Code:
+         0: aload_0
+         1: getfield      #37                 // Field position:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getTwitter();
+    Code:
+         0: aload_0
+         1: getfield      #39                 // Field twitter:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getTimeZone();
+    Code:
+         0: aload_0
+         1: getfield      #41                 // Field timeZone:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String getCommonChannels();
+    Code:
+         0: aload_0
+         1: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String toString();
+    Code:
+         0: ldc           #71                 // String ProfileScreenState(
+         2: invokedynamic #83,  0             // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+         7: astore_1
+         8: aload_1
+         9: aload_0
+        10: getfield      #27                 // Field userId:Ljava/lang/String;
+        13: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+        18: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        23: invokedynamic #94,  0             // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        28: aload_0
+        29: getfield      #29                 // Field photo:Ljava/lang/Integer;
+        32: invokestatic  #98                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+        35: invokevirtual #101                // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
+        38: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        43: invokedynamic #104,  0            // InvokeDynamic #4:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        48: astore_2
+        49: aload_0
+        50: getfield      #31                 // Field name:Ljava/lang/String;
+        53: aload_2
+        54: swap
+        55: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+        60: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        65: invokedynamic #107,  0            // InvokeDynamic #5:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        70: astore_3
+        71: aload_0
+        72: getfield      #33                 // Field status:Ljava/lang/String;
+        75: aload_3
+        76: swap
+        77: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+        82: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        87: invokedynamic #110,  0            // InvokeDynamic #6:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+        92: astore        4
+        94: aload_0
+        95: getfield      #35                 // Field displayName:Ljava/lang/String;
+        98: aload         4
+       100: swap
+       101: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+       106: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       111: invokedynamic #113,  0            // InvokeDynamic #7:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       116: astore        5
+       118: aload_0
+       119: getfield      #37                 // Field position:Ljava/lang/String;
+       122: aload         5
+       124: swap
+       125: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+       130: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       135: invokedynamic #116,  0            // InvokeDynamic #8:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       140: astore        6
+       142: aload_0
+       143: getfield      #39                 // Field twitter:Ljava/lang/String;
+       146: aload         6
+       148: swap
+       149: invokedynamic #88,  0             // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+       154: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       159: invokedynamic #119,  0            // InvokeDynamic #9:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       164: aload_0
+       165: getfield      #41                 // Field timeZone:Ljava/lang/String;
+       168: invokestatic  #98                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+       171: invokevirtual #101                // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
+       174: invokedynamic #91,  0             // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       179: invokedynamic #122,  0            // InvokeDynamic #10:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       184: aload_0
+       185: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+       188: invokestatic  #98                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+       191: invokevirtual #101                // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
+       194: invokedynamic #125,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       199: areturn
+
+  public java.lang.String component1();
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field userId:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.Integer component2();
+    Code:
+         0: aload_0
+         1: getfield      #29                 // Field photo:Ljava/lang/Integer;
+         4: areturn
+
+  public java.lang.String component3();
+    Code:
+         0: aload_0
+         1: getfield      #31                 // Field name:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component4();
+    Code:
+         0: aload_0
+         1: getfield      #33                 // Field status:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component5();
+    Code:
+         0: aload_0
+         1: getfield      #35                 // Field displayName:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component6();
+    Code:
+         0: aload_0
+         1: getfield      #37                 // Field position:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component7();
+    Code:
+         0: aload_0
+         1: getfield      #39                 // Field twitter:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component8();
+    Code:
+         0: aload_0
+         1: getfield      #41                 // Field timeZone:Ljava/lang/String;
+         4: areturn
+
+  public java.lang.String component9();
+    Code:
+         0: aload_0
+         1: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+         4: areturn
+
+  public boolean equals(java.lang.Object);
+    Code:
+         0: aload_0
+         1: astore_2
+         2: aload_2
+         3: aload_1
+         4: if_acmpne     13
+         7: iconst_1
+         8: istore        4
+        10: iload         4
+        12: ireturn
+        13: aload_1
+        14: instanceof    #2                  // class com/example/compose/jetchat/profile/ProfileScreenState
+        17: istore        5
+        19: iload         5
+        21: ifne          30
+        24: iconst_0
+        25: istore        6
+        27: iload         6
+        29: ireturn
+        30: aload_1
+        31: checkcast     #138                // class ProfileScreenState
+        34: astore        7
+        36: aload_0
+        37: getfield      #27                 // Field userId:Ljava/lang/String;
+        40: astore        8
+        42: aload         7
+        44: getfield      #27                 // Field userId:Ljava/lang/String;
+        47: astore        9
+        49: aload         8
+        51: aload         9
+        53: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+        56: istore        10
+        58: aload_0
+        59: getfield      #29                 // Field photo:Ljava/lang/Integer;
+        62: astore        11
+        64: aload         7
+        66: getfield      #29                 // Field photo:Ljava/lang/Integer;
+        69: astore        12
+        71: aload         11
+        73: aload         12
+        75: invokevirtual #141                // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
+        78: istore        13
+        80: iload         10
+        82: iload         13
+        84: imul
+        85: istore        14
+        87: aload_0
+        88: getfield      #31                 // Field name:Ljava/lang/String;
+        91: astore        15
+        93: aload         7
+        95: getfield      #31                 // Field name:Ljava/lang/String;
+        98: astore        16
+       100: aload         15
+       102: aload         16
+       104: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       107: istore        17
+       109: iload         14
+       111: iload         17
+       113: imul
+       114: istore        18
+       116: aload_0
+       117: getfield      #33                 // Field status:Ljava/lang/String;
+       120: astore        19
+       122: aload         7
+       124: getfield      #33                 // Field status:Ljava/lang/String;
+       127: astore        20
+       129: aload         19
+       131: aload         20
+       133: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       136: istore        21
+       138: iload         18
+       140: iload         21
+       142: imul
+       143: istore        22
+       145: aload_0
+       146: getfield      #35                 // Field displayName:Ljava/lang/String;
+       149: astore        23
+       151: aload         7
+       153: getfield      #35                 // Field displayName:Ljava/lang/String;
+       156: astore        24
+       158: aload         23
+       160: aload         24
+       162: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       165: istore        25
+       167: iload         22
+       169: iload         25
+       171: imul
+       172: istore        26
+       174: aload_0
+       175: getfield      #37                 // Field position:Ljava/lang/String;
+       178: astore        27
+       180: aload         7
+       182: getfield      #37                 // Field position:Ljava/lang/String;
+       185: astore        28
+       187: aload         27
+       189: aload         28
+       191: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       194: istore        29
+       196: iload         26
+       198: iload         29
+       200: imul
+       201: istore        30
+       203: aload_0
+       204: getfield      #39                 // Field twitter:Ljava/lang/String;
+       207: astore        31
+       209: aload         7
+       211: getfield      #39                 // Field twitter:Ljava/lang/String;
+       214: astore        32
+       216: aload         31
+       218: aload         32
+       220: invokevirtual #140                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       223: istore        33
+       225: iload         30
+       227: iload         33
+       229: imul
+       230: istore        34
+       232: aload_0
+       233: getfield      #41                 // Field timeZone:Ljava/lang/String;
+       236: astore        35
+       238: aload         7
+       240: getfield      #41                 // Field timeZone:Ljava/lang/String;
+       243: astore        36
+       245: aload         35
+       247: aload         36
+       249: invokevirtual #141                // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
+       252: istore        37
+       254: iload         34
+       256: iload         37
+       258: imul
+       259: istore        38
+       261: aload_0
+       262: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+       265: astore        39
+       267: aload         7
+       269: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+       272: astore        40
+       274: aload         39
+       276: aload         40
+       278: invokevirtual #141                // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
+       281: istore        41
+       283: iload         38
+       285: iload         41
+       287: imul
+       288: istore        42
+       290: iload         42
+       292: ireturn
+
+  public int hashCode();
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field userId:Ljava/lang/String;
+         4: invokevirtual #146                // Method java/lang/String.hashCode:()I
+         7: istore_1
+         8: aload_0
+         9: getfield      #29                 // Field photo:Ljava/lang/Integer;
+        12: checkcast     #4                  // class java/lang/Object
+        15: invokevirtual #147                // Method java/lang/Object.hashCode:()I
+        18: istore_2
+        19: bipush        31
+        21: iload_1
+        22: imul
+        23: iload_2
+        24: iadd
+        25: istore_3
+        26: aload_0
+        27: getfield      #31                 // Field name:Ljava/lang/String;
+        30: invokevirtual #146                // Method java/lang/String.hashCode:()I
+        33: istore        4
+        35: bipush        31
+        37: iload_3
+        38: imul
+        39: iload         4
+        41: iadd
+        42: istore        5
+        44: aload_0
+        45: getfield      #33                 // Field status:Ljava/lang/String;
+        48: invokevirtual #146                // Method java/lang/String.hashCode:()I
+        51: istore        6
+        53: bipush        31
+        55: iload         5
+        57: imul
+        58: iload         6
+        60: iadd
+        61: istore        7
+        63: aload_0
+        64: getfield      #35                 // Field displayName:Ljava/lang/String;
+        67: invokevirtual #146                // Method java/lang/String.hashCode:()I
+        70: istore        8
+        72: bipush        31
+        74: iload         7
+        76: imul
+        77: iload         8
+        79: iadd
+        80: istore        9
+        82: aload_0
+        83: getfield      #37                 // Field position:Ljava/lang/String;
+        86: invokevirtual #146                // Method java/lang/String.hashCode:()I
+        89: istore        10
+        91: bipush        31
+        93: iload         9
+        95: imul
+        96: iload         10
+        98: iadd
+        99: istore        11
+       101: aload_0
+       102: getfield      #39                 // Field twitter:Ljava/lang/String;
+       105: invokevirtual #146                // Method java/lang/String.hashCode:()I
+       108: istore        12
+       110: bipush        31
+       112: iload         11
+       114: imul
+       115: iload         12
+       117: iadd
+       118: istore        13
+       120: aload_0
+       121: getfield      #41                 // Field timeZone:Ljava/lang/String;
+       124: checkcast     #4                  // class java/lang/Object
+       127: invokevirtual #147                // Method java/lang/Object.hashCode:()I
+       130: istore        14
+       132: bipush        31
+       134: iload         13
+       136: imul
+       137: iload         14
+       139: iadd
+       140: istore        15
+       142: aload_0
+       143: getfield      #43                 // Field commonChannels:Ljava/lang/String;
+       146: checkcast     #4                  // class java/lang/Object
+       149: invokevirtual #147                // Method java/lang/Object.hashCode:()I
+       152: istore        16
+       154: bipush        31
+       156: iload         15
+       158: imul
+       159: iload         16
+       161: iadd
+       162: ireturn
+
+  public com.example.compose.jetchat.profile.ProfileScreenState copy(java.lang.String, java.lang.Integer, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+         0: new           #2                  // class com/example/compose/jetchat/profile/ProfileScreenState
+         3: dup
+         4: aload_1
+         5: aload_2
+         6: aload_3
+         7: aload         4
+         9: aload         5
+        11: aload         6
+        13: aload         7
+        15: aload         8
+        17: aload         9
+        19: invokespecial #151                // Method "<init>":(Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+        22: areturn
+}

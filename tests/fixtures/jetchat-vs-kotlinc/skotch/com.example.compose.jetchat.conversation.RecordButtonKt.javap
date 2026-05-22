@@ -1,0 +1,236 @@
+Compiled from "com/example/compose/jetchat/conversation/RecordButton.kt"
+public final class com.example.compose.jetchat.conversation.RecordButtonKt {
+  public static final <T> void RecordButton(boolean, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
+    Code:
+         0: aload         7
+         2: ldc           #33                 // int -1652196216
+         4: invokeinterface #16,  2           // InterfaceMethod androidx/compose/runtime/Composer.startRestartGroup:(I)Landroidx/compose/runtime/Composer;
+         9: astore        7
+        11: aload         7
+        13: iload         8
+        15: ifeq          22
+        18: iconst_1
+        19: goto          23
+        22: iconst_0
+        23: iload         8
+        25: iconst_1
+        26: iand
+        27: invokeinterface #20,  3           // InterfaceMethod androidx/compose/runtime/Composer.shouldExecute:(ZI)Z
+        32: ifne          45
+        35: aload         7
+        37: invokeinterface #24,  1           // InterfaceMethod androidx/compose/runtime/Composer.skipToGroupEnd:()V
+        42: goto          183
+        45: aconst_null
+        46: astore        9
+        48: new           #35                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$23
+        51: dup
+        52: invokespecial #38                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$23."<init>":()V
+        55: pop
+        56: invokedynamic #58,  0             // InvokeDynamic #0:invoke:()Lkotlin/jvm/functions/Function1;
+        61: astore        10
+        63: new           #60                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$24
+        66: dup
+        67: invokespecial #61                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$24."<init>":()V
+        70: pop
+        71: invokedynamic #66,  0             // InvokeDynamic #1:invoke:()Lkotlin/jvm/functions/Function1;
+        76: astore        11
+        78: aconst_null
+        79: astore        12
+        81: new           #68                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$25
+        84: dup
+        85: invokespecial #69                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$25."<init>":()V
+        88: pop
+        89: invokedynamic #74,  0             // InvokeDynamic #2:invoke:()Lkotlin/jvm/functions/Function1;
+        94: astore        13
+        96: new           #76                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$26
+        99: dup
+       100: invokespecial #77                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$26."<init>":()V
+       103: pop
+       104: invokedynamic #82,  0             // InvokeDynamic #3:invoke:()Lkotlin/jvm/functions/Function1;
+       109: astore        14
+       111: aconst_null
+       112: astore        15
+       114: new           #84                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$27
+       117: dup
+       118: invokespecial #85                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$27."<init>":()V
+       121: pop
+       122: invokedynamic #93,  0             // InvokeDynamic #4:invoke:()Lkotlin/jvm/functions/Function1;
+       127: astore        16
+       129: new           #95                 // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$28
+       132: dup
+       133: invokespecial #96                 // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$28."<init>":()V
+       136: pop
+       137: invokedynamic #101,  0            // InvokeDynamic #5:invoke:()Lkotlin/jvm/functions/Function1;
+       142: astore        17
+       144: aconst_null
+       145: astore        18
+       147: new           #103                // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$29
+       150: dup
+       151: aload         15
+       153: aload         12
+       155: aload         18
+       157: aload         6
+       159: aload_1
+       160: aload_2
+       161: aload_3
+       162: aload         4
+       164: aload         5
+       166: invokespecial #106                // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$29."<init>":(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
+       169: astore        19
+       171: aload         19
+       173: checkcast     #108                // class androidx/compose/ui/Modifier
+       176: aload         7
+       178: iload         8
+       180: invokestatic  #114                // Method androidx/compose/foundation/layout/BoxKt.Box:(Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)V
+       183: aload         7
+       185: invokeinterface #28,  1           // InterfaceMethod androidx/compose/runtime/Composer.endRestartGroup:()Landroidx/compose/runtime/ScopeUpdateScope;
+       190: dup
+       191: ifnull        219
+       194: iload_0
+       195: aload_1
+       196: aload_2
+       197: aload_3
+       198: aload         4
+       200: aload         5
+       202: aload         6
+       204: iload         8
+       206: invokedynamic #125,  0            // InvokeDynamic #6:invoke:(ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;I)Lkotlin/jvm/functions/Function2;
+       211: invokeinterface #32,  2           // InterfaceMethod androidx/compose/runtime/ScopeUpdateScope.updateScope:(Lkotlin/jvm/functions/Function2;)V
+       216: goto          220
+       219: pop
+       220: return
+
+  private static final kotlin.Unit RecordButton$lambda$0(boolean, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, androidx.compose.ui.Modifier, int, androidx.compose.runtime.Composer, int);
+    Code:
+         0: iload_0
+         1: aload_1
+         2: aload_2
+         3: aload_3
+         4: aload         4
+         6: aload         5
+         8: aload         6
+        10: aload         8
+        12: iload         7
+        14: iconst_1
+        15: ior
+        16: invokestatic  #142                // Method androidx/compose/runtime/RecomposeScopeImplKt.updateChangedFlags:(I)I
+        19: invokestatic  #144                // Method RecordButton:(ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)V
+        22: getstatic     #150                // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
+        25: areturn
+
+  private static final <T> androidx.compose.ui.Modifier voiceRecordingGesture(androidx.compose.ui.Modifier, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp);
+    Code:
+         0: aload_0
+         1: ldc           #154                // String <this>
+         3: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+         6: aload_1
+         7: ldc           #162                // String horizontalSwipeProgress
+         9: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        12: aload_2
+        13: ldc           #164                // String onSwipeProgressChanged
+        15: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        18: aload_3
+        19: ldc           #166                // String onClick
+        21: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        24: aload         4
+        26: ldc           #168                // String onStartRecording
+        28: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        31: aload         5
+        33: ldc           #170                // String onFinishRecording
+        35: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        38: aload         6
+        40: ldc           #172                // String onCancelRecording
+        42: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        45: aload         7
+        47: ldc           #174                // String swipeToCancelThreshold
+        49: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        52: aload         8
+        54: ldc           #176                // String verticalThreshold
+        56: invokestatic  #160                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+        59: new           #178                // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$35
+        62: dup
+        63: aload_3
+        64: invokespecial #181                // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$35."<init>":(Lkotlin/jvm/functions/Function0;)V
+        67: pop
+        68: new           #183                // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$37
+        71: dup
+        72: aload_3
+        73: invokespecial #184                // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$37."<init>":(Lkotlin/jvm/functions/Function0;)V
+        76: astore        9
+        78: aload_0
+        79: aconst_null
+        80: aload         9
+        82: invokevirtual #188                // Method androidx/compose/ui/Modifier.pointerInput:(Ljava/lang/Object;Lcom/example/compose/jetchat/conversation/RecordButtonKt$Lambda$37;)V
+        85: new           #190                // class com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$39
+        88: dup
+        89: aload         7
+        91: aload         8
+        93: aload_2
+        94: aload         4
+        96: aload         6
+        98: aload         5
+       100: aload_1
+       101: invokespecial #193                // Method com/example/compose/jetchat/conversation/RecordButtonKt$Lambda$39."<init>":(Landroidx/compose/ui/unit/Dp;Landroidx/compose/ui/unit/Dp;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
+       104: pop
+       105: aconst_null
+       106: checkcast     #108                // class androidx/compose/ui/Modifier
+       109: areturn
+
+  public static final float RecordButton$lambda$0(java.lang.Object);
+    Code:
+         0: aload_0
+         1: ifnull        9
+         4: fconst_2
+         5: fstore_1
+         6: goto          11
+         9: fconst_1
+        10: fstore_1
+        11: fload_1
+        12: freturn
+
+  public static final float RecordButton$lambda$1(java.lang.Object);
+    Code:
+         0: aload_0
+         1: ifnull        9
+         4: fconst_2
+         5: fstore_1
+         6: goto          11
+         9: fconst_1
+        10: fstore_1
+        11: fload_1
+        12: freturn
+
+  public static final float RecordButton$lambda$2(java.lang.Object);
+    Code:
+         0: aload_0
+         1: ifnull        9
+         4: fconst_1
+         5: fstore_1
+         6: goto          11
+         9: fconst_0
+        10: fstore_1
+        11: fload_1
+        12: freturn
+
+  public static final float RecordButton$lambda$3(java.lang.Object);
+    Code:
+         0: aload_0
+         1: ifnull        9
+         4: fconst_1
+         5: fstore_1
+         6: goto          11
+         9: fconst_0
+        10: fstore_1
+        11: fload_1
+        12: freturn
+
+  public static final long RecordButton$lambda$4(java.lang.Object);
+    Code:
+         0: lconst_0
+         1: lreturn
+
+  public static final long RecordButton$lambda$5(java.lang.Object);
+    Code:
+         0: lconst_0
+         1: lreturn
+}

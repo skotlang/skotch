@@ -1,0 +1,103 @@
+Compiled from "JetChatWidget.kt"
+public final class com.example.compose.jetchat.widget.JetChatWidget extends androidx.glance.appwidget.GlanceAppWidget {
+  public static final int $stable;
+
+  public com.example.compose.jetchat.widget.JetChatWidget();
+    Code:
+         0: aload_0
+         1: iconst_0
+         2: iconst_1
+         3: aconst_null
+         4: invokespecial #9                  // Method androidx/glance/appwidget/GlanceAppWidget."<init>":(IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+         7: return
+
+  public java.lang.Object provideGlance(android.content.Context, androidx.glance.GlanceId, kotlin.coroutines.Continuation<? super kotlin.Unit>);
+    Code:
+         0: aload_3
+         1: instanceof    #18                 // class com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1
+         4: ifeq          39
+         7: aload_3
+         8: checkcast     #18                 // class com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1
+        11: astore        5
+        13: aload         5
+        15: getfield      #22                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.label:I
+        18: ldc           #23                 // int -2147483648
+        20: iand
+        21: ifeq          39
+        24: aload         5
+        26: dup
+        27: getfield      #22                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.label:I
+        30: ldc           #23                 // int -2147483648
+        32: isub
+        33: putfield      #22                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.label:I
+        36: goto          50
+        39: new           #18                 // class com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1
+        42: dup
+        43: aload_0
+        44: aload_3
+        45: invokespecial #26                 // Method com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1."<init>":(Lcom/example/compose/jetchat/widget/JetChatWidget;Lkotlin/coroutines/Continuation;)V
+        48: astore        5
+        50: aload         5
+        52: getfield      #30                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.result:Ljava/lang/Object;
+        55: astore        4
+        57: invokestatic  #36                 // Method kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;
+        60: astore        6
+        62: aload         5
+        64: getfield      #22                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.label:I
+        67: tableswitch   { // 0 to 1
+                       0: 88
+                       1: 141
+                 default: 175
+            }
+        88: aload         4
+        90: invokestatic  #42                 // Method kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V
+        93: aload_0
+        94: checkcast     #4                  // class androidx/glance/appwidget/GlanceAppWidget
+        97: getstatic     #48                 // Field com/example/compose/jetchat/widget/ComposableSingletons$JetChatWidgetKt.INSTANCE:Lcom/example/compose/jetchat/widget/ComposableSingletons$JetChatWidgetKt;
+       100: invokevirtual #52                 // Method com/example/compose/jetchat/widget/ComposableSingletons$JetChatWidgetKt.getLambda$439461164$app:()Lkotlin/jvm/functions/Function2;
+       103: aload         5
+       105: aload         5
+       107: aload_1
+       108: invokestatic  #58                 // Method kotlin/coroutines/jvm/internal/SpillingKt.nullOutSpilledVariable:(Ljava/lang/Object;)Ljava/lang/Object;
+       111: putfield      #61                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.L$0:Ljava/lang/Object;
+       114: aload         5
+       116: aload_2
+       117: invokestatic  #58                 // Method kotlin/coroutines/jvm/internal/SpillingKt.nullOutSpilledVariable:(Ljava/lang/Object;)Ljava/lang/Object;
+       120: putfield      #64                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.L$1:Ljava/lang/Object;
+       123: aload         5
+       125: iconst_1
+       126: putfield      #22                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.label:I
+       129: invokestatic  #70                 // Method androidx/glance/appwidget/GlanceAppWidgetKt.provideContent:(Landroidx/glance/appwidget/GlanceAppWidget;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+       132: dup
+       133: aload         6
+       135: if_acmpne     166
+       138: aload         6
+       140: areturn
+       141: aload         5
+       143: getfield      #64                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.L$1:Ljava/lang/Object;
+       146: checkcast     #72                 // class androidx/glance/GlanceId
+       149: astore_2
+       150: aload         5
+       152: getfield      #61                 // Field com/example/compose/jetchat/widget/JetChatWidget$provideGlance$1.L$0:Ljava/lang/Object;
+       155: checkcast     #74                 // class android/content/Context
+       158: astore_1
+       159: aload         4
+       161: invokestatic  #42                 // Method kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V
+       164: aload         4
+       166: pop
+       167: new           #76                 // class kotlin/KotlinNothingValueException
+       170: dup
+       171: invokespecial #78                 // Method kotlin/KotlinNothingValueException."<init>":()V
+       174: athrow
+       175: new           #80                 // class java/lang/IllegalStateException
+       178: dup
+       179: ldc           #82                 // String call to \'resume\' before \'invoke\' with coroutine
+       181: invokespecial #85                 // Method java/lang/IllegalStateException."<init>":(Ljava/lang/String;)V
+       184: athrow
+
+  static {};
+    Code:
+         0: getstatic     #101                // Field androidx/glance/appwidget/GlanceAppWidget.$stable:I
+         3: putstatic     #102                // Field $stable:I
+         6: return
+}
