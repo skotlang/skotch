@@ -1,4 +1,4 @@
 name   = "1214-java-getter-property"
 status = "supported"
 features = ["java-interop", "property-access", "getter-method"]
-expected_output = "/tmp/skotch-1214\nskotch-1214\n"
+expected_output = "skotch-1214\nskotch-1214.txt\n"
