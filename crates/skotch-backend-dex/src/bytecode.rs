@@ -1314,6 +1314,10 @@ fn type_descriptor(ty: &Ty) -> &'static str {
         Ty::BooleanArray => "[Z",
         Ty::ByteArray => "[B",
         Ty::Any | Ty::Class(_) | Ty::Nullable(_) => "Ljava/lang/Object;",
+        // Generic and TypeVar erase to Object on the DEX (Dalvik has no
+        // generic descriptors). Backends that need the underlying class
+        // should call `erase_to_class()` and re-dispatch.
+        Ty::Generic { .. } | Ty::TypeVar(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;",
         Ty::Nothing => "V",
         Ty::Error => "V",

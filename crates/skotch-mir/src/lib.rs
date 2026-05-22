@@ -848,6 +848,15 @@ pub struct MirModule {
     /// handlers before the lambda arg is lowered; cleared after use.
     #[serde(skip)]
     pub lambda_receiver_type: Option<String>,
+    /// When set, the next lambda's implicit `it` parameter (and any
+    /// explicit single-name param) is typed to this `Ty` instead of
+    /// the default `Ty::Any`. Used for collection methods that know
+    /// their element type — `list.filter { it.foo }` propagates the
+    /// list's element type into the lambda so `it.foo` resolves
+    /// against the right class. Set by call-site handlers before the
+    /// lambda arg is lowered; cleared after use.
+    #[serde(skip)]
+    pub lambda_param_type: Option<Ty>,
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,

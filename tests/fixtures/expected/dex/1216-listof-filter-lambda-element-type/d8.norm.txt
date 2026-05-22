@@ -1,0 +1,170 @@
+dex_version   035
+strings       88
+types         22
+methods       27
+classes       2
+
+--- strings ---
+  ""
+  "$i$a$-filter-InputKt$main$mine$1"
+  "$i$f$filter"
+  "$i$f$filterTo"
+  "$this$filter$iv"
+  "$this$filterTo$iv$iv"
+  "()Ljava/lang/String;"
+  "(Ljava/lang/String;Ljava/lang/String;)V"
+  ")"
+  ", text="
+  "<init>"
+  "Hello"
+  "Hi back"
+  "How are you?"
+  "I"
+  "L"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "LLLLIL"
+  "LMessage;"
+  "Ldalvik/annotation/SourceDebugExtension;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "Ljava/util/Collection;"
+  "Ljava/util/Iterator;"
+  "Ljava/util/List;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "Message(author="
+  "SMAP\ninput.kt\nKotlin\n*S Kotlin\n*F\n+ 1 input.kt\nInputKt\n+ 2 _Collections.kt\nkotlin/collections/CollectionsKt___CollectionsKt\n*L\n1#1,20:1\n777#2:21\n873#2,2:22\n*S KotlinDebug\n*F\n+ 1 input.kt\nInputKt\n*L\n17#1:21\n17#1:22,2\n*E\n"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "Z"
+  "ZL"
+  "ZLL"
+  "[LMessage;"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "add"
+  "append"
+  "areEqual"
+  "author"
+  "checkNotNullParameter"
+  "component1"
+  "component2"
+  "copy"
+  "copy$default"
+  "d1"
+  "d2"
+  "destination$iv$iv"
+  "element$iv$iv"
+  "equals"
+  "getAuthor"
+  "getText"
+  "hasNext"
+  "hashCode"
+  "input.kt"
+  "it"
+  "iterator"
+  "k"
+  "listOf"
+  "main"
+  "me"
+  "mine"
+  "msgs"
+  "mv"
+  "next"
+  "other"
+  "out"
+  "println"
+  "size"
+  "text"
+  "toString"
+  "value"
+  "xi"
+  "you"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "�� \n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\n\u{2}\u{8}\n\n\u{2}\u{10}\u{b}\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{8}\n��\u{8}\u{86}\u{8}\u{18}��2\u{2}0\u{1}B\u{17}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{12}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{5}\u{10}\u{6}J\t\u{10}\n\u{1a}\u{2}0\u{3}HÆ\u{3}J\t\u{10}\u{b}\u{1a}\u{2}0\u{3}HÆ\u{3}J\u{1d}\u{10}\u{c}\u{1a}\u{2}0��2\u{8}\u{8}\u{2}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{8}\u{8}\u{2}\u{10}\u{4}\u{1a}\u{2}0\u{3}HÆ\u{1}J\u{14}\u{10}\r\u{1a}\u{2}0\u{e}2\u{8}\u{10}\u{f}\u{1a}\u{4}\u{18}\u{1}0\u{1}HÖ\u{83}\u{4}J\n\u{10}\u{10}\u{1a}\u{2}0\u{11}HÖ\u{81}\u{4}J\n\u{10}\u{12}\u{1a}\u{2}0\u{3}HÖ\u{81}\u{4}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{7}\u{10}\u{8}R\u{11}\u{10}\u{4}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\t\u{10}\u{8}"
+
+--- types ---
+  I
+  LInputKt;
+  LMessage;
+  Ldalvik/annotation/SourceDebugExtension;
+  Ljava/io/PrintStream;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  Ljava/util/Collection;
+  Ljava/util/Iterator;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [LMessage;
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LMessage;.<init>(Ljava/lang/String;Ljava/lang/String;)V
+  LMessage;.component1()Ljava/lang/String;
+  LMessage;.component2()Ljava/lang/String;
+  LMessage;.copy$default(LMessage;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)LMessage;
+  LMessage;.copy(Ljava/lang/String;Ljava/lang/String;)LMessage;
+  LMessage;.equals(Ljava/lang/Object;)Z
+  LMessage;.getAuthor()Ljava/lang/String;
+  LMessage;.getText()Ljava/lang/String;
+  LMessage;.hashCode()I
+  LMessage;.toString()Ljava/lang/String;
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/String;.hashCode()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/Collection;.add(Ljava/lang/Object;)Z
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Ljava/util/List;.size()I
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/jvm/internal/Intrinsics;.areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=12 ins=0 outs=3 insns=104
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+
+--- class[1] ---
+  descriptor   LMessage;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;Ljava/lang/String;)V flags=0x10001 regs=4 ins=3 outs=2 insns=18
+  method       component1()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       component2()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       copy(Ljava/lang/String;Ljava/lang/String;)LMessage; flags=0x0011 regs=4 ins=3 outs=3 insns=16
+  method       copy$default(LMessage;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)LMessage; flags=0x1009 regs=5 ins=5 outs=3 insns=17
+  method       equals(Ljava/lang/Object;)Z flags=0x0001 regs=7 ins=2 outs=2 insns=36
+  method       getAuthor()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getText()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       hashCode()I flags=0x0001 regs=4 ins=1 outs=1 insns=16
+  method       toString()Ljava/lang/String; flags=0x0001 regs=5 ins=1 outs=2 insns=40

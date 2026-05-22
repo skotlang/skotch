@@ -74,6 +74,26 @@ pub enum Ty {
     Nullable(Box<Ty>),
     /// A user-defined class type. Carries the fully-qualified class name.
     Class(std::string::String),
+    /// A parameterized generic type, e.g. `List<Message>` represented as
+    /// `Generic { base: Class("kotlin/collections/List"), args: [Class("Message")] }`.
+    ///
+    /// At the JVM/DEX descriptor level this **erases to its base** — the
+    /// JVM has no parametric polymorphism — but the type checker and
+    /// MIR-lower carry the args along so call sites can flow the element
+    /// type into lambdas (`list.filter { it.foo }`), constructors with
+    /// generic params, etc. Backends should call `erase_to_class()` /
+    /// `base_class()` when they only need the descriptor.
+    ///
+    /// `args` may contain other `Ty::Generic` for nested parameterization
+    /// (`Map<String, List<Int>>`) or `Ty::TypeVar(_)` while a constraint
+    /// system is still solving.
+    Generic { base: Box<Ty>, args: Vec<Ty> },
+    /// An unresolved inference variable, created during constraint
+    /// solving (`?T0`, `?T1`, ...). The id is unique within a single
+    /// inference context. Should never escape into MIR-lower / backends
+    /// — by the end of type-checking each `TypeVar` is either resolved
+    /// to a concrete `Ty` or reported as an error.
+    TypeVar(u32),
     /// Function type: `(Int, String) -> Boolean`. Used for lambda parameters.
     /// When `is_suspend` is true, this represents a `suspend` function type
     /// (e.g. `suspend () -> String`). On the JVM the arity is bumped by +1
@@ -206,9 +226,45 @@ impl Ty {
             Ty::BooleanArray => "BooleanArray",
             Ty::ByteArray => "ByteArray",
             Ty::Class(_) => "<class>",
+            Ty::Generic { .. } => "<generic>",
+            Ty::TypeVar(_) => "<typevar>",
             Ty::Function { .. } => "<function>",
             Ty::Nullable(_) => "<nullable>",
             Ty::Error => "<error>",
+        }
+    }
+
+    /// Strip generic args, returning just the underlying class type. For
+    /// most JVM backend purposes this is what you want — descriptors,
+    /// methodrefs, etc. use the erased form. Idempotent.
+    pub fn erase_to_class(&self) -> Ty {
+        match self {
+            Ty::Generic { base, .. } => base.as_ref().clone(),
+            Ty::Nullable(inner) => Ty::Nullable(Box::new(inner.erase_to_class())),
+            _ => self.clone(),
+        }
+    }
+
+    /// If this type is a class (possibly generic, possibly nullable),
+    /// return the JVM-internal class name. Used by descriptor builders
+    /// that don't care about generic args.
+    pub fn base_class_name(&self) -> Option<&str> {
+        match self {
+            Ty::Class(name) => Some(name.as_str()),
+            Ty::Generic { base, .. } => base.base_class_name(),
+            Ty::Nullable(inner) => inner.base_class_name(),
+            _ => None,
+        }
+    }
+
+    /// Generic arguments of a parameterized type, if any. Returns an
+    /// empty slice for non-parameterized types so callers can treat
+    /// everything uniformly.
+    pub fn generic_args(&self) -> &[Ty] {
+        match self {
+            Ty::Generic { args, .. } => args.as_slice(),
+            Ty::Nullable(inner) => inner.generic_args(),
+            _ => &[],
         }
     }
 }

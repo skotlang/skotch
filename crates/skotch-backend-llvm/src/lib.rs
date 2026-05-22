@@ -1080,6 +1080,10 @@ fn llvm_type(ty: &Ty) -> &'static str {
         Ty::String => "ptr",
         Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::BooleanArray | Ty::ByteArray => "ptr",
         Ty::Any | Ty::Class(_) | Ty::Function { .. } | Ty::Nullable(_) => "ptr",
+        // Generic and TypeVar erase to opaque pointer at the LLVM level.
+        // Callers that need a concrete element type should call
+        // `erase_to_class()` first.
+        Ty::Generic { .. } | Ty::TypeVar(_) => "ptr",
         Ty::Nothing => "void",
         Ty::Error => "void",
     }

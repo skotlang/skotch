@@ -1,0 +1,64 @@
+dex_version   035
+strings       34
+types         10
+methods       3
+classes       1
+
+--- strings ---
+  ""
+  "$completion"
+  "(I"
+  "(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+  "-"
+  ">;>;)"
+  "I"
+  "LI"
+  "LIL"
+  "LInputKt;"
+  "LL"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/util/List;"
+  "Ljava/util/List<"
+  "Lkotlin/Metadata;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/coroutines/Continuation;"
+  "Lkotlin/coroutines/Continuation<"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "a"
+  "boxInt"
+  "d1"
+  "d2"
+  "input.kt"
+  "k"
+  "listOf"
+  "makeList"
+  "mv"
+  "value"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{e}\n��\n\u{2}\u{10} \n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}\u{1a}\u{1c}\u{10}��\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{2}0\u{1}2\u{6}\u{10}\u{3}\u{1a}\u{2}0\u{2}H\u{86}@¢\u{6}\u{2}\u{10}\u{4}"
+
+--- types ---
+  I
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/coroutines/Continuation;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+
+--- methods ---
+  LInputKt;.makeList(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf(Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxInt(I)Ljava/lang/Integer;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       makeList(ILkotlin/coroutines/Continuation;)Ljava/lang/Object; flags=0x0019 regs=3 ins=2 outs=1 insns=9

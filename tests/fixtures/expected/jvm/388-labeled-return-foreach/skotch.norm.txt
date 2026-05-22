@@ -70,20 +70,18 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x0019
+method        main$lambda$0 (I)Lkotlin/Unit; 0x0019
   code        max_stack=2 max_locals=1
-    0000 aload_0
+    0000 iload_0
     0001 iconst_3
-    0002 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0005 invokevirtual Method(java/lang/Object.equals:(Ljava/lang/Object;)Z)
-    0008 ifeq 15
-    0011 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0014 areturn
-    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 aload_0
-    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0022 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0025 areturn
+    0002 if_icmpne 9
+    0005 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0008 areturn
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 iload_0
+    0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0016 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0019 areturn
     sub_attr  StackMapTable (3 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 class_attr    BootstrapMethods (12 bytes)

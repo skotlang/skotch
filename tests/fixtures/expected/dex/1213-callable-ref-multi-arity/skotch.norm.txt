@@ -1,0 +1,61 @@
+dex_version   035
+strings       23
+types         10
+methods       7
+classes       1
+
+--- strings ---
+  "I"
+  "LInputKt;"
+  "LL"
+  "LLIZ"
+  "LLLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/jvm/functions/Function3;"
+  "V"
+  "VL"
+  "Z"
+  "[Ljava/lang/String;"
+  "consumeFunction3"
+  "hi"
+  "input.kt"
+  "invoke"
+  "main"
+  "main$lambda$0"
+  "makeStr"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/jvm/functions/Function3;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.consumeFunction3(Ljava/lang/Object;)Ljava/lang/String;
+  LInputKt;.main$lambda$0(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.makeStr(Ljava/lang/String;IZ)Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Lkotlin/jvm/functions/Function3;.invoke(Ljava/lang/String;IZ)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       consumeFunction3(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=5 ins=1 outs=4 insns=9
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=10
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=4 ins=3 outs=3 insns=5
+  method       makeStr(Ljava/lang/String;IZ)Ljava/lang/String; flags=0x0019 regs=4 ins=3 outs=0 insns=1

@@ -1,0 +1,4 @@
+name   = "1217-listof-map-element-type"
+status = "supported"
+features = ["generics", "lambda", "type-inference", "collections"]
+expected_output = "Ada\nBob\nCy\n"

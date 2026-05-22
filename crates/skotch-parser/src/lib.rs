@@ -4112,35 +4112,21 @@ impl<'a> Parser<'a> {
                 }
             }
             if uses_it {
-                // Infer `it` type from usage in the body:
-                // - If `it` appears next to `.` (method call) → String
-                // - Otherwise → Int (most common case)
-                // TODO: proper inference from val annotation / function param type.
+                // Implicit `it` parameter. Default to `Any` — the
+                // mir-lower lambda body emission consumes
+                // `module.lambda_param_type` (set at the call site for
+                // collection methods like `filter`, `map`, etc.) and
+                // overrides this with the receiver's element type.
+                //
+                // A previous version of this code did a token-peek
+                // "inference": if `it` was followed by `.`, it picked
+                // `String`. That worked for `{ it.length }` on strings
+                // but broke `list.filter { it.author }` where `it` is
+                // actually `Message` (or any class) — the syntactic
+                // guess shadowed the real type and the lambda body
+                // got dropped during lowering.
                 let it_sym = self.interner.intern("it");
-                let mut it_type_name = "Any";
-                {
-                    let mut scan = self.pos;
-                    while scan < self.tokens.len() {
-                        match self.tokens[scan].kind {
-                            TokenKind::RBrace | TokenKind::Eof => break,
-                            TokenKind::Ident => {
-                                if let Some(skotch_lexer::TokenPayload::Ident(ref s)) =
-                                    self.payloads.get(scan).and_then(|p| p.as_ref())
-                                {
-                                    if s == "it"
-                                        && scan + 1 < self.tokens.len()
-                                        && self.tokens[scan + 1].kind == TokenKind::Dot
-                                    {
-                                        it_type_name = "String";
-                                        break;
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                        scan += 1;
-                    }
-                }
+                let it_type_name = "Any";
                 let type_sym = self.interner.intern(it_type_name);
                 params.push(Param {
                     name: it_sym,

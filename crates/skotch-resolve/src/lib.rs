@@ -310,8 +310,43 @@ fn infer_val_type_from_init(
 ) -> Ty {
     use skotch_syntax::ast::Expr;
     match init {
-        Expr::Call { callee, .. } => match callee.as_ref() {
+        Expr::Call { callee, args, .. } => match callee.as_ref() {
             Expr::Ident(sym, _) => {
+                let name = interner.resolve(*sym);
+                // Kotlin stdlib collection builders: `listOf`, `setOf`,
+                // `mapOf`, `arrayOf`. Each returns a parameterized
+                // collection over the inferred element type. We pick
+                // the first arg's inferred type as the element — for
+                // homogeneous collections this is right; heterogeneous
+                // `listOf(1, "two")` would infer `Any` either way, and
+                // the JVM-erased descriptor is still `List`.
+                let collection_ctor = match name {
+                    "listOf" | "mutableListOf" => Some("kotlin/collections/List".to_string()),
+                    "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" => {
+                        Some("kotlin/collections/Set".to_string())
+                    }
+                    "arrayOf" => Some("kotlin/Array".to_string()),
+                    "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" => {
+                        Some("kotlin/collections/Map".to_string())
+                    }
+                    _ => None,
+                };
+                if let Some(coll_class) = collection_ctor {
+                    let elem_ty = args
+                        .first()
+                        .map(|a| infer_val_type_from_init(&a.expr, interner, imports))
+                        .unwrap_or(Ty::Any);
+                    // `mapOf("k" to 1, ...)` — the args are
+                    // `Pair<K,V>` but we don't yet trace through `to`;
+                    // record `Map` as parameterized over the pair to
+                    // signal there IS a parameterization, and let
+                    // downstream code fall back to erasure if it can't
+                    // use it. Conservative.
+                    return Ty::Generic {
+                        base: Box::new(Ty::Class(coll_class)),
+                        args: vec![elem_ty],
+                    };
+                }
                 // Only treat the call as a constructor when the callee name
                 // starts uppercase (Kotlin convention). Lowercase Ident calls
                 // are top-level functions whose return type we can't recover
@@ -319,7 +354,6 @@ fn infer_val_type_from_init(
                 // produces fields like `ThemesKt.JetchatDarkColorScheme:
                 // Landroidx/compose/material3/darkColorScheme;` (the
                 // function path stuffed into a class-type slot).
-                let name = interner.resolve(*sym);
                 let starts_upper = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
                 if starts_upper {
                     if let Some(fq) = imports.get(name) {

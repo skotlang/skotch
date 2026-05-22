@@ -1,6 +1,6 @@
 dex_version   035
-strings       33
-types         14
+strings       35
+types         15
 methods       9
 classes       1
 
@@ -10,6 +10,7 @@ classes       1
   "Charlie"
   "I"
   "IL"
+  "INSTANCE"
   "LInputKt;"
   "LL"
   "LLL"
@@ -19,6 +20,7 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/lang/System;"
   "Ljava/util/List;"
+  "Lkotlin/Unit;"
   "Lkotlin/collections/CollectionsKt;"
   "Lkotlin/jvm/functions/Function1;"
   "Lkotlin/jvm/internal/Intrinsics;"
@@ -48,6 +50,7 @@ classes       1
   Ljava/lang/String;
   Ljava/lang/System;
   Ljava/util/List;
+  Lkotlin/Unit;
   Lkotlin/collections/CollectionsKt;
   Lkotlin/jvm/functions/Function1;
   Lkotlin/jvm/internal/Intrinsics;
@@ -56,7 +59,7 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt;.main$lambda$0(Ljava/lang/String;)I
+  LInputKt;.main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main$lambda$1(Ljava/lang/String;)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
@@ -72,5 +75,5 @@ classes       1
   source_file  input.kt
   method       main()V flags=0x0019 regs=13 ins=0 outs=2 insns=24
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       main$lambda$0(Ljava/lang/String;)I flags=0x0019 regs=3 ins=1 outs=2 insns=10
+  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=2 ins=1 outs=0 insns=3
   method       main$lambda$1(Ljava/lang/String;)I flags=0x0019 regs=3 ins=1 outs=2 insns=10

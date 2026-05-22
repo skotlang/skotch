@@ -1,0 +1,4 @@
+name   = "1216-listof-filter-lambda-element-type"
+status = "supported"
+features = ["generics", "lambda", "type-inference", "collections"]
+expected_output = "2\n"

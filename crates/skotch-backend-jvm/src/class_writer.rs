@@ -10149,6 +10149,14 @@ fn checkcast_class_for_return_ty(ty: &Ty) -> Option<String> {
         Ty::BooleanArray => Some("[Z".to_string()),
         Ty::ByteArray => Some("[B".to_string()),
         Ty::Class(name) => Some(name.clone()),
+        // Generic types erase to their base class at the JVM level —
+        // `List<Message>` cast → `Ljava/util/List;`. Recurse into the
+        // base so nullable/Class-wrapping handling stays uniform.
+        Ty::Generic { base, .. } => checkcast_class_for_return_ty(base),
+        // TypeVar should be resolved before reaching the backend. Treat
+        // an unsolved one as `Object` to keep emission from crashing —
+        // typeck should have produced a Ty::Error for it.
+        Ty::TypeVar(_) => Some("java/lang/Object".to_string()),
         Ty::Nullable(inner) => checkcast_class_for_return_ty(inner),
         Ty::Function { .. } => None,
     }
@@ -12404,6 +12412,14 @@ fn jvm_type(ty: &Ty) -> &'static str {
         Ty::BooleanArray => "[Z",
         Ty::ByteArray => "[B",
         Ty::Class(_) => "Ljava/lang/Object;",
+        // Generic types erase on the JVM — descriptor is the base
+        // class's descriptor. `List<Foo>` and `List` both descriptor
+        // to `Ljava/util/List;` (handled via the Class arm above by
+        // erasing first).
+        Ty::Generic { .. } => "Ljava/lang/Object;",
+        // TypeVar shouldn't reach the backend; conservatively emit as
+        // Object so the stack shape stays valid.
+        Ty::TypeVar(_) => "Ljava/lang/Object;",
         Ty::Function { .. } => "Ljava/lang/Object;", // erased on JVM
         Ty::Nothing => "V",                          // Nothing → void (unreachable on JVM)
         // Nullable reference types use Object in JVM descriptors so

@@ -1,0 +1,54 @@
+dex_version   035
+strings       28
+types         7
+methods       2
+classes       1
+
+--- strings ---
+  ""
+  "$completion"
+  "(I"
+  "(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+  "-"
+  ">;)"
+  "I"
+  "LI"
+  "LIL"
+  "LInputKt;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/coroutines/Continuation;"
+  "Lkotlin/coroutines/Continuation<"
+  "d1"
+  "d2"
+  "input.kt"
+  "k"
+  "mv"
+  "n"
+  "toString_"
+  "value"
+  "valueOf"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{e}\n��\n\u{2}\u{10}\u{e}\n��\n\u{2}\u{10}\u{8}\n��\u{1a}\u{16}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}H\u{86}@¢\u{6}\u{2}\u{10}\u{4}"
+
+--- types ---
+  I
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Lkotlin/Metadata;
+  Lkotlin/coroutines/Continuation;
+
+--- methods ---
+  LInputKt;.toString_(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+  Ljava/lang/String;.valueOf(I)Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       toString_(ILkotlin/coroutines/Continuation;)Ljava/lang/Object; flags=0x0019 regs=3 ins=2 outs=1 insns=5

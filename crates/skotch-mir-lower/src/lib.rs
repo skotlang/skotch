@@ -3443,14 +3443,40 @@ fn infer_top_level_val_ty(init: &Expr, file: &KtFile, interner: &Interner) -> Ty
         None
     };
     match init {
-        E::Call { callee, .. } => match callee.as_ref() {
+        E::Call { callee, args, .. } => match callee.as_ref() {
             E::Ident(sym, _) => {
+                let name = interner.resolve(*sym);
+                // Kotlin stdlib collection builders: `listOf`, `setOf`,
+                // `mapOf`, `arrayOf`. Each returns a parameterized
+                // collection over the inferred element type. Mirror of
+                // `skotch-resolve::infer_val_type_from_init` so the
+                // mir-lower side and the cross-file side agree.
+                let collection_ctor = match name {
+                    "listOf" | "mutableListOf" => Some("kotlin/collections/List".to_string()),
+                    "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" => {
+                        Some("kotlin/collections/Set".to_string())
+                    }
+                    "arrayOf" => Some("kotlin/Array".to_string()),
+                    "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" => {
+                        Some("kotlin/collections/Map".to_string())
+                    }
+                    _ => None,
+                };
+                if let Some(coll_class) = collection_ctor {
+                    let elem_ty = args
+                        .first()
+                        .map(|a| infer_top_level_val_ty(&a.expr, file, interner))
+                        .unwrap_or(Ty::Any);
+                    return Ty::Generic {
+                        base: Box::new(Ty::Class(coll_class)),
+                        args: vec![elem_ty],
+                    };
+                }
                 // Kotlin convention: type names start uppercase, function
                 // names start lowercase. Only treat the call as a class
                 // construction when the callee follows the type-name rule;
                 // otherwise we have no way to know the function's actual
                 // return type from this position and `Ty::Any` is correct.
-                let name = interner.resolve(*sym);
                 let starts_upper = name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
                 if !starts_upper {
                     return Ty::Any;
@@ -8420,6 +8446,75 @@ fn lower_expr(
                     }
                 }
 
+                // For collection methods that take a `(T) -> R` lambda,
+                // propagate the receiver's element type to the lambda's
+                // `it` parameter so `list.filter { it.foo }` correctly
+                // resolves `.foo` against the element class. Without
+                // this, the lambda's `it` falls back to `Ty::Any` and
+                // any member access on it gets silently dropped during
+                // MIR lowering (the source bug behind task #319).
+                //
+                // `Iterable<T>`-style methods: lambda is `(T) -> R`.
+                // `Map<K,V>`-style methods: lambda is `(Map.Entry<K,V>) -> R`
+                // (we don't yet model Map.Entry — leave as a follow-up).
+                if matches!(
+                    method_name_str.as_str(),
+                    "filter"
+                        | "filterNot"
+                        | "filterIsInstance"
+                        | "filterNotNull"
+                        | "map"
+                        | "mapNotNull"
+                        | "flatMap"
+                        | "forEach"
+                        | "forEachIndexed"
+                        | "onEach"
+                        | "any"
+                        | "all"
+                        | "none"
+                        | "count"
+                        | "first"
+                        | "firstOrNull"
+                        | "last"
+                        | "lastOrNull"
+                        | "find"
+                        | "findLast"
+                        | "single"
+                        | "singleOrNull"
+                        | "partition"
+                        | "groupBy"
+                        | "associateBy"
+                        | "associateWith"
+                        | "sortedBy"
+                        | "sortedByDescending"
+                        | "maxBy"
+                        | "maxByOrNull"
+                        | "minBy"
+                        | "minByOrNull"
+                        | "sumOf"
+                        | "sumBy"
+                        | "takeWhile"
+                        | "dropWhile"
+                ) {
+                    // Element type may be recorded in the receiver's
+                    // `Ty::Generic` args OR in the side-channel
+                    // `local_generic_args` map (used when the local's
+                    // nominal type stays as the erased class so
+                    // downstream pattern matches keep working). Prefer
+                    // the Generic form, fall back to the side channel.
+                    let element_ty = recv_ty.generic_args().first().cloned().or_else(|| {
+                        fb.mf
+                            .local_generic_args
+                            .get(&recv_local.0)
+                            .and_then(|args| args.first().cloned())
+                    });
+                    if let Some(elem) = element_ty {
+                        if !matches!(elem, Ty::Any) {
+                            module.lambda_param_type = Some(elem);
+                        }
+                    }
+                }
+
                 let mut all_args = vec![recv_local];
                 for a in args {
                     let id = lower_expr(
@@ -8436,6 +8531,7 @@ fn lower_expr(
                     all_args.push(id);
                 }
                 module.lambda_receiver_type = None; // clear after use
+                module.lambda_param_type = None; // clear after use
 
                 // ── data class copy() with default-fill ──────────
                 // `p.copy(y = 3)` fills unspecified params from receiver fields.
@@ -12341,7 +12437,19 @@ fn lower_expr(
                 }
 
                 // Call kotlin/collections/CollectionsKt.listOf(Object[])List
+                //
+                // Type the result as the erased `Ty::Class("java/util/List")`
+                // (downstream `.size`/`.add`/etc. dispatch matches on
+                // class names containing "List"). Record the element
+                // type in `local_generic_args` so the call-site lambda
+                // param inference (`.filter { it.foo }`) can recover it
+                // without changing the local's nominal type.
+                let elem_ty = arg_locals
+                    .first()
+                    .map(|a| fb.mf.locals[a.0 as usize].clone())
+                    .unwrap_or(Ty::Any);
                 let result = fb.new_local(Ty::Class("java/util/List".to_string()));
+                fb.mf.local_generic_args.insert(result.0, vec![elem_ty]);
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
                     value: Rvalue::Call {
@@ -12392,9 +12500,15 @@ fn lower_expr(
                     });
                 }
 
-                // Return type is java/util/List at JVM level. The .add()/.remove()
-                // dispatch already matches on class names containing "List".
+                // Return type is java/util/List at JVM level. Keep the
+                // erased Ty::Class and record element type in
+                // local_generic_args (same approach as listOf above).
+                let elem_ty = arg_locals
+                    .first()
+                    .map(|a| fb.mf.locals[a.0 as usize].clone())
+                    .unwrap_or(Ty::Any);
                 let result = fb.new_local(Ty::Class("java/util/List".to_string()));
+                fb.mf.local_generic_args.insert(result.0, vec![elem_ty]);
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
                     value: Rvalue::Call {
@@ -17704,9 +17818,30 @@ fn lower_expr(
                     helper_fb.mf.params.push(pid);
                     helper_scope.push((*sym, pid));
                 }
-                // Then user-declared params.
-                for p in params {
-                    let ty = resolve_type(interner.resolve(p.ty.name), module);
+                // Then user-declared params. For a single un-annotated
+                // explicit param (common case: parser-injected implicit
+                // `it: Any` from `{ it.foo }`), consume the call site's
+                // `lambda_param_type` so the param picks up the
+                // receiver's element type.
+                let override_first_meta: Option<Ty> = if params.len() == 1 {
+                    let first_resolved = resolve_type(interner.resolve(params[0].ty.name), module);
+                    if matches!(first_resolved, Ty::Any) {
+                        module
+                            .lambda_param_type
+                            .take()
+                            .filter(|t| !matches!(t, Ty::Any))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                for (param_idx, p) in params.iter().enumerate() {
+                    let ty = if param_idx == 0 && override_first_meta.is_some() {
+                        override_first_meta.clone().unwrap()
+                    } else {
+                        resolve_type(interner.resolve(p.ty.name), module)
+                    };
                     let pid = helper_fb.new_local(ty);
                     helper_fb.mf.params.push(pid);
                     helper_scope.push((p.name, pid));
@@ -18143,10 +18278,43 @@ fn lower_expr(
                 // so the invoke descriptor matches FunctionN.invoke(Object...).
                 // Then immediately unbox/cast to the annotated type in
                 // a body-local so method resolution and arithmetic work.
-                for p in params {
+                //
+                // If the lambda has exactly one explicit param with no
+                // annotation (`Ty::Any` after resolve), consume
+                // `module.lambda_param_type` set by the call site (e.g.
+                // `.filter`/`.map` on a `List<T>`). This covers both
+                // the parser's auto-injected `it: Any` for `{ ... }`
+                // bodies and user-written `{ x -> ... }` lambdas where
+                // `x` has no type annotation.
+                let mut consumed_lambda_param = false;
+                let override_first_param_ty: Option<Ty> = if params.len() == 1 {
+                    let first_resolved = resolve_type(interner.resolve(params[0].ty.name), module);
+                    if matches!(first_resolved, Ty::Any) {
+                        if let Some(ty) = module.lambda_param_type.take() {
+                            if !matches!(ty, Ty::Any) {
+                                consumed_lambda_param = true;
+                                Some(ty)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                for (param_idx, p) in params.iter().enumerate() {
                     let erased_pid = invoke_fb.new_local(Ty::Any);
                     invoke_fb.mf.params.push(erased_pid);
-                    let annotated_ty = resolve_type(interner.resolve(p.ty.name), module);
+                    let annotated_ty = if param_idx == 0 && override_first_param_ty.is_some() {
+                        override_first_param_ty.clone().unwrap()
+                    } else {
+                        resolve_type(interner.resolve(p.ty.name), module)
+                    };
+                    let _ = consumed_lambda_param;
                     if annotated_ty != Ty::Any {
                         // Cast/unbox from Object to the annotated type.
                         let cast_rvalue = match &annotated_ty {
@@ -18248,6 +18416,13 @@ fn lower_expr(
                     // params[0] is `this`, params[1] is the implicit `it`
                     let it_sym = interner.intern("it");
                     let it_local = invoke_fb.mf.params[1];
+                    // Override `it`'s type if the call site set
+                    // lambda_param_type (e.g. filter on List<T>).
+                    if let Some(ty) = module.lambda_param_type.take() {
+                        if !matches!(ty, Ty::Any) {
+                            invoke_fb.mf.locals[it_local.0 as usize] = ty;
+                        }
+                    }
                     invoke_scope.push((it_sym, it_local));
                 } else if params.is_empty()
                     && invoke_fb.mf.params.len() == 1
@@ -18263,7 +18438,14 @@ fn lower_expr(
                     // call-site `checkcast Function1` fails (e.g.
                     // JetChat's `onChatClicked = { ... selectedMenu
                     // = it }` lambdas).
-                    let it_local = invoke_fb.new_local(Ty::Any);
+                    //
+                    // Consume `module.lambda_param_type` (set by the
+                    // call site for collection methods like `filter`/
+                    // `map`) so `it`'s type matches the receiver's
+                    // element type — `it.author` resolves against the
+                    // right class instead of falling back to `Any`.
+                    let it_ty = module.lambda_param_type.take().unwrap_or(Ty::Any);
+                    let it_local = invoke_fb.new_local(it_ty);
                     invoke_fb.mf.params.push(it_local);
                     let it_sym = interner.intern("it");
                     invoke_scope.push((it_sym, it_local));

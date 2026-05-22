@@ -1,0 +1,4 @@
+name   = "1218-listof-foreach-data-class"
+status = "supported"
+features = ["generics", "lambda", "type-inference", "collections"]
+expected_output = "apples:3\noranges:7\n"
