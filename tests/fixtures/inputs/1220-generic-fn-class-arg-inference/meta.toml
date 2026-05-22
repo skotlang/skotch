@@ -1,0 +1,4 @@
+name   = "1220-generic-fn-class-arg-inference"
+status = "supported"
+features = ["generic-function", "type-inference"]
+expected_output = "hi\n"

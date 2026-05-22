@@ -14192,23 +14192,41 @@ fn walk_block(
                     };
                     bump(stack, max_stack, -arg_pop + return_push);
                     if target.return_ty != Ty::Unit && target.return_ty != Ty::Nothing {
-                        // Generic-call result unboxing. If the target is a
-                        // generic function (`<T> f(x: T): T`) the descriptor
-                        // returns Object, but the dest local's type was
-                        // specialized to a primitive at the MIR-lower call
-                        // site (the actual T is known from the arg's
-                        // concrete type). kotlinc inserts `checkcast Number;
-                        // intValue()` (or the matching primitive accessor)
-                        // before storing so callers see the unboxed value.
+                        // Generic-call result unboxing/widening. If the
+                        // target is a generic function (`<T> f(x: T): T`)
+                        // the descriptor returns Object, but the dest
+                        // local's type was specialized at the MIR-lower
+                        // call site (the actual T is inferred from the
+                        // arg's concrete type). Three cases:
+                        //   * dest is a primitive → checkcast to the
+                        //     boxed wrapper + invoke the primitive
+                        //     accessor (`intValue`, `booleanValue`, …).
+                        //   * dest is a class → checkcast to that class
+                        //     so subsequent member access verifies.
+                        //   * dest is `String` → checkcast java/lang/String.
+                        // kotlinc emits the same checkcast/unbox sequence.
                         let dest_ty = &func.locals[dest.0 as usize];
-                        if matches!(target.return_ty, Ty::Any)
-                            && target.has_type_params
-                            && !matches!(
-                                dest_ty,
-                                Ty::Any | Ty::Class(_) | Ty::String | Ty::Nullable(_)
-                            )
-                        {
-                            emit_generic_call_unbox(code, cp, stack, max_stack, dest_ty);
+                        if matches!(target.return_ty, Ty::Any) && target.has_type_params {
+                            match dest_ty {
+                                Ty::Any | Ty::Error | Ty::Nullable(_) => {
+                                    // No checkcast needed — already
+                                    // typed broadly enough for the
+                                    // operand stack value.
+                                }
+                                Ty::Class(cls) => {
+                                    let ci = cp.class(cls);
+                                    code.push(0xC0); // checkcast
+                                    code.write_u16::<BigEndian>(ci).unwrap();
+                                }
+                                Ty::String => {
+                                    let ci = cp.class("java/lang/String");
+                                    code.push(0xC0);
+                                    code.write_u16::<BigEndian>(ci).unwrap();
+                                }
+                                _ => {
+                                    emit_generic_call_unbox(code, cp, stack, max_stack, dest_ty);
+                                }
+                            }
                         }
                         if is_unused_local(*dest) {
                             // Statement-level call whose return is

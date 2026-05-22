@@ -8446,6 +8446,35 @@ fn lower_expr(
                     }
                 }
 
+                // For `.let`, `.also`, `.takeIf`, `.takeUnless`, the
+                // implicit `it` parameter is the receiver itself.
+                // Propagate the receiver's nominal type so the lambda
+                // body's references to `it.<field>` / `it.<method>`
+                // resolve correctly. `.apply` and `.run` bind the
+                // receiver as `this`, not `it`, so they get the
+                // receiver-type channel above but not this one.
+                //
+                // Common JetChat pattern (Profile.kt):
+                //   `userData.timeZone?.let { ProfileProperty(it) }`
+                // — `it` here is `String` (the type of `timeZone`)
+                // and the call site for `ProfileProperty(it)` needs
+                // that to type-check.
+                if matches!(
+                    method_name_str.as_str(),
+                    "let" | "also" | "takeIf" | "takeUnless"
+                ) {
+                    // Strip the outer `Nullable` wrapper if the
+                    // receiver is `T?` — inside the safe-call lambda
+                    // body, `it` has been null-narrowed to `T`.
+                    let it_ty = match &recv_ty {
+                        Ty::Nullable(inner) => (**inner).clone(),
+                        other => other.clone(),
+                    };
+                    if !matches!(it_ty, Ty::Any | Ty::Error | Ty::Unit) {
+                        module.lambda_param_type = Some(it_ty);
+                    }
+                }
+
                 // For collection methods that take a `(T) -> R` lambda,
                 // propagate the receiver's element type to the lambda's
                 // `it` parameter so `list.filter { it.foo }` correctly
@@ -14811,36 +14840,40 @@ fn lower_expr(
                     let target = &module.functions[fid.0 as usize];
                     let raw_ret = target.return_ty.clone();
                     // Generic call specialization: when calling
-                    // `<T> f(x: T): T` (or any generic fn returning T) with
-                    // a primitive arg, the call-site return type is that
-                    // primitive. The JVM descriptor still uses Object;
-                    // the JVM emitter inserts checkcast+unbox after the
-                    // invokestatic so the value lands in a typed slot.
-                    // Mirrors kotlinc's behavior.
+                    // `<T> f(x: T): T` (or any generic fn returning T)
+                    // with an arg of known type, the call-site result
+                    // type is that arg's type. The JVM descriptor still
+                    // uses Object (T erases to Object); the JVM emitter
+                    // inserts checkcast/unbox after the invokestatic so
+                    // the value lands in a typed slot. Mirrors
+                    // kotlinc's argument-driven inference for the
+                    // single-T case `fun <T> f(x: T): T`.
+                    //
+                    // We accept primitive AND class arg types now —
+                    // previously only primitives were specialized, so
+                    // `identity(Wrapper(...))` returned `Any` and
+                    // `result.field` failed to resolve.
                     if matches!(raw_ret, Ty::Any) && target.has_type_params {
                         if let Some(first_arg_id) = arg_locals.first() {
                             let first_arg_ty = fb.mf.locals[first_arg_id.0 as usize].clone();
                             // Only specialize when the first formal param
-                            // is also Any (T-typed). Some generics take
-                            // primitives directly with a separate T return.
+                            // is also Any (T-typed). Functions whose
+                            // first param is a concrete type aren't
+                            // generic in their first slot.
                             let first_param_is_t = target
                                 .params
                                 .first()
                                 .and_then(|pid| target.locals.get(pid.0 as usize))
                                 .is_some_and(|t| matches!(t, Ty::Any));
-                            if first_param_is_t
-                                && matches!(
-                                    first_arg_ty,
-                                    Ty::Int
-                                        | Ty::Long
-                                        | Ty::Double
-                                        | Ty::Float
-                                        | Ty::Bool
-                                        | Ty::Char
-                                        | Ty::Byte
-                                        | Ty::Short
-                                )
-                            {
+                            // Avoid specializing when the arg type is
+                            // unresolvable — `Ty::Any`/`Error`/Unit
+                            // don't carry useful info and overriding
+                            // raw_ret to them would just re-erase.
+                            let arg_is_concrete = !matches!(
+                                first_arg_ty,
+                                Ty::Any | Ty::Error | Ty::Unit | Ty::Nothing
+                            );
+                            if first_param_is_t && arg_is_concrete {
                                 first_arg_ty
                             } else {
                                 raw_ret
@@ -14876,6 +14909,47 @@ fn lower_expr(
                     ref descriptor,
                     ..
                 } => {
+                    // Compose-style stdlib functions that return a
+                    // generic `T` derived from a trailing lambda's
+                    // body: `remember { calc(): T }: T`, `lazy { … }`,
+                    // `derivedStateOf { … }`. The descriptor's return
+                    // type is `Object`/`Any`, but kotlinc infers T from
+                    // the lambda's last expression. We do the same:
+                    // look at the last `Ty::Function` arg and use its
+                    // `ret` if present.
+                    //
+                    // This is essential for `var x by remember {
+                    // mutableStateOf(false) }` — without inference `x`
+                    // would be `Any` and `.getValue()` lookups against
+                    // the delegate fail at codegen time.
+                    let is_t_from_lambda = matches!(
+                        method_name.as_str(),
+                        "remember" | "rememberSaveable" | "lazy" | "derivedStateOf"
+                    );
+                    if is_t_from_lambda {
+                        let trailing_lambda_ret =
+                            arg_locals
+                                .last()
+                                .and_then(|&id| match &fb.mf.locals[id.0 as usize] {
+                                    Ty::Function { ret, .. } => Some((**ret).clone()),
+                                    _ => None,
+                                });
+                        if let Some(ret_ty) = trailing_lambda_ret {
+                            if !matches!(ret_ty, Ty::Unit | Ty::Any) {
+                                return Some({
+                                    let dest = fb.new_local(ret_ty);
+                                    fb.push_stmt(MStmt::Assign {
+                                        dest,
+                                        value: Rvalue::Call {
+                                            kind: kind.clone(),
+                                            args: arg_locals.clone(),
+                                        },
+                                    });
+                                    dest
+                                });
+                            }
+                        }
+                    }
                     // For cross-file calls, look up return type from
                     // cross_file_fns or infer from descriptor.
                     if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name) {
