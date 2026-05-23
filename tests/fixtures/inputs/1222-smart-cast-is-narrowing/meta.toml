@@ -1,0 +1,4 @@
+name   = "1222-smart-cast-is-narrowing"
+status = "supported"
+features = ["smart-cast", "type-inference"]
+expected_output = "Named(Ada)\nunknown\n"

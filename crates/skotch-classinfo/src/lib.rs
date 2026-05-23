@@ -2,8 +2,11 @@
 //!
 //! Reads just enough of the class file format to build a registry of
 //! available methods for Java interop — constant pool, field_info,
-//! method_info, and access flags. Does NOT parse bytecode, attributes,
+//! method_info, access flags, and the `Signature` attribute (which
+//! carries the unerased generic type info). Does NOT parse bytecode
 //! or annotations.
+
+pub mod generic_signature;
 
 use std::collections::HashMap;
 use std::io::{self, Read};
@@ -94,6 +97,17 @@ pub struct MethodInfo {
     pub name: String,
     pub descriptor: String,
     pub access_flags: u16,
+    /// The JVM `Signature` attribute (JVMS §4.7.9), present on
+    /// generic methods. For `<T> List<T> listOf(T...)` this carries
+    /// the unerased string `<T:Ljava/lang/Object;>([TT;)Ljava/util/List<TT;>;`
+    /// — the descriptor would only show the erased
+    /// `([Ljava/lang/Object;)Ljava/util/List;`. The type inferrer
+    /// reads this to recover T from arg types and substitute it in
+    /// the result, replacing what used to be a hard-coded match on
+    /// known stdlib method names. `None` for non-generic methods,
+    /// or methods compiled without the attribute (e.g. plain Java
+    /// stdlib before any `<T>`).
+    pub signature: Option<String>,
 }
 
 /// A field signature.
@@ -102,6 +116,13 @@ pub struct FieldInfo {
     pub name: String,
     pub descriptor: String,
     pub access_flags: u16,
+    /// The JVM `Signature` attribute on the field. Present when the
+    /// field's declared type carries generic args, e.g. a Kotlin
+    /// property `val xs: List<Foo>` whose erased descriptor is
+    /// `Ljava/util/List;` but whose signature is
+    /// `Ljava/util/List<LFoo;>;`. Used so the inferrer can recover
+    /// the element type of cross-file fields.
+    pub signature: Option<String>,
 }
 
 const ACC_PUBLIC: u16 = 0x0001;
@@ -188,6 +209,55 @@ pub fn lookup_method_descriptor(
         }
         if let Some(d) = best {
             return Some(d.to_string());
+        }
+    }
+    None
+}
+
+/// Look up the parsed generic signature for a method, if present in
+/// its classfile. Returns `None` for non-generic methods (no
+/// `Signature` attribute) or when the class can't be loaded. Resolved
+/// against the same lookup order as [`lookup_method_descriptor`] —
+/// classpath cache first, then JDK jmods.
+///
+/// When `Some`, the result is suitable for feeding into
+/// [`generic_signature::infer_return_ty`] alongside the call-site
+/// arg types to recover the call's return Ty without enumerating
+/// the target method's name.
+pub fn lookup_method_signature(
+    class_path: &str,
+    method_name: &str,
+    param_count: usize,
+) -> Option<generic_signature::MethodSignature> {
+    let raw = lookup_method_signature_raw(class_path, method_name, param_count)?;
+    generic_signature::parse_method_signature(&raw)
+}
+
+fn lookup_method_signature_raw(
+    class_path: &str,
+    method_name: &str,
+    param_count: usize,
+) -> Option<String> {
+    if let Some(ci) = cached_class_lookup(class_path) {
+        for m in &ci.methods {
+            if (m.name == method_name || matches_mangled(&m.name, method_name))
+                && count_descriptor_params(&m.descriptor) == param_count
+            {
+                if let Some(sig) = &m.signature {
+                    return Some(sig.clone());
+                }
+            }
+        }
+    }
+    if let Ok(ci) = load_jdk_class(class_path) {
+        for m in &ci.methods {
+            if (m.name == method_name || matches_mangled(&m.name, method_name))
+                && count_descriptor_params(&m.descriptor) == param_count
+            {
+                if let Some(sig) = &m.signature {
+                    return Some(sig.clone());
+                }
+            }
         }
     }
     None
@@ -515,15 +585,25 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
         let f_name_idx = r.u16()? as usize;
         let f_desc_idx = r.u16()? as usize;
         let f_attrs = r.u16()? as usize;
+        let mut f_signature: Option<String> = None;
         for _ in 0..f_attrs {
-            let _attr_name = r.u16()?;
+            let attr_name_idx = r.u16()? as usize;
             let attr_len = r.u32()? as usize;
-            r.pos += attr_len;
+            let attr_name = resolve_utf8(&cp, attr_name_idx);
+            // `Signature` attribute body: u2 index into the constant
+            // pool pointing at a Utf8 entry. JVMS §4.7.9.
+            if attr_name == "Signature" && attr_len == 2 {
+                let sig_idx = r.u16()? as usize;
+                f_signature = Some(resolve_utf8(&cp, sig_idx));
+            } else {
+                r.pos += attr_len;
+            }
         }
         fields.push(FieldInfo {
             name: resolve_utf8(&cp, f_name_idx),
             descriptor: resolve_utf8(&cp, f_desc_idx),
             access_flags: f_access,
+            signature: f_signature,
         });
     }
 
@@ -535,15 +615,23 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
         let m_name_idx = r.u16()? as usize;
         let m_desc_idx = r.u16()? as usize;
         let m_attrs = r.u16()? as usize;
+        let mut m_signature: Option<String> = None;
         for _ in 0..m_attrs {
-            let _attr_name = r.u16()?;
+            let attr_name_idx = r.u16()? as usize;
             let attr_len = r.u32()? as usize;
-            r.pos += attr_len;
+            let attr_name = resolve_utf8(&cp, attr_name_idx);
+            if attr_name == "Signature" && attr_len == 2 {
+                let sig_idx = r.u16()? as usize;
+                m_signature = Some(resolve_utf8(&cp, sig_idx));
+            } else {
+                r.pos += attr_len;
+            }
         }
         methods.push(MethodInfo {
             name: resolve_utf8(&cp, m_name_idx),
             descriptor: resolve_utf8(&cp, m_desc_idx),
             access_flags: m_access,
+            signature: m_signature,
         });
     }
 

@@ -1,0 +1,4 @@
+name   = "1223-chained-map-filter-element-flow"
+status = "supported"
+features = ["generics", "lambda", "type-inference", "collections"]
+expected_output = "Cyril\n"

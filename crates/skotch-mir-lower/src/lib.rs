@@ -38,6 +38,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use skotch_types::intrinsics;
+
 thread_local! {
     /// Hint set by `lower_val_stmt` while lowering the right-hand side
     /// of a `val name = ...` so an `Expr::ObjectExpr` knows the target
@@ -3446,23 +3448,13 @@ fn infer_top_level_val_ty(init: &Expr, file: &KtFile, interner: &Interner) -> Ty
         E::Call { callee, args, .. } => match callee.as_ref() {
             E::Ident(sym, _) => {
                 let name = interner.resolve(*sym);
-                // Kotlin stdlib collection builders: `listOf`, `setOf`,
-                // `mapOf`, `arrayOf`. Each returns a parameterized
-                // collection over the inferred element type. Mirror of
+                // Kotlin stdlib collection builders. Centralized in
+                // `intrinsics::fallback_collection_builder_class`. Mirror of
                 // `skotch-resolve::infer_val_type_from_init` so the
                 // mir-lower side and the cross-file side agree.
-                let collection_ctor = match name {
-                    "listOf" | "mutableListOf" => Some("kotlin/collections/List".to_string()),
-                    "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" => {
-                        Some("kotlin/collections/Set".to_string())
-                    }
-                    "arrayOf" => Some("kotlin/Array".to_string()),
-                    "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" => {
-                        Some("kotlin/collections/Map".to_string())
-                    }
-                    _ => None,
-                };
+                let collection_ctor = intrinsics::fallback_collection_builder_class(name);
                 if let Some(coll_class) = collection_ctor {
+                    let coll_class = coll_class.to_string();
                     let elem_ty = args
                         .first()
                         .map(|a| infer_top_level_val_ty(&a.expr, file, interner))
@@ -5960,24 +5952,12 @@ fn lower_stmt(
                     let exc_ty = catch_type
                         .as_ref()
                         .map(|ct| {
+                            // Known stdlib exceptions resolve to their JVM
+                            // class via the central table; user exception
+                            // types pass through unchanged (identity).
                             let name = interner.resolve(*ct);
-                            match name {
-                                "IllegalStateException" => {
-                                    Ty::Class("java/lang/IllegalStateException".into())
-                                }
-                                "IllegalArgumentException" => {
-                                    Ty::Class("java/lang/IllegalArgumentException".into())
-                                }
-                                "RuntimeException" => {
-                                    Ty::Class("java/lang/RuntimeException".into())
-                                }
-                                "Exception" => Ty::Class("java/lang/Exception".into()),
-                                "Throwable" => Ty::Class("java/lang/Throwable".into()),
-                                "NullPointerException" => {
-                                    Ty::Class("java/lang/NullPointerException".into())
-                                }
-                                other => Ty::Class(other.to_string()),
-                            }
+                            let jvm = intrinsics::kotlin_to_jvm_class(name).unwrap_or(name);
+                            Ty::Class(jvm.to_string())
                         })
                         .unwrap_or(Ty::Error);
                     let exc_local = fb.new_local(exc_ty);
@@ -6018,36 +5998,8 @@ fn lower_stmt(
                 }
 
                 // Record exception handler.
-                let jvm_catch_type = catch_type.map(|sym| {
-                    let name = interner.resolve(sym).to_string();
-                    match name.as_str() {
-                        "Exception" => "java/lang/Exception".to_string(),
-                        "RuntimeException" => "java/lang/RuntimeException".to_string(),
-                        "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
-                        "NullPointerException" => "java/lang/NullPointerException".to_string(),
-                        "IllegalArgumentException" => {
-                            "java/lang/IllegalArgumentException".to_string()
-                        }
-                        "IllegalStateException" => "java/lang/IllegalStateException".to_string(),
-                        "IndexOutOfBoundsException" => {
-                            "java/lang/IndexOutOfBoundsException".to_string()
-                        }
-                        "ClassCastException" => "java/lang/ClassCastException".to_string(),
-                        "NumberFormatException" => "java/lang/NumberFormatException".to_string(),
-                        "UnsupportedOperationException" => {
-                            "java/lang/UnsupportedOperationException".to_string()
-                        }
-                        "Throwable" => "java/lang/Throwable".to_string(),
-                        "Error" => "java/lang/Error".to_string(),
-                        other => {
-                            if other.contains('/') {
-                                other.to_string()
-                            } else {
-                                format!("java/lang/{other}")
-                            }
-                        }
-                    }
-                });
+                let jvm_catch_type =
+                    catch_type.map(|sym| intrinsics::catch_type_to_jvm(interner.resolve(sym)));
 
                 fb.mf.exception_handlers.push(ExceptionHandler {
                     try_start_block: try_block,
@@ -6064,21 +6016,13 @@ fn lower_stmt(
                     let extra_catch_block = extra_catch_blocks[idx];
                     // Resolve declared exception type.
                     let extra_name = interner.resolve(*extra_type);
-                    let extra_exc_ty = match extra_name {
-                        "IllegalStateException" => {
-                            Ty::Class("java/lang/IllegalStateException".into())
-                        }
-                        "IllegalArgumentException" => {
-                            Ty::Class("java/lang/IllegalArgumentException".into())
-                        }
-                        "RuntimeException" => Ty::Class("java/lang/RuntimeException".into()),
-                        "Exception" => Ty::Class("java/lang/Exception".into()),
-                        "Throwable" => Ty::Class("java/lang/Throwable".into()),
-                        "NullPointerException" => {
-                            Ty::Class("java/lang/NullPointerException".into())
-                        }
-                        other => Ty::Class(other.to_string()),
-                    };
+                    // Known stdlib exceptions resolve via the central
+                    // table; user types pass through unchanged (identity).
+                    let extra_exc_ty = Ty::Class(
+                        intrinsics::kotlin_to_jvm_class(extra_name)
+                            .unwrap_or(extra_name)
+                            .to_string(),
+                    );
                     fb.cur_block = extra_catch_block;
                     let extra_exc_local = fb.new_local(extra_exc_ty);
                     let scope_entry = (*extra_param, extra_exc_local);
@@ -6116,40 +6060,8 @@ fn lower_stmt(
                         fb.cur_block = after_block;
                     }
                     // Map declared type name to FQN for exception table.
-                    let jvm_extra_type = {
-                        let n = interner.resolve(*extra_type).to_string();
-                        match n.as_str() {
-                            "Exception" => "java/lang/Exception".to_string(),
-                            "RuntimeException" => "java/lang/RuntimeException".to_string(),
-                            "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
-                            "NullPointerException" => "java/lang/NullPointerException".to_string(),
-                            "IllegalArgumentException" => {
-                                "java/lang/IllegalArgumentException".to_string()
-                            }
-                            "IllegalStateException" => {
-                                "java/lang/IllegalStateException".to_string()
-                            }
-                            "IndexOutOfBoundsException" => {
-                                "java/lang/IndexOutOfBoundsException".to_string()
-                            }
-                            "ClassCastException" => "java/lang/ClassCastException".to_string(),
-                            "NumberFormatException" => {
-                                "java/lang/NumberFormatException".to_string()
-                            }
-                            "UnsupportedOperationException" => {
-                                "java/lang/UnsupportedOperationException".to_string()
-                            }
-                            "Throwable" => "java/lang/Throwable".to_string(),
-                            "Error" => "java/lang/Error".to_string(),
-                            other => {
-                                if other.contains('/') {
-                                    other.to_string()
-                                } else {
-                                    format!("java/lang/{other}")
-                                }
-                            }
-                        }
-                    };
+                    let jvm_extra_type =
+                        intrinsics::catch_type_to_jvm(interner.resolve(*extra_type));
                     fb.mf.exception_handlers.push(ExceptionHandler {
                         try_start_block: try_block,
                         try_end_block: catch_block,
@@ -7629,9 +7541,18 @@ fn lower_expr(
                 if let Some((Expr::Ident(var_name, _), type_name)) = is_check_info {
                     let type_str = interner.resolve(type_name);
                     let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
-                        // Check if it's a user-defined class/interface.
+                        // Check same-file user classes first…
                         if module.classes.iter().any(|c| c.name == type_str) {
                             Ty::Class(type_str.to_string())
+                        }
+                        // …then file-level imports (parser strips the
+                        // module path; `import a.b.Foo` lands in
+                        // `module.import_map` as `Foo -> a/b/Foo`).
+                        // Without this, `if (x is Bar)` where Bar is
+                        // an imported class narrows to `Ty::Any` and
+                        // the smart-cast loses all useful information.
+                        else if let Some(fq) = module.import_map.get(type_str) {
+                            Ty::Class(fq.clone())
                         } else {
                             Ty::Any
                         }
@@ -8437,10 +8358,10 @@ fn lower_expr(
                 let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                 let method_name_str = interner.resolve(method_name).to_string();
 
-                // For scope functions (apply, run, with, also, let),
+                // For value scope functions (apply, run, also, let),
                 // set the receiver type so the lambda body can bind
                 // `this` to the receiver for implicit dispatch.
-                if matches!(method_name_str.as_str(), "apply" | "run" | "also" | "let") {
+                if intrinsics::is_value_scope_fn(method_name_str.as_str()) {
                     if let Ty::Class(ref cn) = recv_ty {
                         module.lambda_receiver_type = Some(cn.clone());
                     }
@@ -8459,17 +8380,11 @@ fn lower_expr(
                 // — `it` here is `String` (the type of `timeZone`)
                 // and the call site for `ProfileProperty(it)` needs
                 // that to type-check.
-                if matches!(
-                    method_name_str.as_str(),
-                    "let" | "also" | "takeIf" | "takeUnless"
-                ) {
+                if intrinsics::scope_fn_binds_it(method_name_str.as_str()) {
                     // Strip the outer `Nullable` wrapper if the
                     // receiver is `T?` — inside the safe-call lambda
                     // body, `it` has been null-narrowed to `T`.
-                    let it_ty = match &recv_ty {
-                        Ty::Nullable(inner) => (**inner).clone(),
-                        other => other.clone(),
-                    };
+                    let it_ty = intrinsics::strip_nullable(&recv_ty);
                     if !matches!(it_ty, Ty::Any | Ty::Error | Ty::Unit) {
                         module.lambda_param_type = Some(it_ty);
                     }
@@ -8486,45 +8401,7 @@ fn lower_expr(
                 // `Iterable<T>`-style methods: lambda is `(T) -> R`.
                 // `Map<K,V>`-style methods: lambda is `(Map.Entry<K,V>) -> R`
                 // (we don't yet model Map.Entry — leave as a follow-up).
-                if matches!(
-                    method_name_str.as_str(),
-                    "filter"
-                        | "filterNot"
-                        | "filterIsInstance"
-                        | "filterNotNull"
-                        | "map"
-                        | "mapNotNull"
-                        | "flatMap"
-                        | "forEach"
-                        | "forEachIndexed"
-                        | "onEach"
-                        | "any"
-                        | "all"
-                        | "none"
-                        | "count"
-                        | "first"
-                        | "firstOrNull"
-                        | "last"
-                        | "lastOrNull"
-                        | "find"
-                        | "findLast"
-                        | "single"
-                        | "singleOrNull"
-                        | "partition"
-                        | "groupBy"
-                        | "associateBy"
-                        | "associateWith"
-                        | "sortedBy"
-                        | "sortedByDescending"
-                        | "maxBy"
-                        | "maxByOrNull"
-                        | "minBy"
-                        | "minByOrNull"
-                        | "sumOf"
-                        | "sumBy"
-                        | "takeWhile"
-                        | "dropWhile"
-                ) {
+                if intrinsics::is_iterable_t_lambda_method(method_name_str.as_str()) {
                     // Element type may be recorded in the receiver's
                     // `Ty::Generic` args OR in the side-channel
                     // `local_generic_args` map (used when the local's
@@ -8703,9 +8580,7 @@ fn lower_expr(
                 // Lowered as inline intrinsics: the trailing lambda arg
                 // is invoked with the receiver, and the result depends
                 // on the scope function semantics.
-                if matches!(method_name_str.as_str(), "let" | "also" | "run" | "apply")
-                    && args.len() == 1
-                {
+                if intrinsics::is_value_scope_fn(method_name_str.as_str()) && args.len() == 1 {
                     // The single argument should be a lambda.
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
@@ -8765,16 +8640,15 @@ fn lower_expr(
                             },
                         });
 
-                        return match method_name_str.as_str() {
-                            "let" | "run" => {
-                                // Return the lambda's result.
-                                Some(call_result)
-                            }
-                            "also" | "apply" => {
-                                // Return the original receiver.
-                                Some(recv_local)
-                            }
-                            _ => unreachable!(),
+                        // `apply`/`also` return the original receiver;
+                        // `run`/`let` return the lambda's result.
+                        // (Predicates are excluded by is_value_scope_fn.)
+                        let returns_receiver = intrinsics::scope_fn(method_name_str.as_str())
+                            .is_some_and(intrinsics::ScopeFn::returns_receiver);
+                        return if returns_receiver {
+                            Some(recv_local)
+                        } else {
+                            Some(call_result)
                         };
                     }
                 }
@@ -10736,10 +10610,7 @@ fn lower_expr(
                 // then-block: unwrap and dispatch the method call via a
                 // synthetic Call { callee: Field { .. } } expression.
                 let recv_ty = fb.mf.locals[recv.0 as usize].clone();
-                let inner_ty = match &recv_ty {
-                    Ty::Nullable(inner) => (**inner).clone(),
-                    other => other.clone(),
-                };
+                let inner_ty = intrinsics::strip_nullable(&recv_ty);
                 let recv_unwrapped = if matches!(recv_ty, Ty::Nullable(_)) {
                     let uw = fb.new_local(inner_ty);
                     fb.push_stmt(MStmt::Assign {
@@ -10978,14 +10849,9 @@ fn lower_expr(
                             _ => arg_local,
                         };
                         // Emit instanceof check with the concrete type.
-                        let jvm_name = match concrete_type.as_str() {
-                            "String" => "java/lang/String".to_string(),
-                            "Int" => "java/lang/Integer".to_string(),
-                            "Long" => "java/lang/Long".to_string(),
-                            "Double" => "java/lang/Double".to_string(),
-                            "Boolean" => "java/lang/Boolean".to_string(),
-                            other => other.to_string(),
-                        };
+                        let jvm_name = intrinsics::runtime_check_jvm_class(&concrete_type)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| concrete_type.clone());
                         let result = fb.new_local(Ty::Bool);
                         fb.push_stmt(MStmt::Assign {
                             dest: result,
@@ -12839,20 +12705,8 @@ fn lower_expr(
             }
 
             // Exception constructors: `IllegalStateException("msg")` etc.
-            // Maps Kotlin exception class names to JVM internal names.
-            let exception_class = match callee_str {
-                "IllegalStateException" => Some("java/lang/IllegalStateException"),
-                "IllegalArgumentException" => Some("java/lang/IllegalArgumentException"),
-                "RuntimeException" => Some("java/lang/RuntimeException"),
-                "NullPointerException" => Some("java/lang/NullPointerException"),
-                "UnsupportedOperationException" => Some("java/lang/UnsupportedOperationException"),
-                "IndexOutOfBoundsException" => Some("java/lang/IndexOutOfBoundsException"),
-                "NoSuchElementException" => Some("java/util/NoSuchElementException"),
-                "Exception" => Some("java/lang/Exception"),
-                "Error" | "AssertionError" => Some("java/lang/AssertionError"),
-                "NotImplementedError" => Some("kotlin/NotImplementedError"),
-                _ => None,
-            };
+            // The Kotlin → JVM name map lives in one place (intrinsics §7).
+            let exception_class = intrinsics::kotlin_exception_class(callee_str);
             if let Some(jvm_class) = exception_class {
                 // Use ClasspathIndex to find the correct constructor overload.
                 let arg_types: Vec<Ty> = arg_locals
@@ -14905,64 +14759,69 @@ fn lower_expr(
                     ret
                 }
                 CallKind::StaticJava {
+                    ref class_name,
                     ref method_name,
                     ref descriptor,
-                    ..
                 } => {
-                    // Compose-style stdlib functions that return a
-                    // generic `T` derived from a trailing lambda's
-                    // body: `remember { calc(): T }: T`, `lazy { … }`,
-                    // `derivedStateOf { … }`. The descriptor's return
-                    // type is `Object`/`Any`, but kotlinc infers T from
-                    // the lambda's last expression. We do the same:
-                    // look at the last `Ty::Function` arg and use its
-                    // `ret` if present.
+                    // ── Generic-signature-driven inference ────────
+                    // If the target method has a `Signature` attribute
+                    // (JVMS §4.7.9) AND it actually declares type
+                    // parameters, parse it and run the unifier
+                    // against the actual arg Tys to recover the
+                    // type-variable bindings. The substituted return
+                    // signature becomes the call's result Ty.
                     //
-                    // This is essential for `var x by remember {
-                    // mutableStateOf(false) }` — without inference `x`
-                    // would be `Any` and `.getValue()` lookups against
-                    // the delegate fail at codegen time.
-                    let is_t_from_lambda = matches!(
-                        method_name.as_str(),
-                        "remember" | "rememberSaveable" | "lazy" | "derivedStateOf"
-                    );
-                    if is_t_from_lambda {
-                        let trailing_lambda_ret =
+                    // This subsumes a chunk of the hardcoded method-
+                    // name lists (`listOf`/`map`/`mutableStateOf`/
+                    // `remember`/…) — kotlinc-compiled stdlib classes
+                    // carry the unerased generic info we need.
+                    let arg_tys: Vec<Ty> = arg_locals
+                        .iter()
+                        .map(|l| fb.mf.locals[l.0 as usize].clone())
+                        .collect();
+                    let sig_inferred: Option<Ty> = skotch_classinfo::lookup_method_signature(
+                        class_name,
+                        method_name,
+                        arg_locals.len(),
+                    )
+                    .filter(|s| !s.type_params.is_empty())
+                    .map(|s| skotch_classinfo::generic_signature::infer_return_ty(&s, &arg_tys))
+                    .filter(|t| !matches!(t, Ty::Any));
+                    if let Some(t) = sig_inferred {
+                        t
+                    } else {
+                        // Fall back to the (still-needed) hardcoded
+                        // lambda-return-T pattern for Compose intrinsics
+                        // whose classpath signatures we don't have
+                        // (e.g. private Compose runtime classes).
+                        let is_t_from_lambda =
+                            intrinsics::is_compose_t_from_lambda(method_name.as_str());
+                        let lambda_ret = if is_t_from_lambda {
                             arg_locals
                                 .last()
                                 .and_then(|&id| match &fb.mf.locals[id.0 as usize] {
                                     Ty::Function { ret, .. } => Some((**ret).clone()),
                                     _ => None,
-                                });
-                        if let Some(ret_ty) = trailing_lambda_ret {
-                            if !matches!(ret_ty, Ty::Unit | Ty::Any) {
-                                return Some({
-                                    let dest = fb.new_local(ret_ty);
-                                    fb.push_stmt(MStmt::Assign {
-                                        dest,
-                                        value: Rvalue::Call {
-                                            kind: kind.clone(),
-                                            args: arg_locals.clone(),
-                                        },
-                                    });
-                                    dest
-                                });
+                                })
+                                .filter(|t| !matches!(t, Ty::Unit | Ty::Any))
+                        } else {
+                            None
+                        };
+                        if let Some(t) = lambda_ret {
+                            t
+                        } else if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name)
+                        {
+                            ret_ty.clone()
+                        } else {
+                            match skotch_classinfo::return_type_from_descriptor(descriptor) {
+                                "Unit" => Ty::Unit,
+                                "Boolean" => Ty::Bool,
+                                "Int" => Ty::Int,
+                                "Long" => Ty::Long,
+                                "Double" => Ty::Double,
+                                "String" => Ty::String,
+                                _ => Ty::Any,
                             }
-                        }
-                    }
-                    // For cross-file calls, look up return type from
-                    // cross_file_fns or infer from descriptor.
-                    if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name) {
-                        ret_ty.clone()
-                    } else {
-                        match skotch_classinfo::return_type_from_descriptor(descriptor) {
-                            "Unit" => Ty::Unit,
-                            "Boolean" => Ty::Bool,
-                            "Int" => Ty::Int,
-                            "Long" => Ty::Long,
-                            "Double" => Ty::Double,
-                            "String" => Ty::String,
-                            _ => Ty::Any,
                         }
                     }
                 }
@@ -15037,7 +14896,71 @@ fn lower_expr(
                 }
             }
 
+            // Before consuming `kind`, peek at the method name and
+            // figure out whether the call's result needs an element-
+            // type tag (e.g. `users.filter { ... }` is `List<User>`,
+            // `users.map { it.name }` is `List<String>`). The collection
+            // backbone calls go through `CollectionsKt`/`SequencesKt`
+            // static methods after the receiver-method-dispatch rewrite.
+            //
+            // We use the side-channel `local_generic_args` rather than
+            // changing the nominal `dest_ty` so the downstream type-
+            // sensitive dispatchers (`.size`, `.add`, etc.) keep
+            // matching on `Class(java/util/List)`. Chained calls like
+            // `users.map { it.name }.filter { it.length > 0 }` work
+            // because the filter dispatch reads element type from
+            // `local_generic_args`.
+            let result_element_ty: Option<Ty> =
+                if let CallKind::StaticJava { method_name, .. } = &kind {
+                    let lambda_ret =
+                        arg_locals
+                            .last()
+                            .and_then(|&id| match &fb.mf.locals[id.0 as usize] {
+                                Ty::Function { ret, .. } => Some((**ret).clone()),
+                                _ => None,
+                            });
+                    let receiver_elem = arg_locals.first().and_then(|&id| {
+                        let recv_ty = &fb.mf.locals[id.0 as usize];
+                        recv_ty.generic_args().first().cloned().or_else(|| {
+                            fb.mf
+                                .local_generic_args
+                                .get(&id.0)
+                                .and_then(|args| args.first().cloned())
+                        })
+                    });
+                    let first_arg_ty = arg_locals
+                        .first()
+                        .map(|&id| fb.mf.locals[id.0 as usize].clone());
+                    let m = method_name.as_str();
+                    if intrinsics::is_element_preserving(m) {
+                        // Receiver-element-preserving: result is `List<T>`
+                        // where T is the receiver's element type.
+                        receiver_elem.filter(|t| !matches!(t, Ty::Any))
+                    } else if intrinsics::is_map_family(m) {
+                        // Lambda-return-driven: result is `List<R>` where R
+                        // is the lambda body's last-expression type.
+                        lambda_ret.filter(|t| !matches!(t, Ty::Unit | Ty::Any))
+                    } else if matches!(
+                        m,
+                        "mutableStateOf" | "stateOf" | "mutableStateListOf" | "mutableStateSetOf"
+                    ) {
+                        // First-arg-driven: Compose's `mutableStateOf(v)`
+                        // returns `MutableState<typeof(v)>`. Recording the
+                        // element type on the result local lets `state.value`
+                        // resolve against the right field type at downstream
+                        // access sites without having to model full
+                        // `Class<T>` parameterization.
+                        first_arg_ty.filter(|t| !matches!(t, Ty::Any | Ty::Unit | Ty::Error))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
             let dest = fb.new_local(dest_ty);
+            if let Some(elem) = result_element_ty {
+                fb.mf.local_generic_args.insert(dest.0, vec![elem]);
+            }
             let stmt_idx = fb.mf.blocks[fb.cur_block as usize].stmts.len() as u32;
             fb.push_stmt(MStmt::Assign {
                 dest,
@@ -15447,15 +15370,9 @@ fn lower_expr(
                         let raw_type_str = interner.resolve(*type_name);
                         let substituted = fb.reified_types.get(raw_type_str).cloned();
                         let type_str = substituted.as_deref().unwrap_or(raw_type_str);
-                        let jvm_type = match type_str {
-                            "String" => "java/lang/String".to_string(),
-                            "Int" => "java/lang/Integer".to_string(),
-                            "Long" => "java/lang/Long".to_string(),
-                            "Double" => "java/lang/Double".to_string(),
-                            "Boolean" => "java/lang/Boolean".to_string(),
-                            "Any" => "java/lang/Object".to_string(),
-                            other => other.to_string(),
-                        };
+                        let jvm_type = intrinsics::runtime_check_jvm_class(type_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| type_str.to_string());
                         let dest = fb.new_local(Ty::Bool);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -16395,8 +16312,7 @@ fn lower_expr(
             // backend handles via `i2f`/`l2f`/`d2f`).
             {
                 let field_str = interner.resolve(*name);
-                let is_compose_unit_prop = matches!(field_str, "dp" | "sp" | "em");
-                if is_compose_unit_prop {
+                if intrinsics::is_compose_unit_prop(field_str) {
                     // Build a synthetic `<receiver>.toFloat()` call and
                     // recurse via lower_expr so the existing primitive-
                     // conversion path handles the actual numeric coerce.
@@ -17116,36 +17032,8 @@ fn lower_expr(
                 fb.terminate_and_switch(Terminator::Goto(after_block), after_block);
 
                 // Exception handler entry.
-                let jvm_catch_type = catch_type.map(|sym| {
-                    let name = interner.resolve(sym).to_string();
-                    match name.as_str() {
-                        "Exception" => "java/lang/Exception".to_string(),
-                        "RuntimeException" => "java/lang/RuntimeException".to_string(),
-                        "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
-                        "NullPointerException" => "java/lang/NullPointerException".to_string(),
-                        "IllegalArgumentException" => {
-                            "java/lang/IllegalArgumentException".to_string()
-                        }
-                        "IllegalStateException" => "java/lang/IllegalStateException".to_string(),
-                        "IndexOutOfBoundsException" => {
-                            "java/lang/IndexOutOfBoundsException".to_string()
-                        }
-                        "ClassCastException" => "java/lang/ClassCastException".to_string(),
-                        "NumberFormatException" => "java/lang/NumberFormatException".to_string(),
-                        "UnsupportedOperationException" => {
-                            "java/lang/UnsupportedOperationException".to_string()
-                        }
-                        "Throwable" => "java/lang/Throwable".to_string(),
-                        "Error" => "java/lang/Error".to_string(),
-                        other => {
-                            if other.contains('/') {
-                                other.to_string()
-                            } else {
-                                format!("java/lang/{other}")
-                            }
-                        }
-                    }
-                });
+                let jvm_catch_type =
+                    catch_type.map(|sym| intrinsics::catch_type_to_jvm(interner.resolve(sym)));
 
                 fb.mf.exception_handlers.push(ExceptionHandler {
                     try_start_block: try_block,
@@ -17284,10 +17172,7 @@ fn lower_expr(
             // then: dispatch the property access on the non-null receiver.
             // Unwrap the nullable type to get the inner type for dispatch.
             let recv_ty = fb.mf.locals[recv.0 as usize].clone();
-            let inner_ty = match &recv_ty {
-                Ty::Nullable(inner) => (**inner).clone(),
-                other => other.clone(),
-            };
+            let inner_ty = intrinsics::strip_nullable(&recv_ty);
             let field_name = interner.resolve(*name).to_string();
 
             // Create a non-nullable alias so JVM dispatch sees the right type.
@@ -17439,20 +17324,8 @@ fn lower_expr(
             let substituted = fb.reified_types.get(raw_type_str).cloned();
             let type_str = substituted.as_deref().unwrap_or(raw_type_str);
             // Map Kotlin type names to JVM internal names for instanceof.
-            let jvm_type = match type_str {
-                "String" => "java/lang/String",
-                "Int" => "java/lang/Integer",
-                "Long" => "java/lang/Long",
-                "Double" => "java/lang/Double",
-                "Boolean" => "java/lang/Boolean",
-                "Any" => "java/lang/Object",
-                other => {
-                    // User-defined class — use as-is (single-segment name).
-                    // Leak into a stable &str for the descriptor.
-                    // (For now, assume same-module classes.)
-                    other
-                }
-            };
+            // User-defined classes pass through as-is (single-segment name).
+            let jvm_type = intrinsics::runtime_check_jvm_class(type_str).unwrap_or(type_str);
             // Const-fold when `obj`'s static or last-assigned type
             // already matches the checked type — kotlinc emits
             // `iconst_1` for an `is` against the same class. Only
@@ -17593,15 +17466,11 @@ fn lower_expr(
                     Ty::Any
                 }
             });
-            let default_jvm: String = match type_str {
-                "String" => "java/lang/String".to_string(),
-                "Int" => "java/lang/Integer".to_string(),
-                "Long" => "java/lang/Long".to_string(),
-                "Double" => "java/lang/Double".to_string(),
-                "Boolean" => "java/lang/Boolean".to_string(),
-                "Char" => "java/lang/Character".to_string(),
-                other => imported_fq.clone().unwrap_or_else(|| other.to_string()),
-            };
+            // Boxed JVM class for the runtime cast; unknown types fall
+            // back to the import map, then to the bare name.
+            let default_jvm: String = intrinsics::runtime_check_jvm_class(type_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| imported_fq.clone().unwrap_or_else(|| type_str.to_string()));
             let jvm_type = default_jvm.as_str();
             if *safe {
                 // `as?` — emit instanceof check: returns T? (null if not match)

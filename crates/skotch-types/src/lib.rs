@@ -27,6 +27,8 @@
 //! own crate lets backends import the types directly without depending
 //! on the type-checker.
 
+pub mod intrinsics;
+
 /// Surface type after the typeck pass.
 ///
 /// Currently a small set; the remaining variants are placeholders

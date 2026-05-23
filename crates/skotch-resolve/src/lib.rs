@@ -313,25 +313,17 @@ fn infer_val_type_from_init(
         Expr::Call { callee, args, .. } => match callee.as_ref() {
             Expr::Ident(sym, _) => {
                 let name = interner.resolve(*sym);
-                // Kotlin stdlib collection builders: `listOf`, `setOf`,
-                // `mapOf`, `arrayOf`. Each returns a parameterized
-                // collection over the inferred element type. We pick
-                // the first arg's inferred type as the element — for
-                // homogeneous collections this is right; heterogeneous
-                // `listOf(1, "two")` would infer `Any` either way, and
-                // the JVM-erased descriptor is still `List`.
-                let collection_ctor = match name {
-                    "listOf" | "mutableListOf" => Some("kotlin/collections/List".to_string()),
-                    "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" => {
-                        Some("kotlin/collections/Set".to_string())
-                    }
-                    "arrayOf" => Some("kotlin/Array".to_string()),
-                    "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" => {
-                        Some("kotlin/collections/Map".to_string())
-                    }
-                    _ => None,
-                };
+                // Kotlin stdlib collection builders + Compose state
+                // holders — centralized in
+                // `skotch_types::intrinsics::fallback_collection_builder_class`.
+                // We pick the first arg's inferred type as the
+                // element; heterogeneous `listOf(1, "two")` would
+                // infer `Any` either way, and the JVM-erased
+                // descriptor is still `List`.
+                let collection_ctor =
+                    skotch_types::intrinsics::fallback_collection_builder_class(name);
                 if let Some(coll_class) = collection_ctor {
+                    let coll_class = coll_class.to_string();
                     let elem_ty = args
                         .first()
                         .map(|a| infer_val_type_from_init(&a.expr, interner, imports))
@@ -776,89 +768,9 @@ pub fn resolve_file(
     r.out.top_level.insert(println_sym, DefId::PrintlnIntrinsic);
     let print_sym = r.interner.intern("print");
     r.out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
-    // Register stdlib top-level functions.
-    for name in &[
-        "maxOf",
-        "minOf",
-        "with",
-        "repeat",
-        "listOf",
-        "mutableListOf",
-        "mapOf",
-        "mutableMapOf",
-        "setOf",
-        "mutableSetOf",
-        "Pair",
-        "Triple",
-        "runBlocking",
-        "delay",
-        "launch",
-        "async",
-        "withContext",
-        "coroutineScope",
-        "supervisorScope",
-        "withTimeout",
-        "withTimeoutOrNull",
-        "yield",
-        "StringBuilder",
-        "require",
-        "check",
-        "error",
-        "TODO",
-        "arrayOf",
-        "intArrayOf",
-        "longArrayOf",
-        "doubleArrayOf",
-        "booleanArrayOf",
-        "byteArrayOf",
-        "LongArray",
-        "DoubleArray",
-        "BooleanArray",
-        "ByteArray",
-        "buildString",
-        "sequence",
-        "buildList",
-        "buildMap",
-        "buildSet",
-        "lazy",
-        "emptyList",
-        "emptyMap",
-        "emptySet",
-        "hashMapOf",
-        "hashSetOf",
-        "linkedMapOf",
-        "sortedMapOf",
-        "sortedSetOf",
-        // Regex constructor
-        "Regex",
-        // kotlin.math functions
-        "abs",
-        "sqrt",
-        "ceil",
-        "floor",
-        "round",
-        "pow",
-        "sin",
-        "cos",
-        "tan",
-        "log",
-        "log10",
-        "exp",
-        // IO functions
-        "readLine",
-        "readln",
-        // Exception constructors
-        "IllegalStateException",
-        "IllegalArgumentException",
-        "RuntimeException",
-        "NullPointerException",
-        "UnsupportedOperationException",
-        "IndexOutOfBoundsException",
-        "NoSuchElementException",
-        "Exception",
-        "AssertionError",
-        "NotImplementedError",
-    ] {
+    // Register stdlib top-level functions — the canonical list lives
+    // in `skotch_types::intrinsics::STDLIB_TOP_LEVEL_NAMES`.
+    for name in skotch_types::intrinsics::STDLIB_TOP_LEVEL_NAMES {
         let sym = r.interner.intern(name);
         r.out.top_level.insert(sym, DefId::PrintlnIntrinsic); // reuse intrinsic DefId
     }
