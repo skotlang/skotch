@@ -14940,10 +14940,7 @@ fn lower_expr(
                         // Lambda-return-driven: result is `List<R>` where R
                         // is the lambda body's last-expression type.
                         lambda_ret.filter(|t| !matches!(t, Ty::Unit | Ty::Any))
-                    } else if matches!(
-                        m,
-                        "mutableStateOf" | "stateOf" | "mutableStateListOf" | "mutableStateSetOf"
-                    ) {
+                    } else if intrinsics::is_compose_state_holder(m) {
                         // First-arg-driven: Compose's `mutableStateOf(v)`
                         // returns `MutableState<typeof(v)>`. Recording the
                         // element type on the result local lets `state.value`

@@ -194,11 +194,23 @@ pub fn unify_one(formal: &JavaTypeSignature, actual: &skotch_types::Ty, subst: &
             }
         }
         JavaTypeSignature::Array(inner_sig) => {
-            // Without a generic Array(T) variant we can't recurse —
-            // primitive arrays carry no element type information.
-            // Object arrays would need the actual arg to be a list-
-            // like Ty::Generic too; rare in practice.
-            let _ = inner_sig;
+            // A `vararg x: T` parameter compiles to an array formal
+            // `[T]`, but the call passes the elements individually
+            // (`listOf("a", "b")` → the unifier sees the first
+            // element's Ty as the actual). Bind the element type
+            // variable from that scalar actual. We skip when the
+            // actual is itself a primitive array (a `*spread` of e.g.
+            // `IntArray`) — there's no Array(T) lattice variant to
+            // recover the scalar element from, and binding T to the
+            // whole array would be wrong. Object-array actuals surface
+            // as `Ty::Any`, which the `TypeVar` arm discards as vacuous.
+            let actual_is_primitive_array = matches!(
+                actual,
+                Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::BooleanArray | Ty::ByteArray
+            );
+            if !actual_is_primitive_array {
+                unify_one(inner_sig, actual, subst);
+            }
         }
         JavaTypeSignature::ClassType { name, args } => {
             // For Function-typed formals (`Function1<-T, +R>`),
@@ -595,18 +607,36 @@ mod tests {
     }
 
     #[test]
-    fn infer_listof_string_arg_returns_list_of_string() {
+    fn infer_listof_vararg_binds_element_t() {
         use skotch_types::Ty;
-        // Real listOf is `<T> ([T]) -> List<T>` but the array
-        // formal doesn't contribute a binding through our unifier,
-        // so we exercise the simpler `<T> (T) -> List<T>` shape
-        // here.
+        // Real listOf is `<T> ([T]) -> List<T>`. The vararg array
+        // formal `[T]` now binds T from the first element's actual
+        // Ty (the call passes elements individually).
         let sig =
-            parse_method_signature("<T:Ljava/lang/Object;>(TT;)Ljava/util/List<TT;>;").unwrap();
+            parse_method_signature("<T:Ljava/lang/Object;>([TT;)Ljava/util/List<TT;>;").unwrap();
         let result = infer_return_ty(&sig, &[Ty::String]);
         match result {
-            Ty::Generic { args, .. } => assert_eq!(args, vec![Ty::String]),
+            Ty::Generic { base, args } => {
+                assert_eq!(*base, Ty::Class("java/util/List".to_string()));
+                assert_eq!(args, vec![Ty::String]);
+            }
             other => panic!("expected List<String>, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn vararg_primitive_array_actual_is_not_bound() {
+        use skotch_types::Ty;
+        // A `*spread` of a primitive array as the vararg actual has no
+        // recoverable scalar element type, so T stays unbound and the
+        // return element falls back to Any rather than wrongly binding
+        // T to the whole array.
+        let sig =
+            parse_method_signature("<T:Ljava/lang/Object;>([TT;)Ljava/util/List<TT;>;").unwrap();
+        let result = infer_return_ty(&sig, &[Ty::IntArray]);
+        match result {
+            Ty::Generic { args, .. } => assert_eq!(args, vec![Ty::Any]),
+            other => panic!("expected List<Any>, got {other:?}"),
         }
     }
 

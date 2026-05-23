@@ -88,6 +88,24 @@ pub fn is_compose_unit_prop(name: &str) -> bool {
     COMPOSE_UNIT_PROPS.contains(&name)
 }
 
+/// Compose state-holder builders whose result wraps the *first*
+/// argument's type: `mutableStateOf(v)` → `MutableState<typeof v>`,
+/// `mutableStateListOf(a, b)` → `SnapshotStateList<typeof a>`. The
+/// element type flows from the first arg onto the result local's
+/// `local_generic_args` side channel so `state.value` resolves to the
+/// right type downstream. (The nominal class for each is listed in
+/// [`fallback_collection_builder_class`].)
+pub const COMPOSE_STATE_HOLDERS: &[&str] = &[
+    "mutableStateOf",
+    "stateOf",
+    "mutableStateListOf",
+    "mutableStateSetOf",
+];
+
+pub fn is_compose_state_holder(name: &str) -> bool {
+    COMPOSE_STATE_HOLDERS.contains(&name)
+}
+
 // ── 3. Kotlin → Java type aliases ───────────────────────────────
 
 /// Kotlin source-level type name → JVM internal class path. Sourced
@@ -634,5 +652,16 @@ mod tests {
         assert_eq!(runtime_check_jvm_class("String"), Some("java/lang/String"));
         // User types are not built in; caller falls back.
         assert_eq!(runtime_check_jvm_class("Foo"), None);
+    }
+
+    #[test]
+    fn compose_state_holders_recognized() {
+        assert!(is_compose_state_holder("mutableStateOf"));
+        assert!(is_compose_state_holder("mutableStateListOf"));
+        assert!(!is_compose_state_holder("listOf"));
+        // Every state holder also has a nominal class in the builder table.
+        for name in COMPOSE_STATE_HOLDERS {
+            assert!(fallback_collection_builder_class(name).is_some());
+        }
     }
 }
