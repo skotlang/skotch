@@ -7,6 +7,7 @@
 //! or annotations.
 
 pub mod generic_signature;
+pub mod kotlin_metadata;
 
 use std::collections::HashMap;
 use std::io::{self, Read};
@@ -89,6 +90,11 @@ pub struct ClassInfo {
     pub methods: Vec<MethodInfo>,
     /// Fields in this class.
     pub fields: Vec<FieldInfo>,
+    /// Decoded `@kotlin.Metadata` annotation, if the class carries one
+    /// (i.e. it was compiled by kotlinc). Present for Kotlin classes and
+    /// file facades; `None` for plain Java classes. Lets the inferrer
+    /// recover Kotlin-level type facts the JVM signature erases.
+    pub metadata: Option<kotlin_metadata::RawMetadata>,
 }
 
 /// A method signature.
@@ -475,18 +481,17 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
         let tag = r.u8()?;
         match tag {
             1 => {
-                // CONSTANT_Utf8
+                // CONSTANT_Utf8 — keep raw bytes; decode lazily.
                 let len = r.u16()? as usize;
-                let s = std::str::from_utf8(&r.bytes[r.pos..r.pos + len])
-                    .unwrap_or("")
-                    .to_string();
+                let raw = r.bytes[r.pos..r.pos + len].to_vec();
                 r.pos += len;
-                cp[i] = CpEntry::Utf8(s);
+                cp[i] = CpEntry::Utf8(raw);
             }
             3 => {
-                r.pos += 4;
-                cp[i] = CpEntry::Other;
-            } // Integer
+                // CONSTANT_Integer
+                let v = r.u32()? as i32;
+                cp[i] = CpEntry::Int(v);
+            }
             4 => {
                 r.pos += 4;
                 cp[i] = CpEntry::Other;
@@ -635,13 +640,140 @@ pub fn parse_class(bytes: &[u8]) -> io::Result<ClassInfo> {
         });
     }
 
+    // Class-level attributes — scan for `RuntimeVisibleAnnotations`
+    // carrying `@kotlin/Metadata`.
+    let mut metadata = None;
+    if let Ok(class_attr_count) = r.u16() {
+        for _ in 0..class_attr_count {
+            let attr_name_idx = match r.u16() {
+                Ok(n) => n as usize,
+                Err(_) => break,
+            };
+            let attr_len = match r.u32() {
+                Ok(l) => l as usize,
+                Err(_) => break,
+            };
+            let attr_name = resolve_utf8(&cp, attr_name_idx);
+            let end = (r.pos + attr_len).min(r.bytes.len());
+            if attr_name == "RuntimeVisibleAnnotations" {
+                metadata = extract_kotlin_metadata(&r.bytes[r.pos..end], &cp);
+            }
+            r.pos = end;
+        }
+    }
+
     Ok(ClassInfo {
         name: class_name,
         super_class,
         access_flags,
         methods,
         fields,
+        metadata,
     })
+}
+
+/// A parsed `element_value` from a JVMS annotation (§4.7.16.1). Only
+/// the shapes `@kotlin.Metadata` uses are kept distinctly; everything
+/// else is consumed (so the cursor advances) and reported as `Other`.
+enum ElementValue {
+    Int(i32),
+    Str(String),
+    Array(Vec<ElementValue>),
+    Other,
+}
+
+/// Parse one `element_value`, advancing `r` past it. Returns `None`
+/// only on truncation.
+fn parse_element_value(r: &mut Reader, cp: &[CpEntry]) -> Option<ElementValue> {
+    let tag = r.u8().ok()?;
+    match tag {
+        b'I' => {
+            let idx = r.u16().ok()? as usize;
+            Some(ElementValue::Int(resolve_int(cp, idx).unwrap_or(0)))
+        }
+        b's' => {
+            let idx = r.u16().ok()? as usize;
+            Some(ElementValue::Str(resolve_utf8(cp, idx)))
+        }
+        // Other primitive constants (B/C/D/F/J/S/Z) and class refs (c):
+        // a single u2 const index we don't need.
+        b'B' | b'C' | b'D' | b'F' | b'J' | b'S' | b'Z' | b'c' => {
+            r.u16().ok()?;
+            Some(ElementValue::Other)
+        }
+        b'e' => {
+            // enum: type_name_index + const_name_index.
+            r.u16().ok()?;
+            r.u16().ok()?;
+            Some(ElementValue::Other)
+        }
+        b'@' => {
+            // Nested annotation: type_index, then name/value pairs.
+            r.u16().ok()?;
+            let pairs = r.u16().ok()?;
+            for _ in 0..pairs {
+                r.u16().ok()?;
+                parse_element_value(r, cp)?;
+            }
+            Some(ElementValue::Other)
+        }
+        b'[' => {
+            let n = r.u16().ok()?;
+            let mut items = Vec::with_capacity(n as usize);
+            for _ in 0..n {
+                items.push(parse_element_value(r, cp)?);
+            }
+            Some(ElementValue::Array(items))
+        }
+        _ => None,
+    }
+}
+
+/// Find and decode `@kotlin/Metadata` within a `RuntimeVisibleAnnotations`
+/// attribute body.
+fn extract_kotlin_metadata(body: &[u8], cp: &[CpEntry]) -> Option<kotlin_metadata::RawMetadata> {
+    let mut r = Reader {
+        bytes: body,
+        pos: 0,
+    };
+    let num_annotations = r.u16().ok()?;
+    for _ in 0..num_annotations {
+        let type_idx = r.u16().ok()? as usize;
+        let num_pairs = r.u16().ok()?;
+        if resolve_utf8(cp, type_idx) == "Lkotlin/Metadata;" {
+            let mut kind = 1;
+            let mut data1 = Vec::new();
+            let mut data2 = Vec::new();
+            for _ in 0..num_pairs {
+                let name = resolve_utf8(cp, r.u16().ok()? as usize);
+                let value = parse_element_value(&mut r, cp)?;
+                match (name.as_str(), value) {
+                    ("k", ElementValue::Int(v)) => kind = v,
+                    ("d1", ElementValue::Array(items)) => data1 = collect_strings(items),
+                    ("d2", ElementValue::Array(items)) => data2 = collect_strings(items),
+                    _ => {}
+                }
+            }
+            return Some(kotlin_metadata::RawMetadata { kind, data1, data2 });
+        }
+        // Not @Metadata: skip its pairs.
+        for _ in 0..num_pairs {
+            r.u16().ok()?;
+            parse_element_value(&mut r, cp)?;
+        }
+    }
+    None
+}
+
+/// Keep only the string values from an annotation array element.
+fn collect_strings(items: Vec<ElementValue>) -> Vec<String> {
+    items
+        .into_iter()
+        .filter_map(|v| match v {
+            ElementValue::Str(s) => Some(s),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Load a class from the JDK's jmod files. Searches java.base first,
@@ -1171,7 +1303,14 @@ fn find_jdk_home() -> io::Result<PathBuf> {
 #[derive(Clone)]
 enum CpEntry {
     Empty,
-    Utf8(String),
+    /// `CONSTANT_Utf8` stored as raw bytes — decoded on demand via
+    /// Modified UTF-8 (JVMS §4.4.7). Raw bytes are kept (rather than a
+    /// pre-decoded `String`) so `@kotlin.Metadata` `d1`/`d2` payloads,
+    /// which use the two-byte forms standard UTF-8 rejects, survive.
+    Utf8(Vec<u8>),
+    /// `CONSTANT_Integer` value — needed to read the `@Metadata` `k`
+    /// (kind) element.
+    Int(i32),
     Class(usize),
     NameAndType(#[allow(dead_code)] usize, #[allow(dead_code)] usize),
     Other,
@@ -1179,11 +1318,18 @@ enum CpEntry {
 
 fn resolve_utf8(cp: &[CpEntry], idx: usize) -> String {
     if idx < cp.len() {
-        if let CpEntry::Utf8(s) = &cp[idx] {
-            return s.clone();
+        if let CpEntry::Utf8(bytes) = &cp[idx] {
+            return kotlin_metadata::decode_modified_utf8(bytes);
         }
     }
     String::new()
+}
+
+fn resolve_int(cp: &[CpEntry], idx: usize) -> Option<i32> {
+    match cp.get(idx) {
+        Some(CpEntry::Int(v)) => Some(*v),
+        _ => None,
+    }
 }
 
 fn resolve_class(cp: &[CpEntry], idx: usize) -> String {

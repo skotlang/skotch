@@ -1,37 +1,71 @@
-//! Centralized lists of Kotlin standard-library function/class names
-//! that skotch handles specially.
+//! Centralized Kotlin standard-library special-cases that skotch
+//! handles by name, in one place so call sites consult an accessor
+//! rather than re-listing names inline.
 //!
-//! These cases CANNOT be replaced by reading classpath generic
-//! signatures + unifying — they need bespoke handling for one of
-//! three reasons:
+//! Each list below is annotated with whether the **reference compiler
+//! (`kotlin/`) hardcodes the same thing**, so it's clear which entries
+//! are irreducible language facts versus skotch-only fallbacks that a
+//! more complete front-end would infer. Two categories:
 //!
-//!   1. **Compiler intrinsics with custom bytecode.** Coroutine
-//!      builders (`runBlocking`, `withTimeout`) need continuation
-//!      passing, scope construction, and `$default` mask handling
-//!      that's not derivable from the method signature. Same for
-//!      `error()` / `TODO()` which throw special exceptions.
+//! ## Category A — kotlinc hardcodes these too (keep; mirror kotlinc)
 //!
-//!   2. **Compose plugin transformations.** `remember { … }` and
-//!      friends would have their bodies turned into
-//!      `currentComposer.cache(...)` calls by the Compose plugin
-//!      that skotch doesn't run. The lambda's return type still
-//!      drives the call's result type, but the emission path
-//!      differs from a vanilla static call.
+//! The Kotlin → JVM class mappings — §3 type aliases, §7 exception
+//! classes, and §7b `is`/`as` boxing — mirror kotlinc's
+//! `JavaToKotlinClassMap` (`kotlin/core/compiler.common.jvm/src/org/
+//! jetbrains/kotlin/builtins/jvm/JavaToKotlinClassMap.kt`) and
+//! `JvmPrimitiveType`. kotlinc maintains the very same ~40-entry table
+//! because these are language-level facts, not classpath data. The
+//! goal for these is to *match* kotlinc's table, not remove it.
 //!
-//!   3. **Kotlin → Java type aliases defined by the Kotlin spec.**
-//!      `kotlin.List` maps to `java.util.List`, `kotlin.String` to
-//!      `java.lang.String`. These are language-level facts, not
-//!      classpath data.
+//! ## Category B — kotlinc infers these; skotch falls back by name
 //!
-//! Anything *not* in this module is now handled by the general
-//! signature-driven unifier in [`skotch_classinfo::generic_signature`].
+//! Scope functions (§5), Compose intrinsics (§2), collection builders
+//! (§4) and iterable methods (§6) are NOT special-cased in kotlinc's
+//! front-end. kotlinc resolves them by ordinary overload resolution +
+//! generic inference against the stdlib it always compiles against,
+//! using information skotch cannot yet recover from `.class` files:
 //!
-//! This module is also the single home for the Kotlin-name → JVM-class
-//! tables that the resolver and MIR-lowering both need (type aliases,
-//! exception classes, `catch`-type resolution, and the boxed classes
-//! used by `is`/`as` runtime checks). Each such name list lives here
-//! exactly once; call sites consult the relevant accessor rather than
-//! re-listing names inline.
+//!   * **Scope-fn `this` vs `it` is purely structural in kotlinc.**
+//!     `run`/`apply`/`with` take a *receiver* lambda `T.() -> R`;
+//!     `let`/`also`/`takeIf` take `(T) -> R`
+//!     (`kotlin/libraries/stdlib/src/kotlin/util/Standard.kt`). But
+//!     `T.() -> R` and `(T) -> R` erase to the **same** JVM type
+//!     (`Function1`); the receiver-ness survives only in Kotlin
+//!     `@Metadata` (or a `@kotlin.ExtensionFunctionType` type
+//!     annotation), neither of which skotch parses yet (task #297).
+//!   * **`remember`/`lazy`/`derivedStateOf`** are ordinary
+//!     `inline fun <T> …(): T`; the Compose plugin only rewrites their
+//!     bodies at the IR level — the *result type* is plain generic
+//!     inference. skotch resolves this through the unifier
+//!     ([`skotch_classinfo::generic_signature`]) when the classpath
+//!     signature is available and falls back to the name list otherwise.
+//!   * **`listOf`/`setOf`/`mapOf`** are ordinary
+//!     `fun <T> listOf(vararg e: T): List<T>` (stdlib `Collections.kt`).
+//!
+//! **Why skotch keeps these at all (the determinism constraint).**
+//! kotlinc can avoid name lists because it *always* compiles against
+//! `kotlin-stdlib.jar` and reads these facts from it. skotch's golden
+//! tests instead compare byte-for-byte against committed `skotch.class`
+//! files (`crates/skotch-driver/tests/fixture_compare.rs`), so type
+//! inference must be **deterministic and stdlib-independent** — pulling
+//! signatures / `@Metadata` from a stdlib jar that may or may not be
+//! present in a given environment would make output environment-
+//! dependent and drift the goldens. These tables provide that
+//! determinism.
+//!
+//! The deterministic, kotlinc-faithful way to *shrink* Category B is
+//! therefore NOT to load the stdlib, but to **embed canonical
+//! signatures as data and run the same generic unifier**
+//! ([`skotch_classinfo::generic_signature`]) over them — replacing the
+//! hand-categorised name lists + bespoke branching with one inference
+//! algorithm. (Scope-fn receiver-ness additionally needs `@Metadata`
+//! / `Ty::TypeVar` threading, task #297.) That is a deliberate refactor
+//! with golden regeneration, not a drop-in change; until it lands these
+//! stay as documented fallbacks.
+//!
+//! Coroutine builders (§1) are a third case: not a *type-inference*
+//! special case at all — they drive the suspend bytecode transform,
+//! which kotlinc keys off the `suspend` modifier (again `@Metadata`).
 
 use crate::Ty;
 
@@ -108,16 +142,24 @@ pub fn is_compose_state_holder(name: &str) -> bool {
 
 // ── 3. Kotlin → Java type aliases ───────────────────────────────
 
-/// Kotlin source-level type name → JVM internal class path. Sourced
-/// from the Kotlin spec (Mapped Types section, §8.2.2). This is a
-/// closed set defined by the language; classpath signatures can't
-/// replace it.
+/// Kotlin source-level type name → JVM internal class path.
+///
+/// **kotlinc hardcodes the same table** in `JavaToKotlinClassMap`
+/// (`kotlin/core/compiler.common.jvm/src/org/jetbrains/kotlin/builtins/
+/// jvm/JavaToKotlinClassMap.kt`, the `init {}` block): `Any`, `String`,
+/// `CharSequence`, `Throwable`, `Cloneable`, `Number`, `Comparable`,
+/// `Enum`, `Annotation`, plus the read-only/mutable collection
+/// "mutability mappings" (List, Set, Map, …). This is a closed set of
+/// language-level facts, not classpath data — so this is the *correct*
+/// category to keep hardcoded; the aim is to mirror kotlinc's table.
 pub fn kotlin_to_jvm_class(simple_name: &str) -> Option<&'static str> {
     let aliased = match simple_name {
         "Any" => "java/lang/Object",
         "String" => "java/lang/String",
         "CharSequence" => "java/lang/CharSequence",
         "Throwable" => "java/lang/Throwable",
+        "Cloneable" => "java/lang/Cloneable",
+        "Annotation" => "java/lang/annotation/Annotation",
         "Comparable" => "java/lang/Comparable",
         "Enum" => "java/lang/Enum",
         "Number" => "java/lang/Number",
@@ -190,9 +232,16 @@ pub enum ScopeResult {
 }
 
 /// A Kotlin receiver-extension scope function and how it binds its
-/// receiver / computes its result. These are `inline` in stdlib, so
-/// once inlining lands the receiver-binding becomes structural rather
-/// than name-based and this table can retire.
+/// receiver / computes its result.
+///
+/// In kotlinc the `this`-vs-`it` choice is *not* name-based: it falls
+/// out of the block parameter's type — `run`/`apply` declare
+/// `block: T.() -> R` (receiver lambda → `this`), `let`/`also` declare
+/// `block: (T) -> R` (→ `it`) (stdlib `Standard.kt`). skotch keeps the
+/// table because `T.() -> R` and `(T) -> R` erase to the same JVM
+/// `Function1`, so the receiver-ness is unrecoverable from `.class`
+/// files without `@Metadata` parsing (task #297). Once that lands this
+/// table can retire in favour of structural detection.
 ///
 /// `with` is intentionally excluded — it's a two-arg top-level
 /// function (`with(receiver) { … }`), not a `receiver.fn { … }`
@@ -567,6 +616,15 @@ mod tests {
             Some("kotlin/sequences/Sequence")
         );
         assert_eq!(kotlin_to_jvm_class("UserDefined"), None);
+        // Mappings mirrored from kotlinc's JavaToKotlinClassMap.init{}.
+        assert_eq!(
+            kotlin_to_jvm_class("Cloneable"),
+            Some("java/lang/Cloneable")
+        );
+        assert_eq!(
+            kotlin_to_jvm_class("Annotation"),
+            Some("java/lang/annotation/Annotation")
+        );
     }
 
     #[test]
