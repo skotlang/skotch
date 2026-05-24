@@ -269,6 +269,41 @@ fn lookup_method_signature_raw(
     None
 }
 
+/// Recover the `@kotlin.Metadata` description of a function on an
+/// already-loaded class, by source-level name. Returns the first match
+/// (overloads share a name — refine with arity at the call site if
+/// needed). `None` when the class carries no `@Metadata` (e.g. plain
+/// Java) or declares no such function.
+pub fn class_function_metadata(
+    ci: &ClassInfo,
+    function_name: &str,
+) -> Option<kotlin_metadata::FunctionInfo> {
+    let cm = kotlin_metadata::parse_metadata(ci.metadata.as_ref()?)?;
+    cm.functions.into_iter().find(|f| f.name == function_name)
+}
+
+/// Resolve a function's `@kotlin.Metadata` from the classpath
+/// (cache → JDK/stdlib jars) — the Kotlin-level counterpart of
+/// [`lookup_method_signature`]. Recovers facts the erased JVM signature
+/// drops: receiver-ness (`T.() -> R` vs `(T) -> R`), nullability, and
+/// parameter names. `None` for non-Kotlin classes or absent functions.
+pub fn lookup_function_metadata(
+    class_path: &str,
+    function_name: &str,
+) -> Option<kotlin_metadata::FunctionInfo> {
+    if let Some(ci) = cached_class_lookup(class_path) {
+        if let Some(f) = class_function_metadata(&ci, function_name) {
+            return Some(f);
+        }
+    }
+    if let Ok(ci) = load_jdk_class(class_path) {
+        if let Some(f) = class_function_metadata(&ci, function_name) {
+            return Some(f);
+        }
+    }
+    None
+}
+
 /// Look up a method allowing mangled matches, returning both the actual
 /// JVM method name (which may be mangled like `measure-BRTryo0`) and the
 /// descriptor. Useful when the caller needs to emit an invokevirtual with

@@ -12,21 +12,28 @@
 //! hardcoding their names. Wiring this in lets skotch shrink the
 //! name-based fallbacks in [`skotch_types::intrinsics`] (task #297).
 //!
-//! This module currently provides the two foundational, format-level
-//! layers, each verified by round-trip / vector tests and not yet
-//! wired into inference:
+//! Layers, each verified against a real kotlinc-compiled class
+//! (`tests/data/MetaProbeKt.class`, exercised by
+//! `tests/metadata_extraction.rs`):
 //!
 //!   * [`bit_encoding`] — the `@Metadata.d1` `String[]` ⇄ `byte[]`
 //!     codec, a direct port of
 //!     `org.jetbrains.kotlin.metadata.jvm.deserialization.BitEncoding`
 //!     (+ `utfEncoding.kt`).
-//!   * [`protobuf`] — a minimal protobuf-2 wire reader for walking the
-//!     decoded `ProtoBuf.Class` / `ProtoBuf.Package` messages
+//!   * [`protobuf`] — a minimal protobuf-2 wire reader for the decoded
+//!     `ProtoBuf.Class` / `ProtoBuf.Package` messages
 //!     (schema: `kotlin/core/metadata/src/metadata.proto`).
+//!   * [`decode_modified_utf8`] + [`RawMetadata`] — the constant-pool
+//!     annotation read (`skotch_classinfo::parse_class` populates
+//!     `ClassInfo.metadata`).
+//!   * [`parse_metadata`] + [`NameResolver`] — the schema walk: recovers
+//!     each [`FunctionInfo`]'s name, parameter names, and whether a
+//!     parameter is a *receiver* function type (`T.() -> R`), which is
+//!     the structural signal kotlinc uses for scope-fn `this`/`it`.
 //!
-//! Higher layers (extracting the annotation from the constant pool,
-//! walking the `metadata.proto` schema, and feeding the recovered
-//! signatures into the unifier) build on these in follow-ups.
+//! Still TODO: feeding the recovered signatures into the inference
+//! unifier and retiring the corresponding name lists in
+//! `skotch_types::intrinsics` (the `@Metadata` reader itself is done).
 
 /// `@Metadata.d1` codec: the array of `String`s stored in the
 /// annotation back into the raw protobuf byte stream.
@@ -305,6 +312,13 @@ pub mod protobuf {
             Some(Reader::new(self.read_len_bytes()?))
         }
 
+        /// The not-yet-consumed remainder of the buffer. Used to pick up
+        /// the message that follows a `parseDelimitedFrom`-style prefix
+        /// (e.g. `ProtoBuf.Package` after the leading `StringTableTypes`).
+        pub fn remaining(&self) -> &'a [u8] {
+            &self.buf[self.pos.min(self.buf.len())..]
+        }
+
         fn read_fixed(&mut self, n: usize) -> Option<u64> {
             let end = self.pos.checked_add(n)?;
             if end > self.buf.len() {
@@ -529,4 +543,507 @@ mod mutf8_tests {
         let s = decode_modified_utf8(&[0xEF, 0xBF, 0xBF]);
         assert_eq!(s.chars().next().map(|c| c as u32), Some(0xFFFF));
     }
+}
+
+// ── Schema walk: decoded protobuf → Kotlin declarations ─────────
+//
+// The decoded `d1` byte stream is a length-delimited
+// `JvmProtoBuf.StringTableTypes` (the JVM name table) followed by a
+// `ProtoBuf.Package` (file facade, k=2) or `ProtoBuf.Class` (k=1), per
+// `JvmProtoBufUtil.readPackageDataFrom`. Names are indices resolved by
+// [`NameResolver`] (port of `JvmNameResolverBase`). Field numbers below
+// come from `kotlin/core/metadata/src/metadata.proto`.
+
+use protobuf::{Reader, WIRE_LEN, WIRE_VARINT};
+
+/// kotlinc's predefined string table
+/// (`JvmNameResolverBase.PREDEFINED_STRINGS`). Records may reference
+/// these by index instead of carrying the string in `d2`.
+const PREDEFINED_STRINGS: &[&str] = &[
+    "kotlin/Any",
+    "kotlin/Nothing",
+    "kotlin/Unit",
+    "kotlin/Throwable",
+    "kotlin/Number",
+    "kotlin/Byte",
+    "kotlin/Double",
+    "kotlin/Float",
+    "kotlin/Int",
+    "kotlin/Long",
+    "kotlin/Short",
+    "kotlin/Boolean",
+    "kotlin/Char",
+    "kotlin/CharSequence",
+    "kotlin/String",
+    "kotlin/Comparable",
+    "kotlin/Enum",
+    "kotlin/Array",
+    "kotlin/ByteArray",
+    "kotlin/DoubleArray",
+    "kotlin/FloatArray",
+    "kotlin/IntArray",
+    "kotlin/LongArray",
+    "kotlin/ShortArray",
+    "kotlin/BooleanArray",
+    "kotlin/CharArray",
+    "kotlin/Cloneable",
+    "kotlin/Annotation",
+    "kotlin/collections/Iterable",
+    "kotlin/collections/MutableIterable",
+    "kotlin/collections/Collection",
+    "kotlin/collections/MutableCollection",
+    "kotlin/collections/List",
+    "kotlin/collections/MutableList",
+    "kotlin/collections/Set",
+    "kotlin/collections/MutableSet",
+    "kotlin/collections/Map",
+    "kotlin/collections/MutableMap",
+    "kotlin/collections/Map.Entry",
+    "kotlin/collections/MutableMap.MutableEntry",
+    "kotlin/collections/Iterator",
+    "kotlin/collections/MutableIterator",
+    "kotlin/collections/ListIterator",
+    "kotlin/collections/MutableListIterator",
+];
+
+/// One `StringTableTypes.Record` (already range-expanded into one entry
+/// per covered index).
+#[derive(Default, Clone)]
+struct Record {
+    range: i32,
+    predefined_index: Option<i32>,
+    string: Option<String>,
+    operation: i32,
+    substring: Vec<i32>,
+    replace_char: Vec<i32>,
+}
+
+/// Resolves a metadata name/FQ-class index to its string. Port of
+/// `JvmNameResolverBase.getString` (the JVM resolver also routes
+/// `getQualifiedClassName` through `getString`).
+pub struct NameResolver {
+    strings: Vec<String>,
+    records: Vec<Record>,
+}
+
+impl NameResolver {
+    /// Resolve the string at `index`.
+    pub fn get_string(&self, index: usize) -> String {
+        let record = match self.records.get(index) {
+            Some(r) => r,
+            None => return self.strings.get(index).cloned().unwrap_or_default(),
+        };
+        let mut s = if let Some(str) = &record.string {
+            str.clone()
+        } else if let Some(pi) = record.predefined_index.filter(|&pi| pi >= 0) {
+            PREDEFINED_STRINGS
+                .get(pi as usize)
+                .map(|p| (*p).to_string())
+                .unwrap_or_else(|| self.strings.get(index).cloned().unwrap_or_default())
+        } else {
+            self.strings.get(index).cloned().unwrap_or_default()
+        };
+        if record.substring.len() >= 2 {
+            let (begin, end) = (record.substring[0], record.substring[1]);
+            let chars: Vec<char> = s.chars().collect();
+            if begin >= 0 && begin <= end && (end as usize) <= chars.len() {
+                s = chars[begin as usize..end as usize].iter().collect();
+            }
+        }
+        if record.replace_char.len() >= 2 {
+            if let (Some(from), Some(to)) = (
+                char::from_u32(record.replace_char[0] as u32),
+                char::from_u32(record.replace_char[1] as u32),
+            ) {
+                s = s.replace(from, &to.to_string());
+            }
+        }
+        match record.operation {
+            // INTERNAL_TO_CLASS_ID
+            1 => s = s.replace('$', "."),
+            // DESC_TO_CLASS_ID
+            2 => {
+                let chars: Vec<char> = s.chars().collect();
+                if chars.len() >= 2 {
+                    s = chars[1..chars.len() - 1].iter().collect();
+                }
+                s = s.replace('$', ".");
+            }
+            _ => {}
+        }
+        s
+    }
+}
+
+/// A Kotlin type recovered from `@Metadata` (`ProtoBuf.Type`), in the
+/// reduced form skotch's inferrer needs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TypeInfo {
+    /// Resolved fully-qualified class name (e.g. `kotlin/Int`,
+    /// `kotlin/collections/List`, `kotlin/Function1`). `None` for a bare
+    /// type variable.
+    pub class_name: Option<String>,
+    /// Whether the type is nullable (`T?`).
+    pub nullable: bool,
+    /// True when the type is a *receiver* function type (`T.() -> R`),
+    /// as opposed to a plain function type (`(T) -> R`). This is the
+    /// structural signal kotlinc uses to bind `this` vs `it` in
+    /// scope-function lambdas (`KotlinType.isExtensionFunctionType`).
+    pub is_extension_function_type: bool,
+    /// Generic type arguments, e.g. `[String]` for `List<String>` or
+    /// `[String, List<Int>]` for `Map<String, List<Int>>`. Star
+    /// projections (`*`) contribute a default (empty) entry.
+    pub arguments: Vec<TypeInfo>,
+}
+
+/// A value parameter recovered from `@Metadata`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParamInfo {
+    /// Source-level parameter name (e.g. `block`).
+    pub name: String,
+    /// The parameter's declared type.
+    pub ty: TypeInfo,
+}
+
+/// A function recovered from `@Metadata`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub value_params: Vec<ParamInfo>,
+    /// Declared return type, when present inline (`Function.return_type`).
+    pub return_type: Option<TypeInfo>,
+    /// Extension receiver type for `fun T.foo()` (`Function.receiver_type`).
+    pub receiver_type: Option<TypeInfo>,
+}
+
+/// The functions of a Kotlin class / file facade, recovered from its
+/// `@Metadata`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClassMetadata {
+    pub functions: Vec<FunctionInfo>,
+}
+
+/// Parse a [`RawMetadata`] into its declared functions and their
+/// parameter shapes. Returns `None` on a malformed/empty payload.
+pub fn parse_metadata(raw: &RawMetadata) -> Option<ClassMetadata> {
+    let decoded = bit_encoding::decode_bytes(&raw.data1);
+    if decoded.is_empty() {
+        return None;
+    }
+    let mut top = Reader::new(&decoded);
+    // Leading delimited StringTableTypes, then the Package/Class body.
+    let string_table_bytes = top.read_len_bytes()?;
+    let body = top.remaining();
+    let resolver = parse_string_table(string_table_bytes, raw.data2.clone());
+
+    // Package.function = 3 ; Class.function = 9.
+    let function_field = if raw.kind == 1 { 9 } else { 3 };
+    let mut functions = Vec::new();
+    let mut r = Reader::new(body);
+    while let Some((field, wire)) = r.read_tag() {
+        if field == function_field && wire == WIRE_LEN {
+            if let Some(fn_bytes) = r.read_len_bytes() {
+                functions.push(parse_function(fn_bytes, &resolver));
+            }
+        } else {
+            r.skip_field(wire)?;
+        }
+    }
+    Some(ClassMetadata { functions })
+}
+
+fn parse_string_table(bytes: &[u8], strings: Vec<String>) -> NameResolver {
+    let mut r = Reader::new(bytes);
+    let mut raw_records: Vec<Record> = Vec::new();
+    while let Some((field, wire)) = r.read_tag() {
+        // StringTableTypes.record = 1.
+        if field == 1 && wire == WIRE_LEN {
+            if let Some(rec) = r.read_len_bytes() {
+                raw_records.push(parse_record(rec));
+            }
+        } else if r.skip_field(wire).is_none() {
+            break;
+        }
+    }
+    // Expand each record across the `range` indices it covers.
+    let mut records = Vec::new();
+    for rec in raw_records {
+        for _ in 0..rec.range.max(0) {
+            records.push(rec.clone());
+        }
+    }
+    NameResolver { strings, records }
+}
+
+fn parse_record(bytes: &[u8]) -> Record {
+    let mut rec = Record {
+        range: 1,
+        ..Default::default()
+    };
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            (1, WIRE_VARINT) => rec.range = r.read_varint().unwrap_or(1) as i32,
+            (2, WIRE_VARINT) => rec.predefined_index = Some(r.read_varint().unwrap_or(0) as i32),
+            (3, WIRE_VARINT) => rec.operation = r.read_varint().unwrap_or(0) as i32,
+            // substring_index / replace_char are `packed` repeated int32,
+            // but tolerate the non-packed (one varint per tag) form too.
+            (4, WIRE_LEN) => rec.substring = read_packed_int32(r.read_len_bytes().unwrap_or(&[])),
+            (4, WIRE_VARINT) => rec.substring.push(r.read_varint().unwrap_or(0) as i32),
+            (5, WIRE_LEN) => {
+                rec.replace_char = read_packed_int32(r.read_len_bytes().unwrap_or(&[]))
+            }
+            (5, WIRE_VARINT) => rec.replace_char.push(r.read_varint().unwrap_or(0) as i32),
+            (6, WIRE_LEN) => {
+                rec.string = r
+                    .read_len_bytes()
+                    .map(|b| String::from_utf8_lossy(b).into_owned())
+            }
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    rec
+}
+
+fn read_packed_int32(bytes: &[u8]) -> Vec<i32> {
+    let mut r = Reader::new(bytes);
+    let mut out = Vec::new();
+    while !r.is_at_end() {
+        match r.read_varint() {
+            Some(v) => out.push(v as i32),
+            None => break,
+        }
+    }
+    out
+}
+
+/// A `ProtoBuf.TypeTable`: types a declaration references by `type_id`
+/// instead of inlining. kotlinc moves shared/large types here.
+struct TypeTable {
+    /// Raw `Type` message bytes, indexed by id.
+    types: Vec<Vec<u8>>,
+    /// Types at index `>= first_nullable` (when `>= 0`) are implicitly
+    /// nullable — a serializer optimisation (`TypeTable` in
+    /// `org.jetbrains.kotlin.metadata.deserialization`).
+    first_nullable: i32,
+}
+
+impl TypeTable {
+    fn parse(bytes: &[u8]) -> TypeTable {
+        let mut types = Vec::new();
+        let mut first_nullable = -1;
+        let mut r = Reader::new(bytes);
+        while let Some((field, wire)) = r.read_tag() {
+            match (field, wire) {
+                // TypeTable.type = 1.
+                (1, WIRE_LEN) => {
+                    if let Some(t) = r.read_len_bytes() {
+                        types.push(t.to_vec());
+                    }
+                }
+                // TypeTable.first_nullable = 2.
+                (2, WIRE_VARINT) => first_nullable = r.read_varint().unwrap_or(0) as i32,
+                (_, w) => {
+                    if r.skip_field(w).is_none() {
+                        break;
+                    }
+                }
+            }
+        }
+        TypeTable {
+            types,
+            first_nullable,
+        }
+    }
+
+    fn implicitly_nullable(&self, id: usize) -> bool {
+        self.first_nullable >= 0 && id >= self.first_nullable as usize
+    }
+}
+
+/// A type reference: either inlined bytes, or an index into the
+/// enclosing declaration's [`TypeTable`].
+enum TypeRef<'a> {
+    Inline(&'a [u8]),
+    Id(usize),
+}
+
+/// Cap on `Type` nesting / `TypeTable` chasing, guarding against
+/// pathological or cyclic references in untrusted `.class` files.
+const MAX_TYPE_DEPTH: u32 = 24;
+
+fn resolve_type(r: TypeRef, nr: &NameResolver, table: Option<&TypeTable>, depth: u32) -> TypeInfo {
+    if depth >= MAX_TYPE_DEPTH {
+        return TypeInfo::default();
+    }
+    match r {
+        TypeRef::Inline(b) => parse_type(b, nr, table, depth),
+        TypeRef::Id(id) => match table.and_then(|t| t.types.get(id).map(|b| (t, b))) {
+            Some((t, bytes)) => {
+                let mut info = parse_type(bytes, nr, table, depth);
+                if t.implicitly_nullable(id) {
+                    info.nullable = true;
+                }
+                info
+            }
+            None => TypeInfo::default(),
+        },
+    }
+}
+
+fn parse_function(bytes: &[u8], nr: &NameResolver) -> FunctionInfo {
+    let mut name = String::new();
+    let mut param_raws: Vec<&[u8]> = Vec::new();
+    let mut return_ref: Option<TypeRef> = None;
+    let mut receiver_ref: Option<TypeRef> = None;
+    let mut table: Option<TypeTable> = None;
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            // Function.name = 2.
+            (2, WIRE_VARINT) => name = nr.get_string(r.read_varint().unwrap_or(0) as usize),
+            // Function.return_type = 3 (inline) / return_type_id = 7.
+            (3, WIRE_LEN) => return_ref = r.read_len_bytes().map(TypeRef::Inline),
+            (7, WIRE_VARINT) => {
+                return_ref = Some(TypeRef::Id(r.read_varint().unwrap_or(0) as usize))
+            }
+            // Function.receiver_type = 5 (inline) / receiver_type_id = 8.
+            (5, WIRE_LEN) => receiver_ref = r.read_len_bytes().map(TypeRef::Inline),
+            (8, WIRE_VARINT) => {
+                receiver_ref = Some(TypeRef::Id(r.read_varint().unwrap_or(0) as usize))
+            }
+            // Function.value_parameter = 6.
+            (6, WIRE_LEN) => {
+                if let Some(vp) = r.read_len_bytes() {
+                    param_raws.push(vp);
+                }
+            }
+            // Function.type_table = 30.
+            (30, WIRE_LEN) => table = r.read_len_bytes().map(TypeTable::parse),
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    let t = table.as_ref();
+    FunctionInfo {
+        name,
+        value_params: param_raws
+            .into_iter()
+            .map(|vp| parse_value_parameter(vp, nr, t))
+            .collect(),
+        return_type: return_ref.map(|rf| resolve_type(rf, nr, t, 0)),
+        receiver_type: receiver_ref.map(|rf| resolve_type(rf, nr, t, 0)),
+    }
+}
+
+fn parse_value_parameter(bytes: &[u8], nr: &NameResolver, table: Option<&TypeTable>) -> ParamInfo {
+    let mut name = String::new();
+    let mut type_ref: Option<TypeRef> = None;
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            // ValueParameter.name = 2.
+            (2, WIRE_VARINT) => name = nr.get_string(r.read_varint().unwrap_or(0) as usize),
+            // ValueParameter.type = 3 (inline) / type_id = 5.
+            (3, WIRE_LEN) => type_ref = r.read_len_bytes().map(TypeRef::Inline),
+            (5, WIRE_VARINT) => type_ref = Some(TypeRef::Id(r.read_varint().unwrap_or(0) as usize)),
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    let ty = type_ref
+        .map(|rf| resolve_type(rf, nr, table, 0))
+        .unwrap_or_default();
+    ParamInfo { name, ty }
+}
+
+/// Parse a `ProtoBuf.Type` into the reduced [`TypeInfo`], following
+/// generic arguments and `TypeTable` references.
+fn parse_type(bytes: &[u8], nr: &NameResolver, table: Option<&TypeTable>, depth: u32) -> TypeInfo {
+    let mut info = TypeInfo::default();
+    if depth >= MAX_TYPE_DEPTH {
+        return info;
+    }
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            // Type.argument = 2 (repeated Argument).
+            (2, WIRE_LEN) => {
+                if let Some(arg) = r.read_len_bytes() {
+                    info.arguments
+                        .push(parse_type_argument(arg, nr, table, depth + 1));
+                }
+            }
+            // Type.nullable = 3.
+            (3, WIRE_VARINT) => info.nullable = r.read_varint().unwrap_or(0) != 0,
+            // Type.class_name = 6 (fq-class index).
+            (6, WIRE_VARINT) => {
+                info.class_name = Some(nr.get_string(r.read_varint().unwrap_or(0) as usize))
+            }
+            // Type.annotation = 100 → kotlin/ExtensionFunctionType marks
+            // a receiver function type (`T.() -> R`).
+            (100, WIRE_LEN) => {
+                if let Some(ann) = r.read_len_bytes() {
+                    if annotation_id(ann, nr).as_deref() == Some("kotlin/ExtensionFunctionType") {
+                        info.is_extension_function_type = true;
+                    }
+                }
+            }
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    info
+}
+
+/// Parse a `Type.Argument` (one generic arg). A star projection has no
+/// type and yields a default [`TypeInfo`].
+fn parse_type_argument(
+    bytes: &[u8],
+    nr: &NameResolver,
+    table: Option<&TypeTable>,
+    depth: u32,
+) -> TypeInfo {
+    let mut type_ref: Option<TypeRef> = None;
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            // Argument.type = 2 (inline) / type_id = 3.
+            (2, WIRE_LEN) => type_ref = r.read_len_bytes().map(TypeRef::Inline),
+            (3, WIRE_VARINT) => type_ref = Some(TypeRef::Id(r.read_varint().unwrap_or(0) as usize)),
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    type_ref
+        .map(|rf| resolve_type(rf, nr, table, depth))
+        .unwrap_or_default()
+}
+
+/// Resolve `Annotation.id = 1` (an fq-class index) to its name.
+fn annotation_id(bytes: &[u8], nr: &NameResolver) -> Option<String> {
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        if field == 1 && wire == WIRE_VARINT {
+            return Some(nr.get_string(r.read_varint()? as usize));
+        }
+        r.skip_field(wire)?;
+    }
+    None
 }
