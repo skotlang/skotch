@@ -1643,6 +1643,8 @@ pub fn lower_file(
                         has_type_params: false,
                         is_object_singleton: true,
                         companion_class_name: None,
+                        static_fields: Vec::new(),
+                        clinit: None,
                     });
                     Some(comp_name)
                 };
@@ -1663,6 +1665,8 @@ pub fn lower_file(
                     has_type_params: false,
                     is_object_singleton: false,
                     companion_class_name: companion_jvm_name,
+                    static_fields: Vec::new(),
+                    clinit: None,
                 });
             }
         }
@@ -2437,6 +2441,8 @@ fn build_continuation_class(
         has_type_params: false,
         is_object_singleton: false,
         companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
     }
 }
 
@@ -14820,7 +14826,11 @@ fn lower_expr(
                                 "Long" => Ty::Long,
                                 "Double" => Ty::Double,
                                 "String" => Ty::String,
-                                _ => Ty::Any,
+                                // The descriptor erases class/collection/
+                                // nullable returns to `Object` (→ Any here).
+                                // For kotlinc-compiled callees, recover the
+                                // real Kotlin return type from `@Metadata`.
+                                _ => metadata_return_ty(class_name, method_name).unwrap_or(Ty::Any),
                             }
                         }
                     }
@@ -18055,6 +18065,8 @@ fn lower_expr(
                     has_type_params: false,
                     is_object_singleton: false,
                     companion_class_name: None,
+                    static_fields: Vec::new(),
+                    clinit: None,
                 });
 
                 // In the outer scope, wrap the var into a $Ref instance.
@@ -18150,6 +18162,8 @@ fn lower_expr(
                 has_type_params: false,
                 is_object_singleton: false,
                 companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
             });
 
             // ── Invoke method ───────────────────────────────────────
@@ -18793,6 +18807,8 @@ fn lower_expr(
                 has_type_params: false,
                 is_object_singleton: false,
                 companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
             };
 
             // ── Instantiate at definition site ──────────────────────
@@ -19014,6 +19030,8 @@ fn lower_expr(
                 has_type_params: false,
                 is_object_singleton: false,
                 companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
             });
 
             // Instantiate. Type as the synthetic anonymous class so
@@ -19539,6 +19557,23 @@ fn lower_enum(
         });
     }
 
+    // Enum entries become `public static final <Enum> ENTRY;` singleton
+    // fields, each constructed exactly once in the class `<clinit>` (built
+    // below). kotlinc does the same so that reference equality on entries
+    // (`V.A == V.A`, and `it == V.A` after `pick { ... }`) holds — Kotlin
+    // specifies enum entries are singletons (fixtures 65/427/995 et al.).
+    // The per-entry `ENTRY()` accessor functions then just read the field
+    // (`getstatic`) instead of constructing a fresh instance.
+    let enum_desc = format!("L{};", enum_name);
+    let static_fields: Vec<MirField> = e
+        .entries
+        .iter()
+        .map(|entry| MirField {
+            name: interner.resolve(entry.name).to_string(),
+            ty: Ty::Class(enum_name.clone()),
+        })
+        .collect();
+
     // <init>(this, name: String, ...params)
     let mut init_fn = MirFunction {
         id: FuncId(0),
@@ -19786,6 +19821,67 @@ fn lower_enum(
         module.add_function(fb.finish());
     }
 
+    // ── <clinit>: construct each entry singleton exactly once ───────────
+    //
+    // For each entry: `new V; invokespecial V.<init>("NAME", ...args);
+    // putstatic V.ENTRY`. Emitted as ordinary MIR so every backend reuses
+    // its existing NewInstance / Constructor / PutStaticField lowering —
+    // this is the same NewInstance+Constructor sequence the per-entry
+    // accessors used to produce, now storing into the static field instead
+    // of returning a fresh instance. The first `getstatic V.ENTRY` (from an
+    // accessor) triggers this `<clinit>`, initializing all entries together.
+    let clinit_fn = {
+        let mut cb = FnBuilder::new(module.functions.len(), "<clinit>".to_string(), Ty::Unit);
+        for entry in &e.entries {
+            let entry_name_str = interner.resolve(entry.name).to_string();
+            let inst = cb.new_local(Ty::Class(enum_name.clone()));
+            cb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::NewInstance(enum_name.clone()),
+            });
+            // Constructor args: ["ENTRY_NAME", ...const entry args]. `inst`
+            // is intentionally omitted — NewInstance already left new+dup on
+            // the stack for the invokespecial.
+            let name_sid = module.intern_string(&entry_name_str);
+            let name_local = cb.new_local(Ty::String);
+            cb.push_stmt(MStmt::Assign {
+                dest: name_local,
+                value: Rvalue::Const(MirConst::String(name_sid)),
+            });
+            let mut ctor_args = vec![name_local];
+            for arg_expr in &entry.args {
+                if let Some(c) = lower_const_init(arg_expr, module) {
+                    let ty = const_ty(&c);
+                    let arg_local = cb.new_local(ty);
+                    cb.push_stmt(MStmt::Assign {
+                        dest: arg_local,
+                        value: Rvalue::Const(c),
+                    });
+                    ctor_args.push(arg_local);
+                }
+            }
+            cb.push_stmt(MStmt::Assign {
+                dest: inst,
+                value: Rvalue::Call {
+                    kind: CallKind::Constructor(enum_name.clone()),
+                    args: ctor_args,
+                },
+            });
+            let sink = cb.new_local(Ty::Unit);
+            cb.push_stmt(MStmt::Assign {
+                dest: sink,
+                value: Rvalue::PutStaticField {
+                    class_name: enum_name.clone(),
+                    field_name: entry_name_str,
+                    descriptor: enum_desc.clone(),
+                    value: inst,
+                },
+            });
+        }
+        cb.set_terminator(Terminator::Return);
+        cb.finish()
+    };
+
     module.classes.push(MirClass {
         name: enum_name.clone(),
         super_class: None,
@@ -19803,6 +19899,8 @@ fn lower_enum(
         has_type_params: false,
         is_object_singleton: false,
         companion_class_name: None,
+        static_fields,
+        clinit: Some(clinit_fn),
     });
 
     // ── Entry functions ─────────────────────────────────────────────────
@@ -19825,44 +19923,19 @@ fn lower_enum(
 
         let mut fb = FnBuilder::new(fn_idx, entry_name.clone(), Ty::Class(enum_name.clone()));
 
-        // NewInstance + Constructor(enum_name, [name_str, ...args])
+        // Read the singleton from the static field that `<clinit>`
+        // initialized (`getstatic V.ENTRY`). Returning the shared instance —
+        // rather than constructing a fresh one per call — is what makes
+        // reference equality on entries (`it == V.A`) behave correctly.
         let inst = fb.new_local(Ty::Class(enum_name.clone()));
         fb.push_stmt(MStmt::Assign {
             dest: inst,
-            value: Rvalue::NewInstance(enum_name.clone()),
-        });
-
-        // Build constructor args: ["ENTRY_NAME", ...entry.args]
-        // (inst is NOT included — the JVM backend's NewInstance handler
-        // already has [ref, ref] on the stack from new+dup.)
-        let name_sid = module.intern_string(&entry_name);
-        let name_local = fb.new_local(Ty::String);
-        fb.push_stmt(MStmt::Assign {
-            dest: name_local,
-            value: Rvalue::Const(MirConst::String(name_sid)),
-        });
-        let mut ctor_args = vec![name_local];
-
-        for arg_expr in &entry.args {
-            if let Some(c) = lower_const_init(arg_expr, module) {
-                let ty = const_ty(&c);
-                let arg_local = fb.new_local(ty);
-                fb.push_stmt(MStmt::Assign {
-                    dest: arg_local,
-                    value: Rvalue::Const(c),
-                });
-                ctor_args.push(arg_local);
-            }
-        }
-
-        fb.push_stmt(MStmt::Assign {
-            dest: inst,
-            value: Rvalue::Call {
-                kind: CallKind::Constructor(enum_name.clone()),
-                args: ctor_args,
+            value: Rvalue::GetStaticField {
+                class_name: enum_name.clone(),
+                field_name: entry_name.clone(),
+                descriptor: enum_desc.clone(),
             },
         });
-
         fb.set_terminator(Terminator::ReturnValue(inst));
         module.add_function(fb.finish());
     }
@@ -20145,6 +20218,8 @@ fn lower_object(
         has_type_params: false,
         is_object_singleton: true,
         companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
     });
 }
 
@@ -20564,6 +20639,8 @@ fn lower_class(
         has_type_params: !c.type_params.is_empty(),
         is_object_singleton: false,
         companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
     });
 
     // Lower methods.
@@ -21471,6 +21548,8 @@ fn lower_class(
             has_type_params: false,
             is_object_singleton: true,
             companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
         });
     }
 
@@ -22242,6 +22321,8 @@ fn lower_class(
         has_type_params: !c.type_params.is_empty(),
         is_object_singleton: false,
         companion_class_name: companion_class_name_opt.clone(),
+        static_fields: Vec::new(),
+        clinit: None,
     };
 
     // Lower nested (static inner) classes. Each nested class becomes a
@@ -22396,6 +22477,8 @@ fn lower_interface(
         has_type_params: false,
         is_object_singleton: false,
         companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
     });
 
     // Lower method bodies for default methods (non-abstract).
@@ -22518,6 +22601,45 @@ fn lower_interface(
     module.classes[class_idx].methods = mir_methods;
 }
 
+/// Convert a Kotlin `@Metadata` [`skotch_classinfo::kotlin_metadata::TypeInfo`]
+/// to skotch's `Ty`, for use as a call's result type.
+///
+/// Primitives / `String` / `Any` map to their `Ty` variants; built-in
+/// collection names map to their *erased* JVM class (kept erased, not
+/// `Ty::Generic`, so the value-type dispatchers that match `Ty::Class`
+/// keep working); other classes pass through unchanged; a bare type
+/// variable yields `None`. A nullable Kotlin type wraps in
+/// `Ty::Nullable`.
+fn metadata_type_to_ty(ti: &skotch_classinfo::kotlin_metadata::TypeInfo) -> Option<Ty> {
+    let cn = ti.class_name.as_deref()?;
+    let simple = cn.rsplit('/').next().unwrap_or(cn);
+    let base = if cn.starts_with("kotlin/") {
+        // Built-in: primitive/String/Any via ty_from_name, else a
+        // read-only collection alias (List → java/util/List, …).
+        skotch_types::ty_from_name(simple)
+            .or_else(|| intrinsics::kotlin_to_jvm_class(simple).map(|j| Ty::Class(j.to_string())))
+            .unwrap_or_else(|| Ty::Class(cn.to_string()))
+    } else {
+        Ty::Class(cn.to_string())
+    };
+    if ti.nullable && !matches!(base, Ty::Any | Ty::Unit | Ty::Nothing) {
+        Some(Ty::Nullable(Box::new(base)))
+    } else {
+        Some(base)
+    }
+}
+
+/// Recover a static Kotlin method's return type from its `@Metadata`.
+/// Used as a last-resort refinement when descriptor-based inference
+/// would otherwise yield `Ty::Any` — turning "unknown" into the real
+/// (possibly nullable / collection) Kotlin return type for external
+/// kotlinc-compiled callees. `None` for Java callees (no `@Metadata`),
+/// absent functions, or type-variable returns.
+fn metadata_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
+    let f = skotch_classinfo::lookup_function_metadata(class_name, method_name)?;
+    metadata_type_to_ty(f.return_type.as_ref()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -22526,6 +22648,41 @@ mod tests {
     use skotch_resolve::resolve_file;
     use skotch_span::FileId;
     use skotch_typeck::type_check;
+
+    #[test]
+    fn metadata_type_to_ty_bridge() {
+        use skotch_classinfo::kotlin_metadata::TypeInfo;
+        let mk = |cn: &str, nullable: bool| TypeInfo {
+            class_name: Some(cn.to_string()),
+            nullable,
+            ..Default::default()
+        };
+        // Primitive / String map to their Ty variants.
+        assert_eq!(metadata_type_to_ty(&mk("kotlin/Int", false)), Some(Ty::Int));
+        assert_eq!(
+            metadata_type_to_ty(&mk("kotlin/String", false)),
+            Some(Ty::String)
+        );
+        // Nullable wraps in Ty::Nullable.
+        assert_eq!(
+            metadata_type_to_ty(&mk("kotlin/String", true)),
+            Some(Ty::Nullable(Box::new(Ty::String)))
+        );
+        // Built-in read-only collection → erased JVM class (NOT Generic,
+        // so the Ty::Class value-type dispatchers keep matching).
+        assert_eq!(
+            metadata_type_to_ty(&mk("kotlin/collections/List", false)),
+            Some(Ty::Class("java/util/List".to_string()))
+        );
+        // A user/library class passes through unchanged.
+        assert_eq!(
+            metadata_type_to_ty(&mk("com/example/Foo", false)),
+            Some(Ty::Class("com/example/Foo".to_string()))
+        );
+        // A bare type variable (no class name) is unresolvable → None,
+        // so the caller keeps its existing fallback (Ty::Any).
+        assert_eq!(metadata_type_to_ty(&TypeInfo::default()), None);
+    }
 
     fn lower(src: &str) -> (MirModule, Diagnostics) {
         let mut interner = Interner::new();

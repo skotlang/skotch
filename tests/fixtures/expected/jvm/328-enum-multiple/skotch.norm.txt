@@ -3,12 +3,9 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        BLUE ()LColor; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "BLUE"
-    0006 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.BLUE:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0019
   code        max_stack=2 max_locals=1
@@ -61,44 +58,29 @@ method        Color$values ()Ljava/util/ArrayList; 0x0019
     0033 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        GREEN ()LColor; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "GREEN"
-    0006 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.GREEN:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        LARGE ()LSize; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Size)
-    0003 dup
-    0004 ldc "LARGE"
-    0006 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Size.LARGE:LSize;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        MEDIUM ()LSize; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Size)
-    0003 dup
-    0004 ldc "MEDIUM"
-    0006 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Size.MEDIUM:LSize;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        RED ()LColor; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "RED"
-    0006 invokespecial Method(Color.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.RED:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        SMALL ()LSize; 0x0019
-  code        max_stack=3 max_locals=0
-    0000 new Class(Size)
-    0003 dup
-    0004 ldc "SMALL"
-    0006 invokespecial Method(Size.<init>:(Ljava/lang/String;)V)
-    0009 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Size.SMALL:LSize;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Size$valueOf (Ljava/lang/String;)LSize; 0x0019
   code        max_stack=2 max_locals=1

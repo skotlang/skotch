@@ -1199,6 +1199,8 @@ mod tests {
             has_type_params: false,
             is_object_singleton: false,
             companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
         }
     }
 

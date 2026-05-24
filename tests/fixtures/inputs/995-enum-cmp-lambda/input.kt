@@ -1,4 +1,4 @@
-private enum class V { A, B }
+enum class V { A, B }
 
 fun pick(fn: (V) -> Int): Int = fn(V.A)
 

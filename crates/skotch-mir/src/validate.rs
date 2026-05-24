@@ -586,6 +586,8 @@ mod tests {
             has_type_params: false,
             is_object_singleton: false,
             companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
         });
         let errors = validate_module(&m);
         assert!(errors.is_empty(), "Stub class should not cause errors");

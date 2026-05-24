@@ -1,4 +1,4 @@
-name   = "995-enum-cmp-lambda"
-status = "unsupported"
+name     = "995-enum-cmp-lambda"
+status   = "supported"
 features = ["lambda", "enum"]
-reason = "`it == EnumConstant` inside a lambda body — JetChat's JumpToBottom$lambda$0 hits a broken bytecode shape (swap; if_acmpne; both branches to same offset; iload of nonexistent slot). Narrows that bug to a fixture for kotlinc comparison."
+notes    = "Reference equality on an enum entry inside a lambda (`it == V.A`). Enum entries are emitted as `public static final` singletons constructed once in the enum class `<clinit>`; the per-entry accessor returns the shared instance via `getstatic`, so the reference `==` holds. Outputs 1."

@@ -1708,6 +1708,16 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         let d = cp2.utf8(&jvm_param_type_string(&field.ty));
         field_infos.push((n, d, ACC_PUBLIC));
     }
+    // Enum entry singletons: `public static final <Enum> ENTRY;`. The
+    // values are constructed once in this class's synthetic `<clinit>`
+    // (emitted below). The descriptor is `L<EnumName>;` — identical to the
+    // descriptor the accessor `getstatic` and the `<clinit>` `putstatic`
+    // use — so the field declaration and its references agree.
+    for sf in &class.static_fields {
+        let n = cp2.utf8(&sf.name);
+        let d = cp2.utf8(&jvm_param_type_string(&sf.ty));
+        field_infos.push((n, d, ACC_PUBLIC | ACC_STATIC | ACC_FINAL));
+    }
     // Compose `$stable`: kotlinc emits `public static final int $stable`
     // on every Kotlin class — Compose runtime reads it during skip-checks
     // to decide whether a recomposition can be elided. The value is 0 for
@@ -1776,6 +1786,30 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         // `Companion` static field.
         if let Some(comp) = class.companion_class_name.as_deref() {
             let blob = emit_companion_clinit(&class.name, comp, &mut cp2, code2);
+            method_blobs2.push(blob);
+        }
+        // Enum classes carry a synthesized `<clinit>` (built as ordinary
+        // MIR in `lower_enum`) that constructs each entry singleton and
+        // stores it in its static field. Emit it through the shared static-
+        // method body emitter (no implicit `this`, `ACC_STATIC`). Enum
+        // classes are never singletons/companions, so this is the only
+        // `<clinit>` on the class.
+        if let Some(clinit) = &class.clinit {
+            let name_idx = cp2.utf8("<clinit>");
+            let desc_idx = cp2.utf8("()V");
+            let blob = emit_method_body(
+                clinit,
+                module,
+                &class.name,
+                &mut cp2,
+                code2,
+                MethodHeader {
+                    access_flags: ACC_STATIC,
+                    name_idx,
+                    descriptor_idx: desc_idx,
+                    kind: MethodKind::Static,
+                },
+            );
             method_blobs2.push(blob);
         }
         if !primary_conflicts {

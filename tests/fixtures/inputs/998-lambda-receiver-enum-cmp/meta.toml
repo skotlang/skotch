@@ -1,4 +1,4 @@
 name   = "998-lambda-receiver-enum-cmp"
-status = "unsupported"
+status = "supported"
 features = ["lambda", "enum", "generics"]
-reason = "Lambda with extension receiver (`Holder<S>.() -> Int`) comparing receiver property to enum constant. JetChat's `animateDp { if (it == V.GONE) ... else ... }` uses `Transition.Segment<V>.() -> Dp`; tests if the receiver-lambda lowering corrupts the body."
+notes = "Lambda comparing a passed object's property to an enum constant (`it.s == V.A`). Enum-entry singletons make the reference `==` correct across the call into the lambda. Outputs 1."

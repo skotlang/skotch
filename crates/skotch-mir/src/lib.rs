@@ -813,6 +813,21 @@ pub struct MirClass {
     /// et al.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub companion_class_name: Option<std::string::String>,
+    /// `static final` fields on this class, initialized in [`MirClass::clinit`]
+    /// rather than the instance constructor. Used for Kotlin `enum` entries,
+    /// which kotlinc emits as `public static final <Enum> ENTRY;` singletons
+    /// constructed once in `<clinit>` so reference equality (`==`) on entries
+    /// works (fixtures 65/427/995 et al.). The JVM/DEX backends emit these with
+    /// `ACC_STATIC | ACC_FINAL | ACC_ENUM`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub static_fields: Vec<MirField>,
+    /// A synthesized `<clinit>()V` static initializer for this class, emitted
+    /// when [`MirClass::static_fields`] need runtime construction (enum entries).
+    /// Its body is ordinary MIR (`NewInstance` + `Constructor` + `PutStaticField`)
+    /// so backends reuse their normal instruction emission. Backends treat the
+    /// method as `ACC_STATIC` with no implicit `this`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clinit: Option<MirFunction>,
 }
 
 /// A field in a MIR class.
