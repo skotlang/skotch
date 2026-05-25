@@ -3458,17 +3458,13 @@ fn infer_top_level_val_ty(init: &Expr, file: &KtFile, interner: &Interner) -> Ty
                 // `intrinsics::fallback_collection_builder_class`. Mirror of
                 // `skotch-resolve::infer_val_type_from_init` so the
                 // mir-lower side and the cross-file side agree.
-                let collection_ctor = intrinsics::fallback_collection_builder_class(name);
-                if let Some(coll_class) = collection_ctor {
-                    let coll_class = coll_class.to_string();
+                if intrinsics::fallback_collection_builder_class(name).is_some() {
                     let elem_ty = args
                         .first()
                         .map(|a| infer_top_level_val_ty(&a.expr, file, interner))
                         .unwrap_or(Ty::Any);
-                    return Ty::Generic {
-                        base: Box::new(Ty::Class(coll_class)),
-                        args: vec![elem_ty],
-                    };
+                    return intrinsics::collection_builder_result_ty(name, elem_ty)
+                        .unwrap_or(Ty::Any);
                 }
                 // Kotlin convention: type names start uppercase, function
                 // names start lowercase. Only treat the call as a class
@@ -14931,13 +14927,11 @@ fn lower_expr(
             // `local_generic_args`.
             let result_element_ty: Option<Ty> =
                 if let CallKind::StaticJava { method_name, .. } = &kind {
-                    let lambda_ret =
-                        arg_locals
-                            .last()
-                            .and_then(|&id| match &fb.mf.locals[id.0 as usize] {
-                                Ty::Function { ret, .. } => Some((**ret).clone()),
-                                _ => None,
-                            });
+                    let m = method_name.as_str();
+                    // The receiver's element type is tracked either in the
+                    // receiver local's nominal `Ty::Generic` args or in the
+                    // `local_generic_args` side channel (when the nominal Ty
+                    // stays erased for downstream dispatch).
                     let receiver_elem = arg_locals.first().and_then(|&id| {
                         let recv_ty = &fb.mf.locals[id.0 as usize];
                         recv_ty.generic_args().first().cloned().or_else(|| {
@@ -14947,26 +14941,39 @@ fn lower_expr(
                                 .and_then(|args| args.first().cloned())
                         })
                     });
-                    let first_arg_ty = arg_locals
-                        .first()
-                        .map(|&id| fb.mf.locals[id.0 as usize].clone());
-                    let m = method_name.as_str();
-                    if intrinsics::is_element_preserving(m) {
-                        // Receiver-element-preserving: result is `List<T>`
-                        // where T is the receiver's element type.
-                        receiver_elem.filter(|t| !matches!(t, Ty::Any))
-                    } else if intrinsics::is_map_family(m) {
-                        // Lambda-return-driven: result is `List<R>` where R
-                        // is the lambda body's last-expression type.
-                        lambda_ret.filter(|t| !matches!(t, Ty::Unit | Ty::Any))
+                    if let Some(sig_str) = intrinsics::iterable_result_signature(m) {
+                        // §6 collection methods: drive the result element type
+                        // through the shared unifier over an embedded canonical
+                        // signature (`filter` → List<T>, `map` → List<R>) —
+                        // one signature-driven path replacing the former
+                        // is_element_preserving / is_map_family branch.
+                        // Reconstruct the receiver as `Iterable<elem>` (its
+                        // element lives in the side channel, not the nominal
+                        // Ty) so `T` binds; the remaining actuals (the lambda)
+                        // pass through so `R` binds from its return type.
+                        let mut actuals: Vec<Ty> = vec![Ty::Generic {
+                            base: Box::new(Ty::Class("java/lang/Iterable".to_string())),
+                            args: vec![receiver_elem.clone().unwrap_or(Ty::Any)],
+                        }];
+                        for &id in arg_locals.iter().skip(1) {
+                            actuals.push(fb.mf.locals[id.0 as usize].clone());
+                        }
+                        skotch_classinfo::generic_signature::parse_method_signature(sig_str)
+                            .map(|sig| {
+                                skotch_classinfo::generic_signature::infer_return_ty(&sig, &actuals)
+                            })
+                            .and_then(|t| t.generic_args().first().cloned())
+                            .filter(|t| !matches!(t, Ty::Any | Ty::Unit | Ty::Error))
                     } else if intrinsics::is_compose_state_holder(m) {
                         // First-arg-driven: Compose's `mutableStateOf(v)`
-                        // returns `MutableState<typeof(v)>`. Recording the
-                        // element type on the result local lets `state.value`
-                        // resolve against the right field type at downstream
-                        // access sites without having to model full
-                        // `Class<T>` parameterization.
-                        first_arg_ty.filter(|t| !matches!(t, Ty::Any | Ty::Unit | Ty::Error))
+                        // returns `MutableState<typeof(v)>` (a §2 state holder,
+                        // not a §6 iterable method, so it keeps its own rule).
+                        // Recording the element on the result local lets
+                        // `state.value` resolve against the right field type.
+                        arg_locals
+                            .first()
+                            .map(|&id| fb.mf.locals[id.0 as usize].clone())
+                            .filter(|t| !matches!(t, Ty::Any | Ty::Unit | Ty::Error))
                     } else {
                         None
                     }

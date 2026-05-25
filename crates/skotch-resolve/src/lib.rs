@@ -320,24 +320,17 @@ fn infer_val_type_from_init(
                 // element; heterogeneous `listOf(1, "two")` would
                 // infer `Any` either way, and the JVM-erased
                 // descriptor is still `List`.
-                let collection_ctor =
-                    skotch_types::intrinsics::fallback_collection_builder_class(name);
-                if let Some(coll_class) = collection_ctor {
-                    let coll_class = coll_class.to_string();
+                if skotch_types::intrinsics::fallback_collection_builder_class(name).is_some() {
+                    // `mapOf("k" to 1, ...)` args are `Pair<K,V>`, but we
+                    // don't yet trace through `to`; the first arg's inferred
+                    // type signals there IS a parameterization and downstream
+                    // code falls back to erasure if it can't use it.
                     let elem_ty = args
                         .first()
                         .map(|a| infer_val_type_from_init(&a.expr, interner, imports))
                         .unwrap_or(Ty::Any);
-                    // `mapOf("k" to 1, ...)` — the args are
-                    // `Pair<K,V>` but we don't yet trace through `to`;
-                    // record `Map` as parameterized over the pair to
-                    // signal there IS a parameterization, and let
-                    // downstream code fall back to erasure if it can't
-                    // use it. Conservative.
-                    return Ty::Generic {
-                        base: Box::new(Ty::Class(coll_class)),
-                        args: vec![elem_ty],
-                    };
+                    return skotch_types::intrinsics::collection_builder_result_ty(name, elem_ty)
+                        .unwrap_or(Ty::Any);
                 }
                 // Only treat the call as a constructor when the callee name
                 // starts uppercase (Kotlin convention). Lowercase Ident calls

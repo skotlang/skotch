@@ -215,6 +215,22 @@ pub fn fallback_collection_builder_class(name: &str) -> Option<&'static str> {
     })
 }
 
+/// Inferred type of a collection-builder call given its element type:
+/// `Ty::Generic { <builder class>, [elem_ty] }`, or `None` when `name`
+/// isn't a builder. This is the single place the wrapping is built — the
+/// val-type inferrers in `skotch-mir-lower` (`infer_top_level_val_ty`)
+/// and `skotch-resolve` (`infer_val_type_from_init`) both call it with
+/// their own first-argument element type, so the mir-lower side and the
+/// cross-file side stay in agreement without duplicating the
+/// `fallback_collection_builder_class` → `Ty::Generic` construction.
+pub fn collection_builder_result_ty(name: &str, elem_ty: Ty) -> Option<Ty> {
+    let class = fallback_collection_builder_class(name)?;
+    Some(Ty::Generic {
+        base: Box::new(Ty::Class(class.to_string())),
+        args: vec![elem_ty],
+    })
+}
+
 // ── 5. Scope functions ──────────────────────────────────────────
 
 /// How a Kotlin scope function exposes its receiver to the trailing
@@ -389,34 +405,39 @@ pub fn is_iterable_t_lambda_method(name: &str) -> bool {
     ITERABLE_T_LAMBDA.contains(&name)
 }
 
-/// Methods that preserve the receiver's element type into the
-/// result (`filter` → List<T>, `take` → List<T>, etc.).
-pub const ITERABLE_ELEMENT_PRESERVING: &[&str] = &[
-    "filter",
-    "filterNot",
-    "filterNotNull",
-    "sortedBy",
-    "sortedByDescending",
-    "take",
-    "drop",
-    "takeWhile",
-    "dropWhile",
-    "reversed",
-    "distinct",
-    "distinctBy",
-];
-
-pub fn is_element_preserving(name: &str) -> bool {
-    ITERABLE_ELEMENT_PRESERVING.contains(&name)
-}
-
-/// Methods that produce `List<R>` from a lambda `(T) -> R`. The
-/// result element type comes from the lambda's body, not the
-/// receiver.
-pub const ITERABLE_MAP_FAMILY: &[&str] = &["map", "mapNotNull", "mapIndexed", "mapIndexedNotNull"];
-
-pub fn is_map_family(name: &str) -> bool {
-    ITERABLE_MAP_FAMILY.contains(&name)
+/// Generic signature of a §6 collection method whose *result element
+/// type* the shared unifier (`skotch_classinfo::generic_signature`)
+/// recovers. This replaces the former `is_element_preserving` /
+/// `is_map_family` boolean lists plus the bespoke "result elem = receiver
+/// elem vs lambda return" branch in mir-lower with one signature-driven
+/// path. Two shapes:
+///
+/// * **element-preserving** (`filter`, `take`, `reversed`, …): result is
+///   `List<T>` where `T` is the receiver's element —
+///   `(Iterable<T>) -> List<T>`.
+/// * **map-family** (`map`, `mapNotNull`, …): result is `List<R>` where
+///   `R` is the transform lambda's return — `(Iterable<T>, (T)->R) -> List<R>`.
+///
+/// kotlinc reads these from `kotlin-stdlib` and resolves the element by
+/// ordinary generic inference; skotch uses the real classpath signature
+/// when present and this embedded copy as the deterministic fallback. Only
+/// the receiver-`T` / lambda-`R` binding matters here, so surplus value
+/// args (`take`'s `Int`, `mapIndexed`'s index) are omitted — the unifier
+/// ignores extra actuals.
+pub fn iterable_result_signature(name: &str) -> Option<&'static str> {
+    const ELEMENT_PRESERVING: &str =
+        "<T:Ljava/lang/Object;>(Ljava/lang/Iterable<TT;>;)Ljava/util/List<TT;>;";
+    const MAP_FAMILY: &str = "<T:Ljava/lang/Object;R:Ljava/lang/Object;>\
+        (Ljava/lang/Iterable<TT;>;Lkotlin/jvm/functions/Function1<-TT;+TR;>;)\
+        Ljava/util/List<TR;>;";
+    match name {
+        "filter" | "filterNot" | "filterNotNull" | "sortedBy" | "sortedByDescending" | "take"
+        | "drop" | "takeWhile" | "dropWhile" | "reversed" | "distinct" | "distinctBy" => {
+            Some(ELEMENT_PRESERVING)
+        }
+        "map" | "mapNotNull" | "mapIndexed" | "mapIndexedNotNull" => Some(MAP_FAMILY),
+        _ => None,
+    }
 }
 
 // ── 7. Common Kotlin exception types ────────────────────────────
@@ -657,10 +678,20 @@ mod tests {
     #[test]
     fn iterable_method_categorization() {
         assert!(is_iterable_t_lambda_method("filter"));
-        assert!(is_element_preserving("filter"));
-        assert!(!is_element_preserving("map"));
-        assert!(is_map_family("map"));
-        assert!(!is_map_family("filter"));
+        // Result-element signatures: element-preserving methods keep the
+        // receiver's `T`; the map family returns `List<R>` from the lambda.
+        assert_eq!(
+            iterable_result_signature("filter"),
+            iterable_result_signature("take"),
+            "all element-preserving methods share one signature"
+        );
+        assert_ne!(
+            iterable_result_signature("filter"),
+            iterable_result_signature("map"),
+            "element-preserving and map-family signatures differ"
+        );
+        assert!(iterable_result_signature("map").unwrap().contains("TR;"));
+        assert!(iterable_result_signature("not_a_method").is_none());
     }
 
     #[test]
@@ -730,5 +761,27 @@ mod tests {
         for name in COMPOSE_STATE_HOLDERS {
             assert!(fallback_collection_builder_class(name).is_some());
         }
+    }
+
+    #[test]
+    fn collection_builder_result_ty_wraps_element() {
+        // `listOf(1, 2)` infers `List<Int>` — the shared helper both
+        // mir-lower and resolve route through.
+        assert_eq!(
+            collection_builder_result_ty("listOf", Ty::Int),
+            Some(Ty::Generic {
+                base: Box::new(Ty::Class("kotlin/collections/List".to_string())),
+                args: vec![Ty::Int],
+            })
+        );
+        assert_eq!(
+            collection_builder_result_ty("mutableSetOf", Ty::String),
+            Some(Ty::Generic {
+                base: Box::new(Ty::Class("kotlin/collections/Set".to_string())),
+                args: vec![Ty::String],
+            })
+        );
+        // Non-builders get nothing.
+        assert_eq!(collection_builder_result_ty("println", Ty::Int), None);
     }
 }
