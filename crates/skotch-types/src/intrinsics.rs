@@ -96,20 +96,29 @@ pub fn is_coroutine_builder(name: &str) -> bool {
 
 // ── 2. Compose intrinsics ───────────────────────────────────────
 
-/// Compose-runtime functions whose result type is the trailing
-/// lambda's return type. The signature in `compose-runtime.jar`
-/// records this via `<T> remember(calc: () -> T): T`, so the
-/// unifier in `skotch_classinfo::generic_signature` resolves T
-/// correctly *when* the classpath signature is available. We keep
-/// this list for the case where signature lookup fails (e.g. the
-/// Compose runtime isn't on the classpath in a unit test).
-pub const COMPOSE_T_FROM_LAMBDA: &[&str] =
-    &["remember", "rememberSaveable", "lazy", "derivedStateOf"];
-
-/// True when the method is a Compose intrinsic whose result type
-/// equals its trailing lambda's return type.
-pub fn is_compose_t_from_lambda(name: &str) -> bool {
-    COMPOSE_T_FROM_LAMBDA.contains(&name)
+/// Compose-runtime functions whose result type is their trailing
+/// lambda's return type (`<T> remember(calculation: () -> T): T`).
+///
+/// Returns the canonical JVM generic signature rather than a boolean so
+/// the **same generic unifier** (`skotch_classinfo::generic_signature`)
+/// that resolves classpath-derived signatures recovers `T` — there is no
+/// bespoke "result = lambda return type" branch any more. The caller runs
+/// it against the trailing lambda argument (`remember` has variadic
+/// leading `key` args, so the lambda is always last).
+///
+/// kotlinc reads this signature from the `compose-runtime.jar` it always
+/// compiles against; skotch prefers the real classpath signature when
+/// present and falls back to this embedded copy for determinism (the
+/// Compose runtime isn't on the classpath in unit tests). The receiver-
+/// less `() -> T` shape and the result-equals-lambda-return fact are
+/// library facts, so the name set stays — only the *mechanism* is now the
+/// shared unifier rather than a hand-written `match`.
+pub fn compose_lambda_result_signature(name: &str) -> Option<&'static str> {
+    matches!(
+        name,
+        "remember" | "rememberSaveable" | "lazy" | "derivedStateOf"
+    )
+    .then_some("<T:Ljava/lang/Object;>(Lkotlin/jvm/functions/Function0<+TT;>;)TT;")
 }
 
 /// Compose-runtime "unit property" extensions: `Int.dp`, `Int.sp`,

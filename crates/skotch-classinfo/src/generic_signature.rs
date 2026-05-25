@@ -700,6 +700,37 @@ mod tests {
     }
 
     #[test]
+    fn infer_remember_family_result_from_lambda() {
+        use skotch_types::Ty;
+        // The embedded Compose `remember`-family signature, fed through
+        // the same unifier mir-lower uses, must resolve the result type to
+        // the trailing lambda's return type — replacing the old bespoke
+        // `match Ty::Function { ret }` extraction.
+        for name in ["remember", "rememberSaveable", "lazy", "derivedStateOf"] {
+            let sig_str = skotch_types::intrinsics::compose_lambda_result_signature(name)
+                .unwrap_or_else(|| panic!("{name} should have an embedded signature"));
+            let sig = parse_method_signature(sig_str).unwrap();
+            // Caller: `remember { Foo() }` — the trailing arg is `() -> Foo`;
+            // mir-lower isolates this last arg before unifying.
+            let lambda = Ty::Function {
+                params: vec![],
+                ret: Box::new(Ty::Class("com/example/Foo".to_string())),
+                is_suspend: false,
+                is_composable: false,
+            };
+            let result = infer_return_ty(&sig, std::slice::from_ref(&lambda));
+            assert_eq!(
+                result,
+                Ty::Class("com/example/Foo".to_string()),
+                "{name}: T should bind to the lambda's return type"
+            );
+        }
+        // A non-family name gets no embedded signature (falls through to
+        // the descriptor / @Metadata fallbacks).
+        assert!(skotch_types::intrinsics::compose_lambda_result_signature("println").is_none());
+    }
+
+    #[test]
     fn nullable_actual_unwraps_for_unification() {
         use skotch_types::Ty;
         let sig = parse_method_signature("<T:Ljava/lang/Object;>(TT;)TT;").unwrap();

@@ -14800,19 +14800,28 @@ fn lower_expr(
                         // lambda-return-T pattern for Compose intrinsics
                         // whose classpath signatures we don't have
                         // (e.g. private Compose runtime classes).
-                        let is_t_from_lambda =
-                            intrinsics::is_compose_t_from_lambda(method_name.as_str());
-                        let lambda_ret = if is_t_from_lambda {
-                            arg_locals
-                                .last()
-                                .and_then(|&id| match &fb.mf.locals[id.0 as usize] {
-                                    Ty::Function { ret, .. } => Some((**ret).clone()),
-                                    _ => None,
+                        // Compose intrinsics whose result is the trailing
+                        // lambda's return type (`remember`/`lazy`/…). Run the
+                        // same generic unifier used for classpath signatures
+                        // over an embedded canonical signature, against just
+                        // the trailing lambda arg — `remember` has variadic
+                        // leading `key` args, so the lambda is always last.
+                        // This replaces a bespoke `match Ty::Function { ret }`
+                        // with the shared inference path.
+                        let lambda_ret =
+                            intrinsics::compose_lambda_result_signature(method_name.as_str())
+                                .and_then(
+                                    skotch_classinfo::generic_signature::parse_method_signature,
+                                )
+                                .and_then(|sig| {
+                                    arg_tys.last().map(|last| {
+                                        skotch_classinfo::generic_signature::infer_return_ty(
+                                            &sig,
+                                            std::slice::from_ref(last),
+                                        )
+                                    })
                                 })
-                                .filter(|t| !matches!(t, Ty::Unit | Ty::Any))
-                        } else {
-                            None
-                        };
+                                .filter(|t| !matches!(t, Ty::Unit | Ty::Any));
                         if let Some(t) = lambda_ret {
                             t
                         } else if let Some((_, _, ret_ty)) = module.cross_file_fns.get(method_name)
