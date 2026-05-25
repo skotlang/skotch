@@ -2,26 +2,72 @@ Compiled from "com/example/compose/jetchat/conversation/InputSelector.kt"
 public final class com.example.compose.jetchat.conversation.InputSelector {
   public java.lang.String name;
 
+  public static final InputSelector NONE;
+
+  public static final InputSelector MAP;
+
+  public static final InputSelector DM;
+
+  public static final InputSelector EMOJI;
+
+  public static final InputSelector PHONE;
+
+  public static final InputSelector PICTURE;
+
   public static final int $stable;
+
+  static {};
+    Code:
+         0: new           #22                 // class InputSelector
+         3: dup
+         4: ldc           #23                 // String NONE
+         6: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+         9: putstatic     #29                 // Field InputSelector.NONE:LInputSelector;
+        12: new           #22                 // class InputSelector
+        15: dup
+        16: ldc           #30                 // String MAP
+        18: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+        21: putstatic     #32                 // Field InputSelector.MAP:LInputSelector;
+        24: new           #22                 // class InputSelector
+        27: dup
+        28: ldc           #33                 // String DM
+        30: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+        33: putstatic     #35                 // Field InputSelector.DM:LInputSelector;
+        36: new           #22                 // class InputSelector
+        39: dup
+        40: ldc           #36                 // String EMOJI
+        42: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+        45: putstatic     #38                 // Field InputSelector.EMOJI:LInputSelector;
+        48: new           #22                 // class InputSelector
+        51: dup
+        52: ldc           #39                 // String PHONE
+        54: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+        57: putstatic     #41                 // Field InputSelector.PHONE:LInputSelector;
+        60: new           #22                 // class InputSelector
+        63: dup
+        64: ldc           #42                 // String PICTURE
+        66: invokespecial #27                 // Method InputSelector."<init>":(Ljava/lang/String;)V
+        69: putstatic     #44                 // Field InputSelector.PICTURE:LInputSelector;
+        72: return
 
   public com.example.compose.jetchat.conversation.InputSelector(java.lang.String);
     Code:
          0: aload_0
-         1: invokespecial #16                 // Method java/lang/Object."<init>":()V
+         1: invokespecial #46                 // Method java/lang/Object."<init>":()V
          4: aload_0
          5: aload_1
-         6: putfield      #18                 // Field name:Ljava/lang/String;
+         6: putfield      #48                 // Field name:Ljava/lang/String;
          9: return
 
   public java.lang.String toString();
     Code:
          0: aload_0
-         1: getfield      #18                 // Field name:Ljava/lang/String;
+         1: getfield      #48                 // Field name:Ljava/lang/String;
          4: areturn
 
   public final java.lang.String getName();
     Code:
          0: aload_0
-         1: getfield      #18                 // Field name:Ljava/lang/String;
+         1: getfield      #48                 // Field name:Ljava/lang/String;
          4: areturn
 }

@@ -43,25 +43,54 @@ public final class com.example.compose.jetchat.profile.ProfileViewModel extends 
         17: aload_2
         18: if_acmpeq     28
         21: aload_1
-        22: ifnull        53
-        25: goto          50
-        28: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Ljava/lang/Object;
-        31: astore        5
-        33: aload_0
+        22: ifnull        58
+        25: goto          52
+        28: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Lcom/example/compose/jetchat/profile/ProfileScreenState;
+        31: getfield      #41                 // Field com/example/compose/jetchat/profile/ProfileScreenState.userId:Ljava/lang/String;
         34: aload_2
-        35: putfield      #23                 // Field userId:Ljava/lang/String;
-        38: aload_0
-        39: aload_3
-        40: putfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
-        43: aload_0
-        44: aload         4
-        46: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
-        49: return
-        50: goto          61
-        53: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Ljava/lang/Object;
-        56: astore        6
-        58: goto          28
-        61: return
+        35: swap
+        36: invokestatic  #47                 // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
+        39: istore        5
+        41: iconst_1
+        42: istore        6
+        44: iload         5
+        46: ifeq          72
+        49: goto          85
+        52: aload_1
+        53: astore        7
+        55: goto          66
+        58: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Lcom/example/compose/jetchat/profile/ProfileScreenState;
+        61: getfield      #41                 // Field com/example/compose/jetchat/profile/ProfileScreenState.userId:Ljava/lang/String;
+        64: astore        7
+        66: aload         7
+        68: astore_2
+        69: goto          28
+        72: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Lcom/example/compose/jetchat/profile/ProfileScreenState;
+        75: getfield      #50                 // Field com/example/compose/jetchat/profile/ProfileScreenState.displayName:Ljava/lang/String;
+        78: aload_2
+        79: swap
+        80: invokestatic  #47                 // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
+        83: istore        6
+        85: iload         6
+        87: ifeq          98
+        90: invokestatic  #38                 // Method com/example/compose/jetchat/data/FakeDataKt.getMeProfile:()Lcom/example/compose/jetchat/profile/ProfileScreenState;
+        93: astore        8
+        95: goto          103
+        98: invokestatic  #53                 // Method com/example/compose/jetchat/data/FakeDataKt.getColleagueProfile:()Lcom/example/compose/jetchat/profile/ProfileScreenState;
+       101: astore        8
+       103: aload_3
+       104: aload         8
+       106: invokevirtual #57                 // Method androidx/lifecycle/MutableLiveData.setValue:(Ljava/lang/Object;)V
+       109: aload_0
+       110: aload_2
+       111: putfield      #23                 // Field userId:Ljava/lang/String;
+       114: aload_0
+       115: aload_3
+       116: putfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
+       119: aload_0
+       120: aload         4
+       122: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
+       125: return
 
   public java.lang.String getUserId();
     Code:

@@ -20,6 +20,17 @@ use std::sync::Mutex;
 /// `None` marks a known-absent class so we don't repeatedly re-scan.
 static CLASSPATH_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mutex::new(None);
 
+/// Process-wide memo of [`load_jdk_class`] results (`class_path →
+/// Option<ClassInfo>`). The underlying search opens `java.base.jmod`, then
+/// iterates *every* jmod, then CLASSPATH jars, then the Kotlin stdlib jars —
+/// re-reading each archive's central directory from scratch. MIR-lowering of
+/// a Compose-heavy file resolves thousands of method descriptors, and for the
+/// many classes that aren't in the JDK at all (Compose/AndroidX), the entire
+/// futile search repeated per call. This made JetChat-scale builds take 10+
+/// minutes. Caching both hits and misses (the classpath is fixed for a build)
+/// bounds the search to once per distinct `class_path`.
+static JDK_CLASS_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mutex::new(None);
+
 /// Pre-populate the classpath cache from a set of JAR paths. Idempotent —
 /// existing entries aren't overwritten. Call this once per project build
 /// after dep resolution; subsequent `lookup_method_descriptor` calls hit
@@ -814,6 +825,33 @@ fn collect_strings(items: Vec<ElementValue>) -> Vec<String> {
 /// Load a class from the JDK's jmod files. Searches java.base first,
 /// then all other jmod files in the jmods/ directory.
 pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
+    // Memoize: the search below is expensive and MIR-lowering calls it
+    // thousands of times for the same handful of classes (and repeats the
+    // entire futile search for never-found Compose/AndroidX classes). The
+    // classpath/jmods are fixed for a build, so caching hits *and* misses
+    // is safe and bounds the cost to one search per distinct class_path.
+    if let Ok(guard) = JDK_CLASS_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if let Some(slot) = cache.get(class_path) {
+                return match slot {
+                    Some(ci) => Ok(ci.clone()),
+                    None => Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "class not found (cached miss)",
+                    )),
+                };
+            }
+        }
+    }
+    let result = load_jdk_class_uncached(class_path);
+    if let Ok(mut guard) = JDK_CLASS_CACHE.lock() {
+        let cache = guard.get_or_insert_with(HashMap::new);
+        cache.insert(class_path.to_string(), result.as_ref().ok().cloned());
+    }
+    result
+}
+
+fn load_jdk_class_uncached(class_path: &str) -> io::Result<ClassInfo> {
     let jdk_home = find_jdk_home()?;
     let jmods_dir = jdk_home.join("jmods");
     if !jmods_dir.exists() {

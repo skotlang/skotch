@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-21 07:24:33
-+++ ./skotch/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-21 07:24:33
+--- ./gradle/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-24 23:07:53
++++ ./skotch/com.example.compose.jetchat.UiExtrasKt.javap	2026-05-24 23:07:53
 @@ -1,162 +1,55 @@
 -Compiled from "UiExtras.kt"
 +Compiled from "com/example/compose/jetchat/UiExtras.kt"

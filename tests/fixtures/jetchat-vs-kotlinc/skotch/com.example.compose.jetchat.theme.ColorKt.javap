@@ -1,248 +1,248 @@
 Compiled from "com/example/compose/jetchat/theme/Color.kt"
 public final class com.example.compose.jetchat.theme.ColorKt {
-  private static final java.lang.Object Blue10;
+  private static final androidx.compose.ui.graphics.Color Blue10;
 
-  private static final java.lang.Object Blue20;
+  private static final androidx.compose.ui.graphics.Color Blue20;
 
-  private static final java.lang.Object Blue30;
+  private static final androidx.compose.ui.graphics.Color Blue30;
 
-  private static final java.lang.Object Blue40;
+  private static final androidx.compose.ui.graphics.Color Blue40;
 
-  private static final java.lang.Object Blue80;
+  private static final androidx.compose.ui.graphics.Color Blue80;
 
-  private static final java.lang.Object Blue90;
+  private static final androidx.compose.ui.graphics.Color Blue90;
 
-  private static final java.lang.Object DarkBlue10;
+  private static final androidx.compose.ui.graphics.Color DarkBlue10;
 
-  private static final java.lang.Object DarkBlue20;
+  private static final androidx.compose.ui.graphics.Color DarkBlue20;
 
-  private static final java.lang.Object DarkBlue30;
+  private static final androidx.compose.ui.graphics.Color DarkBlue30;
 
-  private static final java.lang.Object DarkBlue40;
+  private static final androidx.compose.ui.graphics.Color DarkBlue40;
 
-  private static final java.lang.Object DarkBlue80;
+  private static final androidx.compose.ui.graphics.Color DarkBlue80;
 
-  private static final java.lang.Object DarkBlue90;
+  private static final androidx.compose.ui.graphics.Color DarkBlue90;
 
-  private static final java.lang.Object Yellow10;
+  private static final androidx.compose.ui.graphics.Color Yellow10;
 
-  private static final java.lang.Object Yellow20;
+  private static final androidx.compose.ui.graphics.Color Yellow20;
 
-  private static final java.lang.Object Yellow30;
+  private static final androidx.compose.ui.graphics.Color Yellow30;
 
-  private static final java.lang.Object Yellow40;
+  private static final androidx.compose.ui.graphics.Color Yellow40;
 
-  private static final java.lang.Object Yellow80;
+  private static final androidx.compose.ui.graphics.Color Yellow80;
 
-  private static final java.lang.Object Yellow90;
+  private static final androidx.compose.ui.graphics.Color Yellow90;
 
-  private static final java.lang.Object Red10;
+  private static final androidx.compose.ui.graphics.Color Red10;
 
-  private static final java.lang.Object Red20;
+  private static final androidx.compose.ui.graphics.Color Red20;
 
-  private static final java.lang.Object Red30;
+  private static final androidx.compose.ui.graphics.Color Red30;
 
-  private static final java.lang.Object Red40;
+  private static final androidx.compose.ui.graphics.Color Red40;
 
-  private static final java.lang.Object Red80;
+  private static final androidx.compose.ui.graphics.Color Red80;
 
-  private static final java.lang.Object Red90;
+  private static final androidx.compose.ui.graphics.Color Red90;
 
-  private static final java.lang.Object Grey10;
+  private static final androidx.compose.ui.graphics.Color Grey10;
 
-  private static final java.lang.Object Grey20;
+  private static final androidx.compose.ui.graphics.Color Grey20;
 
-  private static final java.lang.Object Grey80;
+  private static final androidx.compose.ui.graphics.Color Grey80;
 
-  private static final java.lang.Object Grey90;
+  private static final androidx.compose.ui.graphics.Color Grey90;
 
-  private static final java.lang.Object Grey95;
+  private static final androidx.compose.ui.graphics.Color Grey95;
 
-  private static final java.lang.Object Grey99;
+  private static final androidx.compose.ui.graphics.Color Grey99;
 
-  private static final java.lang.Object BlueGrey30;
+  private static final androidx.compose.ui.graphics.Color BlueGrey30;
 
-  private static final java.lang.Object BlueGrey50;
+  private static final androidx.compose.ui.graphics.Color BlueGrey50;
 
-  private static final java.lang.Object BlueGrey60;
+  private static final androidx.compose.ui.graphics.Color BlueGrey60;
 
-  private static final java.lang.Object BlueGrey80;
+  private static final androidx.compose.ui.graphics.Color BlueGrey80;
 
-  private static final java.lang.Object BlueGrey90;
+  private static final androidx.compose.ui.graphics.Color BlueGrey90;
 
-  public static final java.lang.Object getBlue10();
+  public static final androidx.compose.ui.graphics.Color getBlue10();
     Code:
-         0: getstatic     #44                 // Field Blue10:Ljava/lang/Object;
+         0: getstatic     #44                 // Field Blue10:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlue20();
+  public static final androidx.compose.ui.graphics.Color getBlue20();
     Code:
-         0: getstatic     #49                 // Field Blue20:Ljava/lang/Object;
+         0: getstatic     #49                 // Field Blue20:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlue30();
+  public static final androidx.compose.ui.graphics.Color getBlue30();
     Code:
-         0: getstatic     #52                 // Field Blue30:Ljava/lang/Object;
+         0: getstatic     #52                 // Field Blue30:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlue40();
+  public static final androidx.compose.ui.graphics.Color getBlue40();
     Code:
-         0: getstatic     #55                 // Field Blue40:Ljava/lang/Object;
+         0: getstatic     #55                 // Field Blue40:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlue80();
+  public static final androidx.compose.ui.graphics.Color getBlue80();
     Code:
-         0: getstatic     #58                 // Field Blue80:Ljava/lang/Object;
+         0: getstatic     #58                 // Field Blue80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlue90();
+  public static final androidx.compose.ui.graphics.Color getBlue90();
     Code:
-         0: getstatic     #61                 // Field Blue90:Ljava/lang/Object;
+         0: getstatic     #61                 // Field Blue90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue10();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue10();
     Code:
-         0: getstatic     #64                 // Field DarkBlue10:Ljava/lang/Object;
+         0: getstatic     #64                 // Field DarkBlue10:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue20();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue20();
     Code:
-         0: getstatic     #67                 // Field DarkBlue20:Ljava/lang/Object;
+         0: getstatic     #67                 // Field DarkBlue20:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue30();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue30();
     Code:
-         0: getstatic     #70                 // Field DarkBlue30:Ljava/lang/Object;
+         0: getstatic     #70                 // Field DarkBlue30:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue40();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue40();
     Code:
-         0: getstatic     #73                 // Field DarkBlue40:Ljava/lang/Object;
+         0: getstatic     #73                 // Field DarkBlue40:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue80();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue80();
     Code:
-         0: getstatic     #76                 // Field DarkBlue80:Ljava/lang/Object;
+         0: getstatic     #76                 // Field DarkBlue80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getDarkBlue90();
+  public static final androidx.compose.ui.graphics.Color getDarkBlue90();
     Code:
-         0: getstatic     #79                 // Field DarkBlue90:Ljava/lang/Object;
+         0: getstatic     #79                 // Field DarkBlue90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow10();
+  public static final androidx.compose.ui.graphics.Color getYellow10();
     Code:
-         0: getstatic     #82                 // Field Yellow10:Ljava/lang/Object;
+         0: getstatic     #82                 // Field Yellow10:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow20();
+  public static final androidx.compose.ui.graphics.Color getYellow20();
     Code:
-         0: getstatic     #85                 // Field Yellow20:Ljava/lang/Object;
+         0: getstatic     #85                 // Field Yellow20:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow30();
+  public static final androidx.compose.ui.graphics.Color getYellow30();
     Code:
-         0: getstatic     #88                 // Field Yellow30:Ljava/lang/Object;
+         0: getstatic     #88                 // Field Yellow30:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow40();
+  public static final androidx.compose.ui.graphics.Color getYellow40();
     Code:
-         0: getstatic     #91                 // Field Yellow40:Ljava/lang/Object;
+         0: getstatic     #91                 // Field Yellow40:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow80();
+  public static final androidx.compose.ui.graphics.Color getYellow80();
     Code:
-         0: getstatic     #94                 // Field Yellow80:Ljava/lang/Object;
+         0: getstatic     #94                 // Field Yellow80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getYellow90();
+  public static final androidx.compose.ui.graphics.Color getYellow90();
     Code:
-         0: getstatic     #97                 // Field Yellow90:Ljava/lang/Object;
+         0: getstatic     #97                 // Field Yellow90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed10();
+  public static final androidx.compose.ui.graphics.Color getRed10();
     Code:
-         0: getstatic     #100                // Field Red10:Ljava/lang/Object;
+         0: getstatic     #100                // Field Red10:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed20();
+  public static final androidx.compose.ui.graphics.Color getRed20();
     Code:
-         0: getstatic     #103                // Field Red20:Ljava/lang/Object;
+         0: getstatic     #103                // Field Red20:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed30();
+  public static final androidx.compose.ui.graphics.Color getRed30();
     Code:
-         0: getstatic     #106                // Field Red30:Ljava/lang/Object;
+         0: getstatic     #106                // Field Red30:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed40();
+  public static final androidx.compose.ui.graphics.Color getRed40();
     Code:
-         0: getstatic     #109                // Field Red40:Ljava/lang/Object;
+         0: getstatic     #109                // Field Red40:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed80();
+  public static final androidx.compose.ui.graphics.Color getRed80();
     Code:
-         0: getstatic     #112                // Field Red80:Ljava/lang/Object;
+         0: getstatic     #112                // Field Red80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getRed90();
+  public static final androidx.compose.ui.graphics.Color getRed90();
     Code:
-         0: getstatic     #115                // Field Red90:Ljava/lang/Object;
+         0: getstatic     #115                // Field Red90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey10();
+  public static final androidx.compose.ui.graphics.Color getGrey10();
     Code:
-         0: getstatic     #118                // Field Grey10:Ljava/lang/Object;
+         0: getstatic     #118                // Field Grey10:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey20();
+  public static final androidx.compose.ui.graphics.Color getGrey20();
     Code:
-         0: getstatic     #121                // Field Grey20:Ljava/lang/Object;
+         0: getstatic     #121                // Field Grey20:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey80();
+  public static final androidx.compose.ui.graphics.Color getGrey80();
     Code:
-         0: getstatic     #124                // Field Grey80:Ljava/lang/Object;
+         0: getstatic     #124                // Field Grey80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey90();
+  public static final androidx.compose.ui.graphics.Color getGrey90();
     Code:
-         0: getstatic     #127                // Field Grey90:Ljava/lang/Object;
+         0: getstatic     #127                // Field Grey90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey95();
+  public static final androidx.compose.ui.graphics.Color getGrey95();
     Code:
-         0: getstatic     #130                // Field Grey95:Ljava/lang/Object;
+         0: getstatic     #130                // Field Grey95:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getGrey99();
+  public static final androidx.compose.ui.graphics.Color getGrey99();
     Code:
-         0: getstatic     #133                // Field Grey99:Ljava/lang/Object;
+         0: getstatic     #133                // Field Grey99:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlueGrey30();
+  public static final androidx.compose.ui.graphics.Color getBlueGrey30();
     Code:
-         0: getstatic     #136                // Field BlueGrey30:Ljava/lang/Object;
+         0: getstatic     #136                // Field BlueGrey30:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlueGrey50();
+  public static final androidx.compose.ui.graphics.Color getBlueGrey50();
     Code:
-         0: getstatic     #139                // Field BlueGrey50:Ljava/lang/Object;
+         0: getstatic     #139                // Field BlueGrey50:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlueGrey60();
+  public static final androidx.compose.ui.graphics.Color getBlueGrey60();
     Code:
-         0: getstatic     #142                // Field BlueGrey60:Ljava/lang/Object;
+         0: getstatic     #142                // Field BlueGrey60:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlueGrey80();
+  public static final androidx.compose.ui.graphics.Color getBlueGrey80();
     Code:
-         0: getstatic     #145                // Field BlueGrey80:Ljava/lang/Object;
+         0: getstatic     #145                // Field BlueGrey80:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
-  public static final java.lang.Object getBlueGrey90();
+  public static final androidx.compose.ui.graphics.Color getBlueGrey90();
     Code:
-         0: getstatic     #148                // Field BlueGrey90:Ljava/lang/Object;
+         0: getstatic     #148                // Field BlueGrey90:Landroidx/compose/ui/graphics/Color;
          3: areturn
 
   public static final {};

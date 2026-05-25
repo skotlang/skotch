@@ -153,7 +153,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         27: iload         6
         29: ireturn
         30: aload_1
-        31: checkcast     #103                // class Message
+        31: checkcast     #2                  // class com/example/compose/jetchat/conversation/Message
         34: astore        7
         36: aload_0
         37: getfield      #23                 // Field author:Ljava/lang/String;
@@ -163,7 +163,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         47: astore        9
         49: aload         8
         51: aload         9
-        53: invokevirtual #105                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+        53: invokevirtual #103                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
         56: istore        10
         58: aload_0
         59: getfield      #25                 // Field content:Ljava/lang/String;
@@ -173,7 +173,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         69: astore        12
         71: aload         11
         73: aload         12
-        75: invokevirtual #105                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+        75: invokevirtual #103                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
         78: istore        13
         80: iload         10
         82: iload         13
@@ -187,7 +187,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         98: astore        16
        100: aload         15
        102: aload         16
-       104: invokevirtual #105                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       104: invokevirtual #103                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
        107: istore        17
        109: iload         14
        111: iload         17
@@ -201,7 +201,7 @@ public final class com.example.compose.jetchat.conversation.Message {
        127: astore        20
        129: aload         19
        131: aload         20
-       133: invokevirtual #106                // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
+       133: invokevirtual #104                // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
        136: istore        21
        138: iload         18
        140: iload         21
@@ -231,11 +231,11 @@ public final class com.example.compose.jetchat.conversation.Message {
     Code:
          0: aload_0
          1: getfield      #23                 // Field author:Ljava/lang/String;
-         4: invokevirtual #110                // Method java/lang/String.hashCode:()I
+         4: invokevirtual #108                // Method java/lang/String.hashCode:()I
          7: istore_1
          8: aload_0
          9: getfield      #25                 // Field content:Ljava/lang/String;
-        12: invokevirtual #110                // Method java/lang/String.hashCode:()I
+        12: invokevirtual #108                // Method java/lang/String.hashCode:()I
         15: istore_2
         16: bipush        31
         18: iload_1
@@ -245,7 +245,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         22: istore_3
         23: aload_0
         24: getfield      #27                 // Field timestamp:Ljava/lang/String;
-        27: invokevirtual #110                // Method java/lang/String.hashCode:()I
+        27: invokevirtual #108                // Method java/lang/String.hashCode:()I
         30: istore        4
         32: bipush        31
         34: iload_3
@@ -256,7 +256,7 @@ public final class com.example.compose.jetchat.conversation.Message {
         41: aload_0
         42: getfield      #29                 // Field image:Ljava/lang/Integer;
         45: checkcast     #4                  // class java/lang/Object
-        48: invokevirtual #111                // Method java/lang/Object.hashCode:()I
+        48: invokevirtual #109                // Method java/lang/Object.hashCode:()I
         51: istore        6
         53: bipush        31
         55: iload         5
@@ -283,6 +283,6 @@ public final class com.example.compose.jetchat.conversation.Message {
          6: aload_3
          7: aload         4
          9: iload         5
-        11: invokespecial #115                // Method "<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
+        11: invokespecial #113                // Method "<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
         14: areturn
 }

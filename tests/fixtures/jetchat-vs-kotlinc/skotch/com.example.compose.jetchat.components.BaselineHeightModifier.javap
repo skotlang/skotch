@@ -62,7 +62,7 @@ public final class com.example.compose.jetchat.components.BaselineHeightModifier
         27: iload         6
         29: ireturn
         30: aload_1
-        31: checkcast     #61                 // class BaselineHeightModifier
+        31: checkcast     #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
         34: astore        7
         36: aload_0
         37: getfield      #20                 // Field heightFromBaseline:Landroidx/compose/ui/unit/Dp;
@@ -72,7 +72,7 @@ public final class com.example.compose.jetchat.components.BaselineHeightModifier
         47: astore        9
         49: aload         8
         51: aload         9
-        53: invokevirtual #63                 // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
+        53: invokevirtual #61                 // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
         56: istore        10
         58: iload         10
         60: ireturn
@@ -81,7 +81,7 @@ public final class com.example.compose.jetchat.components.BaselineHeightModifier
     Code:
          0: aload_0
          1: getfield      #20                 // Field heightFromBaseline:Landroidx/compose/ui/unit/Dp;
-         4: invokevirtual #68                 // Method java/lang/Object.hashCode:()I
+         4: invokevirtual #66                 // Method java/lang/Object.hashCode:()I
          7: ireturn
 
   public com.example.compose.jetchat.components.BaselineHeightModifier copy(androidx.compose.ui.unit.Dp);
@@ -89,6 +89,6 @@ public final class com.example.compose.jetchat.components.BaselineHeightModifier
          0: new           #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
          3: dup
          4: aload_1
-         5: invokespecial #72                 // Method "<init>":(Landroidx/compose/ui/unit/Dp;)V
+         5: invokespecial #70                 // Method "<init>":(Landroidx/compose/ui/unit/Dp;)V
          8: areturn
 }

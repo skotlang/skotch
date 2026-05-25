@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.JetchatIconKt.javap	2026-05-21 07:24:25
-+++ ./skotch/com.example.compose.jetchat.components.JetchatIconKt.javap	2026-05-21 07:24:25
+--- ./gradle/com.example.compose.jetchat.components.JetchatIconKt.javap	2026-05-24 23:07:45
++++ ./skotch/com.example.compose.jetchat.components.JetchatIconKt.javap	2026-05-24 23:07:45
 @@ -1,411 +1,45 @@
 -Compiled from "JetchatIcon.kt"
 +Compiled from "com/example/compose/jetchat/components/JetchatIcon.kt"

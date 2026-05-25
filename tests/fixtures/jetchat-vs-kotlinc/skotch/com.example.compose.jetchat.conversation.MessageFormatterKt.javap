@@ -73,19 +73,13 @@ public final class com.example.compose.jetchat.conversation.MessageFormatterKt {
 
   public static final com.example.compose.jetchat.conversation.SymbolAnnotationType PERSON();
     Code:
-         0: new           #100                // class com/example/compose/jetchat/conversation/SymbolAnnotationType
-         3: dup
-         4: ldc           #101                // String PERSON
-         6: invokespecial #104                // Method com/example/compose/jetchat/conversation/SymbolAnnotationType."<init>":(Ljava/lang/String;)V
-         9: areturn
+         0: getstatic     #103                // Field com/example/compose/jetchat/conversation/SymbolAnnotationType.PERSON:LSymbolAnnotationType;
+         3: areturn
 
   public static final com.example.compose.jetchat.conversation.SymbolAnnotationType LINK();
     Code:
-         0: new           #100                // class com/example/compose/jetchat/conversation/SymbolAnnotationType
-         3: dup
-         4: ldc           #106                // String LINK
-         6: invokespecial #104                // Method com/example/compose/jetchat/conversation/SymbolAnnotationType."<init>":(Ljava/lang/String;)V
-         9: areturn
+         0: getstatic     #106                // Field com/example/compose/jetchat/conversation/SymbolAnnotationType.LINK:LSymbolAnnotationType;
+         3: areturn
 
   public static final java.util.ArrayList SymbolAnnotationType$values();
     Code:
@@ -110,15 +104,15 @@ public final class com.example.compose.jetchat.conversation.MessageFormatterKt {
          1: ldc           #124                // String name
          3: invokestatic  #130                // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
          6: aload_0
-         7: ldc           #101                // String PERSON
-         9: invokestatic  #134                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
+         7: ldc           #131                // String PERSON
+         9: invokestatic  #135                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
         12: ifeq          22
         15: goto          35
         18: invokestatic  #114                // Method PERSON:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
         21: areturn
         22: aload_0
-        23: ldc           #106                // String LINK
-        25: invokestatic  #134                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
+        23: ldc           #136                // String LINK
+        25: invokestatic  #135                // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
         28: ifeq          18
         31: invokestatic  #120                // Method LINK:()Lcom/example/compose/jetchat/conversation/SymbolAnnotationType;
         34: areturn
@@ -127,8 +121,8 @@ public final class com.example.compose.jetchat.conversation.MessageFormatterKt {
 
   private static final {};
     Code:
-         0: ldc           #139                // String (https?://[^\\s\\t\\n]+)|(`[^`]+`)|(@\\w+)|(\\*[\\w]+\\*)|(_[\\w]+_)|(~[\\w]+~)
-         2: invokestatic  #145                // Method java/util/regex/Pattern.compile:(Ljava/lang/String;)Ljava/util/regex/Pattern;
+         0: ldc           #141                // String (https?://[^\\s\\t\\n]+)|(`[^`]+`)|(@\\w+)|(\\*[\\w]+\\*)|(_[\\w]+_)|(~[\\w]+~)
+         2: invokestatic  #147                // Method java/util/regex/Pattern.compile:(Ljava/lang/String;)Ljava/util/regex/Pattern;
          5: putstatic     #10                 // Field symbolPattern:Ljava/lang/Object;
          8: return
 }

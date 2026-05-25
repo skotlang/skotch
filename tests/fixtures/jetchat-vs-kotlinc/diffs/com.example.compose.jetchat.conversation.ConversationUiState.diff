@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.conversation.ConversationUiState.javap	2026-05-21 07:24:26
-+++ ./skotch/com.example.compose.jetchat.conversation.ConversationUiState.javap	2026-05-21 07:24:26
+--- ./gradle/com.example.compose.jetchat.conversation.ConversationUiState.javap	2026-05-24 23:07:46
++++ ./skotch/com.example.compose.jetchat.conversation.ConversationUiState.javap	2026-05-24 23:07:47
 @@ -1,76 +1,92 @@
 -Compiled from "ConversationUiState.kt"
 +Compiled from "com/example/compose/jetchat/conversation/ConversationUiState.kt"

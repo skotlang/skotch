@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-21 07:24:34
-+++ ./skotch/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-21 07:24:34
+--- ./gradle/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-24 23:07:53
++++ ./skotch/com.example.compose.jetchat.widget.theme.JetchatGlanceColorScheme.javap	2026-05-24 23:07:54
 @@ -1,33 +1,18 @@
 -Compiled from "Theme.kt"
 +Compiled from "com/example/compose/jetchat/widget/theme/JetchatGlanceColorScheme.kt"

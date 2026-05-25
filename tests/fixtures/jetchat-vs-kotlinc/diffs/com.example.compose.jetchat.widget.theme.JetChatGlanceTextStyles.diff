@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.widget.theme.JetChatGlanceTextStyles.javap	2026-05-21 07:24:34
-+++ ./skotch/com.example.compose.jetchat.widget.theme.JetChatGlanceTextStyles.javap	2026-05-21 07:24:34
+--- ./gradle/com.example.compose.jetchat.widget.theme.JetChatGlanceTextStyles.javap	2026-05-24 23:07:54
++++ ./skotch/com.example.compose.jetchat.widget.theme.JetChatGlanceTextStyles.javap	2026-05-24 23:07:54
 @@ -1,84 +1,18 @@
 -Compiled from "Type.kt"
 +Compiled from "com/example/compose/jetchat/widget/theme/JetChatGlanceTextStyles.kt"

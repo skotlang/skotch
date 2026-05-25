@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.conversation.RecordButtonKt.javap	2026-05-21 07:24:28
-+++ ./skotch/com.example.compose.jetchat.conversation.RecordButtonKt.javap	2026-05-21 07:24:28
+--- ./gradle/com.example.compose.jetchat.conversation.RecordButtonKt.javap	2026-05-24 23:07:48
++++ ./skotch/com.example.compose.jetchat.conversation.RecordButtonKt.javap	2026-05-24 23:07:48
 @@ -1,2646 +1,236 @@
 -Compiled from "RecordButton.kt"
 -public final class com.example.compose.jetchat.conversation.RecordButtonKt {

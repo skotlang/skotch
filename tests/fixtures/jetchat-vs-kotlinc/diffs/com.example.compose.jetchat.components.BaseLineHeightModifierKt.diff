@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.BaseLineHeightModifierKt.javap	2026-05-21 07:24:24
-+++ ./skotch/com.example.compose.jetchat.components.BaseLineHeightModifierKt.javap	2026-05-21 07:24:24
+--- ./gradle/com.example.compose.jetchat.components.BaseLineHeightModifierKt.javap	2026-05-24 23:07:44
++++ ./skotch/com.example.compose.jetchat.components.BaseLineHeightModifierKt.javap	2026-05-24 23:07:44
 @@ -1,17 +1,25 @@
 -Compiled from "BaseLineHeightModifier.kt"
 +Compiled from "com/example/compose/jetchat/components/BaseLineHeightModifier.kt"

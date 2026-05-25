@@ -23,6 +23,73 @@ Comparison: `diff_jetchat.sh` runs `javap -p -c` on each pair and dumps diffs in
 **No class compiles byte-identically.** Every diff is at least cosmetic (field
 flags, source-file attribute) and most are structural.
 
+---
+
+## 2026-05-24 refresh (rebuilt both sides)
+
+Rebuilt the oracle (`./gradlew :app:compileDebugKotlin` under **JDK 17** — JDK 26
+fails the Gradle script with "Unsupported class file major version 70") and the
+skotch side with the current binary, then re-ran `diff_jetchat.sh`.
+
+**Headline unchanged: 0 identical · 38 differ · 54 missing.** The intervening
+type-inference work (enum singletons, remember-/iterable-unifier, collection
+builders) did not move JetChat's diffs — JetChat's gaps are the *big* compiler
+features (inlining, full `@Composable` lowering, `@Metadata` emission), not the
+small inference cases. The big composables still emit ~15–25 % of kotlinc's
+bytecode (e.g. `UserInputKt` 1586 vs 8910 javap lines) — i.e. partial/stubbed
+bodies, not full lowering.
+
+### Concrete fix landed this session — build no longer stalls
+
+`skotch build` on JetChat **hung at 98 % CPU with 0 classes emitted** (killed at
+14 min). `sample` pinned it to `lower_expr → find_external_static_descriptor →
+lookup_method_descriptor → load_jdk_class → load_class_from_jar →
+ZipArchive::new`: on every CLASSPATH-cache *miss* (the many Compose/AndroidX
+classes that aren't in the JDK), `load_jdk_class` re-ran its **entire** search —
+open `java.base.jmod`, iterate *all* jmods, scan CLASSPATH jars, scan Kotlin
+stdlib jars — re-reading each archive's central directory from scratch, thousands
+of times during MIR-lowering. Added a process-wide memo (`JDK_CLASS_CACHE`,
+`crates/skotch-classinfo/src/lib.rs`) caching hits **and** misses (the classpath
+is fixed for a build). Build now completes in **~5.4 min, 300 classes** instead of
+hanging. (Still slow — other lookup paths likely re-open dep jars too; a shared
+`ZipArchive` handle cache is the obvious follow-up.)
+
+### New/changed observations since the last assessment
+
+* **`$stable` now emitted** (gap closed, #307) — present on `MainViewModel` etc.
+* **Enums are now reference-correct but shaped unlike kotlinc.** The new
+  singleton lowering emits `public static final <Enum> ENTRY` + `<clinit>` so
+  `==` works, but skotch still (a) does **not** `extends java/lang/Enum`, and
+  (b) leaks per-entry accessor fns (`VISIBLE()`, `Visibility$values()`,
+  `Visibility$valueOf()`) onto the **file facade** (e.g. they show up inside
+  `JumpToBottomKt`). kotlinc inlines `getstatic` at refs and puts
+  `values()`/`valueOf()` on the enum class. Correct at runtime, wrong shape.
+* **`@Composable` default-arg dispatcher param missing.** kotlinc:
+  `JumpToBottom(boolean, Function0, Modifier, Composer, int, int)` — two trailing
+  ints (`$changed` + `$default` mask). skotch emits only one (`…Composer, int`),
+  so default-argument call sites can't pass the mask. Also a spurious `<T>`
+  type-param is inferred on some composables.
+* **Restart-scope / extra lambdas still partial.** kotlinc's `JumpToBottom` has
+  `lambda$1` (the `State<Dp>` reader) + `lambda$2` (restart scope); skotch emits
+  one mis-typed `lambda$0(Object)`.
+* **Property machinery still open** (gaps 1/3 below): fields are `public` raw
+  (not `private final` + `Signature`), `drawerShouldBeOpened` is `Object`
+  because `.asStateFlow()`'s return type isn't inferred, and skotch emits
+  getters for *private* backing fields that kotlinc never exposes.
+
+### Major differences & what they need (priority order, this refresh)
+
+| Gap | Where it shows | Effort | Required work |
+|-----|----------------|--------|---------------|
+| **Function inlining** (`inline fun`) | 27 of 54 missing classes (`$$inlined$animateFloat$N`, `viewModels`, `remember`, `LaunchedEffect`) | **XL** | Inline-body copy with per-call-site lambda-class synthesis + reified-type substitution. Biggest single lever; most Compose APIs assume it. |
+| **`@Composable` lowering completeness** | every big composable (15–25 % body size) | **L** | `$default` mask param; full Composer threading; restart-scope + replaceable-group lambdas; correct lambda descriptors. |
+| **`ComposableSingletons$XKt` hoist** | 14 missing classes | **M** | Hoist capture-free content lambdas into a per-file singleton holder with `getLambda$N` accessors. |
+| **`@Metadata` emission** | all 92 classes (we now *read* it, #297, but never *write* it) | **XL** | Encode the protobuf + `BitEncoding` we already decode; unblocks named-args / default-param dispatch / reflection. |
+| **Property/field machinery** | every class with state | **M** | `private final` + synthetic getter; generic `Signature` on fields; infer `asStateFlow()`/extension returns instead of `Object`. |
+| **Enum shape parity** | 5 enums + their `when` sites | **M** | `extends java/lang/Enum`; move `values`/`valueOf` onto the enum class; inline `getstatic` at refs instead of facade accessors; `$WhenMappings`. |
+| **Nested-lambda lexical naming** | 7 missing classes | **M** | Name anonymous lambdas by lexical nesting (`Outer$body$2$1`) instead of flat `Kt$Lambda$N`. |
+| **Build perf (follow-up)** | whole build (~5 min) | **S–M** | Cache opened `ZipArchive` handles / parsed central directories across all dep-jar lookups (the JDK path is now cached; dep jars still re-open). |
+
 ## Missing-class taxonomy (54 total)
 
 | Pattern                                                  | Count | Source                                                                              |
@@ -174,6 +241,8 @@ Updates as fixes land; commit `summary.tsv` to see line-counts drop.
 | 2026-05-20 | External Kt-facade descriptor lookup feeds expected-arity to expansion | #308    |
 | 2026-05-20 | Trailing-lambda placement skipped when positional arg fits slot 0      | #308    |
 | 2026-05-20 | `Any → String`/`Any → Class(C)` autoboxes via `checkcast` at staticjava | #308    |
+| 2026-05-24 | `$stable` confirmed emitted; enums now reference-correct singletons       | #307/enum |
+| 2026-05-24 | `JDK_CLASS_CACHE` memo — build no longer stalls (hung→~5.4 min, 300 cls)  | #347    |
 
 Now MainViewModel correctly emits
 `invokestatic StateFlowKt.MutableStateFlow(Object)MutableStateFlow` and stores it

@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.BaselineHeightModifier.javap	2026-05-21 07:24:23
-+++ ./skotch/com.example.compose.jetchat.components.BaselineHeightModifier.javap	2026-05-21 07:24:24
+--- ./gradle/com.example.compose.jetchat.components.BaselineHeightModifier.javap	2026-05-24 23:07:44
++++ ./skotch/com.example.compose.jetchat.components.BaselineHeightModifier.javap	2026-05-24 23:07:44
 @@ -1,243 +1,94 @@
 -Compiled from "BaseLineHeightModifier.kt"
 +Compiled from "com/example/compose/jetchat/components/BaselineHeightModifier.kt"
@@ -185,7 +185,7 @@
 +        27: iload         6
 +        29: ireturn
 +        30: aload_1
-+        31: checkcast     #61                 // class BaselineHeightModifier
++        31: checkcast     #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
 +        34: astore        7
 +        36: aload_0
 +        37: getfield      #20                 // Field heightFromBaseline:Landroidx/compose/ui/unit/Dp;
@@ -195,7 +195,7 @@
 +        47: astore        9
 +        49: aload         8
 +        51: aload         9
-+        53: invokevirtual #63                 // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
++        53: invokevirtual #61                 // Method java/lang/Object.equals:(Ljava/lang/Object;)Z
 +        56: istore        10
 +        58: iload         10
 +        60: ireturn
@@ -209,7 +209,7 @@
 -         3: iload_3
 -         4: invokespecial #156                // InterfaceMethod androidx/compose/ui/layout/LayoutModifier.minIntrinsicHeight:(Landroidx/compose/ui/layout/IntrinsicMeasureScope;Landroidx/compose/ui/layout/IntrinsicMeasurable;I)I
 +         1: getfield      #20                 // Field heightFromBaseline:Landroidx/compose/ui/unit/Dp;
-+         4: invokevirtual #68                 // Method java/lang/Object.hashCode:()I
++         4: invokevirtual #66                 // Method java/lang/Object.hashCode:()I
           7: ireturn
  
 -  public int maxIntrinsicWidth(androidx.compose.ui.layout.IntrinsicMeasureScope, androidx.compose.ui.layout.IntrinsicMeasurable, int);
@@ -304,6 +304,6 @@
 +         0: new           #2                  // class com/example/compose/jetchat/components/BaselineHeightModifier
 +         3: dup
 +         4: aload_1
-+         5: invokespecial #72                 // Method "<init>":(Landroidx/compose/ui/unit/Dp;)V
++         5: invokespecial #70                 // Method "<init>":(Landroidx/compose/ui/unit/Dp;)V
 +         8: areturn
  }

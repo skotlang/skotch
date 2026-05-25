@@ -23,25 +23,24 @@ public final class com.example.compose.jetchat.profile.ProfileFragment extends a
          4: astore_1
          5: aload_0
          6: getfield      #26                 // Field viewModel$initialized:Z
-         9: ifne          41
+         9: ifne          38
         12: aconst_null
         13: aconst_null
         14: aconst_null
         15: invokestatic  #32                 // Method androidx/fragment/app/FragmentViewModelLazyKt.viewModels:(Landroidx/fragment/app/Fragment;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
-        18: checkcast     #34                 // class kotlin/Lazy
-        21: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
-        26: checkcast     #40                 // class com/example/compose/jetchat/profile/ProfileViewModel
-        29: aload_0
-        30: swap
-        31: putfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
-        34: iconst_1
-        35: istore_2
-        36: aload_0
-        37: iload_2
-        38: putfield      #26                 // Field viewModel$initialized:Z
-        41: aload_0
-        42: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
-        45: areturn
+        18: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+        23: checkcast     #40                 // class com/example/compose/jetchat/profile/ProfileViewModel
+        26: aload_0
+        27: swap
+        28: putfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        31: iconst_1
+        32: istore_2
+        33: aload_0
+        34: iload_2
+        35: putfield      #26                 // Field viewModel$initialized:Z
+        38: aload_0
+        39: getfield      #42                 // Field viewModel:Lcom/example/compose/jetchat/profile/ProfileViewModel;
+        42: areturn
 
   public com.example.compose.jetchat.MainViewModel getActivityViewModel();
     Code:
@@ -53,24 +52,23 @@ public final class com.example.compose.jetchat.profile.ProfileFragment extends a
          9: istore_2
         10: aload_0
         11: getfield      #51                 // Field activityViewModel$initialized:Z
-        14: ifne          45
+        14: ifne          42
         17: aconst_null
         18: aconst_null
         19: invokestatic  #55                 // Method androidx/fragment/app/FragmentViewModelLazyKt.activityViewModels:(Landroidx/fragment/app/Fragment;Lkotlin/jvm/functions/Function0;)Lkotlin/Lazy;
-        22: checkcast     #34                 // class kotlin/Lazy
-        25: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
-        30: checkcast     #44                 // class com/example/compose/jetchat/MainViewModel
-        33: aload_0
-        34: swap
-        35: putfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
-        38: iconst_1
-        39: istore_3
-        40: aload_0
-        41: iload_3
-        42: putfield      #51                 // Field activityViewModel$initialized:Z
-        45: aload_0
-        46: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
-        49: areturn
+        22: invokeinterface #38,  1           // InterfaceMethod kotlin/Lazy.getValue:()Ljava/lang/Object;
+        27: checkcast     #44                 // class com/example/compose/jetchat/MainViewModel
+        30: aload_0
+        31: swap
+        32: putfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        35: iconst_1
+        36: istore_3
+        37: aload_0
+        38: iload_3
+        39: putfield      #51                 // Field activityViewModel$initialized:Z
+        42: aload_0
+        43: getfield      #24                 // Field activityViewModel:Lcom/example/compose/jetchat/MainViewModel;
+        46: areturn
 
   public void onAttach(android.app.Activity);
     Code:

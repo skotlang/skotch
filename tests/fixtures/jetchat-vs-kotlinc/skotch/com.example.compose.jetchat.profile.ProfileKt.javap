@@ -37,7 +37,7 @@ public final class com.example.compose.jetchat.profile.ProfileKt {
         64: dup
         65: aload         6
         67: aload_0
-        68: invokespecial #51                 // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$25."<init>":(Ljava/lang/Object;Lcom/example/compose/jetchat/profile/ProfileScreenState;)V
+        68: invokespecial #51                 // Method com/example/compose/jetchat/profile/ProfileKt$Lambda$25."<init>":(Landroidx/compose/foundation/ScrollState;Lcom/example/compose/jetchat/profile/ProfileScreenState;)V
         71: pop
         72: return
 

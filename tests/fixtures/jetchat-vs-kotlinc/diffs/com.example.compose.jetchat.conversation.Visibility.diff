@@ -1,6 +1,6 @@
---- ./gradle/com.example.compose.jetchat.conversation.Visibility.javap	2026-05-21 07:24:29
-+++ ./skotch/com.example.compose.jetchat.conversation.Visibility.javap	2026-05-21 07:24:29
-@@ -1,76 +1,27 @@
+--- ./gradle/com.example.compose.jetchat.conversation.Visibility.javap	2026-05-24 23:07:49
++++ ./skotch/com.example.compose.jetchat.conversation.Visibility.javap	2026-05-24 23:07:49
+@@ -1,76 +1,45 @@
 -Compiled from "JumpToBottom.kt"
 -final class com.example.compose.jetchat.conversation.Visibility extends java.lang.Enum<com.example.compose.jetchat.conversation.Visibility> {
 -  public static final com.example.compose.jetchat.conversation.Visibility VISIBLE;
@@ -9,48 +9,63 @@
 +  public java.lang.String name;
  
 -  public static final com.example.compose.jetchat.conversation.Visibility GONE;
-+  public static final int $stable;
++  public static final Visibility VISIBLE;
  
 -  private static final com.example.compose.jetchat.conversation.Visibility[] $VALUES;
--
++  public static final Visibility GONE;
+ 
 -  private static final kotlin.enums.EnumEntries $ENTRIES;
--
++  public static final int $stable;
+ 
 -  private com.example.compose.jetchat.conversation.Visibility();
-+  public com.example.compose.jetchat.conversation.Visibility(java.lang.String);
++  static {};
      Code:
-          0: aload_0
+-         0: aload_0
 -         1: aload_1
 -         2: iload_2
 -         3: invokespecial #10                 // Method java/lang/Enum."<init>":(Ljava/lang/String;I)V
 -         6: return
-+         1: invokespecial #16                 // Method java/lang/Object."<init>":()V
-+         4: aload_0
-+         5: aload_1
-+         6: putfield      #18                 // Field name:Ljava/lang/String;
-+         9: return
++         0: new           #18                 // class Visibility
++         3: dup
++         4: ldc           #19                 // String VISIBLE
++         6: invokespecial #23                 // Method Visibility."<init>":(Ljava/lang/String;)V
++         9: putstatic     #25                 // Field Visibility.VISIBLE:LVisibility;
++        12: new           #18                 // class Visibility
++        15: dup
++        16: ldc           #26                 // String GONE
++        18: invokespecial #23                 // Method Visibility."<init>":(Ljava/lang/String;)V
++        21: putstatic     #28                 // Field Visibility.GONE:LVisibility;
++        24: return
  
 -  public static com.example.compose.jetchat.conversation.Visibility[] values();
-+  public java.lang.String toString();
++  public com.example.compose.jetchat.conversation.Visibility(java.lang.String);
      Code:
 -         0: getstatic     #22                 // Field $VALUES:[Lcom/example/compose/jetchat/conversation/Visibility;
 -         3: invokevirtual #28                 // Method java/lang/Object.clone:()Ljava/lang/Object;
 -         6: checkcast     #29                 // class "[Lcom/example/compose/jetchat/conversation/Visibility;"
 -         9: areturn
 +         0: aload_0
-+         1: getfield      #18                 // Field name:Ljava/lang/String;
-+         4: areturn
++         1: invokespecial #30                 // Method java/lang/Object."<init>":()V
++         4: aload_0
++         5: aload_1
++         6: putfield      #32                 // Field name:Ljava/lang/String;
++         9: return
  
 -  public static com.example.compose.jetchat.conversation.Visibility valueOf(java.lang.String);
-+  public final java.lang.String getName();
++  public java.lang.String toString();
      Code:
 -         0: ldc           #2                  // class com/example/compose/jetchat/conversation/Visibility
 -         2: aload_0
 -         3: invokestatic  #34                 // Method java/lang/Enum.valueOf:(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;
 -         6: checkcast     #2                  // class com/example/compose/jetchat/conversation/Visibility
 -         9: areturn
--
++         0: aload_0
++         1: getfield      #32                 // Field name:Ljava/lang/String;
++         4: areturn
+ 
 -  public static kotlin.enums.EnumEntries<com.example.compose.jetchat.conversation.Visibility> getEntries();
--    Code:
++  public final java.lang.String getName();
+     Code:
 -         0: getstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
 -         3: areturn
 -
@@ -92,6 +107,6 @@
 -        41: putstatic     #43                 // Field $ENTRIES:Lkotlin/enums/EnumEntries;
 -        44: return
 +         0: aload_0
-+         1: getfield      #18                 // Field name:Ljava/lang/String;
++         1: getfield      #32                 // Field name:Ljava/lang/String;
 +         4: areturn
  }

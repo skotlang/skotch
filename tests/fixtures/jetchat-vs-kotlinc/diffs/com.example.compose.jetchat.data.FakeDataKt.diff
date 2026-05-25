@@ -1,6 +1,6 @@
---- ./gradle/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-21 07:24:30
-+++ ./skotch/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-21 07:24:30
-@@ -1,248 +1,236 @@
+--- ./gradle/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-24 23:07:50
++++ ./skotch/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-24 23:07:50
+@@ -1,8 +1,8 @@
 -Compiled from "FakeData.kt"
 +Compiled from "com/example/compose/jetchat/data/FakeData.kt"
  public final class com.example.compose.jetchat.data.FakeDataKt {
@@ -10,20 +10,17 @@
 -  private static final java.util.List<com.example.compose.jetchat.conversation.Message> unreadMessages;
 +  private static final java.lang.Object unreadMessages;
  
--  private static final com.example.compose.jetchat.conversation.ConversationUiState exampleUiState;
-+  private static final java.lang.Object exampleUiState;
+   private static final com.example.compose.jetchat.conversation.ConversationUiState exampleUiState;
  
--  private static final com.example.compose.jetchat.profile.ProfileScreenState colleagueProfile;
-+  private static final java.lang.Object colleagueProfile;
+@@ -10,24 +10,24 @@
  
--  private static final com.example.compose.jetchat.profile.ProfileScreenState meProfile;
-+  private static final java.lang.Object meProfile;
+   private static final com.example.compose.jetchat.profile.ProfileScreenState meProfile;
  
 -  public static final java.util.List<com.example.compose.jetchat.conversation.Message> getInitialMessages();
 +  public static final java.lang.Object getInitialMessages();
      Code:
 -         0: getstatic     #12                 // Field initialMessages:Ljava/util/List;
-+         0: getstatic     #14                 // Field initialMessages:Ljava/lang/Object;
++         0: getstatic     #16                 // Field initialMessages:Ljava/lang/Object;
           3: areturn
  
 -  public static final java.util.List<com.example.compose.jetchat.conversation.Message> getUnreadMessages();
@@ -33,41 +30,66 @@
 +         0: getstatic     #19                 // Field unreadMessages:Ljava/lang/Object;
           3: areturn
  
--  public static final com.example.compose.jetchat.conversation.ConversationUiState getExampleUiState();
-+  public static final java.lang.Object getExampleUiState();
+   public static final com.example.compose.jetchat.conversation.ConversationUiState getExampleUiState();
      Code:
 -         0: getstatic     #22                 // Field exampleUiState:Lcom/example/compose/jetchat/conversation/ConversationUiState;
-+         0: getstatic     #22                 // Field exampleUiState:Ljava/lang/Object;
++         0: getstatic     #25                 // Field exampleUiState:Lcom/example/compose/jetchat/conversation/ConversationUiState;
           3: areturn
  
--  public static final com.example.compose.jetchat.profile.ProfileScreenState getColleagueProfile();
-+  public static final java.lang.Object getColleagueProfile();
+   public static final com.example.compose.jetchat.profile.ProfileScreenState getColleagueProfile();
      Code:
 -         0: getstatic     #28                 // Field colleagueProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
-+         0: getstatic     #25                 // Field colleagueProfile:Ljava/lang/Object;
++         0: getstatic     #29                 // Field colleagueProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
           3: areturn
  
--  public static final com.example.compose.jetchat.profile.ProfileScreenState getMeProfile();
-+  public static final java.lang.Object getMeProfile();
-     Code:
--         0: getstatic     #32                 // Field meProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
-+         0: getstatic     #28                 // Field meProfile:Ljava/lang/Object;
+   public static final com.example.compose.jetchat.profile.ProfileScreenState getMeProfile();
+@@ -35,214 +35,224 @@
+          0: getstatic     #32                 // Field meProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
           3: areturn
  
 -  static {};
-+  public static final kotlin.Unit <clinit>$lambda$0(java.lang.String);
++  public static final kotlin.Unit clinit$lambda$0(java.lang.Object);
      Code:
 -         0: bipush        9
 -         2: anewarray     #36                 // class com/example/compose/jetchat/conversation/Message
 -         5: astore_0
--         6: aload_0
++         0: getstatic     #40                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
++         3: areturn
++
++  public static final boolean clinit$lambda$1(com.example.compose.jetchat.conversation.Message);
++    Code:
++         0: aload_0
++         1: ldc           #44                 // String it
++         3: invokestatic  #50                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
+          6: aload_0
 -         7: iconst_0
 -         8: new           #36                 // class com/example/compose/jetchat/conversation/Message
 -        11: dup
 -        12: ldc           #38                 // String me
 -        14: ldc           #40                 // String Check it out!
 -        16: ldc           #42                 // String 8:07 PM
--        18: aconst_null
++         7: getfield      #56                 // Field com/example/compose/jetchat/conversation/Message.author:Ljava/lang/String;
++        10: ldc           #58                 // String me
++        12: invokestatic  #62                 // Method kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z
++        15: ifne          22
++        18: iconst_1
++        19: goto          23
++        22: iconst_0
++        23: ireturn
++
++  private static final {};
++    Code:
++         0: new           #52                 // class com/example/compose/jetchat/conversation/Message
++         3: dup
++         4: ldc           #58                 // String me
++         6: ldc           #67                 // String Check it out!
++         8: ldc           #69                 // String 8:07 PM
++        10: aconst_null
++        11: iconst_0
++        12: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++        15: astore_0
++        16: ldc           #75                 // String Thank you!
+         18: aconst_null
 -        19: iconst_0
 -        20: bipush        24
 -        22: aconst_null
@@ -107,64 +129,7 @@
 -        80: ldc           #64                 // String Taylor Brooks
 -        82: ldc           #70                 // String @aliconors Take a look at the `Flow.collectAsStateWithLifecycle()` APIs
 -        84: ldc           #68                 // String 8:05 PM
-+         0: aload_0
-+         1: ldc           #32                 // String it
-+         3: invokestatic  #38                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
-+         6: getstatic     #44                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
-+         9: areturn
-+
-+  public static final kotlin.Unit <clinit>$lambda$1(java.lang.String);
-+    Code:
-+         0: aload_0
-+         1: ldc           #32                 // String it
-+         3: invokestatic  #38                 // Method kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V
-+         6: getstatic     #44                 // Field kotlin/Unit.INSTANCE:Lkotlin/Unit;
-+         9: areturn
-+
-+  private static final {};
-+    Code:
-+         0: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+         3: dup
-+         4: ldc           #53                 // String me
-+         6: ldc           #55                 // String Check it out!
-+         8: ldc           #57                 // String 8:07 PM
-+        10: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+        13: astore_0
-+        14: ldc           #63                 // String Thank you!
-+        16: aconst_null
-+        17: invokestatic  #67                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
-+        20: invokevirtual #71                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
-+        23: astore_1
-+        24: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+        27: dup
-+        28: ldc           #53                 // String me
-+        30: aload_1
-+        31: ldc           #73                 // String 8:06 PM
-+        33: getstatic     #79                 // Field com/example/compose/jetchat/R$drawable.sticker:I
-+        36: invokespecial #82                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
-+        39: astore_1
-+        40: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+        43: dup
-+        44: ldc           #84                 // String Taylor Brooks
-+        46: ldc           #86                 // String You can use all the same stuff
-+        48: ldc           #88                 // String 8:05 PM
-+        50: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+        53: astore_2
-+        54: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+        57: dup
-+        58: ldc           #84                 // String Taylor Brooks
-+        60: ldc           #90                 // String @aliconors Take a look at the `Flow.collectAsStateWithLifecycle()` APIs
-+        62: ldc           #88                 // String 8:05 PM
-+        64: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+        67: astore_3
-+        68: ldc           #92                 // String Compose newbie as well
-+        70: aconst_null
-+        71: invokestatic  #67                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
-+        74: invokevirtual #71                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
-+        77: invokedynamic #103,  0            // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
-+        82: astore        4
-+        84: ldc           #105                // String applies)
-         86: aconst_null
+-        86: aconst_null
 -        87: iconst_0
 -        88: bipush        24
 -        90: aconst_null
@@ -186,12 +151,62 @@
 -       116: aload_0
 -       117: iconst_5
 -       118: new           #36                 // class com/example/compose/jetchat/conversation/Message
--       121: dup
++        19: invokestatic  #81                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
++        22: invokevirtual #85                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
++        25: astore_1
++        26: new           #52                 // class com/example/compose/jetchat/conversation/Message
++        29: dup
++        30: ldc           #58                 // String me
++        32: aload_1
++        33: ldc           #87                 // String 8:06 PM
++        35: getstatic     #93                 // Field com/example/compose/jetchat/R$drawable.sticker:I
++        38: invokestatic  #98                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
++        41: iconst_0
++        42: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++        45: astore_1
++        46: new           #52                 // class com/example/compose/jetchat/conversation/Message
++        49: dup
++        50: ldc           #100                // String Taylor Brooks
++        52: ldc           #102                // String You can use all the same stuff
++        54: ldc           #104                // String 8:05 PM
++        56: aconst_null
++        57: iconst_0
++        58: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++        61: astore_2
++        62: new           #52                 // class com/example/compose/jetchat/conversation/Message
++        65: dup
++        66: ldc           #100                // String Taylor Brooks
++        68: ldc           #106                // String @aliconors Take a look at the `Flow.collectAsStateWithLifecycle()` APIs
++        70: ldc           #104                // String 8:05 PM
++        72: aconst_null
++        73: iconst_0
++        74: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++        77: astore_3
++        78: ldc           #108                // String Compose newbie as well
++        80: aconst_null
++        81: invokestatic  #81                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
++        84: invokevirtual #85                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
++        87: invokedynamic #119,  0            // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++        92: astore        4
++        94: ldc           #121                // String applies)
++        96: aconst_null
++        97: invokestatic  #81                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
++       100: invokevirtual #85                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
++       103: invokedynamic #124,  0            // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++       108: aload         4
++       110: swap
++       111: invokedynamic #129,  0            // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
++       116: astore        4
++       118: new           #52                 // class com/example/compose/jetchat/conversation/Message
+        121: dup
 -       122: ldc           #38                 // String me
 -       124: ldc           #78                 // String Compose newbie: I’ve scourged the internet for tutorials about async data loading but haven’t found any good ones 🫠 😶‍🌫️. What’s the recommended way to load async data and emit composable widgets?
 -       126: ldc           #80                 // String 8:03 PM
--       128: aconst_null
--       129: iconst_0
++       122: ldc           #131                // String John Glenn
++       124: aload         4
++       126: ldc           #133                // String 8:04 PM
+        128: aconst_null
+        129: iconst_0
 -       130: bipush        24
 -       132: aconst_null
 -       133: invokespecial #46                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -322,142 +337,138 @@
 -       389: invokespecial #167                // Method com/example/compose/jetchat/profile/ProfileScreenState."<init>":(Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 -       392: putstatic     #32                 // Field meProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
 -       395: return
-+        87: invokestatic  #67                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
-+        90: invokevirtual #71                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
-+        93: invokedynamic #108,  0            // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
-+        98: aload         4
-+       100: swap
-+       101: invokedynamic #113,  0            // InvokeDynamic #2:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-+       106: astore        4
-+       108: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+       111: dup
-+       112: ldc           #115                // String John Glenn
-+       114: aload         4
-+       116: ldc           #117                // String 8:04 PM
-+       118: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       121: astore        4
-+       123: ldc           #119                // String loading but haven’t found any good ones
-+       125: aconst_null
-+       126: invokestatic  #67                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
-+       129: invokevirtual #71                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
-+       132: invokedynamic #122,  0            // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++       130: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++       133: astore        4
++       135: ldc           #135                // String loading but haven’t found any good ones
 +       137: aconst_null
-+       138: invokestatic  #67                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
-+       141: invokevirtual #71                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
-+       144: invokedynamic #125,  0            // InvokeDynamic #4:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
-+       149: invokedynamic #128,  0            // InvokeDynamic #5:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
-+       154: astore        5
-+       156: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+       159: dup
-+       160: ldc           #53                 // String me
-+       162: aload         5
-+       164: ldc           #130                // String 8:03 PM
-+       166: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       169: astore        5
-+       171: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+       174: dup
-+       175: ldc           #132                // String Shangeeth Sivan
-+       177: ldc           #134                // String Does anyone know about Glance Widgets its the new way to build widgets in Android!
-+       179: ldc           #136                // String 8:08 PM
-+       181: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       184: astore        6
-+       186: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+       189: dup
-+       190: ldc           #84                 // String Taylor Brooks
-+       192: ldc           #138                // String Wow! I never knew about Glance Widgets when was this added to the android ecosystem
-+       194: ldc           #140                // String 8:10 PM
-+       196: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       199: astore        7
-+       201: new           #51                 // class com/example/compose/jetchat/conversation/Message
-+       204: dup
-+       205: ldc           #115                // String John Glenn
-+       207: ldc           #142                // String Yeah its seems to be pretty new!
-+       209: ldc           #144                // String 8:12 PM
-+       211: invokespecial #61                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       214: astore        8
-+       216: bipush        9
-+       218: anewarray     #4                  // class java/lang/Object
-+       221: astore        9
-+       223: aload         9
-+       225: iconst_0
-+       226: aload_0
-+       227: aastore
-+       228: aload         9
-+       230: iconst_1
-+       231: aload_1
-+       232: aastore
-+       233: aload         9
-+       235: iconst_2
-+       236: aload_2
-+       237: aastore
-+       238: aload         9
-+       240: iconst_3
-+       241: aload_3
-+       242: aastore
++       138: invokestatic  #81                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
++       141: invokevirtual #85                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
++       144: invokedynamic #138,  0            // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++       149: aconst_null
++       150: invokestatic  #81                 // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
++       153: invokevirtual #85                 // Method java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;
++       156: invokedynamic #141,  0            // InvokeDynamic #4:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++       161: invokedynamic #144,  0            // InvokeDynamic #5:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
++       166: astore        5
++       168: new           #52                 // class com/example/compose/jetchat/conversation/Message
++       171: dup
++       172: ldc           #58                 // String me
++       174: aload         5
++       176: ldc           #146                // String 8:03 PM
++       178: aconst_null
++       179: iconst_0
++       180: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++       183: astore        5
++       185: new           #52                 // class com/example/compose/jetchat/conversation/Message
++       188: dup
++       189: ldc           #148                // String Shangeeth Sivan
++       191: ldc           #150                // String Does anyone know about Glance Widgets its the new way to build widgets in Android!
++       193: ldc           #152                // String 8:08 PM
++       195: aconst_null
++       196: iconst_0
++       197: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++       200: astore        6
++       202: new           #52                 // class com/example/compose/jetchat/conversation/Message
++       205: dup
++       206: ldc           #100                // String Taylor Brooks
++       208: ldc           #154                // String Wow! I never knew about Glance Widgets when was this added to the android ecosystem
++       210: ldc           #156                // String 8:10 PM
++       212: aconst_null
++       213: iconst_0
++       214: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++       217: astore        7
++       219: new           #52                 // class com/example/compose/jetchat/conversation/Message
++       222: dup
++       223: ldc           #131                // String John Glenn
++       225: ldc           #158                // String Yeah its seems to be pretty new!
++       227: ldc           #160                // String 8:12 PM
++       229: aconst_null
++       230: iconst_0
++       231: invokespecial #73                 // Method com/example/compose/jetchat/conversation/Message."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;I)V
++       234: astore        8
++       236: bipush        9
++       238: anewarray     #4                  // class java/lang/Object
++       241: astore        9
 +       243: aload         9
-+       245: iconst_4
-+       246: aload         4
-+       248: aastore
-+       249: aload         9
-+       251: iconst_5
-+       252: aload         5
-+       254: aastore
-+       255: aload         9
-+       257: bipush        6
-+       259: aload         6
-+       261: aastore
-+       262: aload         9
-+       264: bipush        7
-+       266: aload         7
++       245: iconst_0
++       246: aload_0
++       247: aastore
++       248: aload         9
++       250: iconst_1
++       251: aload_1
++       252: aastore
++       253: aload         9
++       255: iconst_2
++       256: aload_2
++       257: aastore
++       258: aload         9
++       260: iconst_3
++       261: aload_3
++       262: aastore
++       263: aload         9
++       265: iconst_4
++       266: aload         4
 +       268: aastore
 +       269: aload         9
-+       271: bipush        8
-+       273: aload         8
-+       275: aastore
-+       276: aload         9
-+       278: invokestatic  #150                // Method kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;
-+       281: putstatic     #14                 // Field initialMessages:Ljava/lang/Object;
-+       284: invokedynamic #167,  0            // InvokeDynamic #6:invoke:()Lkotlin/jvm/functions/Function1;
-+       289: astore_0
-+       290: invokedynamic #171,  0            // InvokeDynamic #7:invoke:()Lkotlin/jvm/functions/Function1;
-+       295: astore_0
-+       296: getstatic     #14                 // Field initialMessages:Ljava/lang/Object;
-+       299: checkcast     #173                // class java/lang/Iterable
-+       302: aload_0
-+       303: invokestatic  #177                // Method kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;
-+       306: putstatic     #19                 // Field unreadMessages:Ljava/lang/Object;
-+       309: new           #179                // class com/example/compose/jetchat/conversation/ConversationUiState
-+       312: dup
-+       313: getstatic     #14                 // Field initialMessages:Ljava/lang/Object;
-+       316: ldc           #181                // String #composers
-+       318: bipush        42
-+       320: invokespecial #184                // Method com/example/compose/jetchat/conversation/ConversationUiState."<init>":(Ljava/lang/Object;Ljava/lang/String;I)V
-+       323: putstatic     #22                 // Field exampleUiState:Ljava/lang/Object;
-+       326: new           #186                // class com/example/compose/jetchat/profile/ProfileScreenState
-+       329: dup
-+       330: ldc           #188                // String 12345
-+       332: getstatic     #191                // Field com/example/compose/jetchat/R$drawable.someone_else:I
-+       335: ldc           #84                 // String Taylor Brooks
-+       337: ldc           #193                // String Away
-+       339: ldc           #195                // String taylor
-+       341: ldc           #197                // String Senior Android Dev at Openlane
-+       343: ldc           #199                // String twitter.com/taylorbrookscodes
-+       345: ldc           #201                // String 12:25 AM local time (Eastern Daylight Time)
-+       347: ldc           #203                // String 2
-+       349: invokespecial #206                // Method com/example/compose/jetchat/profile/ProfileScreenState."<init>":(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-+       352: putstatic     #25                 // Field colleagueProfile:Ljava/lang/Object;
-+       355: new           #186                // class com/example/compose/jetchat/profile/ProfileScreenState
-+       358: dup
-+       359: ldc           #53                 // String me
-+       361: getstatic     #209                // Field com/example/compose/jetchat/R$drawable.ali:I
-+       364: ldc           #211                // String Ali Conors
-+       366: ldc           #213                // String Online
-+       368: ldc           #215                // String aliconors
-+       370: ldc           #217                // String Senior Android Dev at Yearin\nGoogle Developer Expert
-+       372: ldc           #219                // String twitter.com/aliconors
-+       374: ldc           #221                // String In your timezone
-+       376: aconst_null
-+       377: invokespecial #224                // Method com/example/compose/jetchat/profile/ProfileScreenState."<init>":(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)V
-+       380: putstatic     #28                 // Field meProfile:Ljava/lang/Object;
-+       383: return
++       271: iconst_5
++       272: aload         5
++       274: aastore
++       275: aload         9
++       277: bipush        6
++       279: aload         6
++       281: aastore
++       282: aload         9
++       284: bipush        7
++       286: aload         7
++       288: aastore
++       289: aload         9
++       291: bipush        8
++       293: aload         8
++       295: aastore
++       296: aload         9
++       298: invokestatic  #166                // Method kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;
++       301: putstatic     #16                 // Field initialMessages:Ljava/lang/Object;
++       304: invokedynamic #183,  0            // InvokeDynamic #6:invoke:()Lkotlin/jvm/functions/Function1;
++       309: astore_0
++       310: invokedynamic #189,  0            // InvokeDynamic #7:invoke:()Lkotlin/jvm/functions/Function1;
++       315: getstatic     #16                 // Field initialMessages:Ljava/lang/Object;
++       318: swap
++       319: invokestatic  #193                // Method kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;
++       322: putstatic     #19                 // Field unreadMessages:Ljava/lang/Object;
++       325: new           #195                // class com/example/compose/jetchat/conversation/ConversationUiState
++       328: dup
++       329: ldc           #197                // String #composers
++       331: bipush        42
++       333: getstatic     #16                 // Field initialMessages:Ljava/lang/Object;
++       336: invokespecial #200                // Method com/example/compose/jetchat/conversation/ConversationUiState."<init>":(Ljava/lang/String;ILjava/lang/Object;)V
++       339: putstatic     #25                 // Field exampleUiState:Lcom/example/compose/jetchat/conversation/ConversationUiState;
++       342: new           #202                // class com/example/compose/jetchat/profile/ProfileScreenState
++       345: dup
++       346: ldc           #204                // String 12345
++       348: getstatic     #207                // Field com/example/compose/jetchat/R$drawable.someone_else:I
++       351: invokestatic  #98                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
++       354: ldc           #100                // String Taylor Brooks
++       356: ldc           #209                // String Away
++       358: ldc           #211                // String taylor
++       360: ldc           #213                // String Senior Android Dev at Openlane
++       362: ldc           #215                // String twitter.com/taylorbrookscodes
++       364: ldc           #217                // String 12:25 AM local time (Eastern Daylight Time)
++       366: ldc           #219                // String 2
++       368: invokespecial #222                // Method com/example/compose/jetchat/profile/ProfileScreenState."<init>":(Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
++       371: putstatic     #29                 // Field colleagueProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
++       374: new           #202                // class com/example/compose/jetchat/profile/ProfileScreenState
++       377: dup
++       378: ldc           #58                 // String me
++       380: getstatic     #225                // Field com/example/compose/jetchat/R$drawable.ali:I
++       383: invokestatic  #98                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
++       386: ldc           #227                // String Ali Conors
++       388: ldc           #229                // String Online
++       390: ldc           #231                // String aliconors
++       392: ldc           #233                // String Senior Android Dev at Yearin\nGoogle Developer Expert
++       394: ldc           #235                // String twitter.com/aliconors
++       396: ldc           #237                // String In your timezone
++       398: aconst_null
++       399: invokespecial #222                // Method com/example/compose/jetchat/profile/ProfileScreenState."<init>":(Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
++       402: putstatic     #32                 // Field meProfile:Lcom/example/compose/jetchat/profile/ProfileScreenState;
++       405: return
  }

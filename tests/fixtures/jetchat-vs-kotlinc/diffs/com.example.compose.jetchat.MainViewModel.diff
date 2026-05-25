@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.MainViewModel.javap	2026-05-21 07:24:30
-+++ ./skotch/com.example.compose.jetchat.MainViewModel.javap	2026-05-21 07:24:30
+--- ./gradle/com.example.compose.jetchat.MainViewModel.javap	2026-05-24 23:07:50
++++ ./skotch/com.example.compose.jetchat.MainViewModel.javap	2026-05-24 23:07:50
 @@ -1,54 +1,77 @@
 -Compiled from "MainViewModel.kt"
 +Compiled from "com/example/compose/jetchat/MainViewModel.kt"
