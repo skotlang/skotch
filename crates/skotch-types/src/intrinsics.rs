@@ -187,6 +187,44 @@ pub fn kotlin_to_jvm_class(simple_name: &str) -> Option<&'static str> {
     Some(aliased)
 }
 
+/// Erase a fully-qualified Kotlin built-in class name to the JVM
+/// descriptor class it maps to (kotlinc's JavaToKotlinClassMap). The
+/// read-only and mutable collection interfaces both compile to their
+/// `java.util` equivalents; a handful of `kotlin/*` builtins map to
+/// `java.lang`. Returns `None` for names that need no remapping — the
+/// caller should emit `L<name>;` directly. This is the FQ-name
+/// companion to [`kotlin_to_jvm_class`] (which keys on simple names),
+/// used at the JVM descriptor boundary where an inferred
+/// `Ty::Generic`/`Ty::Class` may still carry the Kotlin-side name
+/// (e.g. `listOf(...)` infers `kotlin/collections/List`, but the field
+/// descriptor must be `Ljava/util/List;`).
+pub fn jvm_builtin_class_erasure(fq_name: &str) -> Option<&'static str> {
+    Some(match fq_name {
+        "kotlin/collections/List" | "kotlin/collections/MutableList" => "java/util/List",
+        "kotlin/collections/Set" | "kotlin/collections/MutableSet" => "java/util/Set",
+        "kotlin/collections/Map" | "kotlin/collections/MutableMap" => "java/util/Map",
+        "kotlin/collections/Map$Entry" | "kotlin/collections/MutableMap$MutableEntry" => {
+            "java/util/Map$Entry"
+        }
+        "kotlin/collections/Collection" | "kotlin/collections/MutableCollection" => {
+            "java/util/Collection"
+        }
+        "kotlin/collections/Iterable" | "kotlin/collections/MutableIterable" => {
+            "java/lang/Iterable"
+        }
+        "kotlin/collections/Iterator" | "kotlin/collections/MutableIterator" => {
+            "java/util/Iterator"
+        }
+        "kotlin/Any" => "java/lang/Object",
+        "kotlin/String" => "java/lang/String",
+        "kotlin/CharSequence" => "java/lang/CharSequence",
+        "kotlin/Number" => "java/lang/Number",
+        "kotlin/Comparable" => "java/lang/Comparable",
+        "kotlin/Throwable" => "java/lang/Throwable",
+        _ => return None,
+    })
+}
+
 // ── 4. Stdlib collection builders (val-type inference) ──────────
 
 /// Top-level Kotlin stdlib collection constructors. When skotch

@@ -1,0 +1,45 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=6 max_locals=2
+    0000 new Class(Box)
+    0003 dup
+    0004 ldc "hi"
+    0006 iconst_3
+    0007 anewarray Class(java/lang/String)
+    0010 astore_1
+    0011 aload_1
+    0012 iconst_0
+    0013 ldc "a"
+    0015 aastore
+    0016 aload_1
+    0017 iconst_1
+    0018 ldc "b"
+    0020 aastore
+    0021 aload_1
+    0022 iconst_2
+    0023 ldc "c"
+    0025 aastore
+    0026 aload_1
+    0027 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0030 invokespecial Method(Box.<init>:(Ljava/lang/String;Ljava/util/List;)V)
+    0033 astore_0
+    0034 aload_0
+    0035 invokevirtual Method(Box.getName:()Ljava/lang/String;)
+    0038 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0041 swap
+    0042 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0045 aload_0
+    0046 invokevirtual Method(Box.getItems:()Ljava/util/List;)
+    0049 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0054 istore_1
+    0055 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0058 iload_1
+    0059 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0062 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

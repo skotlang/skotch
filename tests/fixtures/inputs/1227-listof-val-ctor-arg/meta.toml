@@ -1,0 +1,4 @@
+name     = "1227-listof-val-ctor-arg"
+status   = "supported"
+features = ["collections", "type-inference"]
+notes    = "Top-level `val = listOf(...)`/`setOf(...)` infer List/Set field descriptors as their JVM erasure (java/util/List, java/util/Set), not Object. Foundation for JetChat's ConversationUiState(initialMessages=...) launch path. Outputs: [x, y, z] / [1, 2]."

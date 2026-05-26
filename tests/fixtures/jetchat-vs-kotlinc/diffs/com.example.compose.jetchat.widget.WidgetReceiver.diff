@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-24 23:07:54
-+++ ./skotch/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-24 23:07:54
+--- ./gradle/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-25 11:17:41
++++ ./skotch/com.example.compose.jetchat.widget.WidgetReceiver.javap	2026-05-25 11:17:42
 @@ -1,24 +1,22 @@
 -Compiled from "WidgetReceiver.kt"
 +Compiled from "com/example/compose/jetchat/widget/WidgetReceiver.kt"

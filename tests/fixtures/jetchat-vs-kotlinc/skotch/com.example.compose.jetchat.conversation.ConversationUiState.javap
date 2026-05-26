@@ -24,15 +24,17 @@ public final class com.example.compose.jetchat.conversation.ConversationUiState 
         15: aload_3
         16: putfield      #27                 // Field initialMessages:Ljava/util/List;
         19: aload_3
-        20: invokeinterface #32,  1           // InterfaceMethod java/util/List.toMutableStateList:()V
-        25: aload_0
-        26: aconst_null
-        27: putfield      #34                 // Field _messages:Ljava/util/List;
-        30: aconst_null
+        20: checkcast     #29                 // class java/util/Collection
+        23: invokestatic  #35                 // Method androidx/compose/runtime/SnapshotStateKt.toMutableStateList:(Ljava/util/Collection;)Landroidx/compose/runtime/snapshots/SnapshotStateList;
+        26: aload_0
+        27: swap
+        28: putfield      #37                 // Field _messages:Ljava/util/List;
         31: aload_0
-        32: swap
-        33: putfield      #36                 // Field messages:Ljava/util/List;
-        36: return
+        32: getfield      #37                 // Field _messages:Ljava/util/List;
+        35: aload_0
+        36: swap
+        37: putfield      #39                 // Field messages:Ljava/util/List;
+        40: return
 
   public void addMessage(com.example.compose.jetchat.conversation.Message);
     Code:
@@ -43,15 +45,15 @@ public final class com.example.compose.jetchat.conversation.ConversationUiState 
          6: getfield      #24                 // Field channelMembers:I
          9: istore_3
         10: aload_0
-        11: getfield      #34                 // Field _messages:Ljava/util/List;
+        11: getfield      #37                 // Field _messages:Ljava/util/List;
         14: astore        4
         16: aload_0
-        17: getfield      #36                 // Field messages:Ljava/util/List;
+        17: getfield      #39                 // Field messages:Ljava/util/List;
         20: astore        5
         22: aload         4
         24: iconst_0
         25: aload_1
-        26: invokeinterface #44,  3           // InterfaceMethod java/util/List.add:(ILjava/lang/Object;)V
+        26: invokeinterface #49,  3           // InterfaceMethod java/util/List.add:(ILjava/lang/Object;)V
         31: aload_0
         32: aload_2
         33: putfield      #22                 // Field channelName:Ljava/lang/String;
@@ -60,10 +62,10 @@ public final class com.example.compose.jetchat.conversation.ConversationUiState 
         38: putfield      #24                 // Field channelMembers:I
         41: aload_0
         42: aload         4
-        44: putfield      #34                 // Field _messages:Ljava/util/List;
+        44: putfield      #37                 // Field _messages:Ljava/util/List;
         47: aload_0
         48: aload         5
-        50: putfield      #36                 // Field messages:Ljava/util/List;
+        50: putfield      #39                 // Field messages:Ljava/util/List;
         53: return
 
   public java.lang.String getChannelName();
@@ -81,12 +83,12 @@ public final class com.example.compose.jetchat.conversation.ConversationUiState 
   public <T> java.util.List get_messages();
     Code:
          0: aload_0
-         1: getfield      #34                 // Field _messages:Ljava/util/List;
+         1: getfield      #37                 // Field _messages:Ljava/util/List;
          4: areturn
 
   public <T> java.util.List getMessages();
     Code:
          0: aload_0
-         1: getfield      #36                 // Field messages:Ljava/util/List;
+         1: getfield      #39                 // Field messages:Ljava/util/List;
          4: areturn
 }

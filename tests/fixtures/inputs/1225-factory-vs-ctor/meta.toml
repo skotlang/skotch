@@ -1,0 +1,4 @@
+name     = "1225-factory-vs-ctor"
+status   = "supported"
+features = ["overload", "constructor"]
+notes    = "A same-named top-level factory function is preferred over the class constructor when the args fit the factory but not the ctor. Outputs 42."

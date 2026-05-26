@@ -1,6 +1,6 @@
---- ./gradle/com.example.compose.jetchat.profile.ProfileViewModel.javap	2026-05-24 23:07:52
-+++ ./skotch/com.example.compose.jetchat.profile.ProfileViewModel.javap	2026-05-24 23:07:52
-@@ -1,76 +1,112 @@
+--- ./gradle/com.example.compose.jetchat.profile.ProfileViewModel.javap	2026-05-25 11:17:39
++++ ./skotch/com.example.compose.jetchat.profile.ProfileViewModel.javap	2026-05-25 11:17:39
+@@ -1,76 +1,113 @@
 -Compiled from "ProfileViewModel.kt"
 +Compiled from "com/example/compose/jetchat/profile/ProfileViewModel.kt"
  public final class com.example.compose.jetchat.profile.ProfileViewModel extends androidx.lifecycle.ViewModel {
@@ -38,16 +38,16 @@
 -        23: getfield      #21                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
 -        26: checkcast     #23                 // class androidx/lifecycle/LiveData
 -        29: putfield      #27                 // Field userData:Landroidx/lifecycle/LiveData;
--        32: return
 +        15: invokespecial #26                 // Method androidx/lifecycle/MutableLiveData."<init>":()V
 +        18: aload_0
 +        19: swap
 +        20: putfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
-+        23: aconst_null
-+        24: aload_0
-+        25: swap
-+        26: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
-+        29: return
++        23: aload_0
++        24: getfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
++        27: aload_0
++        28: swap
++        29: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
+         32: return
  
 -  public final void setUserId(java.lang.String);
 +  public void setUserId(java.lang.String);

@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.conversation.InputSelector.javap	2026-05-24 23:07:47
-+++ ./skotch/com.example.compose.jetchat.conversation.InputSelector.javap	2026-05-24 23:07:47
+--- ./gradle/com.example.compose.jetchat.conversation.InputSelector.javap	2026-05-25 11:17:34
++++ ./skotch/com.example.compose.jetchat.conversation.InputSelector.javap	2026-05-25 11:17:34
 @@ -1,124 +1,73 @@
 -Compiled from "UserInput.kt"
 -public final class com.example.compose.jetchat.conversation.InputSelector extends java.lang.Enum<com.example.compose.jetchat.conversation.InputSelector> {

@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-24 23:07:50
-+++ ./skotch/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-24 23:07:50
+--- ./gradle/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-25 11:17:37
++++ ./skotch/com.example.compose.jetchat.data.FakeDataKt.javap	2026-05-25 11:17:37
 @@ -1,8 +1,8 @@
 -Compiled from "FakeData.kt"
 +Compiled from "com/example/compose/jetchat/data/FakeData.kt"

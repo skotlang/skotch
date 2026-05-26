@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.ExpandableFabStates.javap	2026-05-24 23:07:44
-+++ ./skotch/com.example.compose.jetchat.components.ExpandableFabStates.javap	2026-05-24 23:07:44
+--- ./gradle/com.example.compose.jetchat.components.ExpandableFabStates.javap	2026-05-25 11:17:31
++++ ./skotch/com.example.compose.jetchat.components.ExpandableFabStates.javap	2026-05-25 11:17:31
 @@ -1,76 +1,45 @@
 -Compiled from "AnimatingFabContent.kt"
 -final class com.example.compose.jetchat.components.ExpandableFabStates extends java.lang.Enum<com.example.compose.jetchat.components.ExpandableFabStates> {

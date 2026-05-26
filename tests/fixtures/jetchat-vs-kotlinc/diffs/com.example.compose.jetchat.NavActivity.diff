@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.NavActivity.javap	2026-05-24 23:07:50
-+++ ./skotch/com.example.compose.jetchat.NavActivity.javap	2026-05-24 23:07:50
+--- ./gradle/com.example.compose.jetchat.NavActivity.javap	2026-05-25 11:17:37
++++ ./skotch/com.example.compose.jetchat.NavActivity.javap	2026-05-25 11:17:37
 @@ -1,639 +1,124 @@
 -Compiled from "NavActivity.kt"
 +Compiled from "com/example/compose/jetchat/NavActivity.kt"

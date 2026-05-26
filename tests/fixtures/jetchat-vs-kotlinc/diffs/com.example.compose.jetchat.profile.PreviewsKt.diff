@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.profile.PreviewsKt.javap	2026-05-24 23:07:50
-+++ ./skotch/com.example.compose.jetchat.profile.PreviewsKt.javap	2026-05-24 23:07:50
+--- ./gradle/com.example.compose.jetchat.profile.PreviewsKt.javap	2026-05-25 11:17:37
++++ ./skotch/com.example.compose.jetchat.profile.PreviewsKt.javap	2026-05-25 11:17:38
 @@ -1,338 +1,152 @@
 -Compiled from "Previews.kt"
 +Compiled from "com/example/compose/jetchat/profile/Previews.kt"

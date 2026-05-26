@@ -22,11 +22,12 @@ public final class com.example.compose.jetchat.profile.ProfileViewModel extends 
         18: aload_0
         19: swap
         20: putfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
-        23: aconst_null
-        24: aload_0
-        25: swap
-        26: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
-        29: return
+        23: aload_0
+        24: getfield      #28                 // Field _userData:Landroidx/lifecycle/MutableLiveData;
+        27: aload_0
+        28: swap
+        29: putfield      #30                 // Field userData:Landroidx/lifecycle/LiveData;
+        32: return
 
   public void setUserId(java.lang.String);
     Code:

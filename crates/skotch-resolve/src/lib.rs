@@ -368,13 +368,24 @@ fn infer_val_type_from_init(
 fn type_ref_to_ty(tr: &TypeRef, interner: &Interner, imports: &FxHashMap<String, String>) -> Ty {
     let name = interner.resolve(tr.name);
     let base = skotch_types::ty_from_name(name).unwrap_or_else(|| {
-        // Fall back to the file's import_map so a cross-file call site
-        // sees the right param/return type (e.g. `LayoutInflater` →
-        // `Ty::Class("android/view/LayoutInflater")`). Without this,
-        // `gather_declarations` erases everything non-builtin to `Any`
-        // and downstream methodref descriptors become
-        // `(Object,Object,…)Object`, breaking JVM resolution.
-        if let Some(fq) = imports.get(name) {
+        // Kotlin built-in class names that map to a JVM class via
+        // JavaToKotlinClassMap (`List` → `java/util/List`, `CharSequence`
+        // → `java/lang/CharSequence`, the exception hierarchy, …). Without
+        // this a cross-file constructor/method param declared
+        // `List<Message>` erased to `Any`, so the recorded
+        // `ExternalClass.ctor_params` type was `Object` and the cross-file
+        // `<init>` descriptor came out `(…,Ljava/lang/Object;)V` instead
+        // of `(…,Ljava/util/List;)V` — a runtime NoSuchMethodError (this
+        // is JetChat's `ConversationUiState(…, initialMessages: List<…>)`).
+        if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(name) {
+            Ty::Class(jvm.to_string())
+        } else if let Some(fq) = imports.get(name) {
+            // Fall back to the file's import_map so a cross-file call site
+            // sees the right param/return type (e.g. `LayoutInflater` →
+            // `Ty::Class("android/view/LayoutInflater")`). Without this,
+            // `gather_declarations` erases everything non-builtin to `Any`
+            // and downstream methodref descriptors become
+            // `(Object,Object,…)Object`, breaking JVM resolution.
             Ty::Class(fq.clone())
         } else {
             Ty::Any

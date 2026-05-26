@@ -1080,13 +1080,41 @@ pub struct DiscoveredExtension {
 /// The cache is stored in `~/.skotch/cache/stdlib-extensions-{hash}.json`
 /// and invalidated when kotlin-stdlib.jar changes (by file size).
 pub fn discover_stdlib_extensions() -> Vec<DiscoveredExtension> {
-    // Try to load from cache first.
-    if let Some(cached) = load_cached_extensions() {
-        return cached;
+    // kotlin-stdlib extensions (disk-cached — the stdlib jar is stable).
+    let mut extensions = match load_cached_extensions() {
+        Some(cached) => cached,
+        None => {
+            let e = discover_stdlib_extensions_uncached();
+            save_cached_extensions(&e);
+            e
+        }
+    };
+    // Plus the project's CLASSPATH dep-jar extensions (kotlinx-coroutines,
+    // AndroidX, …). NOT disk-cached: CLASSPATH varies per project/build. The
+    // caller (mir-lower's `DISCOVERED_EXTENSIONS`) memoizes the merged set so
+    // this one-time scan happens once per build. Without it, calls like
+    // `MutableStateFlow.asStateFlow()` can't be resolved to their `*Kt` facade
+    // and get null-stubbed (e.g. JetChat's `MainViewModel.drawerShouldBeOpened`).
+    extensions.extend(discover_classpath_extensions());
+    extensions
+}
+
+/// Scan every jar on `CLASSPATH` for extension functions. The build adds the
+/// resolved dependency jars to `CLASSPATH` before lowering, so this picks up
+/// coroutines/AndroidX/etc. extensions. Empty when `CLASSPATH` is unset (e.g.
+/// the stdlib-independent fixture tests), keeping those deterministic.
+fn discover_classpath_extensions() -> Vec<DiscoveredExtension> {
+    let mut extensions = Vec::new();
+    let Ok(cp) = std::env::var("CLASSPATH") else {
+        return extensions;
+    };
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    for entry in cp.split(sep) {
+        let p = Path::new(entry);
+        if p.extension().and_then(|e| e.to_str()) == Some("jar") {
+            extensions.extend(scan_jar_for_extensions(p));
+        }
     }
-    // Scan and cache.
-    let extensions = discover_stdlib_extensions_uncached();
-    save_cached_extensions(&extensions);
     extensions
 }
 
@@ -1129,15 +1157,24 @@ fn dirs_cache_dir() -> Option<std::path::PathBuf> {
 
 /// Uncached scan of kotlin-stdlib.jar for extension functions.
 fn discover_stdlib_extensions_uncached() -> Vec<DiscoveredExtension> {
-    let mut extensions = Vec::new();
     let kotlin_lib = match find_kotlin_lib_dir() {
         Ok(dir) => dir.join("kotlin-stdlib.jar"),
-        Err(_) => return extensions,
+        Err(_) => return Vec::new(),
     };
-    if !kotlin_lib.exists() {
+    scan_jar_for_extensions(&kotlin_lib)
+}
+
+/// Scan one jar's `*Kt` facade classes for extension functions: public static
+/// methods whose first parameter is the (extension) receiver. Shared by the
+/// kotlin-stdlib discovery and the per-project CLASSPATH dep-jar scan
+/// ([`discover_classpath_extensions`]) so e.g. `MutableStateFlow.asStateFlow()`
+/// (kotlinx-coroutines `FlowKt`) resolves instead of null-stubbing.
+fn scan_jar_for_extensions(jar: &Path) -> Vec<DiscoveredExtension> {
+    let mut extensions = Vec::new();
+    if !jar.exists() {
         return extensions;
     }
-    let file = match std::fs::File::open(&kotlin_lib) {
+    let file = match std::fs::File::open(jar) {
         Ok(f) => f,
         Err(_) => return extensions,
     };

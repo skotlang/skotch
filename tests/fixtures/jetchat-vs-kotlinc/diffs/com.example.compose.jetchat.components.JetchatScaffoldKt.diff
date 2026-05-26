@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.JetchatScaffoldKt.javap	2026-05-24 23:07:45
-+++ ./skotch/com.example.compose.jetchat.components.JetchatScaffoldKt.javap	2026-05-24 23:07:46
+--- ./gradle/com.example.compose.jetchat.components.JetchatScaffoldKt.javap	2026-05-25 11:17:32
++++ ./skotch/com.example.compose.jetchat.components.JetchatScaffoldKt.javap	2026-05-25 11:17:32
 @@ -1,382 +1,70 @@
 -Compiled from "JetchatScaffold.kt"
 +Compiled from "com/example/compose/jetchat/components/JetchatScaffold.kt"

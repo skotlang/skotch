@@ -12763,7 +12763,23 @@ fn count_rvalue_uses(rv: &Rvalue, counts: &mut FxHashMap<u32, u32>) {
 /// actually returns, so the box class is unreachable in practice).
 fn jvm_type_string(ty: &Ty) -> String {
     match ty {
-        Ty::Class(name) => format!("L{name};"),
+        // Apply kotlinc's JavaToKotlinClassMap erasure: an inferred type
+        // may still carry the Kotlin-side name (`kotlin/collections/List`)
+        // where the JVM descriptor must use the Java class
+        // (`Ljava/util/List;`). Unknown names emit `L<name>;` unchanged.
+        Ty::Class(name) => {
+            let mapped = skotch_types::intrinsics::jvm_builtin_class_erasure(name).unwrap_or(name);
+            format!("L{mapped};")
+        }
+        // Generic types erase to their base class's descriptor on the JVM:
+        // `List<Foo>` → `Ljava/util/List;`. Route the base back through
+        // this function so it picks up the same erasure in the `Ty::Class`
+        // arm. Without this, `Ty::Generic` fell through to `jvm_type` which
+        // returns `Ljava/lang/Object;`, so a `val xs = listOf(...)` field
+        // erased to `Object` and constructor/call sites passing it failed
+        // the verifier (operand-stack type mismatch) or could not resolve
+        // the `<init>` descriptor at all.
+        Ty::Generic { base, .. } => jvm_type_string(base),
         // Function types: `(N) -> R` → `Function{N}`. `@Composable
         // () -> R` → `Function{N+2}` (Composer + Int). `suspend`
         // adds +1 for the Continuation. Without preserving these
@@ -12786,7 +12802,14 @@ fn jvm_type_string(ty: &Ty) -> String {
         // — the JVM allows `null` for any reference type. Nullable primitives
         // box to their wrapper class.
         Ty::Nullable(inner) => match inner.as_ref() {
-            Ty::Class(name) => format!("L{name};"),
+            Ty::Class(name) => {
+                let mapped =
+                    skotch_types::intrinsics::jvm_builtin_class_erasure(name).unwrap_or(name);
+                format!("L{mapped};")
+            }
+            // `List<Foo>?` erases like `List<Foo>` — the JVM allows null for
+            // any reference, so the nullable wrapper drops away.
+            Ty::Generic { base, .. } => jvm_type_string(base),
             Ty::String => "Ljava/lang/String;".to_string(),
             Ty::Any => "Ljava/lang/Object;".to_string(),
             Ty::Int => "Ljava/lang/Integer;".to_string(),
@@ -13567,6 +13590,13 @@ fn walk_block(
                         let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Any);
                         let is_long = matches!(lhs_ty, Ty::Long);
                         let is_double = matches!(lhs_ty, Ty::Double);
+                        // Float comparisons need `fcmp` + `if<cond>` like long/
+                        // double; without this they fall to the int `if_icmp`
+                        // path and emit `if_icmple` on float operands, which the
+                        // JVM verifier / d8 reject ("Expected primitive int on
+                        // stack, but was primitive float"). Considered float when
+                        // EITHER operand is float (the other is widened on load).
+                        let is_float = matches!(lhs_ty, Ty::Float) || matches!(rhs_ty, Ty::Float);
 
                         // Mixed ref/primitive comparison: when one side is a
                         // reference type (Any/Nullable from e.g. iterator.next())
@@ -13611,14 +13641,25 @@ fn walk_block(
                             continue;
                         }
 
-                        if is_long || is_double {
-                            // Long/Double comparison: emit lcmp/dcmpg then if<cond>
+                        if is_long || is_double || is_float {
+                            // Long/Double/Float comparison: emit lcmp/dcmpg/fcmp
+                            // then if<cond>.
                             if is_long {
                                 code.push(0x94); // lcmp: pops 2 longs, pushes int
                                 bump(stack, max_stack, -3); // -4 slots in, +1 out = -3
-                            } else {
+                            } else if is_double {
                                 code.push(0x98); // dcmpg: pops 2 doubles, pushes int
                                 bump(stack, max_stack, -3);
+                            } else {
+                                // Float: fcmpg for `<`/`<=` (NaN→1), fcmpl
+                                // otherwise (NaN→-1) — matches kotlinc so NaN
+                                // comparisons yield false. Pops 2 floats (2
+                                // slots), pushes 1 int.
+                                code.push(match op {
+                                    MBinOp::CmpLt | MBinOp::CmpLe => 0x96, // fcmpg
+                                    _ => 0x95,                             // fcmpl
+                                });
+                                bump(stack, max_stack, -1);
                             }
                             let branch_op: u8 = match op {
                                 MBinOp::CmpEq => 0x99, // ifeq

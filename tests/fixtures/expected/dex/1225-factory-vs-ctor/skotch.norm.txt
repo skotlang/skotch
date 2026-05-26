@@ -1,0 +1,59 @@
+dex_version   035
+strings       22
+types         9
+methods       8
+classes       1
+
+--- strings ---
+  "<clinit>"
+  "<init>"
+  "Box"
+  "I"
+  "L"
+  "LBox;"
+  "LI"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "b"
+  "getS"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "valueOf"
+
+--- types ---
+  I
+  LBox;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBox;.<init>(Ljava/lang/String;)V
+  LBox;.getS()Ljava/lang/String;
+  LInputKt;.<clinit>()V
+  LInputKt;.Box(I)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/String;.valueOf(I)Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <clinit>()V flags=0x0019 regs=2 ins=0 outs=1 insns=9
+  method       Box(I)Ljava/lang/Object; flags=0x0019 regs=3 ins=1 outs=2 insns=10
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=12
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

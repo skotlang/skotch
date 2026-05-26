@@ -1,0 +1,72 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+field         theHolder : LHolder; 0x001A
+field         theItems : Ljava/util/List; 0x001A
+method        <clinit> ()V 0x0008
+  code        max_stack=5 max_locals=1
+    0000 iconst_3
+    0001 anewarray Class(java/lang/String)
+    0004 astore_0
+    0005 aload_0
+    0006 iconst_0
+    0007 ldc "x"
+    0009 aastore
+    0010 aload_0
+    0011 iconst_1
+    0012 ldc "y"
+    0014 aastore
+    0015 aload_0
+    0016 iconst_2
+    0017 ldc "z"
+    0019 aastore
+    0020 aload_0
+    0021 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0024 putstatic Field(InputKt.theItems:Ljava/util/List;)
+    0027 getstatic Field(InputKt.theItems:Ljava/util/List;)
+    0030 astore_0
+    0031 new Class(Holder)
+    0034 dup
+    0035 ldc "hi"
+    0037 bipush 42
+    0039 aload_0
+    0040 invokespecial Method(Holder.<init>:(Ljava/lang/String;ILjava/util/List;)V)
+    0043 putstatic Field(InputKt.theHolder:LHolder;)
+    0046 return
+method        getTheHolder ()LHolder; 0x0019
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(InputKt.theHolder:LHolder;)
+    0003 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        getTheItems ()Ljava/util/List; 0x0019
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(InputKt.theItems:Ljava/util/List;)
+    0003 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(InputKt.theHolder:LHolder;)
+    0003 invokevirtual Method(Holder.getName:()Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(InputKt.theHolder:LHolder;)
+    0016 invokevirtual Method(Holder.getCount:()I)
+    0019 istore_0
+    0020 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0023 iload_0
+    0024 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0027 getstatic Field(InputKt.theHolder:LHolder;)
+    0030 invokevirtual Method(Holder.getItems:()Ljava/util/List;)
+    0033 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0038 istore_0
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 iload_0
+    0043 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0046 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

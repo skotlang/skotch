@@ -1,0 +1,124 @@
+dex_version   035
+strings       64
+types         15
+methods       15
+classes       2
+
+--- strings ---
+  ""
+  "("
+  "()"
+  "()I"
+  "()LHolder;"
+  "()Ljava/lang/String;"
+  "()Ljava/util/List;"
+  "(Ljava/lang/String;ILjava/util/List;)V"
+  "<clinit>"
+  "<init>"
+  ">;"
+  ">;)V"
+  "I"
+  "L"
+  "LHolder;"
+  "LInputKt;"
+  "LL"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Ljava/util/List<"
+  "Lkotlin/Metadata;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLIL"
+  "VLL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "checkNotNullParameter"
+  "count"
+  "d1"
+  "d2"
+  "getCount"
+  "getItems"
+  "getName"
+  "getTheHolder"
+  "getTheItems"
+  "hi"
+  "input.kt"
+  "items"
+  "k"
+  "listOf"
+  "main"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "size"
+  "theHolder"
+  "theItems"
+  "value"
+  "x"
+  "xi"
+  "y"
+  "z"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{1a}\n��\n\u{2}\u{10} \n\u{2}\u{10}\u{e}\n\u{2}\u{8}\u{3}\n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{3}\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}\t\u{1a}\u{2}0\n\"\u{17}\u{10}��\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{2}0\u{1}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{3}\u{10}\u{4}\"\u{11}\u{10}\u{5}\u{1a}\u{2}0\u{6}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{7}\u{10}\u{8}"
+  "��\u{1e}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\n��\n\u{2}\u{10}\u{8}\n��\n\u{2}\u{10} \n\u{2}\u{8}\u{8}\u{18}��2\u{2}0\u{1}B%\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{12}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{5}\u{12}\u{c}\u{10}\u{6}\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{3}0\u{7}¢\u{6}\u{4}\u{8}\u{8}\u{10}\tR\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\n\u{10}\u{b}R\u{11}\u{10}\u{4}\u{1a}\u{2}0\u{5}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{c}\u{10}\rR\u{17}\u{10}\u{6}\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{3}0\u{7}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{e}\u{10}\u{f}"
+
+--- types ---
+  I
+  LHolder;
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LHolder;.<init>(Ljava/lang/String;ILjava/util/List;)V
+  LHolder;.getCount()I
+  LHolder;.getItems()Ljava/util/List;
+  LHolder;.getName()Ljava/lang/String;
+  LInputKt;.<clinit>()V
+  LInputKt;.getTheHolder()LHolder;
+  LInputKt;.getTheItems()Ljava/util/List;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/util/List;.size()I
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LHolder;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;ILjava/util/List;)V flags=0x10001 regs=5 ins=4 outs=2 insns=20
+  method       getCount()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getItems()Ljava/util/List; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       getName()Ljava/lang/String; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=4 ins=0 outs=4 insns=38
+  method       getTheHolder()LHolder; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       getTheItems()Ljava/util/List; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       main()V flags=0x0019 regs=2 ins=0 outs=2 insns=38
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

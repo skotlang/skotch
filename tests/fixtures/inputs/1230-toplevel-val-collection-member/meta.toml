@@ -1,0 +1,4 @@
+name     = "1230-toplevel-val-collection-member"
+status   = "supported"
+features = ["top-level-val", "collections", "properties"]
+notes    = "Property access (`.size`) on a top-level-val collection. The val is typed Ty::Generic{List} by infer_top_level_val_ty, but member resolution keys on Ty::Class, so the generic must be unwrapped to its base class first. Before the fix, `xs.size` failed to lower and the failed statement dropped the whole `main` body (no output). Outputs: 3."

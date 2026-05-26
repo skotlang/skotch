@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.profile.ProfileKt.javap	2026-05-24 23:07:51
-+++ ./skotch/com.example.compose.jetchat.profile.ProfileKt.javap	2026-05-24 23:07:51
+--- ./gradle/com.example.compose.jetchat.profile.ProfileKt.javap	2026-05-25 11:17:38
++++ ./skotch/com.example.compose.jetchat.profile.ProfileKt.javap	2026-05-25 11:17:38
 @@ -1,3292 +1,719 @@
 -Compiled from "Profile.kt"
 -public final class com.example.compose.jetchat.profile.ProfileKt {

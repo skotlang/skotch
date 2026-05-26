@@ -1,0 +1,4 @@
+name     = "1226-empty-try-catch"
+status   = "supported"
+features = ["try-catch", "try-finally"]
+notes    = "An empty try body emits no exception-table entry (zero-length protected regions crash d8 with AIOOBE and fail the verifier). The empty try-finally case mirrors JetChat's NavActivityKt$Lambda$27. Finally bodies still run. Outputs: finally ran / cf finally ran / ok."

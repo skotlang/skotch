@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-24 23:07:48
-+++ ./skotch/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-24 23:07:48
+--- ./gradle/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-25 11:17:35
++++ ./skotch/com.example.compose.jetchat.conversation.MessageFormatterKt.javap	2026-05-25 11:17:35
 @@ -1,530 +1,128 @@
 -Compiled from "MessageFormatter.kt"
 +Compiled from "com/example/compose/jetchat/conversation/MessageFormatter.kt"

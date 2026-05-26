@@ -1,0 +1,4 @@
+name     = "1224-float-comparison"
+status   = "supported"
+features = ["float", "comparison"]
+notes    = "Float relational comparisons (>, <=) emit fcmpl/fcmpg + if<cond> rather than the int if_icmp path that d8 rejects. Outputs true/false/false."

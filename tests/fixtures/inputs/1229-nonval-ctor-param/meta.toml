@@ -1,0 +1,4 @@
+name     = "1229-nonval-ctor-param"
+status   = "supported"
+features = ["constructor", "properties"]
+notes    = "A plain (non-val/var) ctor param has no backing field; <init> must not emit a putfield for it. Only val/var params get fields. Mirrors JetChat ConversationUiState(initialMessages: List<Message>). Outputs: hi / 3."

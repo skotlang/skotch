@@ -1,5 +1,5 @@
---- ./gradle/com.example.compose.jetchat.components.AnimatingFabContentKt.javap	2026-05-24 23:07:44
-+++ ./skotch/com.example.compose.jetchat.components.AnimatingFabContentKt.javap	2026-05-24 23:07:44
+--- ./gradle/com.example.compose.jetchat.components.AnimatingFabContentKt.javap	2026-05-25 11:17:30
++++ ./skotch/com.example.compose.jetchat.components.AnimatingFabContentKt.javap	2026-05-25 11:17:30
 @@ -1,1861 +1,294 @@
 -Compiled from "AnimatingFabContent.kt"
 -public final class com.example.compose.jetchat.components.AnimatingFabContentKt {

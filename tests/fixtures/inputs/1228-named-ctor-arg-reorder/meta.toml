@@ -1,0 +1,4 @@
+name     = "1228-named-ctor-arg-reorder"
+status   = "supported"
+features = ["constructor", "named-args"]
+notes    = "Named constructor args (out of order, incl. a top-level-val List) reorder to the declared parameter order so the emitted <init> matches the signature. Mirrors JetChat ConversationUiState(initialMessages=…, channelName=…, channelMembers=…). Outputs: hi / 42."
