@@ -1943,6 +1943,38 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     } else {
         false
     };
+    // The bridge below would emit `invoke(Object, Object)Object` (the
+    // FunctionN-erased shape) and delegate via `invokevirtual <self>.
+    // invoke(<typed_desc>)`. When the MIR's `invoke` would itself be
+    // emitted with an erased descriptor — `(Object, ..., Object)Object` —
+    // typed_desc equals erased_desc, the bridge becomes a duplicate of
+    // the existing MIR method (name + descriptor collide), and its body
+    // calls a "typed" invoke that doesn't actually exist on the class.
+    // Compute the would-be typed descriptor up front and skip the bridge
+    // when it would collide with the erased one. Mirrors the
+    // descriptor-decision in `emit_method` (~line 2888) which keeps the
+    // erased shape when the MIR invoke has no Int/Bool params and arity
+    // matches the FunctionN interface.
+    let bridge_would_duplicate = if needs_bridge_early {
+        let mut td = String::from("(");
+        if let Some(invoke_fn) = class.methods.iter().find(|m| m.name == "invoke") {
+            for &p in invoke_fn.params.iter().skip(1) {
+                let ty = &invoke_fn.locals[p.0 as usize];
+                td.push_str(&jvm_param_type_string(ty));
+            }
+            td.push(')');
+            td.push_str(&jvm_type_string(&invoke_fn.return_ty));
+        }
+        let mut ed = String::from("(");
+        for _ in 0..iface_arity_early.unwrap_or(0) {
+            ed.push_str("Ljava/lang/Object;");
+        }
+        ed.push_str(")Ljava/lang/Object;");
+        td == ed
+    } else {
+        false
+    };
+    let needs_bridge_early = needs_bridge_early && !bridge_would_duplicate;
     // Pre-register bridge method CP entries so they're included in the CP.
     // The bridge: invoke(Object, Object)Object → casts params, delegates to typed invoke.
     let bridge_cp = if needs_bridge_early {

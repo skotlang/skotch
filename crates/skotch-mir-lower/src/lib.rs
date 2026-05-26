@@ -11497,6 +11497,198 @@ fn lower_expr(
                     });
                     return Some(dest);
                 }
+                // ─── External Kt-facade static-fn dispatch (#296) ────────
+                // An uppercase callee like `Text(...)` (or `Icon`, `Surface`,
+                // `Scaffold`) imports to a name that ISN'T a real class — it
+                // resolves through `import_map` because Compose's @Composable
+                // functions are imported by their plain name, but the JVM
+                // class at `androidx/compose/material3/Text` does not exist;
+                // the actual method lives on the sibling Kt facade
+                // `androidx/compose/material3/TextKt`. Without this branch
+                // the construction block above is skipped (`class_exists =
+                // false`) and the call falls through to `None`, which drops
+                // the entire enclosing function body and produces the
+                // JetChat blank-UI (#358). Mirror the ctor synthetic-default
+                // search above for static functions: try the exact-arity
+                // descriptor first, then scan for `<name>$default` (which
+                // appends `int $default_mask, Object $marker` to the primary
+                // signature).
+                if !class_exists {
+                    if let Some((pkg, _)) = jvm_class.rsplit_once('/') {
+                        if let Some(facade) =
+                            skotch_classinfo::find_wrapper_class_for_function(pkg, &callee_str)
+                        {
+                            let mut arg_locals = Vec::new();
+                            for a in args {
+                                let id = lower_expr(
+                                    &a.expr,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                )?;
+                                arg_locals.push(id);
+                            }
+                            let user_n = arg_locals.len();
+                            // Exact-arity match: user supplied all params (no
+                            // defaults needed). Common when the fn has no
+                            // defaults, or the user wrote every arg.
+                            if let Some(desc) = skotch_classinfo::lookup_method_descriptor(
+                                &facade,
+                                &callee_str,
+                                user_n,
+                            ) {
+                                let ret_ty = ty_from_descriptor_return(&desc);
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::StaticJava {
+                                            class_name: facade,
+                                            method_name: callee_str.to_string(),
+                                            descriptor: desc,
+                                        },
+                                        args: arg_locals,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                            // Search for `<name>$default` with arity
+                            // `user_n + extra` for `extra` in 1..=32. The
+                            // synthetic's `primary_count` is `total - 2`
+                            // (mask + Object). 32 is sufficient for compose
+                            // signatures, which can be deep but rarely
+                            // exceed ~24 primary params.
+                            let default_name = format!("{callee_str}$default");
+                            let synthetic = (1..=32usize).find_map(|extra| {
+                                skotch_classinfo::lookup_method_descriptor(
+                                    &facade,
+                                    &default_name,
+                                    user_n + extra,
+                                )
+                            });
+                            if let Some(desc) = synthetic {
+                                let total = skotch_classinfo::count_descriptor_params_pub(&desc);
+                                let primary_count = total.saturating_sub(2);
+                                let param_chars = parse_descriptor_param_chars(&desc);
+                                // For an external `@Composable` synthetic,
+                                // kotlinc's primary signature ends with
+                                // `..., Composer, $changed` (Compose
+                                // transform), then `$default_mask, Object`
+                                // (default-param wrapper). The mask bits
+                                // index ONLY the user-level params — they
+                                // do NOT cover `Composer`/`$changed`, which
+                                // the caller must always supply. Detect the
+                                // Composer slot and bound the user-pad +
+                                // mask there; everything past it is the
+                                // Compose-injected tail (#358).
+                                let composer_sym = interner.intern("$composer");
+                                let changed_sym = interner.intern("$changed");
+                                let scope_composer = scope
+                                    .iter()
+                                    .rev()
+                                    .find(|(s, _)| *s == composer_sym)
+                                    .map(|(_, id)| *id);
+                                let scope_changed = scope
+                                    .iter()
+                                    .rev()
+                                    .find(|(s, _)| *s == changed_sym)
+                                    .map(|(_, id)| *id);
+                                let composer_abs_pos = composer_position_in_descriptor(&desc);
+                                let user_count_total = composer_abs_pos.unwrap_or(primary_count);
+                                // Pad user-omitted user-level slots with
+                                // zero/null per the descriptor's primitive
+                                // kind, and set the mask bits for those
+                                // positions only.
+                                let mut mask: i32 = 0;
+                                for i in user_n..user_count_total {
+                                    let kind = param_chars.get(i).copied().unwrap_or('L');
+                                    let (slot_ty, value) = match kind {
+                                        'I' => (Ty::Int, Rvalue::Const(MirConst::Int(0))),
+                                        'J' => (Ty::Long, Rvalue::Const(MirConst::Long(0))),
+                                        'F' => (Ty::Float, Rvalue::Const(MirConst::Float(0.0))),
+                                        'D' => (Ty::Double, Rvalue::Const(MirConst::Double(0.0))),
+                                        'Z' => (Ty::Bool, Rvalue::Const(MirConst::Int(0))),
+                                        _ => (Ty::Any, Rvalue::Const(MirConst::Null)),
+                                    };
+                                    let pad = fb.new_local(slot_ty);
+                                    fb.push_stmt(MStmt::Assign { dest: pad, value });
+                                    arg_locals.push(pad);
+                                    if i < 32 {
+                                        mask |= 1 << i;
+                                    }
+                                }
+                                // For `@Composable` external calls, inject
+                                // the enclosing scope's `$composer` (and
+                                // `$changed` int) at their dedicated slots
+                                // BEFORE the `$default_mask`. Without this
+                                // the call lands `aconst_null` in the
+                                // Composer slot and the Compose runtime
+                                // short-circuits the body — that's why the
+                                // UI was blank after iter 18 wired up the
+                                // `$default` dispatch (#358).
+                                if composer_abs_pos.is_some() {
+                                    if let Some(cid) = scope_composer {
+                                        arg_locals.push(cid);
+                                    } else {
+                                        let composer_local = fb.new_local(Ty::Class(
+                                            "androidx/compose/runtime/Composer".to_string(),
+                                        ));
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: composer_local,
+                                            value: Rvalue::Const(MirConst::Null),
+                                        });
+                                        arg_locals.push(composer_local);
+                                    }
+                                    if let Some(cid) = scope_changed {
+                                        arg_locals.push(cid);
+                                    } else {
+                                        let changed_local = fb.new_local(Ty::Int);
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: changed_local,
+                                            value: Rvalue::Const(MirConst::Int(0)),
+                                        });
+                                        arg_locals.push(changed_local);
+                                    }
+                                }
+                                let mask_local = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: mask_local,
+                                    value: Rvalue::Const(MirConst::Int(mask)),
+                                });
+                                arg_locals.push(mask_local);
+                                // The trailing `Object` marker is always
+                                // null in Kotlin's `$default` calling
+                                // convention.
+                                let marker_local =
+                                    fb.new_local(Ty::Class("java/lang/Object".to_string()));
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: marker_local,
+                                    value: Rvalue::Const(MirConst::Null),
+                                });
+                                arg_locals.push(marker_local);
+                                let ret_ty = ty_from_descriptor_return(&desc);
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::StaticJava {
+                                            class_name: facade,
+                                            method_name: default_name,
+                                            descriptor: desc,
+                                        },
+                                        args: arg_locals,
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
+                    }
+                }
             }
 
             // ─── Cross-file class constructor ─────────────────────────

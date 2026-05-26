@@ -200,9 +200,29 @@ pub fn lookup_method_descriptor(
     // `textPlaceable = measurable.measure(constraints)` in JetChat's
     // BaselineHeightModifier).
     if let Some(ci) = cached_class_lookup(class_path) {
+        // Two-pass: prefer exact `m.name == method_name` matches. Only
+        // fall back to mangled (`<stem>-<hash>` or `<stem>-<hash>$default`)
+        // when no exact match exists. A single combined pass causes
+        // false positives when BOTH unmangled `Font$default` AND mangled
+        // `Font-<hash>$default` live on the same facade — iteration
+        // order picks the wrong overload and the call emits a descriptor
+        // whose arg types don't match the call site (observed as a
+        // TypographyKt VerifyError in iter-22 when the suffix-mangled
+        // match was first added).
         let mut best: Option<String> = None;
         for m in &ci.methods {
-            if (m.name == method_name || matches_mangled(&m.name, method_name))
+            if m.name == method_name
+                && count_descriptor_params(&m.descriptor) == param_count
+                && (best.is_none() || has_object_params(&m.descriptor))
+            {
+                best = Some(m.descriptor.clone());
+            }
+        }
+        if best.is_some() {
+            return best;
+        }
+        for m in &ci.methods {
+            if matches_mangled(&m.name, method_name)
                 && count_descriptor_params(&m.descriptor) == param_count
                 && (best.is_none() || has_object_params(&m.descriptor))
             {
@@ -217,7 +237,18 @@ pub fn lookup_method_descriptor(
     if let Ok(ci) = load_jdk_class(class_path) {
         let mut best: Option<&str> = None;
         for m in &ci.methods {
-            if (m.name == method_name || matches_mangled(&m.name, method_name))
+            if m.name == method_name
+                && count_descriptor_params(&m.descriptor) == param_count
+                && (best.is_none() || has_object_params(&m.descriptor))
+            {
+                best = Some(&m.descriptor);
+            }
+        }
+        if let Some(d) = best {
+            return Some(d.to_string());
+        }
+        for m in &ci.methods {
+            if matches_mangled(&m.name, method_name)
                 && count_descriptor_params(&m.descriptor) == param_count
                 && (best.is_none() || has_object_params(&m.descriptor))
             {
@@ -357,14 +388,44 @@ pub fn lookup_method_name_and_descriptor(
 /// method calls (`measure-BRTryo0` ↔ `measure`) and for companion-
 /// property getters returning a value-class type.
 fn matches_mangled(mangled: &str, unmangled: &str) -> bool {
+    // Direct mangled: `Text` matches `Text-Nvy7gAk`.
     if let Some(rest) = mangled
         .strip_prefix(unmangled)
         .and_then(|r| r.strip_prefix('-'))
     {
-        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-    } else {
-        false
+        return !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
     }
+    // Mangled-with-`$default`: `Text$default` matches `Text-Nvy7gAk$default`.
+    // Kotlin emits the `$default` synthetic with the mangling hash sitting
+    // BETWEEN the original name stem and the `$default` tail, so the
+    // unmangled `<stem>$default` form has no direct prefix match against
+    // the JVM `<stem>-<hash>$default` name. This affects every
+    // `@Composable` function whose unmangled signature contains an inline
+    // value-class parameter (Color/Dp/TextUnit/etc.) — effectively the
+    // whole material3 surface (Text/Surface/most Icon overloads). Without
+    // this branch, `lookup_method_descriptor` returns None for
+    // `Text$default` (see `TextKt.class` which has only `Text-Nvy7gAk`
+    // and `Text-Nvy7gAk$default`, no unmangled `Text$default`), so the
+    // external Kt-facade dispatch in #358's body-emit path silently
+    // skips and the composable body drops.
+    //
+    // Restricted to the `$default` suffix specifically — other Kotlin
+    // synthetic suffixes (`$lambda$N`, `$annotations` etc.) are
+    // class-local helpers, not callable from outside the source class.
+    // The CALLER (`lookup_method_descriptor`) uses a two-pass approach
+    // (exact-name first, mangled-fallback second) to ensure unmangled
+    // `Font$default` wins over mangled `Font-<hash>$default` when both
+    // exist on the same facade.
+    if let Some(stem) = unmangled.strip_suffix("$default") {
+        let with_dash = format!("{stem}-");
+        if let Some(after_stem) = mangled.strip_prefix(&with_dash) {
+            if let Some(hash) = after_stem.strip_suffix("$default") {
+                return !hash.is_empty()
+                    && hash.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            }
+        }
+    }
+    false
 }
 
 /// Look up the descriptor of a static field on a class. Used by MIR
