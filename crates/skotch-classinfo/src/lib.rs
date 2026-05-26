@@ -272,6 +272,85 @@ pub fn lookup_method_descriptor(
 /// [`generic_signature::infer_return_ty`] alongside the call-site
 /// arg types to recover the call's return Ty without enumerating
 /// the target method's name.
+/// Return `(name, descriptor)` for every method on the named class,
+/// from the classpath cache first then the JDK registry. Used by
+/// mir-lower's external-Kt-facade dispatch (#358) to find Kotlin
+/// name-mangled `$default` synthetics whose JVM name carries an inline
+/// value-class hash sitting BETWEEN the source-level stem and the
+/// `$default` suffix (e.g. `Text-Nvy7gAk$default` vs. the source-level
+/// `Text$default`). The fixed-name `lookup_method_descriptor` can't
+/// match those — and a blanket suffix-aware `matches_mangled` is
+/// unsafe because overloaded mangled forms differ in their param types
+/// (iter 22/23 hit a TypographyKt VerifyError when an arity-only
+/// fallback picked `Font-<resId_hash>$default` for a `Font(GoogleFont,
+/// ...)` call). With this iterator the caller can apply arg-type-aware
+/// overload resolution at the call site, where the source-level arg
+/// types are available.
+pub fn iter_class_methods(class_path: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    if let Some(ci) = cached_class_lookup(class_path) {
+        for m in &ci.methods {
+            out.push((m.name.clone(), m.descriptor.clone()));
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    if let Ok(ci) = load_jdk_class(class_path) {
+        for m in &ci.methods {
+            out.push((m.name.clone(), m.descriptor.clone()));
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    // Direct CLASSPATH scan when the class isn't in the preloaded cache
+    // or the JDK registry. The same Compose facades that
+    // `find_wrapper_class_for_function` finds via direct JAR scan
+    // (`TextKt`, `IconKt`, `SurfaceKt`, etc.) are NOT in the classinfo
+    // cache — `cached_class_lookup` returns None and the iterator
+    // previously returned an empty Vec, so the arg-type-aware
+    // mangled-`$default` fallback in `lower_expr` couldn't enumerate the
+    // candidates that actually live on the class. Mirror the JAR-scan
+    // approach from `find_wrapper_class_for_function` here so the
+    // iterator finds the same classes.
+    let target = format!("{class_path}.class");
+    let cp = std::env::var("CLASSPATH").unwrap_or_default();
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    for jar_path in cp.split(sep) {
+        if jar_path.is_empty() {
+            continue;
+        }
+        let path = std::path::Path::new(jar_path);
+        if !path.exists() {
+            continue;
+        }
+        let Ok(file) = std::fs::File::open(path) else {
+            continue;
+        };
+        let Ok(mut archive) = zip::ZipArchive::new(file) else {
+            continue;
+        };
+        let Ok(mut entry) = archive.by_name(&target) else {
+            continue;
+        };
+        let mut bytes = Vec::new();
+        if std::io::Read::read_to_end(&mut entry, &mut bytes).is_err() {
+            continue;
+        }
+        let Ok(ci) = parse_class(&bytes) else {
+            continue;
+        };
+        for m in &ci.methods {
+            out.push((m.name.clone(), m.descriptor.clone()));
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    out
+}
+
 pub fn lookup_method_signature(
     class_path: &str,
     method_name: &str,
@@ -388,44 +467,14 @@ pub fn lookup_method_name_and_descriptor(
 /// method calls (`measure-BRTryo0` ↔ `measure`) and for companion-
 /// property getters returning a value-class type.
 fn matches_mangled(mangled: &str, unmangled: &str) -> bool {
-    // Direct mangled: `Text` matches `Text-Nvy7gAk`.
     if let Some(rest) = mangled
         .strip_prefix(unmangled)
         .and_then(|r| r.strip_prefix('-'))
     {
-        return !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    } else {
+        false
     }
-    // Mangled-with-`$default`: `Text$default` matches `Text-Nvy7gAk$default`.
-    // Kotlin emits the `$default` synthetic with the mangling hash sitting
-    // BETWEEN the original name stem and the `$default` tail, so the
-    // unmangled `<stem>$default` form has no direct prefix match against
-    // the JVM `<stem>-<hash>$default` name. This affects every
-    // `@Composable` function whose unmangled signature contains an inline
-    // value-class parameter (Color/Dp/TextUnit/etc.) — effectively the
-    // whole material3 surface (Text/Surface/most Icon overloads). Without
-    // this branch, `lookup_method_descriptor` returns None for
-    // `Text$default` (see `TextKt.class` which has only `Text-Nvy7gAk`
-    // and `Text-Nvy7gAk$default`, no unmangled `Text$default`), so the
-    // external Kt-facade dispatch in #358's body-emit path silently
-    // skips and the composable body drops.
-    //
-    // Restricted to the `$default` suffix specifically — other Kotlin
-    // synthetic suffixes (`$lambda$N`, `$annotations` etc.) are
-    // class-local helpers, not callable from outside the source class.
-    // The CALLER (`lookup_method_descriptor`) uses a two-pass approach
-    // (exact-name first, mangled-fallback second) to ensure unmangled
-    // `Font$default` wins over mangled `Font-<hash>$default` when both
-    // exist on the same facade.
-    if let Some(stem) = unmangled.strip_suffix("$default") {
-        let with_dash = format!("{stem}-");
-        if let Some(after_stem) = mangled.strip_prefix(&with_dash) {
-            if let Some(hash) = after_stem.strip_suffix("$default") {
-                return !hash.is_empty()
-                    && hash.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-            }
-        }
-    }
-    false
 }
 
 /// Look up the descriptor of a static field on a class. Used by MIR

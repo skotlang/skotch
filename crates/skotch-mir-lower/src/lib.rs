@@ -11564,13 +11564,126 @@ fn lower_expr(
                             // signatures, which can be deep but rarely
                             // exceed ~24 primary params.
                             let default_name = format!("{callee_str}$default");
-                            let synthetic = (1..=32usize).find_map(|extra| {
+                            let mut synthetic_name = default_name.clone();
+                            let mut synthetic = (1..=32usize).find_map(|extra| {
                                 skotch_classinfo::lookup_method_descriptor(
                                     &facade,
                                     &default_name,
                                     user_n + extra,
                                 )
                             });
+                            // Fallback: mangled `<name>-<hash>$default` for
+                            // overloads that take inline value-class params
+                            // (Color/Dp/TextUnit/etc.), where kotlinc
+                            // mangles the JVM name. The whole material3
+                            // surface (Text/Surface/most Icon overloads)
+                            // emits ONLY mangled `$default` synthetics —
+                            // their source-level `<name>$default` does not
+                            // exist as a JVM method. We can't widen
+                            // `matches_mangled` to accept this pattern in
+                            // the general lookup because multiple mangled
+                            // overloads may share an arity but differ in
+                            // their param types — naive arity-only matching
+                            // picks the wrong one and corrupts the call's
+                            // descriptor (iter 22/23 hit a TypographyKt
+                            // VerifyError when `Font-<resId>$default` won
+                            // for a `Font(GoogleFont, ...)` call site).
+                            // Instead, enumerate all candidates and choose
+                            // the one whose param types are assignable from
+                            // the user's arg types.
+                            if synthetic.is_none() {
+                                let arg_tys: Vec<Ty> = arg_locals
+                                    .iter()
+                                    .map(|l| fb.mf.locals[l.0 as usize].clone())
+                                    .collect();
+                                let stem_dash = format!("{callee_str}-");
+                                // Compose's `@JvmInline value class` types
+                                // erase to primitives on the JVM (Color→long,
+                                // Dp→float, TextUnit→long, etc.). The user-
+                                // level Ty for `Color.Red` is
+                                // `Ty::Class("androidx/compose/ui/graphics/
+                                // Color")`, but the descriptor param for a
+                                // color slot is `J`. Strict
+                                // `Ty::assignable_to` rejects that match, so
+                                // composables that take Color/Dp/TextUnit
+                                // params (Text/Surface/Scaffold overloads)
+                                // never find a compatible mangled-`$default`
+                                // candidate and the enclosing function's
+                                // body drops (#358). Accept the match when
+                                // the user arg is one of these known value
+                                // classes and the descriptor expects the
+                                // corresponding primitive.
+                                let value_class_jvm_ty = |c: &str| -> Option<Ty> {
+                                    match c {
+                                        // Color: value class around ULong → J on the JVM.
+                                        "androidx/compose/ui/graphics/Color"
+                                        // Compose unit/text value classes (long-erased).
+                                        | "androidx/compose/ui/unit/TextUnit"
+                                        | "androidx/compose/ui/unit/DpOffset"
+                                        | "androidx/compose/ui/unit/DpSize"
+                                        | "androidx/compose/ui/unit/IntOffset"
+                                        | "androidx/compose/ui/unit/IntSize"
+                                        // Compose geometry value classes — these live in
+                                        // `geometry/`, NOT `unit/` (an earlier iter-26 cut
+                                        // had the wrong package prefix and never matched).
+                                        | "androidx/compose/ui/geometry/Size"
+                                        | "androidx/compose/ui/geometry/Offset" => Some(Ty::Long),
+                                        // Dp is the lone Float-backed value class in the
+                                        // common compose-unit surface.
+                                        "androidx/compose/ui/unit/Dp" => Some(Ty::Float),
+                                        _ => None,
+                                    }
+                                };
+                                let mut best: Option<(String, String, usize)> = None;
+                                for (mname, mdesc) in skotch_classinfo::iter_class_methods(&facade)
+                                {
+                                    if !mname.starts_with(&stem_dash)
+                                        || !mname.ends_with("$default")
+                                    {
+                                        continue;
+                                    }
+                                    let total =
+                                        skotch_classinfo::count_descriptor_params_pub(&mdesc);
+                                    if total <= user_n + 1 {
+                                        continue;
+                                    }
+                                    let dparams = descriptor_arg_tys(&mdesc);
+                                    if dparams.len() < user_n {
+                                        continue;
+                                    }
+                                    let mut compat = true;
+                                    let mut score = 0usize;
+                                    for (i, ut) in arg_tys.iter().enumerate() {
+                                        let pt = &dparams[i];
+                                        let value_class_match = if let Ty::Class(c) = ut {
+                                            value_class_jvm_ty(c).is_some_and(|j| j == *pt)
+                                        } else {
+                                            false
+                                        };
+                                        if matches!(pt, Ty::Any)
+                                            || ut.assignable_to(pt)
+                                            || value_class_match
+                                        {
+                                            if !matches!(pt, Ty::Any) {
+                                                score += 1;
+                                            }
+                                        } else {
+                                            compat = false;
+                                            break;
+                                        }
+                                    }
+                                    if !compat {
+                                        continue;
+                                    }
+                                    if best.as_ref().is_none_or(|(_, _, s)| score > *s) {
+                                        best = Some((mname.clone(), mdesc.clone(), score));
+                                    }
+                                }
+                                if let Some((mname, mdesc, _)) = best {
+                                    synthetic_name = mname;
+                                    synthetic = Some(mdesc);
+                                }
+                            }
                             if let Some(desc) = synthetic {
                                 let total = skotch_classinfo::count_descriptor_params_pub(&desc);
                                 let primary_count = total.saturating_sub(2);
@@ -11678,7 +11791,7 @@ fn lower_expr(
                                     value: Rvalue::Call {
                                         kind: CallKind::StaticJava {
                                             class_name: facade,
-                                            method_name: default_name,
+                                            method_name: synthetic_name,
                                             descriptor: desc,
                                         },
                                         args: arg_locals,
