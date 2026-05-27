@@ -1,0 +1,4 @@
+name     = "1231-companion-bare-ident"
+status   = "supported"
+features = ["companion-object", "object-decl"]
+notes    = "Bare-Ident reference to a companion-bearing class or `object` resolves to `<class>.Companion` or `<class>.INSTANCE` getstatic, not the null placeholder it used to emit. Outputs: engine\\nhello."

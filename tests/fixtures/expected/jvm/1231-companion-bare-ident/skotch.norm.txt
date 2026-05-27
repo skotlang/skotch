@@ -1,0 +1,26 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 getstatic Field(Engine.Companion:LEngine$Companion;)
+    0003 astore_0
+    0004 aload_0
+    0005 invokevirtual Method(Engine$Companion.describe:()Ljava/lang/String;)
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 swap
+    0012 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0015 getstatic Field(Server.INSTANCE:LServer;)
+    0018 astore_1
+    0019 aload_1
+    0020 invokevirtual Method(Server.hello:()Ljava/lang/String;)
+    0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0026 swap
+    0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0030 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    InnerClasses (10 bytes)

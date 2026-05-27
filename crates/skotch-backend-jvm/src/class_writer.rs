@@ -2064,32 +2064,234 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     //   areturn
     if let (
         true,
-        Some(_arity),
+        Some(arity),
         Some((
             invoke_name,
             erased_desc_idx,
             code_name,
             typed_mr,
             _typed_desc,
-            composer_class,
-            intvalue_mr,
+            _composer_class,
+            _intvalue_mr,
         )),
     ) = (needs_bridge_early, iface_arity_early, bridge_cp)
     {
+        // Recover the typed param/return Ty list from MIR so we can
+        // unbox/checkcast each erased Object slot to its typed shape.
+        // Pulls from the same `invoke` method that fed `typed_desc`
+        // above, so they stay in sync.
+        let (typed_params, typed_ret) =
+            if let Some(invoke_fn) = class.methods.iter().find(|m| m.name == "invoke") {
+                let params: Vec<Ty> = invoke_fn
+                    .params
+                    .iter()
+                    .skip(1)
+                    .map(|p| invoke_fn.locals[p.0 as usize].clone())
+                    .collect();
+                (params, invoke_fn.return_ty.clone())
+            } else {
+                (Vec::new(), Ty::Any)
+            };
+
         let mut code: Vec<u8> = Vec::new();
-        code.push(0x2A); // aload_0 (this)
-        code.push(0x2B); // aload_1 (Object — $composer)
-        code.push(0xC0); // checkcast Composer
-        code.write_u16::<BigEndian>(composer_class).unwrap();
-        code.push(0x2C); // aload_2 (Object — $changed boxed)
-        code.push(0xC0); // checkcast Integer
-        let integer_class = cp2.class("java/lang/Integer");
-        code.write_u16::<BigEndian>(integer_class).unwrap();
-        code.push(0xB6); // invokevirtual Integer.intValue()I
-        code.write_u16::<BigEndian>(intvalue_mr).unwrap();
-        code.push(0xB6); // invokevirtual this.invoke(Composer, int)V
+        // Track stack so max_stack reflects the actual peak. Long/Double
+        // primitives occupy two slots once unboxed.
+        let mut cur_stack: i32 = 0;
+        let mut max_stack: i32 = 0;
+        let bump = |delta: i32, cur: &mut i32, max: &mut i32| {
+            *cur += delta;
+            if *cur > *max {
+                *max = *cur;
+            }
+        };
+
+        // aload_0 (this) — receiver of the typed invoke call.
+        code.push(0x2A);
+        bump(1, &mut cur_stack, &mut max_stack);
+
+        // For each typed param, load the corresponding erased Object slot
+        // and cast/unbox it to the typed shape. The erased local layout
+        // is `this` at slot 0 then one Object per param at slots 1..=N.
+        for (i, ty) in typed_params.iter().enumerate() {
+            let slot = (i + 1) as u8;
+            match slot {
+                1 => code.push(0x2B), // aload_1
+                2 => code.push(0x2C), // aload_2
+                3 => code.push(0x2D), // aload_3
+                n => {
+                    code.push(0x19); // aload <n>
+                    code.push(n);
+                }
+            }
+            bump(1, &mut cur_stack, &mut max_stack);
+
+            // Stack now has [..., Object]. Adjust to typed shape.
+            match ty {
+                Ty::Int => {
+                    let c = cp2.class("java/lang/Integer");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Integer", "intValue", "()I");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                    // Object → int: same slot width (1).
+                }
+                Ty::Long => {
+                    let c = cp2.class("java/lang/Long");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Long", "longValue", "()J");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                    // Object (1) → long (2): +1 slot.
+                    bump(1, &mut cur_stack, &mut max_stack);
+                }
+                Ty::Float => {
+                    let c = cp2.class("java/lang/Float");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Float", "floatValue", "()F");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                }
+                Ty::Double => {
+                    let c = cp2.class("java/lang/Double");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Double", "doubleValue", "()D");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                    bump(1, &mut cur_stack, &mut max_stack);
+                }
+                Ty::Bool => {
+                    let c = cp2.class("java/lang/Boolean");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Boolean", "booleanValue", "()Z");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                }
+                Ty::Byte => {
+                    let c = cp2.class("java/lang/Byte");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Byte", "byteValue", "()B");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                }
+                Ty::Short => {
+                    let c = cp2.class("java/lang/Short");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Short", "shortValue", "()S");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                }
+                Ty::Char => {
+                    let c = cp2.class("java/lang/Character");
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                    let m = cp2.methodref("java/lang/Character", "charValue", "()C");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(m).unwrap();
+                }
+                Ty::Class(name) => {
+                    let mapped =
+                        skotch_types::intrinsics::jvm_builtin_class_erasure(name).unwrap_or(name);
+                    let c = cp2.class(mapped);
+                    code.push(0xC0);
+                    code.write_u16::<BigEndian>(c).unwrap();
+                }
+                Ty::Generic { base, .. } => {
+                    if let Ty::Class(name) = base.as_ref() {
+                        let mapped = skotch_types::intrinsics::jvm_builtin_class_erasure(name)
+                            .unwrap_or(name);
+                        let c = cp2.class(mapped);
+                        code.push(0xC0);
+                        code.write_u16::<BigEndian>(c).unwrap();
+                    }
+                }
+                _ => {
+                    // Ty::Any / Ty::Nullable(_)/Ty::Function{..}: leave
+                    // the Object on the stack — the typed call signature
+                    // already accepts an Object/reference here.
+                }
+            }
+        }
+
+        // invokevirtual this.invoke(<typed_desc>)
+        code.push(0xB6);
         code.write_u16::<BigEndian>(typed_mr).unwrap();
-        code.push(0x01); // aconst_null (return Unit as null)
+        // Stack effect: pops `this` + typed args, pushes typed return.
+        let arg_slots: i32 = typed_params
+            .iter()
+            .map(|t| match t {
+                Ty::Long | Ty::Double => 2,
+                _ => 1,
+            })
+            .sum();
+        let ret_slots: i32 = match &typed_ret {
+            Ty::Long | Ty::Double => 2,
+            Ty::Unit | Ty::Nothing => 0,
+            _ => 1,
+        };
+        cur_stack = cur_stack - (1 + arg_slots) + ret_slots;
+        if cur_stack > max_stack {
+            max_stack = cur_stack;
+        }
+
+        // Adjust the typed return value to the erased `Object` return.
+        match &typed_ret {
+            Ty::Unit | Ty::Nothing => {
+                code.push(0x01); // aconst_null
+                bump(1, &mut cur_stack, &mut max_stack);
+            }
+            Ty::Int => {
+                let m = cp2.methodref("java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            Ty::Long => {
+                let m = cp2.methodref("java/lang/Long", "valueOf", "(J)Ljava/lang/Long;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+                bump(-1, &mut cur_stack, &mut max_stack); // long (2) → Long (1)
+            }
+            Ty::Float => {
+                let m = cp2.methodref("java/lang/Float", "valueOf", "(F)Ljava/lang/Float;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            Ty::Double => {
+                let m = cp2.methodref("java/lang/Double", "valueOf", "(D)Ljava/lang/Double;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+                bump(-1, &mut cur_stack, &mut max_stack); // double (2) → Double (1)
+            }
+            Ty::Bool => {
+                let m = cp2.methodref("java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            Ty::Byte => {
+                let m = cp2.methodref("java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            Ty::Short => {
+                let m = cp2.methodref("java/lang/Short", "valueOf", "(S)Ljava/lang/Short;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            Ty::Char => {
+                let m = cp2.methodref("java/lang/Character", "valueOf", "(C)Ljava/lang/Character;");
+                code.push(0xB8);
+                code.write_u16::<BigEndian>(m).unwrap();
+            }
+            _ => {
+                // Already a reference (Class/Generic/Any/Nullable/Function) — fall through.
+            }
+        }
         code.push(0xB0); // areturn
 
         let mut bridge = Vec::new();
@@ -2100,8 +2302,11 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         bridge.write_u16::<BigEndian>(code_name).unwrap();
         let attr_len = 2 + 2 + 4 + code.len() as u32 + 2 + 2;
         bridge.write_u32::<BigEndian>(attr_len).unwrap();
-        bridge.write_u16::<BigEndian>(4).unwrap(); // max_stack
-        bridge.write_u16::<BigEndian>(3).unwrap(); // max_locals (this + 2 Object params)
+        bridge
+            .write_u16::<BigEndian>(max_stack.max(1) as u16)
+            .unwrap();
+        // Each erased param is one Object slot; plus `this`.
+        bridge.write_u16::<BigEndian>((1 + arity) as u16).unwrap();
         bridge.write_u32::<BigEndian>(code.len() as u32).unwrap();
         bridge.write_all(&code).unwrap();
         bridge.write_u16::<BigEndian>(0).unwrap(); // exception_table

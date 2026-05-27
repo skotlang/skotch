@@ -6843,6 +6843,42 @@ fn lower_expr(
                         },
                     });
                     Some(dest)
+                } else if let Some(desc) =
+                    skotch_classinfo::lookup_static_field_descriptor(jvm_class, "INSTANCE")
+                {
+                    // Kotlin `object` singleton: `MaterialTheme` →
+                    // getstatic MaterialTheme.INSTANCE:LMaterialTheme;
+                    let field_ty = ty_from_descriptor_return(&desc);
+                    let dest = fb.new_local(field_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::GetStaticField {
+                            class_name: jvm_class.clone(),
+                            field_name: "INSTANCE".to_string(),
+                            descriptor: desc,
+                        },
+                    });
+                    Some(dest)
+                } else if let Some(desc) =
+                    skotch_classinfo::lookup_static_field_descriptor(jvm_class, "Companion")
+                {
+                    // Class/interface with companion object: `Modifier` →
+                    // getstatic Modifier.Companion:LModifier$Companion;
+                    // The companion field is the conventional access path
+                    // for the companion singleton, which IS-A the outer
+                    // type when the companion has the right supertype
+                    // (e.g. Modifier.Companion : Modifier).
+                    let field_ty = ty_from_descriptor_return(&desc);
+                    let dest = fb.new_local(field_ty);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::GetStaticField {
+                            class_name: jvm_class.clone(),
+                            field_name: "Companion".to_string(),
+                            descriptor: desc,
+                        },
+                    });
+                    Some(dest)
                 } else {
                     let _ = ident_str;
                     let dest = fb.new_local(Ty::Class(jvm_class.clone()));
@@ -6881,6 +6917,39 @@ fn lower_expr(
                         value: Rvalue::Local(this_local),
                     });
                     return Some(dest);
+                }
+                // Same-file class reference used as a value expression. For
+                // a Kotlin `object Foo`, `Foo` evaluates to its INSTANCE
+                // singleton; for a class with a `companion object`, the
+                // bare class name evaluates to its Companion singleton.
+                // Both are static fields on the (outer) class.
+                if let Some(cls) = module.classes.iter().find(|c| c.name == name_str) {
+                    if cls.is_object_singleton {
+                        let desc = format!("L{};", cls.name);
+                        let dest = fb.new_local(Ty::Class(cls.name.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::GetStaticField {
+                                class_name: cls.name.clone(),
+                                field_name: "INSTANCE".to_string(),
+                                descriptor: desc,
+                            },
+                        });
+                        return Some(dest);
+                    }
+                    if let Some(comp_class) = &cls.companion_class_name {
+                        let desc = format!("L{};", comp_class);
+                        let dest = fb.new_local(Ty::Class(comp_class.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::GetStaticField {
+                                class_name: cls.name.clone(),
+                                field_name: "Companion".to_string(),
+                                descriptor: desc,
+                            },
+                        });
+                        return Some(dest);
+                    }
                 }
                 // Implicit-`this` instance field: a bare `name` that matches a
                 // field of the enclosing class (param[0] = `this`) → `this.name`,
