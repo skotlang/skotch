@@ -918,6 +918,214 @@ fn dynamic_stdlib_extension(
     None
 }
 
+/// Remap a `LocalId` via the given `map`, defaulting to the original
+/// id if no entry exists. Used by the inline-fn body splicer.
+fn remap_local(map: &FxHashMap<u32, LocalId>, l: LocalId) -> LocalId {
+    map.get(&l.0).copied().unwrap_or(l)
+}
+
+/// Clone an `Rvalue`, remapping every `LocalId` it contains via `map`.
+/// String fields (class names, descriptors) are cloned verbatim.
+fn remap_rvalue(map: &FxHashMap<u32, LocalId>, rv: &Rvalue) -> Rvalue {
+    match rv {
+        Rvalue::Const(c) => Rvalue::Const(c.clone()),
+        Rvalue::Local(l) => Rvalue::Local(remap_local(map, *l)),
+        Rvalue::BinOp { op, lhs, rhs } => Rvalue::BinOp {
+            op: *op,
+            lhs: remap_local(map, *lhs),
+            rhs: remap_local(map, *rhs),
+        },
+        Rvalue::GetStaticField {
+            class_name,
+            field_name,
+            descriptor,
+        } => Rvalue::GetStaticField {
+            class_name: class_name.clone(),
+            field_name: field_name.clone(),
+            descriptor: descriptor.clone(),
+        },
+        Rvalue::NewInstance(n) => Rvalue::NewInstance(n.clone()),
+        Rvalue::GetField {
+            receiver,
+            class_name,
+            field_name,
+        } => Rvalue::GetField {
+            receiver: remap_local(map, *receiver),
+            class_name: class_name.clone(),
+            field_name: field_name.clone(),
+        },
+        Rvalue::PutField {
+            receiver,
+            class_name,
+            field_name,
+            value,
+        } => Rvalue::PutField {
+            receiver: remap_local(map, *receiver),
+            class_name: class_name.clone(),
+            field_name: field_name.clone(),
+            value: remap_local(map, *value),
+        },
+        Rvalue::PutStaticField {
+            class_name,
+            field_name,
+            descriptor,
+            value,
+        } => Rvalue::PutStaticField {
+            class_name: class_name.clone(),
+            field_name: field_name.clone(),
+            descriptor: descriptor.clone(),
+            value: remap_local(map, *value),
+        },
+        Rvalue::Call { kind, args } => Rvalue::Call {
+            kind: kind.clone(),
+            args: args.iter().map(|l| remap_local(map, *l)).collect(),
+        },
+        Rvalue::InstanceOf {
+            obj,
+            type_descriptor,
+        } => Rvalue::InstanceOf {
+            obj: remap_local(map, *obj),
+            type_descriptor: type_descriptor.clone(),
+        },
+        Rvalue::NewIntArray(s) => Rvalue::NewIntArray(remap_local(map, *s)),
+        Rvalue::ArrayLoad { array, index } => Rvalue::ArrayLoad {
+            array: remap_local(map, *array),
+            index: remap_local(map, *index),
+        },
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        } => Rvalue::ArrayStore {
+            array: remap_local(map, *array),
+            index: remap_local(map, *index),
+            value: remap_local(map, *value),
+        },
+        Rvalue::ArrayLength(a) => Rvalue::ArrayLength(remap_local(map, *a)),
+        Rvalue::NewObjectArray(s) => Rvalue::NewObjectArray(remap_local(map, *s)),
+        Rvalue::NewTypedObjectArray {
+            size,
+            element_class,
+        } => Rvalue::NewTypedObjectArray {
+            size: remap_local(map, *size),
+            element_class: element_class.clone(),
+        },
+        Rvalue::ObjectArrayStore {
+            array,
+            index,
+            value,
+        } => Rvalue::ObjectArrayStore {
+            array: remap_local(map, *array),
+            index: remap_local(map, *index),
+            value: remap_local(map, *value),
+        },
+        Rvalue::CheckCast { obj, target_class } => Rvalue::CheckCast {
+            obj: remap_local(map, *obj),
+            target_class: target_class.clone(),
+        },
+    }
+}
+
+/// Try to inline a call to a user-declared `inline fun` by splicing the
+/// callee's body into the caller's current basic block. Returns
+/// `Some(result_local)` when inlining succeeded, `None` to fall through
+/// to the regular static-call path.
+///
+/// **Conservative gating:** only inlines callees that are
+/// - marked `is_inline = true`,
+/// - have exactly one basic block (no internal branches),
+/// - have no exception handlers,
+/// - are not `suspend`,
+/// - have no lambda-typed parameters (HOF inline fns like `let`/`with`
+///   are intrinsified separately and not handled here),
+/// - terminate with `Return` or `ReturnValue(local)`.
+///
+/// `target_idx` is the index into `caller_module.functions` of the inline
+/// callee. `arg_locals` are the caller's locals holding the lowered args.
+/// The function clones the callee's body, builds a `param → arg` plus
+/// `other → fresh caller local` remap, then pushes each remapped stmt
+/// onto the caller's `fb` and returns the remapped return local.
+fn try_inline_call_into_fb(
+    target_idx: usize,
+    arg_locals: &[LocalId],
+    fb: &mut FnBuilder,
+    module: &MirModule,
+) -> Option<LocalId> {
+    let target = &module.functions[target_idx];
+
+    if !target.is_inline
+        || target.is_suspend
+        || target.is_abstract
+        || target.blocks.len() != 1
+        || !target.exception_handlers.is_empty()
+        || target.suspend_state_machine.is_some()
+    {
+        return None;
+    }
+    // Skip HOF inline fns — the intrinsics path handles them.
+    if target
+        .params
+        .iter()
+        .any(|p| matches!(target.locals[p.0 as usize], Ty::Function { .. }))
+    {
+        return None;
+    }
+    // The arg count must match the param count. Default-param dispatch
+    // wraps calls in a synthetic wrapper that we don't try to unwind
+    // here — fall through to the normal static-call path.
+    if arg_locals.len() != target.params.len() {
+        return None;
+    }
+
+    let block = &target.blocks[0];
+
+    // Build the LocalId remap: every callee local maps to a fresh local
+    // in the caller. Param locals map to the caller's arg locals
+    // *directly* — re-using the arg's existing slot avoids an extra
+    // copy and matches kotlinc's inline-fn lowering, which uses the
+    // arg slot for the corresponding param read.
+    let mut remap: FxHashMap<u32, LocalId> = FxHashMap::default();
+    for (i, &param_local) in target.params.iter().enumerate() {
+        remap.insert(param_local.0, arg_locals[i]);
+    }
+    for (i, ty) in target.locals.iter().enumerate() {
+        let id = LocalId(i as u32);
+        remap
+            .entry(id.0)
+            .or_insert_with(|| fb.new_local(ty.clone()));
+    }
+
+    // Splice each statement, remapping all LocalIds.
+    for stmt in &block.stmts {
+        match stmt {
+            MStmt::Assign { dest, value } => {
+                fb.push_stmt(MStmt::Assign {
+                    dest: remap_local(&remap, *dest),
+                    value: remap_rvalue(&remap, value),
+                });
+            }
+        }
+    }
+
+    // Capture the return value.
+    match &block.terminator {
+        Terminator::ReturnValue(l) => Some(remap_local(&remap, *l)),
+        Terminator::Return => {
+            // Unit-typed inline fn — synthesize a Unit-valued dest.
+            let dest = fb.new_local(Ty::Unit);
+            fb.push_stmt(MStmt::Assign {
+                dest,
+                value: Rvalue::Const(MirConst::Null),
+            });
+            Some(dest)
+        }
+        // Branch/Goto/Throw in a single-block fn means we gated wrong
+        // (single block can't goto another, and Throw/Branch don't
+        // terminate cleanly here). Fall through.
+        _ => None,
+    }
+}
+
 /// Lower a parsed/resolved/typed file to MIR.
 pub fn lower_file(
     file: &KtFile,
@@ -11097,6 +11305,75 @@ fn lower_expr(
                             },
                         });
                         return Some(result);
+                    }
+                }
+            }
+
+            // ─── User-declared inline-fn body substitution ────────────
+            // For an `inline fun foo(...)` whose body is a single basic
+            // block with no lambda params and no exception handlers,
+            // splice the body directly into the caller at the call site
+            // (with locals/blocks renamed). This avoids the extra static
+            // method call and matches kotlinc's semantic for non-HOF
+            // inline functions. HOF inline fns (the
+            // `let`/`apply`/`with` family) are intrinsified separately
+            // and skipped here via the lambda-param gate inside
+            // `try_inline_call_into_fb`. Reified-T inline fns are
+            // handled by the dedicated branch above.
+            if type_args.is_empty() && callee_str != fb.mf.name {
+                if let Some(fid) = name_to_func.get(&callee_name) {
+                    let target_idx = fid.0 as usize;
+                    // Pre-check the inline gates before lowering args so
+                    // we don't pollute `fb` with arg locals on the
+                    // common path (a regular static call) where we'd
+                    // fall through and re-lower anyway.
+                    let inline_candidate = target_idx < module.functions.len() && {
+                        let t = &module.functions[target_idx];
+                        t.is_inline
+                            && !t.is_suspend
+                            && !t.is_abstract
+                            && t.blocks.len() == 1
+                            && t.exception_handlers.is_empty()
+                            && t.suspend_state_machine.is_none()
+                            && t.params.len() == args.len()
+                            && !t
+                                .params
+                                .iter()
+                                .any(|p| matches!(t.locals[p.0 as usize], Ty::Function { .. }))
+                            && matches!(
+                                t.blocks[0].terminator,
+                                Terminator::ReturnValue(_) | Terminator::Return
+                            )
+                    };
+                    if inline_candidate {
+                        let mut ok = true;
+                        let mut arg_locals: Vec<LocalId> = Vec::with_capacity(args.len());
+                        for a in args {
+                            match lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            ) {
+                                Some(l) => arg_locals.push(l),
+                                None => {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if ok {
+                            if let Some(result) =
+                                try_inline_call_into_fb(target_idx, &arg_locals, fb, module)
+                            {
+                                return Some(result);
+                            }
+                        }
                     }
                 }
             }

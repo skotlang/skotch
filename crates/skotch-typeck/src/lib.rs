@@ -297,6 +297,16 @@ pub fn type_check(
         },
     );
 
+    // ── Pass 1.5: detect cyclic top-level val initializers ──────────────
+    //
+    // `val a = b; val b = a` (or any longer cycle) is illegal in Kotlin —
+    // the static initializer order can't satisfy both. kotlinc rejects
+    // this with "Initializer of this declaration uses circular reference".
+    // We walk each top-level val's initializer, collect the set of other
+    // top-level val names it references, and DFS for cycles. A val that
+    // references itself (`val a = a + 1`) is a 1-cycle and reported too.
+    detect_top_val_cycles(file, &mut tc);
+
     // ── Pass 2: check function bodies ───────────────────────────────────
     let mut fn_idx: u32 = 0;
     let mut val_idx: u32 = 0;
@@ -329,6 +339,336 @@ pub fn type_check(
         }
     }
     tc.out
+}
+
+/// Walk an `Expr` collecting all `Ident` references that resolve to a
+/// name in `top_vals`. Lambda bodies, when-branches, if-branches, and
+/// member-access receivers are all traversed.
+fn collect_top_val_refs_in_expr(
+    e: &Expr,
+    top_vals: &rustc_hash::FxHashSet<Symbol>,
+    out: &mut rustc_hash::FxHashSet<Symbol>,
+) {
+    match e {
+        Expr::Ident(s, _) => {
+            if top_vals.contains(s) {
+                out.insert(*s);
+            }
+        }
+        Expr::Call { callee, args, .. } => {
+            collect_top_val_refs_in_expr(callee, top_vals, out);
+            for a in args {
+                collect_top_val_refs_in_expr(&a.expr, top_vals, out);
+            }
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            collect_top_val_refs_in_expr(lhs, top_vals, out);
+            collect_top_val_refs_in_expr(rhs, top_vals, out);
+        }
+        Expr::Unary { operand, .. } => {
+            collect_top_val_refs_in_expr(operand, top_vals, out);
+        }
+        Expr::Paren(inner, _) => {
+            collect_top_val_refs_in_expr(inner, top_vals, out);
+        }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_top_val_refs_in_expr(cond, top_vals, out);
+            collect_top_val_refs_in_block(then_block, top_vals, out);
+            if let Some(eb) = else_block {
+                collect_top_val_refs_in_block(eb, top_vals, out);
+            }
+        }
+        Expr::When {
+            subject,
+            branches,
+            else_body,
+            ..
+        } => {
+            collect_top_val_refs_in_expr(subject, top_vals, out);
+            for br in branches {
+                collect_top_val_refs_in_expr(&br.pattern, top_vals, out);
+                if let Some(re) = &br.range_end {
+                    collect_top_val_refs_in_expr(re, top_vals, out);
+                }
+                collect_top_val_refs_in_expr(&br.body, top_vals, out);
+            }
+            if let Some(eb) = else_body {
+                collect_top_val_refs_in_expr(eb, top_vals, out);
+            }
+        }
+        Expr::Field { receiver, .. } => {
+            collect_top_val_refs_in_expr(receiver, top_vals, out);
+        }
+        Expr::Throw { expr, .. } => {
+            collect_top_val_refs_in_expr(expr, top_vals, out);
+        }
+        Expr::Try {
+            body,
+            catch_body,
+            extra_catches,
+            finally_body,
+            ..
+        } => {
+            collect_top_val_refs_in_block(body, top_vals, out);
+            if let Some(cb) = catch_body {
+                collect_top_val_refs_in_block(cb, top_vals, out);
+            }
+            for (_, _, b) in extra_catches {
+                collect_top_val_refs_in_block(b, top_vals, out);
+            }
+            if let Some(fb) = finally_body {
+                collect_top_val_refs_in_block(fb, top_vals, out);
+            }
+        }
+        Expr::ElvisOp { lhs, rhs, .. } => {
+            collect_top_val_refs_in_expr(lhs, top_vals, out);
+            collect_top_val_refs_in_expr(rhs, top_vals, out);
+        }
+        Expr::SafeCall { receiver, .. } => {
+            collect_top_val_refs_in_expr(receiver, top_vals, out);
+        }
+        Expr::IsCheck { expr, .. } => {
+            collect_top_val_refs_in_expr(expr, top_vals, out);
+        }
+        Expr::AsCast { expr, .. } => {
+            collect_top_val_refs_in_expr(expr, top_vals, out);
+        }
+        Expr::NotNullAssert { expr, .. } => {
+            collect_top_val_refs_in_expr(expr, top_vals, out);
+        }
+        Expr::Lambda { body, .. } => {
+            collect_top_val_refs_in_block(body, top_vals, out);
+        }
+        Expr::Index {
+            receiver, index, ..
+        } => {
+            collect_top_val_refs_in_expr(receiver, top_vals, out);
+            collect_top_val_refs_in_expr(index, top_vals, out);
+        }
+        Expr::StringTemplate(parts, _) => {
+            for p in parts {
+                match p {
+                    TemplatePart::Expr(inner) => {
+                        collect_top_val_refs_in_expr(inner, top_vals, out);
+                    }
+                    TemplatePart::IdentRef(s, _) => {
+                        if top_vals.contains(s) {
+                            out.insert(*s);
+                        }
+                    }
+                    TemplatePart::Text(_, _) => {}
+                }
+            }
+        }
+        // Object expressions evaluate method bodies lazily — they don't
+        // participate in the val's initializer dependency, so skip them.
+        Expr::ObjectExpr { .. } => {}
+        // Pure literals contribute no references.
+        Expr::IntLit(..)
+        | Expr::CharLit(..)
+        | Expr::LongLit(..)
+        | Expr::DoubleLit(..)
+        | Expr::FloatLit(..)
+        | Expr::BoolLit(..)
+        | Expr::NullLit(_)
+        | Expr::StringLit(..) => {}
+    }
+}
+
+fn collect_top_val_refs_in_block(
+    b: &Block,
+    top_vals: &rustc_hash::FxHashSet<Symbol>,
+    out: &mut rustc_hash::FxHashSet<Symbol>,
+) {
+    for stmt in &b.stmts {
+        match stmt {
+            Stmt::Expr(e) => collect_top_val_refs_in_expr(e, top_vals, out),
+            Stmt::Val(v) => collect_top_val_refs_in_expr(&v.init, top_vals, out),
+            Stmt::Return { value: Some(e), .. } => {
+                collect_top_val_refs_in_expr(e, top_vals, out);
+            }
+            Stmt::While { cond, body, .. } | Stmt::DoWhile { cond, body, .. } => {
+                collect_top_val_refs_in_expr(cond, top_vals, out);
+                collect_top_val_refs_in_block(body, top_vals, out);
+            }
+            Stmt::For {
+                start,
+                end,
+                step,
+                body,
+                ..
+            } => {
+                collect_top_val_refs_in_expr(start, top_vals, out);
+                collect_top_val_refs_in_expr(end, top_vals, out);
+                if let Some(s) = step {
+                    collect_top_val_refs_in_expr(s, top_vals, out);
+                }
+                collect_top_val_refs_in_block(body, top_vals, out);
+            }
+            Stmt::ForIn { iterable, body, .. } => {
+                collect_top_val_refs_in_expr(iterable, top_vals, out);
+                collect_top_val_refs_in_block(body, top_vals, out);
+            }
+            Stmt::Assign { value, .. } => {
+                collect_top_val_refs_in_expr(value, top_vals, out);
+            }
+            Stmt::IndexAssign {
+                receiver,
+                index,
+                value,
+                ..
+            } => {
+                collect_top_val_refs_in_expr(receiver, top_vals, out);
+                collect_top_val_refs_in_expr(index, top_vals, out);
+                collect_top_val_refs_in_expr(value, top_vals, out);
+            }
+            Stmt::FieldAssign {
+                receiver, value, ..
+            } => {
+                collect_top_val_refs_in_expr(receiver, top_vals, out);
+                collect_top_val_refs_in_expr(value, top_vals, out);
+            }
+            Stmt::ThrowStmt { expr, .. } => {
+                collect_top_val_refs_in_expr(expr, top_vals, out);
+            }
+            Stmt::TryStmt {
+                body,
+                catch_body,
+                extra_catches,
+                finally_body,
+                ..
+            } => {
+                collect_top_val_refs_in_block(body, top_vals, out);
+                if let Some(cb) = catch_body {
+                    collect_top_val_refs_in_block(cb, top_vals, out);
+                }
+                for (_, _, b) in extra_catches {
+                    collect_top_val_refs_in_block(b, top_vals, out);
+                }
+                if let Some(fb) = finally_body {
+                    collect_top_val_refs_in_block(fb, top_vals, out);
+                }
+            }
+            Stmt::Destructure { init, .. } => {
+                collect_top_val_refs_in_expr(init, top_vals, out);
+            }
+            Stmt::Return { value: None, .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::LocalFun(_) => {}
+        }
+    }
+}
+
+/// Find any cycles among the top-level `val` initializers. A cycle here
+/// means the class initializer order can't satisfy the data dependency
+/// (`val a = b; val b = a` — neither is well-defined first). Reports
+/// each cycle once at the span of the first val in the cycle.
+fn detect_top_val_cycles(file: &KtFile, tc: &mut TypeChecker<'_>) {
+    use rustc_hash::FxHashSet;
+
+    // Build: name → (span of decl, set of top-val names referenced in init).
+    // Use a Vec for deterministic ordering when emitting diagnostics.
+    let top_val_names: FxHashSet<Symbol> = file
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let Decl::Val(v) = d {
+                Some(v.name)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if top_val_names.is_empty() {
+        return;
+    }
+    let nodes: Vec<&ValDecl> = file
+        .decls
+        .iter()
+        .filter_map(|d| if let Decl::Val(v) = d { Some(v) } else { None })
+        .collect();
+    let mut edges: FxHashMap<Symbol, FxHashSet<Symbol>> = FxHashMap::default();
+    for v in &nodes {
+        let mut refs = FxHashSet::default();
+        collect_top_val_refs_in_expr(&v.init, &top_val_names, &mut refs);
+        edges.insert(v.name, refs);
+    }
+
+    // DFS with a recursion stack to find any back-edge (cycle).
+    // White = unvisited, Gray = on stack, Black = done.
+    #[derive(Copy, Clone, PartialEq)]
+    enum Color {
+        White,
+        Gray,
+        Black,
+    }
+    let mut color: FxHashMap<Symbol, Color> = FxHashMap::default();
+    for v in &nodes {
+        color.insert(v.name, Color::White);
+    }
+    let mut reported: FxHashSet<Symbol> = FxHashSet::default();
+
+    fn dfs(
+        node: Symbol,
+        edges: &FxHashMap<Symbol, FxHashSet<Symbol>>,
+        color: &mut FxHashMap<Symbol, Color>,
+        path: &mut Vec<Symbol>,
+        cycles: &mut Vec<Vec<Symbol>>,
+    ) {
+        color.insert(node, Color::Gray);
+        path.push(node);
+        if let Some(succs) = edges.get(&node) {
+            for &s in succs {
+                match color.get(&s).copied().unwrap_or(Color::Black) {
+                    Color::White => dfs(s, edges, color, path, cycles),
+                    Color::Gray => {
+                        // back-edge: extract the cycle starting at `s`.
+                        if let Some(start) = path.iter().position(|&n| n == s) {
+                            cycles.push(path[start..].to_vec());
+                        }
+                    }
+                    Color::Black => {}
+                }
+            }
+        }
+        path.pop();
+        color.insert(node, Color::Black);
+    }
+
+    let mut cycles: Vec<Vec<Symbol>> = Vec::new();
+    for v in &nodes {
+        if color.get(&v.name).copied() == Some(Color::White) {
+            let mut path = Vec::new();
+            dfs(v.name, &edges, &mut color, &mut path, &mut cycles);
+        }
+    }
+
+    // Report each cycle once at the span of the first val in the cycle.
+    // Skip cycles whose first node already had a diagnostic emitted, to
+    // avoid duplicate reports for DAGs that share a cycle through
+    // multiple entry points.
+    for cycle in &cycles {
+        let first = cycle[0];
+        if !reported.insert(first) {
+            continue;
+        }
+        let v = nodes.iter().find(|v| v.name == first).unwrap();
+        let names: Vec<&str> = cycle.iter().map(|s| tc.interner.resolve(*s)).collect();
+        let chain = names.join(" -> ");
+        tc.diags.push(Diagnostic::error(
+            v.span,
+            format!(
+                "circular reference in top-level val initializer: {chain} -> {}",
+                names[0]
+            ),
+        ));
+    }
 }
 
 // ─── Type checker ───────────────────────────────────────────────────────────
@@ -1444,6 +1784,63 @@ fun main() { val g: Greetable = Person() }
             f_ty.is_some(),
             "lambda local should have Function type, got: {:?}",
             main_fn.local_tys
+        );
+    }
+
+    #[test]
+    fn soundness_reject_top_val_self_reference() {
+        // `val a = a` is a 1-cycle — initializer can't reference itself.
+        let (_, d) = run("val a = a + 1\nfun main() { println(a) }");
+        assert!(
+            d.has_errors(),
+            "must reject self-referential top-level val initializer"
+        );
+        let msg = format!("{:?}", d);
+        assert!(
+            msg.contains("circular reference"),
+            "diagnostic should mention circular reference: {msg}"
+        );
+    }
+
+    #[test]
+    fn soundness_reject_top_val_two_cycle() {
+        // `val a = b; val b = a` — classic 2-cycle.
+        let (_, d) = run("val a = b + 1\nval b = a + 1\nfun main() { println(a + b) }");
+        assert!(
+            d.has_errors(),
+            "must reject 2-cycle in top-level val initializers"
+        );
+    }
+
+    #[test]
+    fn soundness_reject_top_val_three_cycle() {
+        // a → b → c → a chain.
+        let (_, d) = run("val a = b\nval b = c\nval c = a\nfun main() { println(a) }");
+        assert!(
+            d.has_errors(),
+            "must reject 3-cycle in top-level val initializers"
+        );
+    }
+
+    #[test]
+    fn soundness_accept_top_val_dag() {
+        // a depends on b, b depends on c, but no cycle.
+        let (_, d) = run("val c = 1\nval b = c + 1\nval a = b + c\nfun main() { println(a) }");
+        assert!(
+            !d.has_errors(),
+            "non-cyclic dependency chain must be accepted: {:?}",
+            d
+        );
+    }
+
+    #[test]
+    fn soundness_accept_top_val_no_refs() {
+        // Independent vals — no dependencies.
+        let (_, d) = run("val a = 1\nval b = 2\nfun main() { println(a + b) }");
+        assert!(
+            !d.has_errors(),
+            "independent vals must be accepted: {:?}",
+            d
         );
     }
 

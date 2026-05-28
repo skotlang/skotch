@@ -1,0 +1,4 @@
+name     = "1232-inline-fn-body-substitution"
+status   = "supported"
+features = ["inline-fn"]
+notes    = "Non-HOF, non-reified user-declared `inline fun` with a single-expression body has its body spliced into the caller at the call site instead of generating a static method dispatch. Output: 49."
