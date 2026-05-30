@@ -3145,7 +3145,10 @@ fn emit_user_method(
                 }
             } else {
                 let mut d = String::from("(");
-                for &p in func.params.iter().skip(1) {
+                // Static methods have no implicit `this` — all params are
+                // user params. Instance methods reserve slot 0 for `this`.
+                let skip = if func.is_static { 0 } else { 1 };
+                for &p in func.params.iter().skip(skip) {
                     let ty = &func.locals[p.0 as usize];
                     d.push_str(&jvm_param_type_string(ty));
                 }
@@ -3160,6 +3163,11 @@ fn emit_user_method(
         ACC_PUBLIC | ACC_ABSTRACT
     } else {
         ACC_PUBLIC
+    };
+    let access = if func.is_static {
+        access | ACC_STATIC
+    } else {
+        access
     };
     let name_idx = cp.utf8(&func.name);
     let desc_idx = cp.utf8(&descriptor);
@@ -3184,7 +3192,11 @@ fn emit_user_method(
             access_flags: access,
             name_idx,
             descriptor_idx: desc_idx,
-            kind: MethodKind::Instance,
+            kind: if func.is_static {
+                MethodKind::Static
+            } else {
+                MethodKind::Instance
+            },
         },
     )
 }

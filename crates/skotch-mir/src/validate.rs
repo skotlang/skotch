@@ -411,6 +411,7 @@ mod tests {
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            is_static: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),

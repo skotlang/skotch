@@ -942,3 +942,189 @@ fn kotlinc_parity_report() {
     // This test always passes — it's informational.
     // As parity improves, we can tighten to assert matching == total.
 }
+
+/// Regression floor for skotch-vs-kotlinc bytecode parity.
+///
+/// `tests/fixtures/kotlinc_parity_baseline.txt` is a sorted, one-fixture-
+/// per-line list of every fixture whose `skotch.norm.txt` was byte-
+/// identical to its `kotlinc.norm.txt` at the time the baseline was
+/// committed. This test asserts that every name in the file still
+/// matches. The only legitimate way to remove a fixture from the
+/// baseline is to delete its line in the same PR that introduces the
+/// divergence — making such a regression visible in code review
+/// instead of hiding behind an informational counter.
+///
+/// New fixtures are *not* expected to be in the baseline; this test
+/// never *fails* on a missing entry, only on a baselined entry that
+/// no longer matches. To grow the baseline, run
+/// `cargo xtask refresh-parity-baseline` (or regenerate
+/// `kotlinc_parity_baseline.txt` from the parity report's "matching"
+/// set and commit the diff).
+#[test]
+fn kotlinc_parity_no_regressions() {
+    let baseline_path = workspace_root().join("tests/fixtures/kotlinc_parity_baseline.txt");
+    let jvm_dir = workspace_root().join("tests/fixtures/expected/jvm");
+
+    let baseline_text = match std::fs::read_to_string(&baseline_path) {
+        Ok(t) => t,
+        Err(_) => {
+            // Baseline file is committed; missing it is a configuration
+            // bug, not a test failure. Surface clearly.
+            panic!(
+                "missing baseline at {}\n\
+                 — commit the file (run the kotlinc_parity_report and \
+                 capture the 'matching' set)",
+                baseline_path.display()
+            );
+        }
+    };
+
+    let baseline: Vec<&str> = baseline_text
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.starts_with('#'))
+        .collect();
+    let baseline_count = baseline.len();
+
+    let mut regressions: Vec<String> = Vec::new();
+    let mut missing_kotlinc: Vec<String> = Vec::new();
+    let mut missing_skotch: Vec<String> = Vec::new();
+
+    for name in &baseline {
+        let kotlinc_norm = jvm_dir.join(name).join("kotlinc.norm.txt");
+        let skotch_norm = jvm_dir.join(name).join("skotch.norm.txt");
+
+        if !kotlinc_norm.exists() {
+            missing_kotlinc.push((*name).to_string());
+            continue;
+        }
+        if !skotch_norm.exists() {
+            missing_skotch.push((*name).to_string());
+            continue;
+        }
+
+        let k = std::fs::read_to_string(&kotlinc_norm)
+            .unwrap()
+            .replace('\r', "");
+        let s = std::fs::read_to_string(&skotch_norm)
+            .unwrap()
+            .replace('\r', "");
+
+        if k != s {
+            regressions.push((*name).to_string());
+        }
+    }
+
+    let total_problems = regressions.len() + missing_kotlinc.len() + missing_skotch.len();
+    if total_problems == 0 {
+        return;
+    }
+
+    let mut msg = format!(
+        "kotlinc-parity regression: {} of {} baselined fixtures no longer match\n\n",
+        total_problems, baseline_count
+    );
+    if !regressions.is_empty() {
+        msg.push_str(&format!(
+            "  Divergent ({}):\n    {}\n",
+            regressions.len(),
+            regressions.join("\n    ")
+        ));
+    }
+    if !missing_kotlinc.is_empty() {
+        msg.push_str(&format!(
+            "  Missing kotlinc.norm.txt ({}):\n    {}\n",
+            missing_kotlinc.len(),
+            missing_kotlinc.join("\n    ")
+        ));
+    }
+    if !missing_skotch.is_empty() {
+        msg.push_str(&format!(
+            "  Missing skotch.norm.txt ({}):\n    {}\n",
+            missing_skotch.len(),
+            missing_skotch.join("\n    ")
+        ));
+    }
+    msg.push_str(
+        "\nIf the divergence is intentional, remove the affected lines \
+         from tests/fixtures/kotlinc_parity_baseline.txt in the same PR \
+         that introduces the change and explain why in the commit \
+         message.\n",
+    );
+
+    panic!("{msg}");
+}
+
+/// Aspirational byte-identical fixture set.
+///
+/// `tests/fixtures/kotlinc_parity_aspirational.txt` lists a small,
+/// curated set of fixtures that exercise high-leverage Kotlin idioms
+/// where Skotch *must* produce normalized bytecode identical to
+/// kotlinc's. Each line is `<fixture-name> # <reason>`. The set is
+/// intentionally small so each entry is a deliberate, defended
+/// guarantee — not a side-effect of a generated list.
+///
+/// Failure here means a *high-leverage* idiom regressed, which is a
+/// stronger signal than the broad regression-floor test and warrants
+/// extra scrutiny in code review.
+#[test]
+fn kotlinc_parity_aspirational_must_match() {
+    let aspirational_path = workspace_root().join("tests/fixtures/kotlinc_parity_aspirational.txt");
+    let jvm_dir = workspace_root().join("tests/fixtures/expected/jvm");
+
+    let text = match std::fs::read_to_string(&aspirational_path) {
+        Ok(t) => t,
+        Err(_) => {
+            panic!(
+                "missing aspirational set at {}",
+                aspirational_path.display()
+            );
+        }
+    };
+
+    let mut entries: Vec<(String, String)> = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, reason) = match line.split_once('#') {
+            Some((n, r)) => (n.trim().to_string(), r.trim().to_string()),
+            None => (line.to_string(), String::new()),
+        };
+        entries.push((name, reason));
+    }
+
+    let mut failures: Vec<String> = Vec::new();
+    for (name, reason) in &entries {
+        let kotlinc_norm = jvm_dir.join(name).join("kotlinc.norm.txt");
+        let skotch_norm = jvm_dir.join(name).join("skotch.norm.txt");
+
+        if !kotlinc_norm.exists() || !skotch_norm.exists() {
+            failures.push(format!(
+                "{name}: missing kotlinc.norm.txt or skotch.norm.txt (reason: {reason})"
+            ));
+            continue;
+        }
+        let k = std::fs::read_to_string(&kotlinc_norm)
+            .unwrap()
+            .replace('\r', "");
+        let s = std::fs::read_to_string(&skotch_norm)
+            .unwrap()
+            .replace('\r', "");
+        if k != s {
+            failures.push(format!("{name}: divergent ({reason})"));
+        }
+    }
+
+    if !failures.is_empty() {
+        panic!(
+            "{} aspirational parity fixture(s) diverged from kotlinc:\n  - {}\n\n\
+             These fixtures lock in high-leverage Kotlin idioms. If the \
+             divergence is intentional, justify it in the PR before removing \
+             from tests/fixtures/kotlinc_parity_aspirational.txt.",
+            failures.len(),
+            failures.join("\n  - ")
+        );
+    }
+}

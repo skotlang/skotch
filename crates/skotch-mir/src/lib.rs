@@ -463,6 +463,15 @@ pub struct MirFunction {
     /// these with `ACC_PRIVATE` instead of `ACC_PUBLIC`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_private: bool,
+    /// True for methods on a class that should be emitted with
+    /// `ACC_STATIC` rather than as instance methods. The JVM backend
+    /// switches the method header's [`MethodKind`] accordingly and
+    /// skips reserving slot 0 for `this`. Currently set by mir-lower
+    /// when synthesizing the static delegate that backs a companion
+    /// `@JvmStatic` method on the outer class. Defaults to `false` so
+    /// existing fixtures are unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_static: bool,
     /// Default-arg call sites: maps `(block_idx, stmt_idx)` → bit mask
     /// of which positional args came from `param_defaults`. The JVM
     /// backend uses this to route the call through the corresponding

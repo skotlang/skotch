@@ -915,7 +915,12 @@ impl<'a> Parser<'a> {
                                         {
                                             break;
                                         }
-                                        self.skip_annotations();
+                                        // Parse annotations on the companion
+                                        // member so they reach mir-lower (for
+                                        // example `@JvmStatic`, which the
+                                        // companion-static-delegate synthesis
+                                        // looks for).
+                                        let comp_annotations = self.parse_annotations();
                                         // Skip modifiers (const, private, etc.)
                                         while matches!(
                                             self.peek_kind(),
@@ -927,13 +932,21 @@ impl<'a> Parser<'a> {
                                             self.skip_trivia();
                                         }
                                         if self.peek_kind() == TokenKind::KwFun {
-                                            companion_methods.push(self.parse_fun_decl());
+                                            let mut f = self.parse_fun_decl();
+                                            f.annotations = comp_annotations;
+                                            companion_methods.push(f);
                                         } else if matches!(
                                             self.peek_kind(),
                                             TokenKind::KwVal | TokenKind::KwVar
                                         ) {
+                                            // PropertyDecl doesn't carry
+                                            // annotations yet; drop them on
+                                            // the floor for parity with the
+                                            // prior skip_annotations behavior.
+                                            let _ = comp_annotations;
                                             companion_properties.push(self.parse_property_decl());
                                         } else {
+                                            let _ = comp_annotations;
                                             self.bump();
                                         }
                                     }
@@ -4508,6 +4521,40 @@ mod tests {
         let (file, d) = parse(src);
         assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
         assert_eq!(file.decls.len(), 1);
+    }
+
+    #[test]
+    fn parse_annotation_on_companion_method() {
+        // `@JvmStatic fun describe()` inside a `companion object { … }`
+        // block: the annotation must be parsed and attached to the
+        // FunDecl so that mir-lower's static-delegate synthesis can
+        // detect it. Prior to the parser fix this was silently dropped.
+        let src = r#"
+            class Engine {
+                companion object {
+                    @JvmStatic
+                    fun describe(): String = "engine"
+                }
+            }
+        "#;
+        let (file, d) = parse(src);
+        assert!(d.is_empty(), "unexpected diagnostics: {:?}", d);
+        assert_eq!(file.decls.len(), 1);
+        if let Decl::Class(cd) = &file.decls[0] {
+            assert_eq!(
+                cd.companion_methods.len(),
+                1,
+                "expected one companion method"
+            );
+            let method = &cd.companion_methods[0];
+            assert_eq!(
+                method.annotations.len(),
+                1,
+                "@JvmStatic should reach the companion FunDecl"
+            );
+        } else {
+            panic!("expected Decl::Class");
+        }
     }
 
     #[test]

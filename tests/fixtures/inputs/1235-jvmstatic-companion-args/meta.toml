@@ -1,0 +1,4 @@
+name     = "1235-jvmstatic-companion-args"
+status   = "supported"
+features = ["companion-object", "jvm-static"]
+notes    = "@JvmStatic companion methods with one and two Int parameters. The synthesized static delegates forward args (iload_0, iload_1) through to the companion's instance method. Output: '42\\n42'."

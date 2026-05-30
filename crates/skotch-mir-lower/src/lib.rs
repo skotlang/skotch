@@ -1269,6 +1269,7 @@ pub fn lower_file(
                 annotations: fn_annotations,
                 named_locals: Vec::new(),
                 is_private: matches!(f.visibility, skotch_syntax::Visibility::Private),
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1313,6 +1314,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1370,6 +1372,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1409,6 +1412,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1452,6 +1456,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1493,6 +1498,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1534,6 +1540,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1577,6 +1584,7 @@ pub fn lower_file(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -1801,6 +1809,7 @@ pub fn lower_file(
                         annotations: Vec::new(),
                         named_locals: Vec::new(),
                         is_private: false,
+                        is_static: false,
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -2592,6 +2601,7 @@ fn build_continuation_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -2642,6 +2652,7 @@ fn build_continuation_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -3850,6 +3861,7 @@ impl FnBuilder {
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            is_static: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
@@ -6069,6 +6081,7 @@ fn lower_stmt(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: true,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -19039,6 +19052,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    is_static: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
@@ -19170,6 +19184,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    is_static: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
@@ -19649,6 +19664,7 @@ fn lower_expr(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -19752,6 +19768,7 @@ fn lower_expr(
                     annotations: Vec::new(),
                     named_locals: Vec::new(),
                     is_private: false,
+                    is_static: false,
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
@@ -20013,6 +20030,7 @@ fn lower_expr(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -20619,6 +20637,7 @@ fn lower_enum(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -20688,6 +20707,7 @@ fn lower_enum(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -21167,6 +21187,7 @@ fn lower_object(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: true,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -21322,6 +21343,7 @@ fn lower_class(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -21659,6 +21681,7 @@ fn lower_class(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -22491,6 +22514,7 @@ fn lower_class(
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: true,
+            is_static: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
@@ -22617,6 +22641,81 @@ fn lower_class(
             static_fields: Vec::new(),
             clinit: None,
         });
+
+        // Synthesize a `@JvmStatic` static delegate on the OUTER class for
+        // each companion method tagged `@JvmStatic`. kotlinc's emission
+        // pattern: the companion gets the real instance method and the
+        // outer class additionally gets `public static <ret> <name>(args)`
+        // that does `getstatic Outer.Companion : LOuter$Companion;` and
+        // then `invokevirtual Outer$Companion.<name>(args) : <ret>`.
+        // Without the static delegate, call sites that bypass the
+        // companion (`Outer.method(args)` resolved as a plain static call)
+        // hit NoSuchMethodError at runtime.
+        for method in &c.companion_methods {
+            let is_jvm_static = method
+                .annotations
+                .iter()
+                .any(|a| interner.resolve(a.name) == "JvmStatic");
+            if !is_jvm_static {
+                continue;
+            }
+            let m_name = interner.resolve(method.name).to_string();
+            let m_ret = method
+                .return_ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .unwrap_or(Ty::Unit);
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, m_name.clone(), m_ret.clone());
+
+            // Static delegate — no implicit `this`. Each user param becomes
+            // a fresh local + an entry in params.
+            let mut user_arg_locals: Vec<LocalId> = Vec::new();
+            for p in &method.params {
+                let pty = resolve_type(interner.resolve(p.ty.name), module);
+                let id = fb.new_local(pty);
+                fb.mf.params.push(id);
+                user_arg_locals.push(id);
+            }
+
+            // Get the Companion singleton.
+            let companion_local = fb.new_local(Ty::Class(companion_cls.clone()));
+            fb.push_stmt(MStmt::Assign {
+                dest: companion_local,
+                value: Rvalue::GetStaticField {
+                    class_name: class_name.clone(),
+                    field_name: "Companion".to_string(),
+                    descriptor: format!("L{};", companion_cls),
+                },
+            });
+
+            // invokevirtual <Companion>.method(args).
+            let mut all_args = vec![companion_local];
+            all_args.extend(user_arg_locals.iter().copied());
+            let result_local = fb.new_local(m_ret.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: result_local,
+                value: Rvalue::Call {
+                    kind: CallKind::Virtual {
+                        class_name: companion_cls.clone(),
+                        method_name: m_name.clone(),
+                    },
+                    args: all_args,
+                },
+            });
+
+            fb.set_terminator(if matches!(m_ret, Ty::Unit) {
+                Terminator::Return
+            } else {
+                Terminator::ReturnValue(result_local)
+            });
+
+            let mut finished = fb.finish();
+            finished.is_static = true;
+            finished.annotations =
+                lower_annotations(&method.annotations, interner, Some(&module.import_map));
+            mir_methods.push(finished);
+        }
     }
 
     // Lower companion object properties as static fields.
@@ -23153,6 +23252,7 @@ fn lower_class(
             annotations: Vec::new(),
             named_locals: Vec::new(),
             is_private: false,
+            is_static: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
@@ -23483,6 +23583,7 @@ fn lower_interface(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
@@ -23521,6 +23622,7 @@ fn lower_interface(
         annotations: Vec::new(),
         named_locals: Vec::new(),
         is_private: false,
+        is_static: false,
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
@@ -23584,6 +23686,7 @@ fn lower_interface(
                 annotations: Vec::new(),
                 named_locals: Vec::new(),
                 is_private: false,
+                is_static: false,
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),

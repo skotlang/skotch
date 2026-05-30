@@ -119,6 +119,10 @@ struct TypeDecl {
     methods: Vec<MethodSig>,
     companion_methods: Vec<MethodSig>,
     is_enum: bool,
+    /// For enum classes, the declared entry names in source order. Used
+    /// by the `when` exhaustiveness check to compute the covered/missing
+    /// set when a `when` expression branches on an enum-typed subject.
+    enum_entries: Vec<String>,
 }
 
 /// The type environment built from all declarations in the file.
@@ -749,6 +753,7 @@ impl<'a> TypeChecker<'a> {
                 methods,
                 companion_methods,
                 is_enum: false,
+                enum_entries: Vec::new(),
             },
         );
     }
@@ -770,6 +775,7 @@ impl<'a> TypeChecker<'a> {
                 methods,
                 companion_methods: Vec::new(),
                 is_enum: false,
+                enum_entries: Vec::new(),
             },
         );
     }
@@ -789,9 +795,13 @@ impl<'a> TypeChecker<'a> {
             });
         }
         // Register each entry so Color.RED resolves.
+        let mut entries: Vec<String> = Vec::with_capacity(e.entries.len());
         for entry in &e.entries {
             let entry_name = self.interner.resolve(entry.name).to_string();
-            self.env.enum_entries.insert(entry_name, name.clone());
+            self.env
+                .enum_entries
+                .insert(entry_name.clone(), name.clone());
+            entries.push(entry_name);
         }
         self.env.types.insert(
             name.clone(),
@@ -803,6 +813,7 @@ impl<'a> TypeChecker<'a> {
                 methods: Vec::new(),
                 companion_methods: Vec::new(),
                 is_enum: true,
+                enum_entries: entries,
             },
         );
     }
@@ -1179,6 +1190,47 @@ impl<'a> TypeChecker<'a> {
 
     // ── Expression synthesis ────────────────────────────────────────────
 
+    /// Compute the set of enum entries (by simple name) that the given
+    /// `when` branches cover for a subject of enum class `subj_name`.
+    ///
+    /// Recognized patterns:
+    /// - `EnumClass.ENTRY` (a `Field` access on the enum class Ident).
+    /// - `ENTRY` (a bare `Ident` resolving via `enum_entries`).
+    ///
+    /// Any unrecognized pattern (range check, function call, etc.) is
+    /// conservatively treated as covering "something else" — the
+    /// exhaustiveness check then prefers correctness by reporting the
+    /// truly-missing entries only.
+    fn covered_enum_entries(
+        &self,
+        branches: &[skotch_syntax::WhenBranch],
+        subj_name: &str,
+    ) -> rustc_hash::FxHashSet<String> {
+        let mut covered = rustc_hash::FxHashSet::default();
+        for b in branches {
+            match &b.pattern {
+                Expr::Field { receiver, name, .. } => {
+                    if let Expr::Ident(rsym, _) = receiver.as_ref() {
+                        let rname = self.interner.resolve(*rsym);
+                        if rname == subj_name {
+                            covered.insert(self.interner.resolve(*name).to_string());
+                        }
+                    }
+                }
+                Expr::Ident(sym, _) => {
+                    let name = self.interner.resolve(*sym).to_string();
+                    if let Some(enum_class) = self.env.enum_entries.get(&name) {
+                        if enum_class == subj_name {
+                            covered.insert(name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        covered
+    }
+
     fn synth_expr(&mut self, e: &Expr, scope: &mut Vec<(Symbol, Ty)>) -> Ty {
         match e {
             Expr::IntLit(_, _) => Ty::Int,
@@ -1321,8 +1373,25 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     }
-                    // Might be a companion method, enum entry, or constructor.
+                    // Stdlib precondition intrinsics: `requireNotNull(x)` and
+                    // `checkNotNull(x)` narrow the arg from `T?` to `T`.
+                    // Without this case the caller would see `Ty::Any` from
+                    // the unresolved-name fallback below and any subsequent
+                    // assignment `val s: T = requireNotNull(x)` would fail
+                    // type-checking. (Full MIR lowering of the intrinsic is
+                    // a separate gap — the call still falls through to the
+                    // regular dispatch path during MIR emission for now.)
                     let name_str = self.interner.resolve(name).to_string();
+                    if (name_str == "requireNotNull" || name_str == "checkNotNull")
+                        && !args.is_empty()
+                    {
+                        let arg_ty = self.synth_expr(&args[0].expr, scope);
+                        if let Ty::Nullable(inner) = arg_ty {
+                            return (*inner).clone();
+                        }
+                        return arg_ty;
+                    }
+                    // Might be a companion method, enum entry, or constructor.
                     if let Some(enum_name) = self.env.enum_entries.get(&name_str).cloned() {
                         return Ty::Class(enum_name);
                     }
@@ -1405,9 +1474,9 @@ impl<'a> TypeChecker<'a> {
                 subject,
                 branches,
                 else_body,
-                ..
+                span,
             } => {
-                self.synth_expr(subject, scope);
+                let subj_ty = self.synth_expr(subject, scope);
                 let mut result_ty = Ty::Unit;
                 for b in branches {
                     self.synth_expr(&b.pattern, scope);
@@ -1415,6 +1484,43 @@ impl<'a> TypeChecker<'a> {
                 }
                 if let Some(eb) = else_body {
                     result_ty = self.synth_expr(eb, scope);
+                }
+
+                // Enum exhaustiveness: when the subject is an enum-typed
+                // expression with no `else` arm, every entry must appear
+                // somewhere in the branches. Patterns are checked against
+                // both `EnumClass.ENTRY` field-access and bare `ENTRY`
+                // (after import). Missing entries produce a warning —
+                // kotlinc emits an error for the same case in
+                // expression-position; we conservatively warn so the
+                // existing fixture corpus keeps compiling while still
+                // surfacing the gap. Each missing-entry warning lands on
+                // the `when` span so the diagnostic is easy to locate.
+                if else_body.is_none() {
+                    if let Ty::Class(ref subj_name) = subj_ty {
+                        let enum_info = self.env.types.get(subj_name).cloned();
+                        if let Some(ti) = enum_info {
+                            if ti.is_enum {
+                                let covered = self.covered_enum_entries(branches, subj_name);
+                                let missing: Vec<&str> = ti
+                                    .enum_entries
+                                    .iter()
+                                    .filter(|e| !covered.contains(e.as_str()))
+                                    .map(|s| s.as_str())
+                                    .collect();
+                                if !missing.is_empty() {
+                                    let names = missing.join(", ");
+                                    self.diags.push(Diagnostic::warning(
+                                        *span,
+                                        format!(
+                                            "'when' is not exhaustive on enum {}: missing entries: {}",
+                                            subj_name, names
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
                 result_ty
             }
@@ -1840,6 +1946,102 @@ fun main() { val g: Greetable = Person() }
         assert!(
             !d.has_errors(),
             "independent vals must be accepted: {:?}",
+            d
+        );
+    }
+
+    #[test]
+    fn warn_when_missing_enum_entry_with_no_else() {
+        // `when (v: Color) { Color.RED -> ... }` — missing GREEN, BLUE.
+        let src = r#"
+enum class Color { RED, GREEN, BLUE }
+fun describe(c: Color): String {
+    val s = when (c) { Color.RED -> "red" }
+    return s
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            msg.contains("not exhaustive") && msg.contains("GREEN") && msg.contains("BLUE"),
+            "expected non-exhaustive warning naming missing entries: {msg}"
+        );
+    }
+
+    #[test]
+    fn accept_when_all_enum_entries_covered() {
+        let src = r#"
+enum class Color { RED, GREEN, BLUE }
+fun describe(c: Color): String {
+    val s = when (c) {
+        Color.RED -> "red"
+        Color.GREEN -> "green"
+        Color.BLUE -> "blue"
+    }
+    return s
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            !msg.contains("not exhaustive"),
+            "exhaustive when must not warn: {msg}"
+        );
+    }
+
+    #[test]
+    fn accept_when_else_branch_covers_missing_enum_entries() {
+        let src = r#"
+enum class Color { RED, GREEN, BLUE }
+fun describe(c: Color): String {
+    val s = when (c) {
+        Color.RED -> "red"
+        else -> "other"
+    }
+    return s
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            !msg.contains("not exhaustive"),
+            "when with else branch must not warn: {msg}"
+        );
+    }
+
+    #[test]
+    fn require_not_null_narrows_nullable() {
+        // `requireNotNull(s: String?) -> String` should type-check
+        // when assigned to a non-null variable.
+        let src = r#"
+fun main() {
+    val s: String? = "hi"
+    val v: String = requireNotNull(s)
+    println(v)
+}
+"#;
+        let (_, d) = run(src);
+        assert!(
+            !d.has_errors(),
+            "requireNotNull(s) should narrow String? to String: {:?}",
+            d
+        );
+    }
+
+    #[test]
+    fn check_not_null_narrows_nullable() {
+        // Same for checkNotNull.
+        let src = r#"
+fun main() {
+    val s: String? = "hi"
+    val v: String = checkNotNull(s)
+    println(v)
+}
+"#;
+        let (_, d) = run(src);
+        assert!(
+            !d.has_errors(),
+            "checkNotNull(s) should narrow String? to String: {:?}",
             d
         );
     }

@@ -1,0 +1,70 @@
+# Aspirational byte-identical fixture set
+#
+# Each line names a fixture whose `skotch.norm.txt` MUST match its
+# `kotlinc.norm.txt` byte-for-byte (after normalization in
+# skotch-classfile-norm). The list is intentionally small so each
+# entry is a deliberate, defended guarantee rather than a side-effect
+# of a generated list — these are the high-leverage Kotlin idioms
+# where any regression is a red flag.
+#
+# Format:
+#   <fixture-name> # <reason>
+#
+# Maintenance:
+#   - To remove an entry, justify in the PR commit message why exact
+#     parity is no longer required for that idiom.
+#   - To add an entry, the fixture must already be byte-identical in
+#     the regular parity report; this list is for *locking in*, not
+#     proposing aspirations that don't yet hold.
+#
+# Coverage rationale: pick one representative fixture per Kotlin
+# language area, choosing the simplest one that exercises the idiom.
+
+# ── Basics ──────────────────────────────────────────────────────────
+01-fun-main-empty            # empty `fun main()` — establishes the wrapper-class shape
+02-println-string-literal    # `println("…")` — string CP entry + System.out + PrintStream.println
+03-println-int-literal       # `println(42)` — ICONST/BIPUSH + integer overload selection
+04-val-string                # `val s = "…"` — top-level val inlining + LDC pattern
+05-string-template-simple    # `"$name"` — StringTemplate lowering shape
+
+# ── Control flow ────────────────────────────────────────────────────
+07-if-expression             # `if (c) a else b` as expression — branch lowering
+121-while-fibonacci          # `while (cond) { … }` — back-edge + StackMapTable basics
+129-for-loop-sum             # `for (i in 0..n) { … }` — range iteration desugaring
+127-when-multi-branch        # `when` with multiple branches — tableswitch/lookupswitch
+130-when-no-subject          # `when { x > 0 -> … }` — subject-less when as if-chain
+
+# ── Classes & objects ───────────────────────────────────────────────
+20-class-empty               # `class Empty` — ctor + default Object super
+21-data-class                # `data class P(val x, val y)` — equals/hashCode/toString shape
+27-companion-object          # `companion object { fun zero() = … }` — Companion field + dispatch
+28-object-decl               # `object Singleton` — INSTANCE static field + clinit
+33-interface-impl            # `interface Greet; class C : Greet` — invokeinterface vs invokevirtual
+325-object-methods           # object with multiple methods — method ordering on companion
+
+# ── Smart casts & nullables ─────────────────────────────────────────
+31-null-safety-elvis         # `x ?: default` — elvis operator desugaring
+32-smart-cast                # `if (x is String) { x.length }` — local smart-cast slot reuse
+350-null-smart-cast          # `if (x != null) { x.foo() }` — null-check smart cast
+
+# ── Functions ───────────────────────────────────────────────────────
+97-operator-plus             # `operator fun plus(other: T)` — operator overload lowering
+99-operator-invoke           # `operator fun invoke(...)` — call-site dispatch
+142-extension-int            # `fun Int.foo()` — extension fn lowering (static + receiver as arg)
+292-default-params           # `fun f(x: Int = 0)` — `$default` synthetic + mask
+
+# ── Try/catch ───────────────────────────────────────────────────────
+267-try-finally-with-code    # `try { … } finally { … }` — exception table + finally inlining
+
+# ── Sealed class ────────────────────────────────────────────────────
+26-sealed-class              # `sealed class Shape` — sealed hierarchy basics
+
+# ── @JvmStatic / companion delegate ─────────────────────────────────
+1234-jvmstatic-companion     # `@JvmStatic fun describe()` — synthesized static delegate on outer class
+
+# ── Data class extras ───────────────────────────────────────────────
+308-data-class-tostring      # `data class … { toString() }` — concat-based toString shape
+
+# ── Suspend ─────────────────────────────────────────────────────────
+391-suspend-state-machine    # single-suspension-point coroutine — tableswitch dispatcher shape
+1000-suspend-tail-call-string # suspend tail call — return-from-suspend pattern

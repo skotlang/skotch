@@ -1,0 +1,4 @@
+name     = "1234-jvmstatic-companion"
+status   = "supported"
+features = ["companion-object", "jvm-static"]
+notes    = "@JvmStatic on a companion method synthesizes a static delegate on the outer class. The outer class gets a `public static String describe()` that does `getstatic Engine.Companion; invokevirtual Engine$Companion.describe()`. Output: 'engine v2'."
