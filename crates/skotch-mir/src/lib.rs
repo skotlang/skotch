@@ -877,6 +877,14 @@ pub struct MirModule {
     /// these FuncIds entirely.
     #[serde(skip)]
     pub enum_entry_funcs: rustc_hash::FxHashMap<u32, (String, String)>,
+    /// Transient: while a Companion class's method bodies are being
+    /// lowered, this holds `(companion_class_name, method_names)` so
+    /// the bare-call resolver can find sibling overloads even though
+    /// the Companion isn't yet in `module.classes`. Set by `lower_class`
+    /// at the start of the companion-method loop and cleared after. The
+    /// resolver checks `module.classes` first, then falls back to this.
+    #[serde(skip)]
+    pub pending_companion_methods: Option<(String, Vec<String>)>,
     /// Transient flag: when true, the NEXT lambda lowered should be
     /// a SuspendLambda. Set by coroutine builder handlers (runBlocking,
     /// launch, async) before their trailing lambda arg is lowered.
