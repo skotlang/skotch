@@ -13347,16 +13347,48 @@ fn lower_expr(
             if callee_str == "listOf" {
                 let arg_count = arg_locals.len();
 
-                // Create Object[] of the right size.
+                // If all args share the same concrete class (`String`, a
+                // user class, etc.), allocate a typed array
+                // `anewarray Class(<element_class>)` — kotlinc does this
+                // even though `listOf` is declared `<T> vararg T → List<T>`
+                // (the descriptor is still `([Ljava/lang/Object;)`). The
+                // typed allocation is just a bytecode-shape match; the
+                // method signature stays Object[]. Falls back to
+                // `NewObjectArray` if args are heterogeneous or primitive.
+                let inferred_element_class: Option<String> = arg_locals
+                    .first()
+                    .and_then(|first| match &fb.mf.locals[first.0 as usize] {
+                        Ty::Class(name) => Some(name.clone()),
+                        Ty::String => Some("java/lang/String".to_string()),
+                        _ => None,
+                    })
+                    .filter(|cls| {
+                        arg_locals
+                            .iter()
+                            .all(|a| match &fb.mf.locals[a.0 as usize] {
+                                Ty::Class(n) => n == cls,
+                                Ty::String => cls == "java/lang/String",
+                                _ => false,
+                            })
+                    });
+
+                // Create the array of the right size.
                 let count_local = fb.new_local(Ty::Int);
                 fb.push_stmt(MStmt::Assign {
                     dest: count_local,
                     value: Rvalue::Const(MirConst::Int(arg_count as i32)),
                 });
                 let array_local = fb.new_local(Ty::Any);
+                let array_rvalue = match &inferred_element_class {
+                    Some(cls) => Rvalue::NewTypedObjectArray {
+                        size: count_local,
+                        element_class: cls.clone(),
+                    },
+                    None => Rvalue::NewObjectArray(count_local),
+                };
                 fb.push_stmt(MStmt::Assign {
                     dest: array_local,
-                    value: Rvalue::NewObjectArray(count_local),
+                    value: array_rvalue,
                 });
 
                 // Store each arg into the Object[] (autoboxing primitives).

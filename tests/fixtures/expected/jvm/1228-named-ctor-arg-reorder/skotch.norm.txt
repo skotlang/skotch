@@ -7,7 +7,7 @@ field         theItems : Ljava/util/List; 0x001A
 method        <clinit> ()V 0x0008
   code        max_stack=5 max_locals=1
     0000 iconst_3
-    0001 anewarray Class(java/lang/Object)
+    0001 anewarray Class(java/lang/String)
     0004 astore_0
     0005 aload_0
     0006 iconst_0
