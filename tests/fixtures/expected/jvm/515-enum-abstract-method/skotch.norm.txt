@@ -2,11 +2,6 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        MINUS ()LOp; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Op.MINUS:LOp;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Op$apply (LOp;II)I 0x0019
   code        max_stack=2 max_locals=4
     0000 aload_0
@@ -41,15 +36,15 @@ method        Op$valueOf (Ljava/lang/String;)LOp; 0x0019
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0012 ifeq 22
     0015 goto 35
-    0018 invokestatic Method(InputKt.PLUS:()LOp;)
+    0018 getstatic Field(Op.PLUS:LOp;)
     0021 areturn
     0022 aload_0
     0023 ldc "MINUS"
     0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0028 ifeq 18
-    0031 invokestatic Method(InputKt.MINUS:()LOp;)
+    0031 getstatic Field(Op.MINUS:LOp;)
     0034 areturn
-    0035 invokestatic Method(InputKt.PLUS:()LOp;)
+    0035 getstatic Field(Op.PLUS:LOp;)
     0038 areturn
     sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
@@ -61,24 +56,19 @@ method        Op$values ()Ljava/util/ArrayList; 0x0019
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 invokestatic Method(InputKt.PLUS:()LOp;)
+    0009 getstatic Field(Op.PLUS:LOp;)
     0012 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0015 pop
     0016 aload_0
-    0017 invokestatic Method(InputKt.MINUS:()LOp;)
+    0017 getstatic Field(Op.MINUS:LOp;)
     0020 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0023 pop
     0024 aload_0
     0025 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
-method        PLUS ()LOp; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Op.PLUS:LOp;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=3 max_locals=1
-    0000 invokestatic Method(InputKt.PLUS:()LOp;)
+    0000 getstatic Field(Op.PLUS:LOp;)
     0003 iconst_3
     0004 iconst_2
     0005 invokestatic Method(InputKt.Op$apply:(LOp;II)I)
@@ -86,7 +76,7 @@ method        main ()V 0x0019
     0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0012 iload_0
     0013 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0016 invokestatic Method(InputKt.MINUS:()LOp;)
+    0016 getstatic Field(Op.MINUS:LOp;)
     0019 iconst_3
     0020 iconst_2
     0021 invokestatic Method(InputKt.Op$apply:(LOp;II)I)

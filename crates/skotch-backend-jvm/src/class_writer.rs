@@ -13931,24 +13931,29 @@ fn walk_block(
                                 });
                                 bump(stack, max_stack, -1);
                             }
+                            // Inverted branch: branch to FALSE (iconst_0) when
+                            // the inverse condition holds; fall-through to
+                            // TRUE (iconst_1). Matches kotlinc's emission
+                            // for float/double comparisons — the integer
+                            // path below already does the same inversion.
                             let branch_op: u8 = match op {
-                                MBinOp::CmpEq => 0x99, // ifeq
-                                MBinOp::CmpNe => 0x9A, // ifne
-                                MBinOp::CmpLt => 0x9B, // iflt
-                                MBinOp::CmpGe => 0x9C, // ifge
-                                MBinOp::CmpGt => 0x9D, // ifgt
-                                MBinOp::CmpLe => 0x9E, // ifle
+                                MBinOp::CmpEq => 0x9A, // ifne (inverse of ==)
+                                MBinOp::CmpNe => 0x99, // ifeq (inverse of !=)
+                                MBinOp::CmpLt => 0x9C, // ifge (inverse of <)
+                                MBinOp::CmpGe => 0x9B, // iflt (inverse of >=)
+                                MBinOp::CmpGt => 0x9E, // ifle (inverse of >)
+                                MBinOp::CmpLe => 0x9D, // ifgt (inverse of <=)
                                 _ => unreachable!(),
                             };
                             let cmp_start = code.len();
                             code.push(branch_op);
                             code.write_i16::<BigEndian>(7).unwrap();
                             bump(stack, max_stack, -1); // pops the int result
-                            code.push(0x03); // iconst_0
+                            code.push(0x04); // iconst_1 (TRUE, fall-through)
                             bump(stack, max_stack, 1);
                             code.push(0xA7); // goto L_end
                             code.write_i16::<BigEndian>(4).unwrap();
-                            code.push(0x04); // iconst_1
+                            code.push(0x03); // iconst_0 (FALSE, branch target)
 
                             cmp_targets.push(CmpBranchTarget {
                                 offset: cmp_start + 7,

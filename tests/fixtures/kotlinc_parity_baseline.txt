@@ -142,6 +142,7 @@
 1214-java-getter-property
 1215-overload-delegate-default
 122-expression-body-fun
+1224-float-comparison
 123-early-return
 1231-companion-bare-ident
 1234-jvmstatic-companion
