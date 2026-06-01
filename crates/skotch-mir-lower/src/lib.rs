@@ -4821,6 +4821,14 @@ fn lower_function(
                 ..
             }
         );
+        // Preserve the structured Function param types before erasing to
+        // `Ty::Class(FunctionN)` — call sites need the original param Tys
+        // to pick the right lambda-helper descriptor (`(I)I` not `(Object)I`).
+        let preserved_fn_params: Option<Vec<Ty>> = if let Ty::Function { ref params, .. } = ty {
+            Some(params.clone())
+        } else {
+            None
+        };
         let ty = if let Ty::Function {
             ref params,
             is_suspend: fn_suspend,
@@ -4843,6 +4851,9 @@ fn lower_function(
         // Override enum class types to String (enums are string-based).
         let id = fb.new_local(ty);
         fb.mf.params.push(id);
+        if let Some(fn_params) = preserved_fn_params {
+            fb.mf.local_generic_args.insert(id.0, fn_params);
+        }
         // Record suspend-typed callable parameters so that
         // when they're invoked the MIR lowerer threads the continuation.
         if is_suspend_callable {
@@ -12410,10 +12421,22 @@ fn lower_expr(
                 // uses the primitive/concrete type (matches kotlinc; otherwise
                 // we'd erase to Object and emit an unbox in the helper body).
                 if matches!(&a.expr, Expr::Lambda { .. }) {
-                    if let Some(Ty::Function {
-                        params: fparams, ..
-                    }) = param_tys.get(arg_idx)
-                    {
+                    // First try the structured `Ty::Function` form. If the
+                    // callee's param was erased to
+                    // `kotlin/jvm/functions/FunctionN` at decl-lowering
+                    // time, recover the original lambda param types from
+                    // `local_generic_args` (preserved in `lower_fun_decl`).
+                    let recovered: Option<Vec<Ty>> = match param_tys.get(arg_idx) {
+                        Some(Ty::Function { params: fp, .. }) => Some(fp.clone()),
+                        _ => name_to_func.get(&callee_name).and_then(|fid| {
+                            let target = &module.functions[fid.0 as usize];
+                            target
+                                .params
+                                .get(arg_idx)
+                                .and_then(|pid| target.local_generic_args.get(&pid.0).cloned())
+                        }),
+                    };
+                    if let Some(fparams) = recovered {
                         if fparams.len() == 1 && !matches!(fparams[0], Ty::Any) {
                             module.lambda_param_type = Some(fparams[0].clone());
                         }
@@ -12449,6 +12472,10 @@ fn lower_expr(
             // Clear the force flag in case it wasn't consumed
             // (e.g. the lambda was a capture, not a literal).
             module.force_suspend_lambda = false;
+            // Clear lambda param/receiver-type channels in case the lambda
+            // arg took a non-metafactory path that didn't consume them.
+            module.lambda_param_type = None;
+            module.lambda_receiver_type = None;
 
             // Reorder named arguments to match parameter order.
             let mut arg_locals: Vec<LocalId> = if has_named {

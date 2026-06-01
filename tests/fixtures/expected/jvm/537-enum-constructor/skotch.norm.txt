@@ -3,13 +3,9 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        BLUE ()LColor; 0x0019
-  code        max_stack=4 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "BLUE"
-    0006 sipush 255
-    0009 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0012 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.BLUE:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0019
   code        max_stack=2 max_locals=1
@@ -62,22 +58,14 @@ method        Color$values ()Ljava/util/ArrayList; 0x0019
     0033 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        GREEN ()LColor; 0x0019
-  code        max_stack=4 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "GREEN"
-    0006 ldc int(65280)
-    0008 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0011 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.GREEN:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        RED ()LColor; 0x0019
-  code        max_stack=4 max_locals=0
-    0000 new Class(Color)
-    0003 dup
-    0004 ldc "RED"
-    0006 ldc int(16711680)
-    0008 invokespecial Method(Color.<init>:(Ljava/lang/String;I)V)
-    0011 areturn
+  code        max_stack=1 max_locals=0
+    0000 getstatic Field(Color.RED:LColor;)
+    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=1

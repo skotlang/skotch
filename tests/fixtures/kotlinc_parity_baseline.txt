@@ -361,6 +361,7 @@
 532-object-method
 535-multi-method-class
 536-class-inheritance
+538-higher-order-map
 539-abstract-class-ctor
 541-member-reassign
 542-private-ctor-param
