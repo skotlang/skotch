@@ -2,11 +2,6 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        BLUE ()LColor; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Color.BLUE:LColor;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Color$valueOf (Ljava/lang/String;)LColor; 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
@@ -17,21 +12,21 @@ method        Color$valueOf (Ljava/lang/String;)LColor; 0x0019
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0012 ifeq 35
     0015 goto 48
-    0018 invokestatic Method(InputKt.RED:()LColor;)
+    0018 getstatic Field(Color.RED:LColor;)
     0021 areturn
     0022 aload_0
     0023 ldc "BLUE"
     0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0028 ifeq 18
-    0031 invokestatic Method(InputKt.BLUE:()LColor;)
+    0031 getstatic Field(Color.BLUE:LColor;)
     0034 areturn
     0035 aload_0
     0036 ldc "GREEN"
     0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0041 ifeq 22
-    0044 invokestatic Method(InputKt.GREEN:()LColor;)
+    0044 getstatic Field(Color.GREEN:LColor;)
     0047 areturn
-    0048 invokestatic Method(InputKt.RED:()LColor;)
+    0048 getstatic Field(Color.RED:LColor;)
     0051 areturn
     sub_attr  StackMapTable (6 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
@@ -43,44 +38,19 @@ method        Color$values ()Ljava/util/ArrayList; 0x0019
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 invokestatic Method(InputKt.RED:()LColor;)
+    0009 getstatic Field(Color.RED:LColor;)
     0012 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0015 pop
     0016 aload_0
-    0017 invokestatic Method(InputKt.GREEN:()LColor;)
+    0017 getstatic Field(Color.GREEN:LColor;)
     0020 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0023 pop
     0024 aload_0
-    0025 invokestatic Method(InputKt.BLUE:()LColor;)
+    0025 getstatic Field(Color.BLUE:LColor;)
     0028 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0031 pop
     0032 aload_0
     0033 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        GREEN ()LColor; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Color.GREEN:LColor;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        LARGE ()LSize; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Size.LARGE:LSize;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        MEDIUM ()LSize; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Size.MEDIUM:LSize;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        RED ()LColor; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Color.RED:LColor;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        SMALL ()LSize; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Size.SMALL:LSize;)
-    0003 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        Size$valueOf (Ljava/lang/String;)LSize; 0x0019
   code        max_stack=2 max_locals=1
@@ -92,21 +62,21 @@ method        Size$valueOf (Ljava/lang/String;)LSize; 0x0019
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0012 ifeq 35
     0015 goto 48
-    0018 invokestatic Method(InputKt.SMALL:()LSize;)
+    0018 getstatic Field(Size.SMALL:LSize;)
     0021 areturn
     0022 aload_0
     0023 ldc "LARGE"
     0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0028 ifeq 18
-    0031 invokestatic Method(InputKt.LARGE:()LSize;)
+    0031 getstatic Field(Size.LARGE:LSize;)
     0034 areturn
     0035 aload_0
     0036 ldc "MEDIUM"
     0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0041 ifeq 22
-    0044 invokestatic Method(InputKt.MEDIUM:()LSize;)
+    0044 getstatic Field(Size.MEDIUM:LSize;)
     0047 areturn
-    0048 invokestatic Method(InputKt.SMALL:()LSize;)
+    0048 getstatic Field(Size.SMALL:LSize;)
     0051 areturn
     sub_attr  StackMapTable (6 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
@@ -118,15 +88,15 @@ method        Size$values ()Ljava/util/ArrayList; 0x0019
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 invokestatic Method(InputKt.SMALL:()LSize;)
+    0009 getstatic Field(Size.SMALL:LSize;)
     0012 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0015 pop
     0016 aload_0
-    0017 invokestatic Method(InputKt.MEDIUM:()LSize;)
+    0017 getstatic Field(Size.MEDIUM:LSize;)
     0020 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0023 pop
     0024 aload_0
-    0025 invokestatic Method(InputKt.LARGE:()LSize;)
+    0025 getstatic Field(Size.LARGE:LSize;)
     0028 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0031 pop
     0032 aload_0
@@ -134,19 +104,19 @@ method        Size$values ()Ljava/util/ArrayList; 0x0019
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
-    0000 invokestatic Method(InputKt.RED:()LColor;)
+    0000 getstatic Field(Color.RED:LColor;)
     0003 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0006 swap
     0007 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0010 invokestatic Method(InputKt.BLUE:()LColor;)
+    0010 getstatic Field(Color.BLUE:LColor;)
     0013 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0016 swap
     0017 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0020 invokestatic Method(InputKt.SMALL:()LSize;)
+    0020 getstatic Field(Size.SMALL:LSize;)
     0023 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0026 swap
     0027 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0030 invokestatic Method(InputKt.LARGE:()LSize;)
+    0030 getstatic Field(Size.LARGE:LSize;)
     0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0036 swap
     0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)

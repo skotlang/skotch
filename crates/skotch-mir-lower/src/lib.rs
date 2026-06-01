@@ -21012,6 +21012,12 @@ fn lower_enum(
         let qualified_name = format!("{enum_name}${entry_name}");
         let qualified_sym = interner.intern(&qualified_name);
         name_to_func.insert(qualified_sym, fn_id);
+        // Record (enum_class, entry_name) so call-site lowering can emit
+        // `getstatic Color.RED:LColor;` directly (matching kotlinc) and
+        // the JVM backend can skip the synthesized accessor method.
+        module
+            .enum_entry_funcs
+            .insert(fn_idx as u32, (enum_name.clone(), entry_name.clone()));
 
         let mut fb = FnBuilder::new(fn_idx, entry_name.clone(), Ty::Class(enum_name.clone()));
 

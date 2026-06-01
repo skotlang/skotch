@@ -2,16 +2,6 @@ class_version major=61 minor=0
 this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
-method        A ()LV; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(V.A:LV;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        B ()LV; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(V.B:LV;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        V$valueOf (Ljava/lang/String;)LV; 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
@@ -22,15 +12,15 @@ method        V$valueOf (Ljava/lang/String;)LV; 0x0019
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0012 ifeq 22
     0015 goto 35
-    0018 invokestatic Method(InputKt.A:()LV;)
+    0018 getstatic Field(V.A:LV;)
     0021 areturn
     0022 aload_0
     0023 ldc "B"
     0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0028 ifeq 18
-    0031 invokestatic Method(InputKt.B:()LV;)
+    0031 getstatic Field(V.B:LV;)
     0034 areturn
-    0035 invokestatic Method(InputKt.A:()LV;)
+    0035 getstatic Field(V.A:LV;)
     0038 areturn
     sub_attr  StackMapTable (5 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
@@ -42,11 +32,11 @@ method        V$values ()Ljava/util/ArrayList; 0x0019
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 invokestatic Method(InputKt.A:()LV;)
+    0009 getstatic Field(V.A:LV;)
     0012 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0015 pop
     0016 aload_0
-    0017 invokestatic Method(InputKt.B:()LV;)
+    0017 getstatic Field(V.B:LV;)
     0020 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0023 pop
     0024 aload_0
@@ -66,29 +56,30 @@ method        main ([Ljava/lang/String;)V 0x1009
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
 method        main$lambda$0 (LV;)I 0x001A
-  code        max_stack=3 max_locals=1
+  code        max_stack=2 max_locals=1
     0000 aload_0
-    0001 aload_0
-    0002 ldc "it"
-    0004 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0007 invokestatic Method(InputKt.A:()LV;)
+    0001 ldc "it"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 getstatic Field(V.A:LV;)
+    0009 aload_0
     0010 swap
-    0011 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0014 swap
-    0015 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
-    0018 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
-    0021 ifeq 28
-    0024 iconst_1
-    0025 goto 29
-    0028 iconst_2
-    0029 ireturn
+    0011 swap
+    0012 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0015 swap
+    0016 invokevirtual Method(java/lang/Object.toString:()Ljava/lang/String;)
+    0019 invokevirtual Method(java/lang/String.equals:(Ljava/lang/Object;)Z)
+    0022 ifeq 29
+    0025 iconst_1
+    0026 goto 30
+    0029 iconst_2
+    0030 ireturn
     sub_attr  StackMapTable (5 bytes)
 method        pick (Lkotlin/jvm/functions/Function1;)I 0x0019
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "fn"
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
-    0006 invokestatic Method(InputKt.A:()LV;)
+    0006 getstatic Field(V.A:LV;)
     0009 aload_0
     0010 swap
     0011 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)

@@ -1359,12 +1359,19 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             method_blobs.push(getter);
         }
     }
-    for func in &module.functions {
+    for (fn_idx, func) in module.functions.iter().enumerate() {
         // Skip abstract stub functions (e.g. the synthetic
         // `delay` entry used only so the state machine extractor can
         // recognize external suspend calls). These are never called at
         // runtime — the real implementations live in library JARs.
         if func.is_abstract {
+            continue;
+        }
+        // Skip synthesized enum-entry accessor functions — their bodies
+        // (just `getstatic EnumClass.NAME`) are inlined at every call
+        // site by the `CallKind::Static` short-circuit in `emit_method`.
+        // kotlinc never emits these accessors on the wrapper class.
+        if module.enum_entry_funcs.contains_key(&(fn_idx as u32)) {
             continue;
         }
         let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
@@ -14319,6 +14326,29 @@ fn walk_block(
                     let _ = dest;
                 }
                 CallKind::Static(target_id) => {
+                    // Enum-entry accessor short-circuit: kotlinc resolves
+                    // `Color.RED` directly to `getstatic Color.RED:LColor;`
+                    // and never emits a `RED()LColor;` accessor on the
+                    // wrapper class. We still synthesize the accessor
+                    // MirFunction so `name_to_func`-based call dispatch
+                    // works generically — but when the dispatch resolves
+                    // to an enum entry, replace the `invokestatic` with the
+                    // `getstatic` shape that kotlinc emits. The accessor
+                    // method itself is suppressed from emission via
+                    // `module.enum_entry_funcs` (see `compile_class`).
+                    if args.is_empty() {
+                        if let Some((enum_class, entry_name)) =
+                            module.enum_entry_funcs.get(&target_id.0)
+                        {
+                            let desc = format!("L{enum_class};");
+                            let fref = cp.fieldref(enum_class, entry_name, &desc);
+                            code.push(0xB2); // getstatic
+                            code.write_u16::<BigEndian>(fref).unwrap();
+                            bump(stack, max_stack, 1);
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+                    }
                     let target = &module.functions[target_id.0 as usize];
                     for (i, a) in args.iter().enumerate() {
                         // Default-arg dispatch: if MIR-lower flagged this

@@ -867,6 +867,16 @@ pub struct MirModule {
     /// Names of enum classes (mapped to String type for parameter resolution).
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
     pub enum_names: rustc_hash::FxHashSet<String>,
+    /// Maps an enum-entry accessor FuncId → (enum_class, entry_name).
+    /// kotlinc resolves `Color.RED` directly to `getstatic Color.RED:LColor;`
+    /// — it does NOT emit a `RED()LColor;` accessor on the wrapper class. We
+    /// still synthesize the accessor MirFunction so generic call-site
+    /// resolution (Static dispatch via `name_to_func`) doesn't need a
+    /// special case, but every call-site lowering checks this map first and
+    /// inlines a `GetStaticField` rvalue instead, and the JVM backend skips
+    /// these FuncIds entirely.
+    #[serde(skip)]
+    pub enum_entry_funcs: rustc_hash::FxHashMap<u32, (String, String)>,
     /// Transient flag: when true, the NEXT lambda lowered should be
     /// a SuspendLambda. Set by coroutine builder handlers (runBlocking,
     /// launch, async) before their trailing lambda arg is lowered.

@@ -12,27 +12,27 @@ method        Dir$valueOf (Ljava/lang/String;)LDir; 0x0019
     0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0012 ifeq 48
     0015 goto 61
-    0018 invokestatic Method(InputKt.NORTH:()LDir;)
+    0018 getstatic Field(Dir.NORTH:LDir;)
     0021 areturn
     0022 aload_0
     0023 ldc "WEST"
     0025 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0028 ifeq 18
-    0031 invokestatic Method(InputKt.WEST:()LDir;)
+    0031 getstatic Field(Dir.WEST:LDir;)
     0034 areturn
     0035 aload_0
     0036 ldc "EAST"
     0038 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0041 ifeq 22
-    0044 invokestatic Method(InputKt.EAST:()LDir;)
+    0044 getstatic Field(Dir.EAST:LDir;)
     0047 areturn
     0048 aload_0
     0049 ldc "SOUTH"
     0051 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0054 ifeq 35
-    0057 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0057 getstatic Field(Dir.SOUTH:LDir;)
     0060 areturn
-    0061 invokestatic Method(InputKt.NORTH:()LDir;)
+    0061 getstatic Field(Dir.NORTH:LDir;)
     0064 areturn
     sub_attr  StackMapTable (7 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
@@ -44,52 +44,32 @@ method        Dir$values ()Ljava/util/ArrayList; 0x0019
     0004 invokespecial Method(java/util/ArrayList.<init>:()V)
     0007 astore_0
     0008 aload_0
-    0009 invokestatic Method(InputKt.NORTH:()LDir;)
+    0009 getstatic Field(Dir.NORTH:LDir;)
     0012 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0015 pop
     0016 aload_0
-    0017 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0017 getstatic Field(Dir.SOUTH:LDir;)
     0020 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0023 pop
     0024 aload_0
-    0025 invokestatic Method(InputKt.EAST:()LDir;)
+    0025 getstatic Field(Dir.EAST:LDir;)
     0028 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0031 pop
     0032 aload_0
-    0033 invokestatic Method(InputKt.WEST:()LDir;)
+    0033 getstatic Field(Dir.WEST:LDir;)
     0036 invokevirtual Method(java/util/ArrayList.add:(Ljava/lang/Object;)Z)
     0039 pop
     0040 aload_0
     0041 areturn
   attr        RuntimeInvisibleAnnotations (6 bytes)
-method        EAST ()LDir; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Dir.EAST:LDir;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        NORTH ()LDir; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Dir.NORTH:LDir;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        SOUTH ()LDir; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Dir.SOUTH:LDir;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        WEST ()LDir; 0x0019
-  code        max_stack=1 max_locals=0
-    0000 getstatic Field(Dir.WEST:LDir;)
-    0003 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
-    0000 invokestatic Method(InputKt.NORTH:()LDir;)
+    0000 getstatic Field(Dir.NORTH:LDir;)
     0003 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
     0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0009 swap
     0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0013 invokestatic Method(InputKt.WEST:()LDir;)
+    0013 getstatic Field(Dir.WEST:LDir;)
     0016 invokestatic Method(InputKt.move:(LDir;)Ljava/lang/String;)
     0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
     0022 swap
@@ -106,7 +86,7 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
     0006 aload_0
     0007 astore_1
-    0008 invokestatic Method(InputKt.NORTH:()LDir;)
+    0008 getstatic Field(Dir.NORTH:LDir;)
     0011 aload_1
     0012 swap
     0013 swap
@@ -117,7 +97,7 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0024 ifeq 32
     0027 ldc "up"
     0029 goto 106
-    0032 invokestatic Method(InputKt.SOUTH:()LDir;)
+    0032 getstatic Field(Dir.SOUTH:LDir;)
     0035 aload_1
     0036 swap
     0037 swap
@@ -128,7 +108,7 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0048 ifeq 56
     0051 ldc "down"
     0053 goto 106
-    0056 invokestatic Method(InputKt.EAST:()LDir;)
+    0056 getstatic Field(Dir.EAST:LDir;)
     0059 aload_1
     0060 swap
     0061 swap
@@ -139,7 +119,7 @@ method        move (LDir;)Ljava/lang/String; 0x0019
     0072 ifeq 80
     0075 ldc "right"
     0077 goto 106
-    0080 invokestatic Method(InputKt.WEST:()LDir;)
+    0080 getstatic Field(Dir.WEST:LDir;)
     0083 aload_1
     0084 swap
     0085 swap
