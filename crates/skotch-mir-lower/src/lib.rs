@@ -15601,10 +15601,26 @@ fn lower_expr(
                         let in_lambda = tid_class_name
                             .as_ref()
                             .is_some_and(|cn| cn.contains("$Lambda$"));
-                        let current_class = if in_lambda {
-                            tid_class_name
-                                .as_ref()
-                                .and_then(|cn| module.classes.iter().find(|c| &c.name == cn))
+                        // Prefer the class that matches `this`'s actual type.
+                        // The previous fallback ("first non-stub class") was
+                        // wrong for companion-method bodies: `this_local` is
+                        // typed `Binding$Companion` but the fallback picked
+                        // `Binding`, so bare `inflate(...)` self-calls inside
+                        // the companion failed to resolve. Searching by
+                        // `tid_class_name` correctly finds the Companion
+                        // class's sibling methods.
+                        let current_class = if let Some(cn) = &tid_class_name {
+                            module
+                                .classes
+                                .iter()
+                                .find(|c| &c.name == cn)
+                                .or_else(|| {
+                                    if in_lambda {
+                                        None
+                                    } else {
+                                        module.classes.iter().find(|c| !c.is_cross_file_stub)
+                                    }
+                                })
                         } else {
                             module.classes.iter().find(|c| !c.is_cross_file_stub)
                         };
@@ -22660,6 +22676,73 @@ fn lower_class(
             },
         });
 
+        // Pre-register the Companion class with method-name stubs BEFORE
+        // lowering any companion method bodies. The body lowering's
+        // bare-call resolver (`mir-lower:15613`) searches `module.classes`
+        // for a class matching `this`'s type — for companion methods,
+        // that's `<Outer>$Companion`. Without this pre-registration, one
+        // companion method calling its sibling overload by bare name
+        // (e.g. `Companion.inflate(a) = inflate(a, null, false)`) hits
+        // the "unknown call target" path because the Companion class
+        // isn't yet in `module.classes`. We push a stub with empty bodies
+        // and the right method names; the real class is replaced below
+        // once the bodies are lowered.
+        let companion_class_idx = module.classes.len();
+        let stub_methods: Vec<MirFunction> = c
+            .companion_methods
+            .iter()
+            .map(|m| MirFunction {
+                id: FuncId(0),
+                name: interner.resolve(m.name).to_string(),
+                params: Vec::new(),
+                locals: Vec::new(),
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_defaults: Vec::new(),
+                param_receiver_types: Vec::new(),
+                is_abstract: false,
+                exception_handlers: Vec::new(),
+                vararg_index: None,
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            })
+            .collect();
+        module.classes.push(MirClass {
+            name: companion_cls.clone(),
+            super_class: None,
+            is_open: false,
+            is_abstract: false,
+            is_interface: false,
+            interfaces: Vec::new(),
+            fields: Vec::new(),
+            methods: stub_methods,
+            constructor: comp_init.clone(),
+            secondary_constructors: Vec::new(),
+            is_suspend_lambda: false,
+            is_cross_file_stub: false,
+            annotations: Vec::new(),
+            has_type_params: false,
+            is_object_singleton: false,
+            companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
+        });
+
         let mut comp_methods: Vec<MirFunction> = Vec::new();
         for method in &c.companion_methods {
             let m_name = interner.resolve(method.name).to_string();
@@ -22672,7 +22755,12 @@ fn lower_class(
             let mut fb = FnBuilder::new(fn_idx, m_name, m_ret);
             let this_local = fb.new_local(Ty::Class(companion_cls.clone()));
             fb.mf.params.push(this_local);
-            let mut scope: Vec<(Symbol, LocalId)> = Vec::new();
+            // Bind `this` in the body scope so bare-name sibling-method
+            // calls (`inflate(a) = inflate(a, 0)` in the same companion)
+            // can resolve via the call-site's `this_id` lookup at
+            // `mir-lower:15577` and reach the Companion class's methods.
+            let this_sym = interner.intern("this");
+            let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
             for p in &method.params {
                 let ty = resolve_type(interner.resolve(p.ty.name), module);
                 let id = fb.new_local(ty);
@@ -22752,7 +22840,9 @@ fn lower_class(
             comp_methods.push(fb.finish());
         }
 
-        module.classes.push(MirClass {
+        // Replace the stub pre-registered above (at `companion_class_idx`)
+        // with the fully-lowered Companion class.
+        module.classes[companion_class_idx] = MirClass {
             name: companion_cls.clone(),
             super_class: None,
             is_open: false,
@@ -22771,7 +22861,7 @@ fn lower_class(
             companion_class_name: None,
             static_fields: Vec::new(),
             clinit: None,
-        });
+        };
 
         // Synthesize a `@JvmStatic` static delegate on the OUTER class for
         // each companion method tagged `@JvmStatic`. kotlinc's emission

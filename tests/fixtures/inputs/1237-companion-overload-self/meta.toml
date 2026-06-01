@@ -1,0 +1,5 @@
+name     = "1237-companion-overload-self"
+status   = "active"
+features = ["companion", "overload", "self-call"]
+notes    = "Companion method body calls another sibling overload by bare name. Was failing with 'unknown call target' because the resolver didn't include enclosing companion methods in scope."
+expected_output = "hello\n0\n"
