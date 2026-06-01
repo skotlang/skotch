@@ -18863,14 +18863,27 @@ fn lower_expr(
                 let helper_name = format!("{}{}", helper_prefix, inner_idx);
                 let lambda_idx = module.functions.len();
                 let mut helper_fb = FnBuilder::new(lambda_idx, helper_name.clone(), Ty::Any);
-                // Mark ACC_PRIVATE to match kotlinc's emission shape
-                // (0x001A = ACC_PRIVATE | ACC_STATIC | ACC_FINAL). The
-                // helper is invoked only from this class via the
-                // invokedynamic bootstrap, so private visibility is
-                // sufficient on the JVM. d8 handles the LambdaMetafactory
-                // desugaring by widening visibility itself when it splits
-                // the helper into a sibling synthetic class.
-                helper_fb.mf.is_private = true;
+                // Visibility: ACC_PRIVATE only when the metafactory call
+                // site lives in the same class as the helper (typically a
+                // top-level function on the wrapper class). When the
+                // metafactory is emitted INSIDE another skotch-synthesized
+                // class (a `<Wrapper>$Lambda$N.invoke()` body), the helper
+                // still lands on the wrapper but the invokedynamic
+                // references it across class boundaries. d8 desugars that
+                // invokedynamic into a sibling synthetic class (e.g.
+                // `Wrapper$Lambda$N$$ExternalSyntheticLambda0`) which is
+                // NOT a nest member of the wrapper and cannot access the
+                // private helper at runtime (java.lang.IllegalAccessError
+                // — JetChat hit this on `NavActivityKt.invoke$lambda$1`
+                // being inaccessible to `NavActivityKt$Lambda$36$$ExternalSyntheticLambda1`).
+                //
+                // Heuristic: if `outer_name` is `invoke` (the standard
+                // name for a Function.invoke method on a Lambda$N class),
+                // leave the helper public so the cross-class dispatch
+                // works after d8 desugaring. Top-level fns (`main`, user
+                // fns) keep ACC_PRIVATE to match kotlinc-parity.
+                let inside_synthetic_lambda = sanitized_outer == "invoke";
+                helper_fb.mf.is_private = !inside_synthetic_lambda;
                 let mut helper_scope: Vec<(Symbol, LocalId)> = Vec::new();
                 // Capture params come first.
                 for (sym, _outer_lid, ty) in &free_vars {
