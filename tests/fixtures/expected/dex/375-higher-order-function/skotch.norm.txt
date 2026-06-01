@@ -1,19 +1,18 @@
 dex_version   035
-strings       30
-types         9
-methods       14
+strings       28
+types         8
+methods       13
 classes       1
 
 --- strings ---
   "I"
-  "IL"
+  "II"
   "ILI"
   "ILLI"
   "LI"
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
-  "Ljava/lang/Integer;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
   "Lkotlin/jvm/functions/Function1;"
@@ -24,7 +23,6 @@ classes       1
   "apply"
   "combine"
   "input.kt"
-  "intValue"
   "invoke"
   "main"
   "main$lambda$0"
@@ -40,7 +38,6 @@ classes       1
   I
   LInputKt;
   Ljava/io/PrintStream;
-  Ljava/lang/Integer;
   Ljava/lang/Object;
   Ljava/lang/System;
   Lkotlin/jvm/functions/Function1;
@@ -50,16 +47,15 @@ classes       1
 --- methods ---
   LInputKt;.apply(Ljava/lang/Object;I)I
   LInputKt;.combine(Ljava/lang/Object;Ljava/lang/Object;I)I
-  LInputKt;.main$lambda$0(Ljava/lang/Object;)I
-  LInputKt;.main$lambda$1(Ljava/lang/Object;)I
-  LInputKt;.main$lambda$2(Ljava/lang/Object;)I
-  LInputKt;.main$lambda$3(Ljava/lang/Object;)I
-  LInputKt;.main$lambda$4(Ljava/lang/Object;)I
+  LInputKt;.main$lambda$0(I)I
+  LInputKt;.main$lambda$1(I)I
+  LInputKt;.main$lambda$2(I)I
+  LInputKt;.main$lambda$3(I)I
+  LInputKt;.main$lambda$4(I)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.transform(Ljava/lang/Object;I)I
   Ljava/io/PrintStream;.println(I)V
-  Ljava/lang/Integer;.intValue()I
   Lkotlin/jvm/functions/Function1;.invoke(I)Ljava/lang/Object;
   Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
 
@@ -71,9 +67,9 @@ classes       1
   method       combine(Ljava/lang/Object;Ljava/lang/Object;I)I flags=0x0019 regs=5 ins=3 outs=2 insns=9
   method       main()V flags=0x0019 regs=14 ins=0 outs=3 insns=43
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       main$lambda$0(Ljava/lang/Object;)I flags=0x0019 regs=4 ins=1 outs=1 insns=8
-  method       main$lambda$1(Ljava/lang/Object;)I flags=0x0019 regs=4 ins=1 outs=1 insns=8
-  method       main$lambda$2(Ljava/lang/Object;)I flags=0x0019 regs=4 ins=1 outs=1 insns=8
-  method       main$lambda$3(Ljava/lang/Object;)I flags=0x0019 regs=4 ins=1 outs=1 insns=8
-  method       main$lambda$4(Ljava/lang/Object;)I flags=0x0019 regs=4 ins=1 outs=1 insns=8
+  method       main$lambda$0(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
+  method       main$lambda$1(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
+  method       main$lambda$2(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
+  method       main$lambda$3(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
+  method       main$lambda$4(I)I flags=0x0019 regs=3 ins=1 outs=0 insns=4
   method       transform(Ljava/lang/Object;I)I flags=0x0019 regs=3 ins=2 outs=2 insns=5

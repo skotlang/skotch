@@ -1,7 +1,7 @@
 dex_version   035
 strings       22
 types         9
-methods       8
+methods       7
 classes       1
 
 --- strings ---
@@ -45,7 +45,6 @@ classes       1
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.pair(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;
   Ljava/io/PrintStream;.println(I)V
-  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
   Ljava/io/PrintStream;.println(Ljava/lang/String;)V
   Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
 

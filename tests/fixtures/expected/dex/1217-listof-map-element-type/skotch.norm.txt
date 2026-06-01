@@ -1,0 +1,94 @@
+dex_version   035
+strings       43
+types         18
+methods       13
+classes       1
+
+--- strings ---
+  "<init>"
+  "Ada"
+  "Bob"
+  "Cy"
+  "I"
+  "INSTANCE"
+  "L"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "LUser;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/Iterator;"
+  "Ljava/util/List;"
+  "Lkotlin/Unit;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/functions/Function1;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VL"
+  "VLI"
+  "VLL"
+  "Z"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "checkNotNullParameter"
+  "getName"
+  "hasNext"
+  "input.kt"
+  "it"
+  "iterator"
+  "listOf"
+  "main"
+  "main$lambda$0"
+  "main$lambda$1"
+  "map"
+  "next"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  LUser;
+  Ljava/io/PrintStream;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/Iterator;
+  Ljava/util/List;
+  Lkotlin/Unit;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/functions/Function1;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main$lambda$1(Ljava/lang/Object;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LUser;.<init>(Ljava/lang/String;I)V
+  LUser;.getName()Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;.map(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=22 ins=0 outs=3 insns=61
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=2 ins=1 outs=0 insns=3
+  method       main$lambda$1(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=3 ins=1 outs=2 insns=10

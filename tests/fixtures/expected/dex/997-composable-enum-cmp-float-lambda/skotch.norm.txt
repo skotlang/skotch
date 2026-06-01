@@ -1,6 +1,6 @@
 dex_version   035
-strings       27
-types         10
+strings       30
+types         11
 methods       11
 classes       1
 
@@ -21,16 +21,19 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/util/ArrayList;"
   "Lkotlin/jvm/functions/Function1;"
+  "Lkotlin/jvm/internal/Intrinsics;"
   "V"
   "V$valueOf"
   "V$values"
-  "VL"
   "VLI"
+  "VLL"
   "Z"
   "ZL"
   "add"
+  "checkNotNullParameter"
   "input.kt"
   "invoke"
+  "it"
   "pick"
 
 --- types ---
@@ -42,6 +45,7 @@ classes       1
   Ljava/lang/String;
   Ljava/util/ArrayList;
   Lkotlin/jvm/functions/Function1;
+  Lkotlin/jvm/internal/Intrinsics;
   V
   Z
 
@@ -53,19 +57,19 @@ classes       1
   LInputKt;.V$valueOf(Ljava/lang/String;)Ljava/lang/Object;
   LInputKt;.V$values()Ljava/lang/Object;
   LInputKt;.pick(Ljava/lang/Object;)F
-  LV;.<init>(Ljava/lang/String;)V
   Ljava/util/ArrayList;.<init>()V
   Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
   Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       A()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
-  method       B()Ljava/lang/Object; flags=0x0019 regs=2 ins=0 outs=2 insns=8
+  method       A()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       B()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
   method       Box(Ljava/lang/Object;I)V flags=0x0019 regs=4 ins=2 outs=1 insns=5
-  method       Box$lambda$0(Ljava/lang/Object;)F flags=0x0019 regs=6 ins=1 outs=0 insns=21
+  method       Box$lambda$0(Ljava/lang/Object;)F flags=0x0019 regs=7 ins=1 outs=2 insns=26
   method       V$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=8 ins=1 outs=0 insns=32
   method       V$values()Ljava/lang/Object; flags=0x0019 regs=5 ins=0 outs=2 insns=22
   method       pick(Ljava/lang/Object;)F flags=0x0019 regs=3 ins=1 outs=2 insns=9
