@@ -12410,7 +12410,10 @@ fn lower_expr(
                 // uses the primitive/concrete type (matches kotlinc; otherwise
                 // we'd erase to Object and emit an unbox in the helper body).
                 if matches!(&a.expr, Expr::Lambda { .. }) {
-                    if let Some(Ty::Function { params: fparams, .. }) = param_tys.get(arg_idx) {
+                    if let Some(Ty::Function {
+                        params: fparams, ..
+                    }) = param_tys.get(arg_idx)
+                    {
                         if fparams.len() == 1 && !matches!(fparams[0], Ty::Any) {
                             module.lambda_param_type = Some(fparams[0].clone());
                         }
