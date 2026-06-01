@@ -4,7 +4,7 @@ super_class   java/lang/Object
 access_flags  0x0031
 field         items : Ljava/util/List; 0x001A
 field         tags : Ljava/util/Set; 0x001A
-method        <clinit> ()V 0x001A
+method        <clinit> ()V 0x0008
   code        max_stack=3 max_locals=2
     0000 iconst_3
     0001 anewarray Class(java/lang/Object)

@@ -531,6 +531,7 @@ impl<'a> Parser<'a> {
                         cd.is_data = is_data || is_value_class;
                         cd.is_open = is_open || is_sealed;
                         cd.is_abstract = is_abstract || is_sealed;
+                        cd.is_sealed = is_sealed;
                         cd.visibility = visibility;
                         cd.annotations = annotations.clone();
                         decls.push(Decl::Class(cd));
@@ -694,7 +695,10 @@ impl<'a> Parser<'a> {
             if self.peek_kind() != TokenKind::RParen {
                 loop {
                     self.skip_trivia();
-                    self.skip_annotations();
+                    // Parse annotations on the constructor param (e.g.
+                    // `@JvmField val x: Int`) so they reach mir-lower
+                    // for backend codegen decisions.
+                    let param_annotations = self.parse_annotations();
                     let param_start = self.peek_span();
                     // Skip visibility modifiers: private/protected/internal.
                     if matches!(
@@ -718,6 +722,7 @@ impl<'a> Parser<'a> {
                         name: p.name,
                         ty: p.ty,
                         span: param_start.merge(p.span),
+                        annotations: param_annotations,
                     });
                     self.skip_trivia();
                     if !self.eat(TokenKind::Comma) {
@@ -971,6 +976,7 @@ impl<'a> Parser<'a> {
             is_data: false,     // set by caller if `data` modifier present
             is_open: false,     // set by caller
             is_abstract: false, // set by caller
+            is_sealed: false,   // set by caller
             name,
             name_span,
             type_params,
@@ -1188,6 +1194,7 @@ impl<'a> Parser<'a> {
                         name: p.name,
                         ty: p.ty,
                         span: param_start.merge(p.span),
+                        annotations: Vec::new(),
                     });
                     self.skip_trivia();
                     if !self.eat(TokenKind::Comma) {
@@ -1532,6 +1539,9 @@ impl<'a> Parser<'a> {
             getter,
             setter,
             span: start.merge(name_span),
+            // Caller (typically `parse_class_body` or `parse_file`)
+            // attaches annotations after the PropertyDecl is built.
+            annotations: Vec::new(),
         }
     }
 

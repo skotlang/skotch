@@ -237,6 +237,11 @@ pub struct ClassDecl {
     pub is_data: bool,
     pub is_open: bool,
     pub is_abstract: bool,
+    /// True when the source declaration carried the `sealed` modifier.
+    /// `sealed` implies `open` + `abstract` for codegen purposes, but
+    /// the typechecker also uses this flag to enforce `when (s: Sealed)`
+    /// exhaustiveness against the closed set of direct subclasses.
+    pub is_sealed: bool,
     pub name: Symbol,
     pub name_span: Span,
     /// Type parameters: `class Box<T>(...)`.
@@ -301,6 +306,10 @@ pub struct ConstructorParam {
     pub name: Symbol,
     pub ty: TypeRef,
     pub span: Span,
+    /// Annotations on this parameter, e.g. `@JvmField val x: Int`.
+    /// Use-site-targeted annotations like `@field:JvmField` are stored
+    /// here too with the target stored on the Annotation.
+    pub annotations: Vec<Annotation>,
 }
 
 /// A property declaration inside a class body.
@@ -331,6 +340,8 @@ pub struct PropertyDecl {
     /// Custom setter: `var x: Int set(value) { ... }`.
     pub setter: Option<(Symbol, Block)>,
     pub span: Span,
+    /// Annotations on this property, e.g. `@JvmField val x: Int = 0`.
+    pub annotations: Vec<Annotation>,
 }
 
 /// An argument in a function call, optionally named.

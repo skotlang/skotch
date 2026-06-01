@@ -1,0 +1,76 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=7
+    0000 new Class(Item)
+    0003 dup
+    0004 ldc "apples"
+    0006 iconst_3
+    0007 invokespecial Method(Item.<init>:(Ljava/lang/String;I)V)
+    0010 astore_0
+    0011 new Class(Item)
+    0014 dup
+    0015 ldc "oranges"
+    0017 bipush 7
+    0019 invokespecial Method(Item.<init>:(Ljava/lang/String;I)V)
+    0022 astore_1
+    0023 iconst_2
+    0024 anewarray Class(java/lang/Object)
+    0027 astore_2
+    0028 aload_2
+    0029 iconst_0
+    0030 aload_0
+    0031 aastore
+    0032 aload_2
+    0033 iconst_1
+    0034 aload_1
+    0035 aastore
+    0036 aload_2
+    0037 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0040 astore_3
+    0041 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0046 astore 4
+    0048 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0053 astore 5
+    0055 aload_3
+    0056 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0061 astore 6
+    0063 aload 6
+    0065 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0070 ifeq 92
+    0073 aload 6
+    0075 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0080 aload 5
+    0082 swap
+    0083 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0088 pop
+    0089 goto 63
+    0092 return
+    sub_attr  StackMapTable (31 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
+  code        max_stack=1 max_locals=1
+    0000 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0003 areturn
+method        main$lambda$1 (LItem;)Lkotlin/Unit; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "it"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(Item.getLabel:()Ljava/lang/String;)
+    0010 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0015 aconst_null
+    0016 invokestatic Method(java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;)
+    0019 invokevirtual Method(java/lang/String.concat:(Ljava/lang/String;)Ljava/lang/String;)
+    0022 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0025 swap
+    0026 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0029 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0032 areturn
+class_attr    BootstrapMethods (28 bytes)

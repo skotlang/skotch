@@ -1776,6 +1776,7 @@ pub fn lower_file(
                     .map(|(fname, fty)| MirField {
                         name: fname.clone(),
                         ty: fty.clone(),
+                        is_jvm_field: false,
                     })
                     .collect();
                 let stub_fn = |mname: &str, param_tys: &[Ty], ret_ty: &Ty| -> MirFunction {
@@ -2123,10 +2124,9 @@ pub fn lower_file(
         }
         let mut clinit_mf = fb.finish();
         clinit_mf.return_ty = Ty::Unit;
-        // <clinit> is implicitly static — no `this`, no instance args.
-        // Mark it as private so the JVM backend emits the right access
-        // flags (kotlinc emits `static`-only flags for <clinit>).
-        clinit_mf.is_private = true;
+        // `<clinit>` is implicitly static. kotlinc emits ACC_STATIC only —
+        // no visibility flag and no ACC_FINAL. The JVM backend special-
+        // cases the `<clinit>` name in the access-flag computation.
         module.functions.push(clinit_mf);
     }
 
@@ -2678,15 +2678,18 @@ fn build_continuation_class(
                 SpillKind::Double => Ty::Double,
                 SpillKind::Ref => Ty::Any,
             },
+            is_jvm_field: false,
         });
     }
     fields.push(MirField {
         name: "result".to_string(),
         ty: Ty::Any,
+        is_jvm_field: false,
     });
     fields.push(MirField {
         name: "label".to_string(),
         ty: Ty::Int,
+        is_jvm_field: false,
     });
 
     MirClass {
@@ -12402,6 +12405,17 @@ fn lower_expr(
                         module.lambda_receiver_type = Some(recv_class.to_string());
                     }
                 }
+                // If the arg is a single-param lambda passed to a `(T) -> R`
+                // slot, propagate `T` so the lambda helper's invoke descriptor
+                // uses the primitive/concrete type (matches kotlinc; otherwise
+                // we'd erase to Object and emit an unbox in the helper body).
+                if matches!(&a.expr, Expr::Lambda { .. }) {
+                    if let Some(Ty::Function { params: fparams, .. }) = param_tys.get(arg_idx) {
+                        if fparams.len() == 1 && !matches!(fparams[0], Ty::Any) {
+                            module.lambda_param_type = Some(fparams[0].clone());
+                        }
+                    }
+                }
                 // If the arg is a callable-reference desugar and the
                 // target expects a higher-arity FunctionN, expand it.
                 let expanded_arg = param_tys.get(arg_idx).and_then(|expected_ty| {
@@ -18787,12 +18801,14 @@ fn lower_expr(
                 let helper_name = format!("{}{}", helper_prefix, inner_idx);
                 let lambda_idx = module.functions.len();
                 let mut helper_fb = FnBuilder::new(lambda_idx, helper_name.clone(), Ty::Any);
-                // Leave the helper method package-private (no ACC_PRIVATE).
-                // d8 desugars LambdaMetafactory into a sibling synthetic
-                // class; an ACC_PRIVATE helper would trigger
-                // IllegalAccessError when the desugared lambda invokes the
-                // helper from outside the original class. kotlinc dodges
-                // this by not using LambdaMetafactory at all on Android.
+                // Mark ACC_PRIVATE to match kotlinc's emission shape
+                // (0x001A = ACC_PRIVATE | ACC_STATIC | ACC_FINAL). The
+                // helper is invoked only from this class via the
+                // invokedynamic bootstrap, so private visibility is
+                // sufficient on the JVM. d8 handles the LambdaMetafactory
+                // desugaring by widening visibility itself when it splits
+                // the helper into a sibling synthetic class.
+                helper_fb.mf.is_private = true;
                 let mut helper_scope: Vec<(Symbol, LocalId)> = Vec::new();
                 // Capture params come first.
                 for (sym, _outer_lid, ty) in &free_vars {
@@ -19088,6 +19104,7 @@ fn lower_expr(
                     fields: vec![MirField {
                         name: "element".to_string(),
                         ty: ty.clone(),
+                        is_jvm_field: false,
                     }],
                     methods: Vec::new(),
                     constructor: ref_init,
@@ -19142,6 +19159,7 @@ fn lower_expr(
                     MirField {
                         name: interner.resolve(*sym).to_string(),
                         ty: field_ty,
+                        is_jvm_field: false,
                     }
                 })
                 .collect();
@@ -19620,6 +19638,7 @@ fn lower_expr(
                                     SpillKind::Double => Ty::Double,
                                     SpillKind::Ref => Ty::Any,
                                 },
+                                is_jvm_field: false,
                             });
                         }
                         invoke_fn.is_suspend = true;
@@ -19822,6 +19841,7 @@ fn lower_expr(
                 final_fields.push(MirField {
                     name: "p$0".to_string(),
                     ty: Ty::Any,
+                    is_jvm_field: false,
                 });
             }
 
@@ -20585,12 +20605,14 @@ fn lower_enum(
     let mut fields = vec![MirField {
         name: "name".to_string(),
         ty: Ty::String,
+        is_jvm_field: false,
     }];
     for param in &e.constructor_params {
         let ty = resolve_type(interner.resolve(param.ty.name), module);
         fields.push(MirField {
             name: interner.resolve(param.name).to_string(),
             ty,
+            is_jvm_field: false,
         });
     }
 
@@ -20608,6 +20630,7 @@ fn lower_enum(
         .map(|entry| MirField {
             name: interner.resolve(entry.name).to_string(),
             ty: Ty::Class(enum_name.clone()),
+            is_jvm_field: false,
         })
         .collect();
 
@@ -21278,9 +21301,17 @@ fn lower_class(
     for p in &c.constructor_params {
         if p.is_val || p.is_var {
             let ty = resolve_type_ref(&p.ty, interner, module);
+            // `@JvmField val x: Int` in the primary constructor: the
+            // field is exposed as a bare public member with no
+            // synthesized getter, matching kotlinc's Java-interop ABI.
+            let is_jvm_field = p.annotations.iter().any(|a| {
+                let n = interner.resolve(a.name);
+                n == "JvmField" || n == "kotlin/jvm/JvmField"
+            });
             fields.push(MirField {
                 name: interner.resolve(p.name).to_string(),
                 ty,
+                is_jvm_field,
             });
         }
     }
@@ -21299,6 +21330,7 @@ fn lower_class(
             fields.push(MirField {
                 name: interner.resolve(p.name).to_string(),
                 ty,
+                is_jvm_field: false,
             });
         }
     }
@@ -21311,9 +21343,17 @@ fn lower_class(
         } else {
             Ty::Any
         };
+        // `@JvmField` (with optional use-site target like `@field:JvmField`)
+        // promotes the val/var from a private-field-with-getter pair to a
+        // bare public field, matching kotlinc's Java-interop ABI.
+        let is_jvm_field = prop.annotations.iter().any(|a| {
+            let n = interner.resolve(a.name);
+            n == "JvmField" || n == "kotlin/jvm/JvmField"
+        });
         fields.push(MirField {
             name: interner.resolve(prop.name).to_string(),
             ty,
+            is_jvm_field,
         });
     }
 
@@ -21753,6 +21793,7 @@ fn lower_class(
             fields.push(MirField {
                 name: init_field_name.clone(),
                 ty: Ty::Bool,
+                is_jvm_field: false,
             });
 
             // Generate getter: if (!field$initialized) { field = <body>; field$initialized = true } return field
@@ -22293,8 +22334,12 @@ fn lower_class(
                 };
 
             // Synthesize getX() unless the user wrote one OR a method
-            // with that name already exists.
-            if !has_explicit_getter && !user_method_names.contains(&getter_name) {
+            // with that name already exists OR the field is `@JvmField`
+            // (which exposes the field directly with no getter pair).
+            if !has_explicit_getter
+                && !user_method_names.contains(&getter_name)
+                && !field.is_jvm_field
+            {
                 let fn_idx = module.functions.len() + mir_methods.len();
                 let mut fb = FnBuilder::new(fn_idx, getter_name, field.ty.clone());
                 let this_local = fb.new_local(Ty::Class(class_name.clone()));
@@ -22312,8 +22357,13 @@ fn lower_class(
                 mir_methods.push(fb.finish());
             }
 
-            // Synthesize setX(value) for mutable properties.
-            if is_var && !has_explicit_setter && !user_method_names.contains(&setter_name) {
+            // Synthesize setX(value) for mutable properties — also
+            // skipped for `@JvmField` since the field is exposed directly.
+            if is_var
+                && !has_explicit_setter
+                && !user_method_names.contains(&setter_name)
+                && !field.is_jvm_field
+            {
                 let fn_idx = module.functions.len() + mir_methods.len();
                 let mut fb = FnBuilder::new(fn_idx, setter_name, Ty::Unit);
                 let this_local = fb.new_local(Ty::Class(class_name.clone()));
@@ -22732,6 +22782,7 @@ fn lower_class(
         fields.push(MirField {
             name: prop_name.clone(),
             ty: prop_ty.clone(),
+            is_jvm_field: false,
         });
         // If there's an initializer, register as a global constant.
         if let Some(init) = &prop.init {
@@ -23521,6 +23572,7 @@ fn lower_class(
                     span: nested.span,
                 },
                 span: nested.span,
+                annotations: Vec::new(),
             };
             synthetic.constructor_params.insert(0, outer_param);
         }

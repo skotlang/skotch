@@ -1,0 +1,4 @@
+name     = "1236-jvmfield"
+status   = "supported"
+features = ["jvm-field", "annotation"]
+notes    = "@JvmField on a constructor val/var suppresses the synthesized getter; the field is exposed directly. Plain val/var still gets the getter. Output: '3\\n5'."

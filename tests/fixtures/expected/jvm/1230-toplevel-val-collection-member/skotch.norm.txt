@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 field         xs : Ljava/util/List; 0x001A
-method        <clinit> ()V 0x001A
+method        <clinit> ()V 0x0008
   code        max_stack=3 max_locals=1
     0000 iconst_3
     0001 anewarray Class(java/lang/Object)

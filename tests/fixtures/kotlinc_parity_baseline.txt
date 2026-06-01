@@ -146,6 +146,7 @@
 1231-companion-bare-ident
 1234-jvmstatic-companion
 1235-jvmstatic-companion-args
+1236-jvmfield
 124-guard-clause
 125-recursive-function
 126-fizzbuzz
@@ -211,6 +212,7 @@
 226-word-counter
 228-math-interop
 229-fqn-java-call
+23-lambda
 231-import-statement
 232-system-getproperty
 233-class-field-access
@@ -312,9 +314,13 @@
 345-when-no-else
 348-inherited-field-method
 350-null-smart-cast
+351-lambda-arithmetic
+353-trailing-lambda
+356-function-type
 357-object-expr-interface
 358-object-expr-abstract
 36-default-args
+361-receiver-type-parse
 367-star-projection
 369-infix-fun
 37-named-args
@@ -520,6 +526,7 @@
 742-suspend-list-isEmpty
 745-suspend-empty-return
 747-suspend-int-from-string
+75-lambda-basic
 750-suspend-double-mul
 751-suspend-double-div
 752-suspend-int-from-string
@@ -535,6 +542,7 @@
 765-suspend-multiple-returns
 766-composable-inline-no-impl
 767-composable-inline-conditional-2
+77-closure-capture
 770-suspend-int-eq-2
 771-suspend-int-ne
 772-suspend-int-double
@@ -544,6 +552,7 @@
 777-suspend-no-arg-string
 778-suspend-int-from-arg
 779-suspend-int-default-zero
+78-higher-order-function
 780-suspend-printf-int
 781-composable-inline-no-content-lambda
 782-composable-inline-no-content-string

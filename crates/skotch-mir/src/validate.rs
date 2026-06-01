@@ -577,6 +577,7 @@ mod tests {
             fields: vec![MirField {
                 name: "x".into(),
                 ty: Ty::Int,
+                is_jvm_field: false,
             }],
             methods: Vec::new(),
             constructor: empty_func("<init>", 0),

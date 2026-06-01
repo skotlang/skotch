@@ -1861,6 +1861,12 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
         let existing_method_names: std::collections::HashSet<String> =
             class.methods.iter().map(|m| m.name.clone()).collect();
         for field in &class.fields {
+            // `@JvmField` properties are exposed as bare public fields —
+            // no synthesized getter pair. kotlinc emits the same shape
+            // for Java-interop properties.
+            if field.is_jvm_field {
+                continue;
+            }
             let getter_name = format!(
                 "get{}{}",
                 field.name.chars().next().unwrap_or('?').to_uppercase(),
@@ -6281,7 +6287,15 @@ fn emit_method(
     // parity from this choice.
     let synthetic_flag = 0u16;
     let _ = ACC_SYNTHETIC; // kept for the bridge/synthetic emitters elsewhere
-    let access_flags = visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag | synthetic_flag;
+                           // `<clinit>` carries ACC_STATIC only — no visibility flag, no ACC_FINAL.
+                           // kotlinc emits 0x0008; we previously emitted 0x001A
+                           // (ACC_PRIVATE | ACC_STATIC | ACC_FINAL) which the JVM accepts but
+                           // diverges from kotlinc's class-file shape.
+    let access_flags = if func.name == "<clinit>" {
+        ACC_STATIC
+    } else {
+        visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag | synthetic_flag
+    };
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
     // Pre-register attribute-driven CP entries before the body emits any

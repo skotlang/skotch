@@ -844,6 +844,13 @@ pub struct MirClass {
 pub struct MirField {
     pub name: String,
     pub ty: Ty,
+    /// True when the source declaration carried the `@JvmField`
+    /// annotation. Backends use this to emit the field as a direct
+    /// `public` member (no synthesized `getX`/`setX` accessor pair),
+    /// matching kotlinc's @JvmField interop ABI. Defaults to false
+    /// so existing fixtures are unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_jvm_field: bool,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]

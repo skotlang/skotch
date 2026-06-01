@@ -1,0 +1,82 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=9
+    0000 new Class(User)
+    0003 dup
+    0004 ldc "Ada"
+    0006 bipush 36
+    0008 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
+    0011 astore_0
+    0012 new Class(User)
+    0015 dup
+    0016 ldc "Bob"
+    0018 bipush 24
+    0020 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
+    0023 astore_1
+    0024 new Class(User)
+    0027 dup
+    0028 ldc "Cy"
+    0030 bipush 51
+    0032 invokespecial Method(User.<init>:(Ljava/lang/String;I)V)
+    0035 astore_2
+    0036 iconst_3
+    0037 anewarray Class(java/lang/Object)
+    0040 astore_3
+    0041 aload_3
+    0042 iconst_0
+    0043 aload_0
+    0044 aastore
+    0045 aload_3
+    0046 iconst_1
+    0047 aload_1
+    0048 aastore
+    0049 aload_3
+    0050 iconst_2
+    0051 aload_2
+    0052 aastore
+    0053 aload_3
+    0054 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0057 astore 4
+    0059 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0064 astore 5
+    0066 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0071 astore 6
+    0073 aload 4
+    0075 checkcast Class(java/lang/Iterable)
+    0078 aload 6
+    0080 invokestatic Method(kotlin/collections/CollectionsKt.map:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0083 astore 7
+    0085 aload 7
+    0087 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0092 astore 8
+    0094 aload 8
+    0096 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0101 ifeq 121
+    0104 aload 8
+    0106 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0111 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0114 swap
+    0115 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0118 goto 94
+    0121 return
+    sub_attr  StackMapTable (37 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
+  code        max_stack=1 max_locals=1
+    0000 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
+    0003 areturn
+method        main$lambda$1 (LUser;)Ljava/lang/String; 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "it"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(User.getName:()Ljava/lang/String;)
+    0010 areturn
+class_attr    BootstrapMethods (22 bytes)

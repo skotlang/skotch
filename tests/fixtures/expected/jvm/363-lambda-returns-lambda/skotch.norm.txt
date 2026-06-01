@@ -30,7 +30,7 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (I)LInputKt$Lambda$0; 0x0019
+method        main$lambda$0 (I)LInputKt$Lambda$0; 0x001A
   code        max_stack=3 max_locals=2
     0000 new Class(InputKt$Lambda$0)
     0003 dup
@@ -39,6 +39,5 @@ method        main$lambda$0 (I)LInputKt$Lambda$0; 0x0019
     0008 astore_1
     0009 aload_1
     0010 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 class_attr    InnerClasses (10 bytes)
 class_attr    BootstrapMethods (12 bytes)

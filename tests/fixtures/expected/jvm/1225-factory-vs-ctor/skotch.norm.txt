@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 field         b : LBox; 0x001A
-method        <clinit> ()V 0x001A
+method        <clinit> ()V 0x0008
   code        max_stack=1 max_locals=0
     0000 bipush 42
     0002 invokestatic Method(InputKt.Box:(I)LBox;)

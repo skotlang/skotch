@@ -123,6 +123,10 @@ struct TypeDecl {
     /// by the `when` exhaustiveness check to compute the covered/missing
     /// set when a `when` expression branches on an enum-typed subject.
     enum_entries: Vec<String>,
+    /// True for `sealed class` / `sealed interface` declarations. The
+    /// closed subclass list lives in [`TypeEnv::sealed_subclasses`] and
+    /// is consulted by the `when` exhaustiveness check.
+    is_sealed: bool,
 }
 
 /// The type environment built from all declarations in the file.
@@ -132,6 +136,11 @@ struct TypeEnv {
     types: FxHashMap<String, TypeDecl>,
     /// Enum entry names → (enum_class_name)
     enum_entries: FxHashMap<String, String>,
+    /// sealed_class_name → list of direct subclass names (in source order).
+    /// Built during register_class by walking each class's `parent_class`
+    /// and bucketing under its name when the parent is `sealed`. Used by
+    /// the `when` exhaustiveness check for sealed-class subjects.
+    sealed_subclasses: FxHashMap<String, Vec<String>>,
 }
 
 impl TypeEnv {
@@ -702,7 +711,6 @@ impl<'a> TypeChecker<'a> {
     // ── Type environment builders ───────────────────────────────────────
 
     fn register_class(&mut self, c: &ClassDecl) {
-        let name = self.interner.resolve(c.name).to_string();
         let super_class = c
             .parent_class
             .as_ref()
@@ -743,10 +751,25 @@ impl<'a> TypeChecker<'a> {
             .iter()
             .map(|m| self.method_sig_from_fun(m))
             .collect();
+        // If this class extends a sealed parent, record itself as a
+        // direct subclass so the `when` exhaustiveness check can find
+        // the complete set later.
+        if let Some(parent) = &super_class {
+            if let Some(parent_decl) = self.env.types.get(parent) {
+                if parent_decl.is_sealed {
+                    self.env
+                        .sealed_subclasses
+                        .entry(parent.clone())
+                        .or_default()
+                        .push(self.interner.resolve(c.name).to_string());
+                }
+            }
+        }
+        let class_name = self.interner.resolve(c.name).to_string();
         self.env.types.insert(
-            name,
+            class_name.clone(),
             TypeDecl {
-                name: self.interner.resolve(c.name).to_string(),
+                name: class_name,
                 super_class,
                 interfaces,
                 fields,
@@ -754,6 +777,7 @@ impl<'a> TypeChecker<'a> {
                 companion_methods,
                 is_enum: false,
                 enum_entries: Vec::new(),
+                is_sealed: c.is_sealed,
             },
         );
     }
@@ -776,6 +800,7 @@ impl<'a> TypeChecker<'a> {
                 companion_methods: Vec::new(),
                 is_enum: false,
                 enum_entries: Vec::new(),
+                is_sealed: false,
             },
         );
     }
@@ -814,6 +839,7 @@ impl<'a> TypeChecker<'a> {
                 companion_methods: Vec::new(),
                 is_enum: true,
                 enum_entries: entries,
+                is_sealed: false,
             },
         );
     }
@@ -1231,6 +1257,23 @@ impl<'a> TypeChecker<'a> {
         covered
     }
 
+    /// Compute the set of subclass simple-names covered by `is <Subclass>`
+    /// patterns in the given `when` branches. The sealed-class
+    /// exhaustiveness check compares this set to the closed subclass
+    /// list and warns about anything missing.
+    fn covered_sealed_subclasses(
+        &self,
+        branches: &[skotch_syntax::WhenBranch],
+    ) -> rustc_hash::FxHashSet<String> {
+        let mut covered = rustc_hash::FxHashSet::default();
+        for b in branches {
+            if let Expr::IsCheck { type_name, .. } = &b.pattern {
+                covered.insert(self.interner.resolve(*type_name).to_string());
+            }
+        }
+        covered
+    }
+
     fn synth_expr(&mut self, e: &Expr, scope: &mut Vec<(Symbol, Ty)>) -> Ty {
         match e {
             Expr::IntLit(_, _) => Ty::Int,
@@ -1514,6 +1557,36 @@ impl<'a> TypeChecker<'a> {
                                         *span,
                                         format!(
                                             "'when' is not exhaustive on enum {}: missing entries: {}",
+                                            subj_name, names
+                                        ),
+                                    ));
+                                }
+                            } else if ti.is_sealed {
+                                // Sealed-class exhaustiveness: each direct
+                                // subclass declared in this file must be
+                                // covered by an `is <Subclass>` pattern,
+                                // or `else` must be present. Subclasses
+                                // declared in other files aren't visible
+                                // to typeck so this is a conservative
+                                // check against the in-file hierarchy.
+                                let subclasses = self
+                                    .env
+                                    .sealed_subclasses
+                                    .get(subj_name)
+                                    .cloned()
+                                    .unwrap_or_default();
+                                let covered = self.covered_sealed_subclasses(branches);
+                                let missing: Vec<&str> = subclasses
+                                    .iter()
+                                    .filter(|sc| !covered.contains(sc.as_str()))
+                                    .map(|s| s.as_str())
+                                    .collect();
+                                if !missing.is_empty() && !subclasses.is_empty() {
+                                    let names = missing.join(", ");
+                                    self.diags.push(Diagnostic::warning(
+                                        *span,
+                                        format!(
+                                            "'when' is not exhaustive on sealed class {}: missing subclasses: {}",
                                             subj_name, names
                                         ),
                                     ));
@@ -1999,6 +2072,64 @@ fun describe(c: Color): String {
         else -> "other"
     }
     return s
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            !msg.contains("not exhaustive"),
+            "when with else branch must not warn: {msg}"
+        );
+    }
+
+    #[test]
+    fn warn_when_missing_sealed_subclass_with_no_else() {
+        // `when (s: Shape) { is Circle -> … }` — missing Square branch.
+        let src = r#"
+sealed class Shape
+class Circle : Shape()
+class Square : Shape()
+fun describe(s: Shape): String {
+    val r = when (s) { is Circle -> "c" }
+    return r
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            msg.contains("not exhaustive") && msg.contains("Square"),
+            "expected non-exhaustive sealed warning naming Square: {msg}"
+        );
+    }
+
+    #[test]
+    fn accept_when_all_sealed_subclasses_covered() {
+        let src = r#"
+sealed class Shape
+class Circle : Shape()
+class Square : Shape()
+fun describe(s: Shape): String {
+    val r = when (s) { is Circle -> "c" is Square -> "s" }
+    return r
+}
+"#;
+        let (_, d) = run(src);
+        let msg = format!("{:?}", d);
+        assert!(
+            !msg.contains("not exhaustive"),
+            "exhaustive when on sealed must not warn: {msg}"
+        );
+    }
+
+    #[test]
+    fn accept_when_else_branch_covers_missing_sealed_subclasses() {
+        let src = r#"
+sealed class Shape
+class Circle : Shape()
+class Square : Shape()
+fun describe(s: Shape): String {
+    val r = when (s) { is Circle -> "c" else -> "other" }
+    return r
 }
 "#;
         let (_, d) = run(src);

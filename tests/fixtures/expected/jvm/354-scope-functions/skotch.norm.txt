@@ -56,7 +56,7 @@ method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (Ljava/lang/String;)Ljava/lang/String; 0x0019
+method        main$lambda$0 (Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=3 max_locals=1
     0000 aload_0
     0001 ldc "s"
@@ -68,8 +68,7 @@ method        main$lambda$0 (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0014 ldc "toUpperCase(...)"
     0016 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
     0019 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        main$lambda$1 (I)Lkotlin/Unit; 0x0019
+method        main$lambda$1 (I)Lkotlin/Unit; 0x001A
   code        max_stack=2 max_locals=1
     0000 iload_0
     0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
@@ -78,8 +77,7 @@ method        main$lambda$1 (I)Lkotlin/Unit; 0x0019
     0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0013 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
     0016 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        main$lambda$2 (Ljava/lang/String;)Ljava/lang/String; 0x0019
+method        main$lambda$2 (Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "s"
@@ -87,8 +85,7 @@ method        main$lambda$2 (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0006 aload_0
     0007 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
     0012 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        main$lambda$3 (I)Lkotlin/Unit; 0x0019
+method        main$lambda$3 (I)Lkotlin/Unit; 0x001A
   code        max_stack=2 max_locals=1
     0000 iload_0
     0001 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
@@ -97,8 +94,7 @@ method        main$lambda$3 (I)Lkotlin/Unit; 0x0019
     0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0013 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
     0016 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
-method        main$lambda$4 (Ljava/lang/String;)Ljava/lang/String; 0x0019
+method        main$lambda$4 (Ljava/lang/String;)Ljava/lang/String; 0x001A
   code        max_stack=3 max_locals=1
     0000 aload_0
     0001 ldc "s"
@@ -110,5 +106,4 @@ method        main$lambda$4 (Ljava/lang/String;)Ljava/lang/String; 0x0019
     0014 ldc "toUpperCase(...)"
     0016 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
     0019 areturn
-  attr        RuntimeInvisibleAnnotations (6 bytes)
 class_attr    BootstrapMethods (70 bytes)
