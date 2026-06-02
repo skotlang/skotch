@@ -838,6 +838,26 @@ pub fn resolve_file(
         }
     }
 
+    // Register explicit (non-wildcard) imports under the bound name (alias
+    // if present, else last path segment) as PossibleExternal so MIR
+    // lowering can resolve them via the classinfo registry. Without this,
+    // a lowercase imported function like `import androidx.compose.runtime.remember`
+    // hits `is_possible_external("remember") == false` (starts lowercase,
+    // not a known package prefix) and a spurious "unresolved identifier"
+    // warning fires even though MIR lowering does resolve it later.
+    for imp in &file.imports {
+        if imp.is_wildcard {
+            continue;
+        }
+        let name_sym = imp.alias.or_else(|| imp.path.last().copied());
+        if let Some(sym) = name_sym {
+            r.out
+                .top_level
+                .entry(sym)
+                .or_insert(DefId::PossibleExternal(sym));
+        }
+    }
+
     // Second pass: resolve each decl's body.
     for (i, decl) in file.decls.iter().enumerate() {
         match decl {

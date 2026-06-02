@@ -11906,6 +11906,154 @@ fn lower_expr(
                                 )?;
                                 arg_locals.push(id);
                             }
+                            // Named-arg reordering: when the call uses named
+                            // args (e.g. `darkColorScheme(primary = Blue80,
+                            // onPrimary = Blue20, …)`) and the source-level
+                            // order doesn't match the facade fn's param
+                            // declaration order, the trailing `$default`
+                            // dispatch below pads positional gaps with
+                            // wrong-slot defaults and the validator rejects
+                            // the call → enclosing `<clinit>` is stubbed →
+                            // theme colors are null at runtime → MaterialTheme
+                            // NPE. Use `@Metadata` param names to map each
+                            // named arg back to its declaration position;
+                            // synthesize typed defaults for any unfilled
+                            // user-level slot and record the mask bits so
+                            // the callee uses its own defaults for them.
+                            let mut reorder_default_mask: u32 = 0;
+                            let has_named = args.iter().any(|a| a.name.is_some());
+                            if has_named {
+                                if let Some(fn_meta) =
+                                    skotch_classinfo::lookup_function_metadata(&facade, &callee_str)
+                                {
+                                    let param_names: Vec<&str> = fn_meta
+                                        .value_params
+                                        .iter()
+                                        .map(|p| p.name.as_str())
+                                        .collect();
+                                    if !param_names.is_empty() {
+                                        let mut placed: Vec<Option<LocalId>> =
+                                            vec![None; param_names.len()];
+                                        let mut next_positional = 0usize;
+                                        let mut ok = true;
+                                        for (i, a) in args.iter().enumerate() {
+                                            let local = arg_locals[i];
+                                            if let Some(name_sym) = a.name {
+                                                let name_str = interner.resolve(name_sym);
+                                                if let Some(pos) =
+                                                    param_names.iter().position(|n| *n == name_str)
+                                                {
+                                                    if placed[pos].is_some() {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                    placed[pos] = Some(local);
+                                                } else {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                            } else {
+                                                while next_positional < param_names.len()
+                                                    && placed[next_positional].is_some()
+                                                {
+                                                    next_positional += 1;
+                                                }
+                                                if next_positional >= param_names.len() {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                                placed[next_positional] = Some(local);
+                                                next_positional += 1;
+                                            }
+                                        }
+                                        if ok {
+                                            // Find the highest filled
+                                            // position; expand arg_locals up
+                                            // to that point, filling internal
+                                            // gaps with descriptor-typed
+                                            // defaults. Bits for the
+                                            // synthesized defaults go in
+                                            // `reorder_default_mask`, which
+                                            // the padding logic below ORs
+                                            // into the `$default` mask.
+                                            let last_filled =
+                                                placed.iter().rposition(|p| p.is_some());
+                                            if let Some(last) = last_filled {
+                                                // Look up the descriptor we'll
+                                                // use to type each synthesized
+                                                // default. Prefer the exact-
+                                                // arity descriptor; fall back
+                                                // to scanning for a $default
+                                                // overload.
+                                                let desc_for_types =
+                                                    skotch_classinfo::lookup_method_descriptor(
+                                                        &facade,
+                                                        &callee_str,
+                                                        placed.len(),
+                                                    )
+                                                    .or_else(|| {
+                                                        (1..=8usize).find_map(|extra| {
+                                                        skotch_classinfo::lookup_method_descriptor(
+                                                            &facade,
+                                                            &format!("{callee_str}$default"),
+                                                            placed.len() + extra,
+                                                        )
+                                                    })
+                                                    });
+                                                let desc_param_tys = desc_for_types
+                                                    .as_deref()
+                                                    .map(param_tys_from_descriptor)
+                                                    .unwrap_or_default();
+                                                let mut new_arg_locals: Vec<LocalId> =
+                                                    Vec::with_capacity(last + 1);
+                                                for (slot, slot_local) in
+                                                    placed.iter().take(last + 1).enumerate()
+                                                {
+                                                    if let Some(local) = slot_local {
+                                                        new_arg_locals.push(*local);
+                                                    } else {
+                                                        if slot < 32 {
+                                                            reorder_default_mask |= 1u32 << slot;
+                                                        }
+                                                        let slot_ty = desc_param_tys
+                                                            .get(slot)
+                                                            .cloned()
+                                                            .unwrap_or(Ty::Any);
+                                                        let pad = fb.new_local(slot_ty.clone());
+                                                        let init = match &slot_ty {
+                                                            Ty::Int
+                                                            | Ty::Byte
+                                                            | Ty::Short
+                                                            | Ty::Char => {
+                                                                Rvalue::Const(MirConst::Int(0))
+                                                            }
+                                                            Ty::Long => {
+                                                                Rvalue::Const(MirConst::Long(0))
+                                                            }
+                                                            Ty::Float => {
+                                                                Rvalue::Const(MirConst::Float(0.0))
+                                                            }
+                                                            Ty::Double => {
+                                                                Rvalue::Const(MirConst::Double(0.0))
+                                                            }
+                                                            Ty::Bool => {
+                                                                Rvalue::Const(MirConst::Bool(false))
+                                                            }
+                                                            _ => Rvalue::Const(MirConst::Null),
+                                                        };
+                                                        fb.push_stmt(MStmt::Assign {
+                                                            dest: pad,
+                                                            value: init,
+                                                        });
+                                                        new_arg_locals.push(pad);
+                                                    }
+                                                }
+                                                arg_locals = new_arg_locals;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             let user_n = arg_locals.len();
                             // Exact-arity match: user supplied all params (no
                             // defaults needed). Common when the fn has no
@@ -12090,7 +12238,7 @@ fn lower_expr(
                                 // zero/null per the descriptor's primitive
                                 // kind, and set the mask bits for those
                                 // positions only.
-                                let mut mask: i32 = 0;
+                                let mut mask: i32 = reorder_default_mask as i32;
                                 for i in user_n..user_count_total {
                                     let kind = param_chars.get(i).copied().unwrap_or('L');
                                     let (slot_ty, value) = match kind {
@@ -15124,12 +15272,132 @@ fn lower_expr(
                     // (e.g. `MaterialTheme(colorScheme=…, typography=…,
                     // content=…)` lands `typography` in the `Shapes`
                     // slot because skotch can't reorder by name without
-                    // the target's param names — which kotlinc emits via
-                    // `@Metadata`, not parsed yet). Until #295 is real,
-                    // refuse the call and emit null. JetchatTheme's
-                    // MaterialTheme call ends up no-op (UI doesn't
-                    // render) instead of throwing ClassCastException.
+                    // the target's param names. Reorder via
+                    // `lookup_function_metadata` (`@Metadata` param
+                    // names) when available — for callees without
+                    // @Metadata, fall back to the null-emit fallback
+                    // below.
                     let has_named = args.iter().any(|a| a.name.is_some());
+                    let composer_abs_pos = composer_position_in_descriptor(&desc);
+                    let user_slot_count = composer_abs_pos
+                        .unwrap_or_else(|| skotch_classinfo::count_descriptor_params_pub(&desc));
+                    // Mask bits for slots we filled with synthesized
+                    // defaults during named-arg reordering. Consumed by
+                    // the padding path below when emitting the
+                    // `$default` mask slot.
+                    let mut precomputed_default_mask: u64 = 0;
+                    if has_named && arg_locals.len() < user_slot_count {
+                        if let Some(fn_meta) =
+                            skotch_classinfo::lookup_function_metadata(&wrapper_class, callee_str)
+                        {
+                            let param_names: Vec<&str> = fn_meta
+                                .value_params
+                                .iter()
+                                .map(|p| p.name.as_str())
+                                .collect();
+                            let metadata_matches = param_names.len() == user_slot_count;
+                            if metadata_matches {
+                                let mut placed: Vec<Option<LocalId>> = vec![None; user_slot_count];
+                                let mut next_positional = 0usize;
+                                let mut ok = true;
+                                for (i, a) in args.iter().enumerate() {
+                                    let local = arg_locals[i];
+                                    if let Some(name_sym) = a.name {
+                                        let name_str = interner.resolve(name_sym);
+                                        if let Some(pos) =
+                                            param_names.iter().position(|n| *n == name_str)
+                                        {
+                                            if placed[pos].is_some() {
+                                                ok = false;
+                                                break;
+                                            }
+                                            placed[pos] = Some(local);
+                                        } else {
+                                            ok = false;
+                                            break;
+                                        }
+                                    } else {
+                                        while next_positional < user_slot_count
+                                            && placed[next_positional].is_some()
+                                        {
+                                            next_positional += 1;
+                                        }
+                                        if next_positional >= user_slot_count {
+                                            ok = false;
+                                            break;
+                                        }
+                                        placed[next_positional] = Some(local);
+                                        next_positional += 1;
+                                    }
+                                }
+                                // Refuse the reorder when any placed slot
+                                // would need a value-class arg passed to
+                                // a primitive descriptor slot (e.g.
+                                // `darkColorScheme(primary = Blue40)`
+                                // where Blue40 is `Color` (value class
+                                // over `J`) and the descriptor expects
+                                // `J`). The JVM emitter would then push
+                                // a `Color` object reference into a
+                                // primitive slot and the validator would
+                                // stub the entire enclosing function.
+                                // The downstream null-emit fallback
+                                // preserves the previous behavior for
+                                // these cases.
+                                let desc_param_tys = param_tys_from_descriptor(&desc);
+                                let primitive_value_class_mismatch =
+                                    placed.iter().enumerate().any(|(slot, slot_local)| {
+                                        let Some(local) = slot_local else {
+                                            return false;
+                                        };
+                                        let arg_ty = &fb.mf.locals[local.0 as usize];
+                                        let slot_ty = desc_param_tys.get(slot);
+                                        matches!(slot_ty, Some(Ty::Long | Ty::Double))
+                                            && matches!(arg_ty, Ty::Class(_))
+                                    });
+                                if ok && !primitive_value_class_mismatch {
+                                    let mut new_arg_locals: Vec<LocalId> =
+                                        Vec::with_capacity(user_slot_count);
+                                    for (slot, slot_local) in placed.iter().enumerate() {
+                                        if let Some(local) = slot_local {
+                                            new_arg_locals.push(*local);
+                                        } else {
+                                            // Synthesized default for an
+                                            // unfilled slot — record the
+                                            // mask bit so the callee
+                                            // ignores our null/zero and
+                                            // uses its own default.
+                                            precomputed_default_mask |= 1u64 << slot;
+                                            let slot_ty = desc_param_tys
+                                                .get(slot)
+                                                .cloned()
+                                                .unwrap_or(Ty::Any);
+                                            let pad = fb.new_local(slot_ty.clone());
+                                            let init = match &slot_ty {
+                                                Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
+                                                    Rvalue::Const(MirConst::Int(0))
+                                                }
+                                                Ty::Long => Rvalue::Const(MirConst::Long(0)),
+                                                Ty::Float => Rvalue::Const(MirConst::Float(0.0)),
+                                                Ty::Double => Rvalue::Const(MirConst::Double(0.0)),
+                                                Ty::Bool => Rvalue::Const(MirConst::Bool(false)),
+                                                _ => Rvalue::Const(MirConst::Null),
+                                            };
+                                            fb.push_stmt(MStmt::Assign {
+                                                dest: pad,
+                                                value: init,
+                                            });
+                                            new_arg_locals.push(pad);
+                                        }
+                                    }
+                                    arg_locals = new_arg_locals;
+                                    // Skip the null-emit fallback below;
+                                    // the padding+invokestatic path
+                                    // handles `$composer`, `$changed`,
+                                    // and the `$default` mask.
+                                }
+                            }
+                        }
+                    }
                     let composer_abs_pos = composer_position_in_descriptor(&desc);
                     let user_slot_count = composer_abs_pos
                         .unwrap_or_else(|| skotch_classinfo::count_descriptor_params_pub(&desc));
@@ -15369,7 +15637,7 @@ fn lower_expr(
                         // `rememberCoroutineScope` would otherwise call
                         // `null.invoke()` on the missing `getContext`
                         // lambda).
-                        let mut default_mask: u64 = 0;
+                        let mut default_mask: u64 = precomputed_default_mask;
                         let default_slot_idx = composer_abs_pos.map(|p| p + 2);
 
                         // Trailing-lambda placement: if the user provided
