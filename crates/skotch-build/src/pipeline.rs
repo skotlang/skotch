@@ -1993,6 +1993,23 @@ fn compile_multi_module_classes(
 
     // Resolve external Maven dependencies for classpath — needed so the MIR
     // lowerer can resolve library method signatures and types.
+    // ALSO preload android.jar when any module is Android — without it
+    // mir-lower/backend-jvm can't look up `LayoutInflater.inflate(...)V`
+    // → `V` and d8 rejects the resulting `(I,ViewGroup,Z)V` descriptor on
+    // databinding classes. (build_multi_module already does this at
+    // line 2814; the assemble path goes through this function instead.)
+    if modules.iter().any(|m| m.project.is_android) {
+        if let Some(jar) = find_android_jar() {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            let mut cp = std::env::var("CLASSPATH").unwrap_or_default();
+            if !cp.is_empty() {
+                cp.push_str(sep);
+            }
+            cp.push_str(&jar.to_string_lossy());
+            std::env::set_var("CLASSPATH", &cp);
+            skotch_mir_lower::preload_registry_jars(std::slice::from_ref(&jar));
+        }
+    }
     for module in &modules {
         if let Ok(dep_jars) = resolve_external_deps(&module.project, root_dir) {
             if !dep_jars.is_empty() {

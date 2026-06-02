@@ -15482,7 +15482,24 @@ fn walk_block(
                     if let Some((_, ref rty)) = target_method_sig {
                         descriptor.push_str(&jvm_type_string(rty));
                     } else {
-                        descriptor.push_str(&ret_desc);
+                        // External class (e.g. android/view/LayoutInflater):
+                        // ask classinfo for the real method signature so we
+                        // get the right return type, not the cast-target
+                        // `dest_ty` (which `inflate(...) as FrameLayout`
+                        // collapses to Unit when classinfo lookup wasn't
+                        // wired in at MIR-lower time, producing `(...)V`).
+                        let classinfo_ret = if is_function_invoke {
+                            None
+                        } else {
+                            let user_arity = args.len().saturating_sub(1);
+                            skotch_classinfo::lookup_method_descriptor(
+                                class_name,
+                                method_name,
+                                user_arity,
+                            )
+                            .and_then(|d| d.rsplit_once(')').map(|(_, ret)| ret.to_string()))
+                        };
+                        descriptor.push_str(classinfo_ret.as_deref().unwrap_or(&ret_desc));
                     }
                     // Check if receiver type is an interface — if so, use
                     // invokeinterface instead of invokevirtual.
