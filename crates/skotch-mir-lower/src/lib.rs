@@ -11664,19 +11664,99 @@ fn lower_expr(
                         arg_locals.len(),
                     );
                     if let Some(desc) = box_impl_desc {
-                        let dest = fb.new_local(Ty::Class(jvm_class.clone()));
-                        fb.push_stmt(MStmt::Assign {
-                            dest,
-                            value: Rvalue::Call {
-                                kind: CallKind::StaticJava {
-                                    class_name: jvm_class,
-                                    method_name: "box-impl".to_string(),
-                                    descriptor: desc,
+                        // When the user arg types match the value-class's
+                        // underlying primitive directly (e.g. `Color(longLit)`
+                        // calling `Color.box-impl(J)Color`), route through
+                        // box-impl as-is. When they DON'T match — the most
+                        // common JetChat case is `Color(intLit)` where
+                        // box-impl wants `J` — prefer the same-package
+                        // factory `ColorKt.Color(I)J` and then box its long
+                        // result. kotlinc generates exactly this two-call
+                        // chain for `Color(0xFF6750A4)`.
+                        let box_arg_tys = descriptor_arg_tys(&desc);
+                        let user_arg_tys: Vec<Ty> = arg_locals
+                            .iter()
+                            .map(|l| fb.mf.locals[l.0 as usize].clone())
+                            .collect();
+                        let box_accepts = box_arg_tys.len() == user_arg_tys.len()
+                            && box_arg_tys
+                                .iter()
+                                .zip(&user_arg_tys)
+                                .all(|(p, a)| a.assignable_to(p) || matches!(p, Ty::Any));
+                        // Try to locate a sibling `<Pkg>/<Name>Kt.<Name>`
+                        // factory that takes the user's arg types and
+                        // returns the value-class's underlying primitive.
+                        let chained = if !box_accepts {
+                            jvm_class.rsplit_once('/').and_then(|(pkg, _)| {
+                                skotch_classinfo::find_wrapper_class_for_function(pkg, &callee_str)
+                                    .and_then(|facade| {
+                                        skotch_classinfo::lookup_method_descriptor(
+                                            &facade,
+                                            &callee_str,
+                                            arg_locals.len(),
+                                        )
+                                        .and_then(|fd| {
+                                            let fparams = descriptor_arg_tys(&fd);
+                                            let fits = fparams.len() == user_arg_tys.len()
+                                                && user_arg_tys.iter().zip(&fparams).all(
+                                                    |(a, p)| {
+                                                        a.assignable_to(p) || matches!(p, Ty::Any)
+                                                    },
+                                                );
+                                            if fits {
+                                                Some((facade, fd))
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                    })
+                            })
+                        } else {
+                            None
+                        };
+                        if let Some((facade, fac_desc)) = chained {
+                            let fac_ret_ty = ty_from_descriptor_return(&fac_desc);
+                            let inner = fb.new_local(fac_ret_ty.clone());
+                            fb.push_stmt(MStmt::Assign {
+                                dest: inner,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: facade,
+                                        method_name: callee_str.clone(),
+                                        descriptor: fac_desc,
+                                    },
+                                    args: arg_locals,
                                 },
-                                args: arg_locals,
-                            },
-                        });
-                        return Some(dest);
+                            });
+                            let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: jvm_class,
+                                        method_name: "box-impl".to_string(),
+                                        descriptor: desc,
+                                    },
+                                    args: vec![inner],
+                                },
+                            });
+                            return Some(dest);
+                        }
+                        if box_accepts {
+                            let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::StaticJava {
+                                        class_name: jvm_class,
+                                        method_name: "box-impl".to_string(),
+                                        descriptor: desc,
+                                    },
+                                    args: arg_locals,
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                     // Look up the actual constructor descriptor from the
                     // classpath. Use the typed lookup so overload resolution
@@ -18128,8 +18208,23 @@ fn lower_expr(
                     // this, we fall to the generic `Rvalue::GetField`
                     // below and emit `getfield Color.White:Object` on a
                     // null receiver — runtime fails with `NoSuchFieldError`.
+                    //
+                    // Two shapes:
+                    // - receiver is `Color` → declaring_class == "Color",
+                    //   need to dereference through Color.Companion.
+                    // - receiver is already `Color.Companion` (the bare-
+                    //   Ident lowering at lower_expr:7132 emits
+                    //   `getstatic Color.Companion`) →
+                    //   declaring_class == "Color$Companion". Look up the
+                    //   getter on the declaring class directly; recv_local
+                    //   already holds the Companion instance.
                     if declaring_class.contains('/') {
-                        let companion_class = format!("{declaring_class}$Companion");
+                        let already_companion = declaring_class.ends_with("$Companion");
+                        let companion_class = if already_companion {
+                            declaring_class.clone()
+                        } else {
+                            format!("{declaring_class}$Companion")
+                        };
                         let getter_name =
                             format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
                         if let Some((actual_method, getter_desc)) =
@@ -18140,15 +18235,20 @@ fn lower_expr(
                             )
                         {
                             let ret_ty = ty_from_descriptor_return(&getter_desc);
-                            let companion_local = fb.new_local(Ty::Class(companion_class.clone()));
-                            fb.push_stmt(MStmt::Assign {
-                                dest: companion_local,
-                                value: Rvalue::GetStaticField {
-                                    class_name: declaring_class.clone(),
-                                    field_name: "Companion".to_string(),
-                                    descriptor: format!("L{companion_class};"),
-                                },
-                            });
+                            let companion_local = if already_companion {
+                                recv_local
+                            } else {
+                                let local = fb.new_local(Ty::Class(companion_class.clone()));
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: local,
+                                    value: Rvalue::GetStaticField {
+                                        class_name: declaring_class.clone(),
+                                        field_name: "Companion".to_string(),
+                                        descriptor: format!("L{companion_class};"),
+                                    },
+                                });
+                                local
+                            };
                             let dest = fb.new_local(ret_ty);
                             fb.push_stmt(MStmt::Assign {
                                 dest,

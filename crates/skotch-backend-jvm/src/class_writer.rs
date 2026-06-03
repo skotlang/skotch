@@ -5588,6 +5588,18 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
                     for (param_str, arg) in param_types.iter().zip(args.iter()) {
                         let arg_ty = func.locals.get(arg.0 as usize);
                         let first_char = param_str.chars().next().unwrap_or(' ');
+                        // Compose `@JvmInline value class` like `Color` is
+                        // a `Ty::Class("…/Color")` at the user-program level
+                        // but erases to a primitive (`J` for Color, `F` for
+                        // Dp) at the JVM. When the descriptor's slot is the
+                        // underlying primitive, accept the value-class arg —
+                        // the call-emission path inserts the matching
+                        // `unbox-impl()<prim>` instance call before pushing.
+                        let value_class_matches_prim = if let Some(Ty::Class(c)) = arg_ty {
+                            value_class_underlying_prim_char(c).is_some_and(|p| p == first_char)
+                        } else {
+                            false
+                        };
                         let ok = match (first_char, arg_ty) {
                             // Wide primitives: arg must match exactly.
                             ('F', Some(Ty::Float))
@@ -5611,7 +5623,7 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
                             {
                                 true
                             }
-                            _ => false,
+                            _ => value_class_matches_prim,
                         };
                         if !ok {
                             if report {
@@ -14822,6 +14834,32 @@ fn walk_block(
                                         bump(stack, max_stack, 1);
                                     }
                                     _ => {}
+                                }
+                                // Compose value-class coercion: if the
+                                // arg is a known `@JvmInline value class`
+                                // and the descriptor wants its underlying
+                                // primitive, emit
+                                // `invokevirtual <ValueClass>.unbox-impl()<prim>`
+                                // to extract the primitive before pushing.
+                                if let Ty::Class(c) = actual {
+                                    let expect_char = expected.chars().next().unwrap_or(' ');
+                                    if expect_char != 'L'
+                                        && expect_char != '['
+                                        && value_class_underlying_prim_char(c) == Some(expect_char)
+                                    {
+                                        let unbox_desc = format!("(){}", expect_char);
+                                        let mref = cp.methodref(c, "unbox-impl", &unbox_desc);
+                                        code.push(0xB6); // invokevirtual
+                                        code.write_u16::<BigEndian>(mref).unwrap();
+                                        // Stack effect: pop reference (1),
+                                        // push J (2) or F (1).
+                                        let delta = if expect_char == 'J' || expect_char == 'D' {
+                                            1
+                                        } else {
+                                            0
+                                        };
+                                        bump(stack, max_stack, delta);
+                                    }
                                 }
                                 // Reference widening: insert checkcast
                                 // when the descriptor expects a different
@@ -25618,6 +25656,29 @@ fn emit_exception_table(
         out.write_u16::<BigEndian>(end_pc).unwrap();
         out.write_u16::<BigEndian>(handler_pc).unwrap();
         out.write_u16::<BigEndian>(catch_type_idx).unwrap();
+    }
+}
+
+/// Compose `@JvmInline value class` JVM paths and the single-character
+/// JVM descriptor of their underlying primitive. Returns `None` for any
+/// class that isn't a known value-class erasing to a primitive.
+///
+/// Used in both validation (accept Color in a J slot) and in call-emit
+/// (insert an `invokevirtual Color.unbox-impl()J` to coerce the boxed
+/// value-class instance to the primitive that the callee actually wants).
+/// Mirrors the same list in mir-lower / resolver.
+pub(crate) fn value_class_underlying_prim_char(jvm_path: &str) -> Option<char> {
+    match jvm_path {
+        "androidx/compose/ui/graphics/Color"
+        | "androidx/compose/ui/unit/TextUnit"
+        | "androidx/compose/ui/unit/DpOffset"
+        | "androidx/compose/ui/unit/DpSize"
+        | "androidx/compose/ui/unit/IntOffset"
+        | "androidx/compose/ui/unit/IntSize"
+        | "androidx/compose/ui/geometry/Size"
+        | "androidx/compose/ui/geometry/Offset" => Some('J'),
+        "androidx/compose/ui/unit/Dp" => Some('F'),
+        _ => None,
     }
 }
 
