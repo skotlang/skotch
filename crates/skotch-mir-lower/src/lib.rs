@@ -18032,6 +18032,42 @@ fn lower_expr(
                             });
                             return Some(dest);
                         }
+                        // Mangled getter pattern for value-class returns:
+                        // `ColorScheme.background` → real JVM method
+                        // `getBackground-0d7_KjU()J`. The two
+                        // `lookup_java_instance` lookups above use exact
+                        // name matching, so they miss any mangled
+                        // method. Route through the mangle-aware
+                        // `lookup_method_name_and_descriptor` for the
+                        // `getXxx` shape, which is how every Compose
+                        // value-class-returning property is named.
+                        // Without this, `MaterialTheme.colorScheme.background`
+                        // (a long pattern in JetChat theming) returns None
+                        // from this whole field path, drops the parent
+                        // call's arg, and the surrounding `ModalDrawerSheet`
+                        // call collapses to a silent empty body.
+                        if let Some((actual_method, getter_desc)) =
+                            skotch_classinfo::lookup_method_name_and_descriptor(
+                                &declaring_class,
+                                &jvm_getter,
+                                0,
+                            )
+                        {
+                            let ret_ty = ty_from_descriptor_return(&getter_desc);
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: declaring_class.clone(),
+                                        method_name: actual_method,
+                                        descriptor: getter_desc,
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                     // List .size → invokeinterface java/util/List.size()I
                     if field_name == "size"
