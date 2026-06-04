@@ -331,6 +331,7 @@
 39-raw-string
 390-suspend-signature
 391-suspend-state-machine
+393-suspend-with-args
 424-compound-field-assign
 425-sealed-interface
 426-range-expression
@@ -469,6 +470,7 @@
 670-composable-inline-pre-only
 671-suspend-int-mod-2
 672-suspend-pair-second
+673-suspend-listOf
 676-suspend-print-int
 677-suspend-print-no-arg
 678-suspend-print-bool

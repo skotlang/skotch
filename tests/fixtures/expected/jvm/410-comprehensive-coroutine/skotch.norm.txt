@@ -3,78 +3,76 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        doubleAfterDelay (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
-  code        max_stack=4 max_locals=8
+  code        max_stack=5 max_locals=7
     0000 aload_1
     0001 instanceof Class(InputKt$doubleAfterDelay$1)
-    0004 ifeq 40
+    0004 ifeq 39
     0007 aload_1
     0008 checkcast Class(InputKt$doubleAfterDelay$1)
-    0011 astore 6
-    0013 aload 6
+    0011 astore 5
+    0013 aload 5
     0015 getfield Field(InputKt$doubleAfterDelay$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
-    0021 ifeq 40
-    0024 aload 6
-    0026 aload 6
-    0028 getfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0031 ldc int(-2147483648)
-    0033 isub
-    0034 putfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0037 goto 50
-    0040 new Class(InputKt$doubleAfterDelay$1)
-    0043 dup
-    0044 aload_1
-    0045 invokespecial Method(InputKt$doubleAfterDelay$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 6
-    0050 aload 6
-    0052 getfield Field(InputKt$doubleAfterDelay$1.result:Ljava/lang/Object;)
-    0055 astore 5
-    0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 7
-    0062 aload 6
-    0064 getfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0067 tableswitch default=153 low=0 high=1 0=88 1=123
-    0088 aload 5
+    0021 ifeq 39
+    0024 aload 5
+    0026 dup
+    0027 getfield Field(InputKt$doubleAfterDelay$1.label:I)
+    0030 ldc int(-2147483648)
+    0032 isub
+    0033 putfield Field(InputKt$doubleAfterDelay$1.label:I)
+    0036 goto 49
+    0039 new Class(InputKt$doubleAfterDelay$1)
+    0042 dup
+    0043 aload_1
+    0044 invokespecial Method(InputKt$doubleAfterDelay$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0047 astore 5
+    0049 aload 5
+    0051 getfield Field(InputKt$doubleAfterDelay$1.result:Ljava/lang/Object;)
+    0054 astore 4
+    0056 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0059 astore 6
+    0061 aload 5
+    0063 getfield Field(InputKt$doubleAfterDelay$1.label:I)
+    0066 tableswitch default=147 low=0 high=1 0=88 1=122
+    0088 aload 4
     0090 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
     0093 ldc2_w long(10)
-    0096 aload 6
-    0098 iload 0
-    0100 putfield Field(InputKt$doubleAfterDelay$1.I$0:I)
-    0103 aload 6
-    0105 iconst_1
-    0106 putfield Field(InputKt$doubleAfterDelay$1.label:I)
-    0109 aload 6
-    0111 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0114 dup
-    0115 aload 7
-    0117 if_acmpne 137
-    0120 aload 7
-    0122 areturn
-    0123 aload 6
-    0125 getfield Field(InputKt$doubleAfterDelay$1.I$0:I)
-    0128 istore 0
-    0130 aload 5
-    0132 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0135 aload 5
-    0137 pop
-    0138 aconst_null
-    0139 astore_2
-    0140 iload_0
-    0141 iconst_2
-    0142 imul
-    0143 istore_3
-    0144 iload_3
-    0145 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
-    0148 astore 4
-    0150 aload 4
-    0152 areturn
-    0153 new Class(java/lang/IllegalStateException)
-    0156 dup
-    0157 ldc "call to 'resume' before 'invoke' with coroutine"
-    0159 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0162 athrow
-    sub_attr  StackMapTable (50 bytes)
+    0096 aload 5
+    0098 aload 5
+    0100 iload_0
+    0101 putfield Field(InputKt$doubleAfterDelay$1.I$0:I)
+    0104 aload 5
+    0106 iconst_1
+    0107 putfield Field(InputKt$doubleAfterDelay$1.label:I)
+    0110 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0113 dup
+    0114 aload 6
+    0116 if_acmpne 135
+    0119 aload 6
+    0121 areturn
+    0122 aload 5
+    0124 getfield Field(InputKt$doubleAfterDelay$1.I$0:I)
+    0127 istore_0
+    0128 aload 4
+    0130 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0133 aload 4
+    0135 pop
+    0136 iload_0
+    0137 iconst_2
+    0138 imul
+    0139 istore_2
+    0140 iload_2
+    0141 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0144 astore_3
+    0145 aload_3
+    0146 areturn
+    0147 new Class(java/lang/IllegalStateException)
+    0150 dup
+    0151 ldc "call to 'resume' before 'invoke' with coroutine"
+    0153 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0156 athrow
+    sub_attr  StackMapTable (48 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (9 bytes)

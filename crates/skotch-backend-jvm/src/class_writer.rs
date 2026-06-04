@@ -8245,6 +8245,105 @@ fn emit_multi_suspend_state_machine_method(
                 .enumerate()
                 .any(|(i, b)| !site_blocks.contains(&(i as u32)) && !b.stmts.is_empty())
     };
+    // Pre-compute the set of MIR locals that are the *result_local* of a
+    // suspend site whose callee returns `Unit` AND aren't read anywhere
+    // in the function. The state-machine emitter never stores into
+    // these slots (the callee's Object result is dup'd, compared with
+    // SUSPENDED, and pop'd at the resume label), so allocating a slot
+    // is pure waste. Skipping these brings max_locals closer to
+    // kotlinc's tighter packing.
+    let mut read_locals: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        for stmt in &block.stmts {
+            let Stmt::Assign { value, .. } = stmt;
+            match value {
+                Rvalue::Local(l) => {
+                    read_locals.insert(l.0);
+                }
+                Rvalue::BinOp { lhs, rhs, .. } => {
+                    read_locals.insert(lhs.0);
+                    read_locals.insert(rhs.0);
+                }
+                Rvalue::Call { args, .. } => {
+                    for a in args {
+                        read_locals.insert(a.0);
+                    }
+                }
+                Rvalue::GetField { receiver, .. } => {
+                    read_locals.insert(receiver.0);
+                }
+                Rvalue::PutField {
+                    receiver, value, ..
+                } => {
+                    read_locals.insert(receiver.0);
+                    read_locals.insert(value.0);
+                }
+                Rvalue::PutStaticField { value, .. } => {
+                    read_locals.insert(value.0);
+                }
+                Rvalue::ArrayLoad { array, index } => {
+                    read_locals.insert(array.0);
+                    read_locals.insert(index.0);
+                }
+                Rvalue::ArrayStore {
+                    array,
+                    index,
+                    value,
+                } => {
+                    read_locals.insert(array.0);
+                    read_locals.insert(index.0);
+                    read_locals.insert(value.0);
+                }
+                Rvalue::ArrayLength(a) => {
+                    read_locals.insert(a.0);
+                }
+                Rvalue::NewIntArray(s) => {
+                    read_locals.insert(s.0);
+                }
+                Rvalue::NewObjectArray(s) => {
+                    read_locals.insert(s.0);
+                }
+                Rvalue::NewTypedObjectArray { size, .. } => {
+                    read_locals.insert(size.0);
+                }
+                Rvalue::ObjectArrayStore {
+                    array,
+                    index,
+                    value,
+                } => {
+                    read_locals.insert(array.0);
+                    read_locals.insert(index.0);
+                    read_locals.insert(value.0);
+                }
+                Rvalue::CheckCast { obj, .. } => {
+                    read_locals.insert(obj.0);
+                }
+                Rvalue::InstanceOf { obj, .. } => {
+                    read_locals.insert(obj.0);
+                }
+                _ => {}
+            }
+        }
+        match &block.terminator {
+            Terminator::ReturnValue(l) => {
+                read_locals.insert(l.0);
+            }
+            Terminator::Branch { cond, .. } => {
+                read_locals.insert(cond.0);
+            }
+            Terminator::Throw(l) => {
+                read_locals.insert(l.0);
+            }
+            _ => {}
+        }
+    }
+    let suspend_unit_dests: rustc_hash::FxHashSet<u32> = sm
+        .sites
+        .iter()
+        .filter(|s| matches!(s.return_ty, Ty::Unit))
+        .map(|s| s.result_local.0)
+        .filter(|id| !read_locals.contains(id))
+        .collect();
     for block in &func.blocks {
         for stmt in &block.stmts {
             let Stmt::Assign { dest, value } = stmt;
@@ -8285,6 +8384,14 @@ fn emit_multi_suspend_state_machine_method(
                 // execute, and the existing emitter expects a slot to
                 // store-and-discard into.
                 if inlinable.contains_key(&l.0) {
+                    continue;
+                }
+                // Skip the result_local of Unit-returning suspend calls.
+                // The state-machine emitter never stores into these
+                // slots — it dup's the callee's Object result, compares
+                // with SUSPENDED, and pops at the resume label. Saving
+                // these slots brings max_locals closer to kotlinc.
+                if suspend_unit_dests.contains(&l.0) {
                     continue;
                 }
                 let s = next_slot;
@@ -8420,7 +8527,7 @@ fn emit_multi_suspend_state_machine_method(
     let patch_ifeq_second = code.len();
     code.write_i16::<BigEndian>(0).unwrap();
     emit_load_ref_slot(&mut code, cont_slot); // aload $cont
-    emit_load_ref_slot(&mut code, cont_slot); // aload $cont  (kotlinc emits `dup` but aload is also fine)
+    code.push(0x59); // dup (kotlinc shape: dup the just-loaded $cont, then getfield+isub+putfield)
     code.push(0xB4); // getfield label
     code.write_u16::<BigEndian>(fr_label).unwrap();
     emit_ldc(&mut code, int_min);
@@ -8528,27 +8635,21 @@ fn emit_multi_suspend_state_machine_method(
             let slot = sm.spill_layout[ls.slot as usize].kind;
             emit_load_ref_slot(code, cont_slot); // aload $cont
             let local_s = local_slot[&ls.local.0];
-            match slot {
-                SpillKind::Int => {
-                    code.push(0x15);
-                    code.push(local_s); // iload
-                }
-                SpillKind::Long => {
-                    code.push(0x16);
-                    code.push(local_s); // lload
-                }
-                SpillKind::Double => {
-                    code.push(0x18);
-                    code.push(local_s); // dload
-                }
-                SpillKind::Float => {
-                    code.push(0x17);
-                    code.push(local_s); // fload
-                }
-                SpillKind::Ref => {
-                    code.push(0x19);
-                    code.push(local_s); // aload
-                }
+            // Use compact form (iload_N, lload_N, etc.) when slot ≤ 3
+            // to match kotlinc's emission. Generic form is 2 bytes,
+            // compact form is 1 byte.
+            let (generic, compact_base) = match slot {
+                SpillKind::Int => (0x15u8, 0x1Au8),
+                SpillKind::Long => (0x16, 0x1E),
+                SpillKind::Double => (0x18, 0x26),
+                SpillKind::Float => (0x17, 0x22),
+                SpillKind::Ref => (0x19, 0x2A),
+            };
+            if local_s <= 3 {
+                code.push(compact_base + local_s);
+            } else {
+                code.push(generic);
+                code.push(local_s);
             }
             code.push(0xB5); // putfield I$n/L$n/…
             code.write_u16::<BigEndian>(spill_fieldrefs[ls.slot as usize])
@@ -8565,27 +8666,20 @@ fn emit_multi_suspend_state_machine_method(
             code.write_u16::<BigEndian>(spill_fieldrefs[ls.slot as usize])
                 .unwrap();
             let local_s = local_slot[&ls.local.0];
-            match slot {
-                SpillKind::Int => {
-                    code.push(0x36);
-                    code.push(local_s); // istore
-                }
-                SpillKind::Long => {
-                    code.push(0x37);
-                    code.push(local_s); // lstore
-                }
-                SpillKind::Double => {
-                    code.push(0x39);
-                    code.push(local_s); // dstore
-                }
-                SpillKind::Float => {
-                    code.push(0x38);
-                    code.push(local_s); // fstore
-                }
-                SpillKind::Ref => {
-                    code.push(0x3A);
-                    code.push(local_s); // astore
-                }
+            // Use compact form (istore_N, lstore_N, etc.) when slot ≤ 3
+            // to match kotlinc's emission.
+            let (generic, compact_base) = match slot {
+                SpillKind::Int => (0x36u8, 0x3Bu8),
+                SpillKind::Long => (0x37, 0x3F),
+                SpillKind::Double => (0x39, 0x47),
+                SpillKind::Float => (0x38, 0x43),
+                SpillKind::Ref => (0x3A, 0x4B),
+            };
+            if local_s <= 3 {
+                code.push(compact_base + local_s);
+            } else {
+                code.push(generic);
+                code.push(local_s);
             }
         }
     };
@@ -8641,6 +8735,13 @@ fn emit_multi_suspend_state_machine_method(
     };
 
     // Helper macro: emit suspend call inline (used in case 0 and resume cases).
+    //
+    // Stack discipline matches kotlinc:
+    //   1. push user args
+    //   2. aload $cont  (will become callee's last arg, persists)
+    //   3. spill_live (each spill: aload $cont, value, putfield → net 0)
+    //   4. aload $cont  (putfield receiver), iconst label, putfield label → net 0
+    //   5. invokestatic callee (consumes user args + persistent $cont)
     macro_rules! emit_suspend_inline {
         ($code:expr, $site:expr, $label:expr, $sidx:expr) => {{
             for (ai, arg) in $site.args.iter().enumerate() {
@@ -8651,12 +8752,12 @@ fn emit_multi_suspend_state_machine_method(
                     $code.write_u16::<BigEndian>(rc).unwrap();
                 }
             }
+            emit_load_ref_slot($code, cont_slot); // callee's Continuation arg (persists)
             spill_live($code, $site);
-            emit_load_ref_slot($code, cont_slot);
+            emit_load_ref_slot($code, cont_slot); // label-putfield receiver
             emit_iconst_small($code, $label);
             $code.push(0xB5);
             $code.write_u16::<BigEndian>(fr_label).unwrap();
-            emit_load_ref_slot($code, cont_slot);
             let is_iface = $site.is_virtual && is_jvm_interface_check(&$site.callee_class);
             if $site.is_virtual {
                 if is_iface {
@@ -8744,12 +8845,15 @@ fn emit_multi_suspend_state_machine_method(
                         code.write_u16::<BigEndian>(rc).unwrap();
                     }
                 }
-                spill_live(&mut code, site);
+                // kotlinc order: push callee's $continuation arg BEFORE
+                // spill+label-setup so it persists on the stack across
+                // putfields and lands as the invokestatic's last arg.
                 emit_load_ref_slot(&mut code, cont_slot);
+                spill_live(&mut code, site);
+                emit_load_ref_slot(&mut code, cont_slot); // label-putfield receiver
                 emit_iconst_small(&mut code, (case_i as i32) + 1);
                 code.push(0xB5);
                 code.write_u16::<BigEndian>(fr_label).unwrap();
-                emit_load_ref_slot(&mut code, cont_slot);
                 if site.is_virtual {
                     let is_iface = is_jvm_interface_check(&site.callee_class);
                     if is_iface {
@@ -11449,27 +11553,18 @@ fn emit_lambda_multi_suspend_body(
             let slot = sm.spill_layout[ls.slot as usize].kind;
             code.push(0x2A); // aload_0 (receiver for putfield)
             let local_s = local_slot[&ls.local.0];
-            match slot {
-                SpillKind::Int => {
-                    code.push(0x15);
-                    code.push(local_s);
-                }
-                SpillKind::Long => {
-                    code.push(0x16);
-                    code.push(local_s);
-                }
-                SpillKind::Double => {
-                    code.push(0x18);
-                    code.push(local_s);
-                }
-                SpillKind::Float => {
-                    code.push(0x17);
-                    code.push(local_s);
-                }
-                SpillKind::Ref => {
-                    code.push(0x19);
-                    code.push(local_s);
-                }
+            let (generic, compact_base) = match slot {
+                SpillKind::Int => (0x15u8, 0x1Au8),
+                SpillKind::Long => (0x16, 0x1E),
+                SpillKind::Double => (0x18, 0x26),
+                SpillKind::Float => (0x17, 0x22),
+                SpillKind::Ref => (0x19, 0x2A),
+            };
+            if local_s <= 3 {
+                code.push(compact_base + local_s);
+            } else {
+                code.push(generic);
+                code.push(local_s);
             }
             code.push(0xB5); // putfield
             code.write_u16::<BigEndian>(spill_fieldrefs[ls.slot as usize])
@@ -11484,27 +11579,18 @@ fn emit_lambda_multi_suspend_body(
             code.write_u16::<BigEndian>(spill_fieldrefs[ls.slot as usize])
                 .unwrap();
             let local_s = local_slot[&ls.local.0];
-            match slot {
-                SpillKind::Int => {
-                    code.push(0x36);
-                    code.push(local_s);
-                }
-                SpillKind::Long => {
-                    code.push(0x37);
-                    code.push(local_s);
-                }
-                SpillKind::Double => {
-                    code.push(0x39);
-                    code.push(local_s);
-                }
-                SpillKind::Float => {
-                    code.push(0x38);
-                    code.push(local_s);
-                }
-                SpillKind::Ref => {
-                    code.push(0x3A);
-                    code.push(local_s);
-                }
+            let (generic, compact_base) = match slot {
+                SpillKind::Int => (0x36u8, 0x3Bu8),
+                SpillKind::Long => (0x37, 0x3F),
+                SpillKind::Double => (0x39, 0x47),
+                SpillKind::Float => (0x38, 0x43),
+                SpillKind::Ref => (0x3A, 0x4B),
+            };
+            if local_s <= 3 {
+                code.push(compact_base + local_s);
+            } else {
+                code.push(generic);
+                code.push(local_s);
             }
         }
     };
@@ -11530,27 +11616,18 @@ fn emit_lambda_multi_suspend_body(
                 }
             }
             let local_s = local_slot[&ls.local.0];
-            match slot {
-                SpillKind::Int => {
-                    code.push(0x36);
-                    code.push(local_s);
-                }
-                SpillKind::Long => {
-                    code.push(0x37);
-                    code.push(local_s);
-                }
-                SpillKind::Double => {
-                    code.push(0x39);
-                    code.push(local_s);
-                }
-                SpillKind::Float => {
-                    code.push(0x38);
-                    code.push(local_s);
-                }
-                SpillKind::Ref => {
-                    code.push(0x3A);
-                    code.push(local_s);
-                }
+            let (generic, compact_base) = match slot {
+                SpillKind::Int => (0x36u8, 0x3Bu8),
+                SpillKind::Long => (0x37, 0x3F),
+                SpillKind::Double => (0x39, 0x47),
+                SpillKind::Float => (0x38, 0x43),
+                SpillKind::Ref => (0x3A, 0x4B),
+            };
+            if local_s <= 3 {
+                code.push(compact_base + local_s);
+            } else {
+                code.push(generic);
+                code.push(local_s);
             }
         }
     };
@@ -14958,7 +15035,28 @@ fn walk_block(
                     // emit checkcast so the JVM verifier accepts the call.
                     if !args.is_empty() {
                         let recv_ty = &func.locals[args[0].0 as usize];
-                        if matches!(recv_ty, Ty::Any | Ty::Nullable(_)) {
+                        // For `Nullable(T)` with T a primitive, the JVM-level
+                        // type is the boxed wrapper class (Integer, Long, …).
+                        // When the target class is that wrapper, no checkcast
+                        // is needed — match kotlinc's omitting the cast on
+                        // `x?.intValue()` chains.
+                        let nullable_jvm_class: Option<&str> = match recv_ty {
+                            Ty::Nullable(inner) => match &**inner {
+                                Ty::Int => Some("java/lang/Integer"),
+                                Ty::Long => Some("java/lang/Long"),
+                                Ty::Double => Some("java/lang/Double"),
+                                Ty::Float => Some("java/lang/Float"),
+                                Ty::Bool => Some("java/lang/Boolean"),
+                                Ty::Byte => Some("java/lang/Byte"),
+                                Ty::Short => Some("java/lang/Short"),
+                                Ty::Char => Some("java/lang/Character"),
+                                Ty::String => Some("java/lang/String"),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        let already_matches = nullable_jvm_class == Some(class_name);
+                        if matches!(recv_ty, Ty::Any | Ty::Nullable(_)) && !already_matches {
                             let ci = cp.class(class_name);
                             // Insert checkcast under the args on the stack.
                             // The receiver is deepest, so we need to re-order.

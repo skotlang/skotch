@@ -3,109 +3,105 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        run (Lkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
-  code        max_stack=3 max_locals=10
+  code        max_stack=3 max_locals=8
     0000 aload_0
     0001 instanceof Class(InputKt$run$1)
-    0004 ifeq 40
+    0004 ifeq 39
     0007 aload_0
     0008 checkcast Class(InputKt$run$1)
-    0011 astore 8
-    0013 aload 8
+    0011 astore 6
+    0013 aload 6
     0015 getfield Field(InputKt$run$1.label:I)
     0018 ldc int(-2147483648)
     0020 iand
-    0021 ifeq 40
-    0024 aload 8
-    0026 aload 8
-    0028 getfield Field(InputKt$run$1.label:I)
-    0031 ldc int(-2147483648)
-    0033 isub
-    0034 putfield Field(InputKt$run$1.label:I)
-    0037 goto 50
-    0040 new Class(InputKt$run$1)
-    0043 dup
-    0044 aload_0
-    0045 invokespecial Method(InputKt$run$1.<init>:(Lkotlin/coroutines/Continuation;)V)
-    0048 astore 8
-    0050 aload 8
-    0052 getfield Field(InputKt$run$1.result:Ljava/lang/Object;)
-    0055 astore 7
-    0057 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
-    0060 astore 9
-    0062 aload 8
-    0064 getfield Field(InputKt$run$1.label:I)
-    0067 tableswitch default=221 low=0 high=2 0=92 1=127 2=181
-    0092 aload 7
+    0021 ifeq 39
+    0024 aload 6
+    0026 dup
+    0027 getfield Field(InputKt$run$1.label:I)
+    0030 ldc int(-2147483648)
+    0032 isub
+    0033 putfield Field(InputKt$run$1.label:I)
+    0036 goto 49
+    0039 new Class(InputKt$run$1)
+    0042 dup
+    0043 aload_0
+    0044 invokespecial Method(InputKt$run$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0047 astore 6
+    0049 aload 6
+    0051 getfield Field(InputKt$run$1.result:Ljava/lang/Object;)
+    0054 astore 5
+    0056 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0059 astore 7
+    0061 aload 6
+    0063 getfield Field(InputKt$run$1.label:I)
+    0066 tableswitch default=208 low=0 high=2 0=92 1=126 2=175
+    0092 aload 5
     0094 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
     0097 bipush 10
     0099 istore_1
-    0100 aload 8
-    0102 iload 1
-    0104 putfield Field(InputKt$run$1.I$0:I)
-    0107 aload 8
-    0109 iconst_1
-    0110 putfield Field(InputKt$run$1.label:I)
-    0113 aload 8
-    0115 invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0118 dup
-    0119 aload 9
-    0121 if_acmpne 141
-    0124 aload 9
-    0126 areturn
-    0127 aload 8
-    0129 getfield Field(InputKt$run$1.I$0:I)
-    0132 istore 1
-    0134 aload 7
-    0136 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0139 aload 7
-    0141 pop
-    0142 aconst_null
-    0143 astore_3
-    0144 bipush 20
-    0146 istore_2
-    0147 aload 8
-    0149 iload 1
-    0151 putfield Field(InputKt$run$1.I$0:I)
-    0154 aload 8
-    0156 iload 2
-    0158 putfield Field(InputKt$run$1.I$1:I)
-    0161 aload 8
-    0163 iconst_2
-    0164 putfield Field(InputKt$run$1.label:I)
-    0167 aload 8
-    0169 invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
-    0172 dup
-    0173 aload 9
-    0175 if_acmpne 202
-    0178 aload 9
-    0180 areturn
-    0181 aload 8
-    0183 getfield Field(InputKt$run$1.I$0:I)
-    0186 istore 1
-    0188 aload 8
-    0190 getfield Field(InputKt$run$1.I$1:I)
-    0193 istore 2
-    0195 aload 7
-    0197 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
-    0200 aload 7
-    0202 pop
-    0203 aconst_null
-    0204 astore 4
-    0206 iload_1
-    0207 iload_2
-    0208 iadd
-    0209 istore 5
-    0211 iload 5
-    0213 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
-    0216 astore 6
-    0218 aload 6
-    0220 areturn
-    0221 new Class(java/lang/IllegalStateException)
-    0224 dup
-    0225 ldc "call to 'resume' before 'invoke' with coroutine"
-    0227 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
-    0230 athrow
-    sub_attr  StackMapTable (155 bytes)
+    0100 aload 6
+    0102 aload 6
+    0104 iload_1
+    0105 putfield Field(InputKt$run$1.I$0:I)
+    0108 aload 6
+    0110 iconst_1
+    0111 putfield Field(InputKt$run$1.label:I)
+    0114 invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0117 dup
+    0118 aload 7
+    0120 if_acmpne 139
+    0123 aload 7
+    0125 areturn
+    0126 aload 6
+    0128 getfield Field(InputKt$run$1.I$0:I)
+    0131 istore_1
+    0132 aload 5
+    0134 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0137 aload 5
+    0139 pop
+    0140 bipush 20
+    0142 istore_2
+    0143 aload 6
+    0145 aload 6
+    0147 iload_1
+    0148 putfield Field(InputKt$run$1.I$0:I)
+    0151 aload 6
+    0153 iload_2
+    0154 putfield Field(InputKt$run$1.I$1:I)
+    0157 aload 6
+    0159 iconst_2
+    0160 putfield Field(InputKt$run$1.label:I)
+    0163 invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0166 dup
+    0167 aload 7
+    0169 if_acmpne 194
+    0172 aload 7
+    0174 areturn
+    0175 aload 6
+    0177 getfield Field(InputKt$run$1.I$0:I)
+    0180 istore_1
+    0181 aload 6
+    0183 getfield Field(InputKt$run$1.I$1:I)
+    0186 istore_2
+    0187 aload 5
+    0189 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0192 aload 5
+    0194 pop
+    0195 iload_1
+    0196 iload_2
+    0197 iadd
+    0198 istore_3
+    0199 iload_3
+    0200 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0203 astore 4
+    0205 aload 4
+    0207 areturn
+    0208 new Class(java/lang/IllegalStateException)
+    0211 dup
+    0212 ldc "call to 'resume' before 'invoke' with coroutine"
+    0214 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0217 athrow
+    sub_attr  StackMapTable (143 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (7 bytes)

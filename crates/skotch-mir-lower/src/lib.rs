@@ -13577,6 +13577,41 @@ fn lower_expr(
             if callee_str == "listOf" {
                 let arg_count = arg_locals.len();
 
+                // Single-arg listOf: kotlinc dispatches to the
+                // `listOf(T): List<T>` overload (descriptor
+                // `(Ljava/lang/Object;)Ljava/util/List;`) rather than
+                // the vararg form. Match that shape — no array
+                // allocation, just box the element if primitive and
+                // hand it directly to the single-arg overload.
+                if arg_count == 1 {
+                    let arg = arg_locals[0];
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    // Suspend functions use Boxing.boxXxx for primitive
+                    // autoboxing (kotlinc convention); non-suspend
+                    // functions use Integer.valueOf etc.
+                    let boxed = if fb.mf.is_suspend {
+                        mir_autobox_suspend(fb, arg, &arg_ty)
+                    } else {
+                        mir_autobox(fb, arg, &arg_ty)
+                    };
+                    let result = fb.new_local(Ty::Class("java/util/List".to_string()));
+                    fb.mf
+                        .local_generic_args
+                        .insert(result.0, vec![arg_ty.clone()]);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlin/collections/CollectionsKt".to_string(),
+                                method_name: "listOf".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                            },
+                            args: vec![boxed],
+                        },
+                    });
+                    return Some(result);
+                }
+
                 // If all args share the same concrete class (`String`, a
                 // user class, etc.), allocate a typed array
                 // `anewarray Class(<element_class>)` — kotlinc does this
@@ -18403,9 +18438,43 @@ fn lower_expr(
                 _ => Ty::Any,
             };
             let result = fb.new_local(initial_result_ty.clone());
+            // When lhs is Nullable(primitive), the JVM-loaded value is the
+            // boxed wrapper (Integer, Long, …) but the result slot is the
+            // primitive. Unbox before storing so both branches converge at
+            // the primitive type. Mirrors kotlinc's elvis shape for
+            // `Int? ?: 0` (intValue() on the non-null path).
+            let then_value: LocalId = match (&lhs_ty, &initial_result_ty) {
+                (Ty::Nullable(inner), prim)
+                    if matches!(prim, Ty::Int | Ty::Long | Ty::Double | Ty::Float | Ty::Bool)
+                        && **inner == *prim =>
+                {
+                    let (class_name, method_name, descriptor) = match prim {
+                        Ty::Int => ("java/lang/Integer", "intValue", "()I"),
+                        Ty::Long => ("java/lang/Long", "longValue", "()J"),
+                        Ty::Double => ("java/lang/Double", "doubleValue", "()D"),
+                        Ty::Float => ("java/lang/Float", "floatValue", "()F"),
+                        Ty::Bool => ("java/lang/Boolean", "booleanValue", "()Z"),
+                        _ => unreachable!(),
+                    };
+                    let unboxed = fb.new_local(prim.clone());
+                    fb.push_stmt(MStmt::Assign {
+                        dest: unboxed,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: class_name.to_string(),
+                                method_name: method_name.to_string(),
+                                descriptor: descriptor.to_string(),
+                            },
+                            args: vec![l],
+                        },
+                    });
+                    unboxed
+                }
+                _ => l,
+            };
             fb.push_stmt(MStmt::Assign {
                 dest: result,
-                value: Rvalue::Local(l),
+                value: Rvalue::Local(then_value),
             });
             fb.terminate_and_switch(Terminator::Goto(merge_block), else_block);
 

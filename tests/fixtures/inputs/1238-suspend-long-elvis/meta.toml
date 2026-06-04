@@ -1,0 +1,4 @@
+name = "1238-suspend-long-elvis"
+status = "supported"
+features = ["suspend", "elvis", "nullable", "boxing"]
+reason = "Locks in the elvis-with-primitive-unbox verifier fix for Long."

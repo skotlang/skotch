@@ -1128,3 +1128,79 @@ fn kotlinc_parity_aspirational_must_match() {
         );
     }
 }
+
+/// `T? ?: T` for primitive T in suspend context must emit verifier-
+/// correct bytecode. Before the fix, the non-null branch left the
+/// boxed wrapper (Integer/Long/…) on the stack but the merge-point
+/// `Boxing.boxXxx` expected the primitive, causing JVM
+/// VerifyError("Inconsistent stackmap frames at branch target"). This
+/// test compiles each primitive elvis fixture and asserts the
+/// normalized output contains the unbox-then-rebox sequence that
+/// makes both branches converge at the primitive type.
+#[test]
+fn suspend_elvis_primitive_unbox_emitted() {
+    let cases: &[(&str, &str, &str)] = &[
+        (
+            "658-suspend-int-elvis",
+            "java/lang/Integer.intValue",
+            "Boxing.boxInt",
+        ),
+        (
+            "1238-suspend-long-elvis",
+            "java/lang/Long.longValue",
+            "Boxing.boxLong",
+        ),
+        (
+            "1239-suspend-double-elvis",
+            "java/lang/Double.doubleValue",
+            "Boxing.boxDouble",
+        ),
+        (
+            "1240-suspend-bool-elvis",
+            "java/lang/Boolean.booleanValue",
+            "Boxing.boxBoolean",
+        ),
+    ];
+
+    for (fixture, unbox_needle, box_needle) in cases {
+        let norm_path = workspace_root()
+            .join("tests/fixtures/expected/jvm")
+            .join(fixture)
+            .join("skotch.norm.txt");
+        let text = std::fs::read_to_string(&norm_path).unwrap_or_else(|_| {
+            panic!(
+                "missing skotch.norm.txt for {fixture}; run \
+                 `cargo run -p xtask --release -- gen-fixtures --target jvm --fixture {fixture}`"
+            )
+        });
+        assert!(
+            text.contains(unbox_needle),
+            "{fixture}: skotch.norm.txt missing `{unbox_needle}` — \
+             the non-null branch must unbox the wrapper so both branches \
+             reach the boxing call at the primitive type",
+        );
+        assert!(
+            text.contains(box_needle),
+            "{fixture}: skotch.norm.txt missing `{box_needle}` — \
+             suspend functions returning a primitive must box at the \
+             merge point with the coroutine `Boxing.*` helper",
+        );
+        // Spot-check the absence of an inserted checkcast on the
+        // unbox receiver — Nullable(prim) is already JVM-typed as the
+        // wrapper, so a checkcast to the same wrapper class is dead
+        // bytecode and shouldn't be emitted.
+        let bad = match *fixture {
+            "658-suspend-int-elvis" => "checkcast Class(java/lang/Integer)",
+            "1238-suspend-long-elvis" => "checkcast Class(java/lang/Long)",
+            "1239-suspend-double-elvis" => "checkcast Class(java/lang/Double)",
+            "1240-suspend-bool-elvis" => "checkcast Class(java/lang/Boolean)",
+            _ => unreachable!(),
+        };
+        assert!(
+            !text.contains(bad),
+            "{fixture}: skotch.norm.txt unexpectedly contains `{bad}` — \
+             the elvis receiver's JVM type already matches the unbox \
+             receiver class, so no checkcast is needed",
+        );
+    }
+}
