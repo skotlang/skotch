@@ -122,6 +122,8 @@ pub fn compose_transform(module: &mut MirModule) {
     // they're used in a composable context — and bump their arity by 2.
     patch_composable_lambda_interfaces(module, &composable_param_types);
     patch_static_calls_to_composable(module, &composable_param_types);
+
+    skotch_mir::dump::maybe_dump_module(module, "post-compose");
 }
 
 /// Patch lambda classes to implement the correct FunctionN interface

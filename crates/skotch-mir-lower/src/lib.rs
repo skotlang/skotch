@@ -2332,6 +2332,8 @@ pub fn lower_file(
     // "com/example/Message" instead of "Message") which d8 requires.
     fq_qualify_module_types(&mut module);
 
+    skotch_mir::dump::maybe_dump_module(&module, "mir-lower");
+
     module
 }
 
@@ -18346,8 +18348,7 @@ fn lower_expr(
                     return Some(dest);
                 }
             }
-            // Not a class field access — could be a Java package path.
-            // Return None to let the caller handle it.
+            // Receiver couldn't be lowered — return None.
             let _ = (name_to_func, *span);
             None
         }
