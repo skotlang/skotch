@@ -10498,7 +10498,7 @@ fn emit_mir_segment(
             // Pattern: aload receiver; getfield class.field; store dest.
             Rvalue::GetField {
                 receiver,
-                class_name,
+                class_name: field_class,
                 field_name,
             } => {
                 emit_load_mir_local(code, func, local_slot, *receiver);
@@ -10509,13 +10509,22 @@ fn emit_mir_segment(
                 let owning_class = module
                     .classes
                     .iter()
-                    .filter(|c| &c.name == class_name)
+                    .filter(|c| &c.name == field_class)
                     .min_by_key(|c| c.is_cross_file_stub as u8);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let dest_local_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_local_ty);
+                // When the receiver is `this` (param 0) and refers to the
+                // same class as the field, emit `getfield` directly. This
+                // avoids infinite recursion when emitting the getter
+                // itself, and matches kotlinc's shape: inside instance
+                // methods, `this.x` is `getfield`, not invokevirtual
+                // through the getter.
+                let receiver_is_this_of_field_class = !func.params.is_empty()
+                    && *receiver == func.params[0]
+                    && matches!(&func.locals[receiver.0 as usize], Ty::Class(rc) if rc == field_class);
                 // Kotlin properties on user classes go through a synthetic
                 // `get<Property>()T` accessor — kotlinc emits invokevirtual
                 // through that getter even when reading the backing field
@@ -10525,47 +10534,71 @@ fn emit_mir_segment(
                 // `compile_user_class`), prefer it over `getfield` so the
                 // bytecode shape matches. Special case: on enum classes,
                 // the `name` field is inherited from `java.lang.Enum` and
-                // accessed via `name()` (no `get` prefix).
+                // accessed via `name()` (no `get` prefix). Only safe when
+                // the receiver was just pushed via getstatic of an enum
+                // entry on this class — `peephole_fold_enum_entry_name`
+                // folds the pair to `ldc "NAME"`; otherwise the call would
+                // hit a non-existent method on our wrapper class.
                 let is_enum_class = module
                     .enum_entry_funcs
                     .values()
-                    .any(|(ec, _)| ec == class_name);
-                let getter_name = if is_enum_class && field_name == "name" {
+                    .any(|(ec, _)| ec == field_class);
+                let last_emitted_was_enum_entry_getstatic = code.len() >= 3
+                    && code[code.len() - 3] == 0xB2
+                    && {
+                        let idx =
+                            u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
+                        cp.lookup_fieldref_parts(idx).is_some_and(|(fc, _, fd)| {
+                            fc == field_class && fd == format!("L{};", field_class)
+                        })
+                    };
+                let getter_name = if is_enum_class
+                    && field_name == "name"
+                    && last_emitted_was_enum_entry_getstatic
+                {
                     "name".to_string()
                 } else {
                     synthesize_getter_name(field_name)
                 };
                 let getter_descriptor = format!("(){}", jvm_param_type_string(field_ty));
-                let has_getter = owning_class
-                    .map(|c| {
-                        if c.is_cross_file_stub {
-                            return false;
-                        }
-                        // Explicit getter declared in MIR.
-                        if c.methods
-                            .iter()
-                            .any(|m| m.name == getter_name && m.params.len() == 1)
-                        {
-                            return true;
-                        }
-                        // Auto-synthesized getter for a non-@JvmField,
-                        // non-synthetic field. Mirror the gating in
-                        // `compile_user_class` (line ~1960).
-                        c.fields.iter().any(|f| {
-                            f.name == *field_name
-                                && !f.is_jvm_field
-                                && f.name != "label"
-                                && f.name != "$stable"
-                                && !f.name.starts_with('$')
+                let has_getter = !receiver_is_this_of_field_class
+                    && owning_class
+                        .map(|c| {
+                            if c.is_cross_file_stub {
+                                return false;
+                            }
+                            // Explicit getter declared in MIR.
+                            if c.methods
+                                .iter()
+                                .any(|m| m.name == getter_name && m.params.len() == 1)
+                            {
+                                return true;
+                            }
+                            // The field-existence fallback predicts the
+                            // getter synthesized by `compile_user_class`.
+                            // Lambda classes go through different emit
+                            // paths and never get this synthesis.
+                            if module.is_lambda_class(field_class) {
+                                return false;
+                            }
+                            // Auto-synthesized getter for a non-@JvmField,
+                            // non-synthetic field. Mirror the gating in
+                            // `compile_user_class` (line ~1960).
+                            c.fields.iter().any(|f| {
+                                f.name == *field_name
+                                    && !f.is_jvm_field
+                                    && f.name != "label"
+                                    && f.name != "$stable"
+                                    && !f.name.starts_with('$')
+                            })
                         })
-                    })
-                    .unwrap_or(false);
+                        .unwrap_or(false);
                 if has_getter {
-                    let mref = cp.methodref(class_name, &getter_name, &getter_descriptor);
+                    let mref = cp.methodref(field_class, &getter_name, &getter_descriptor);
                     code.push(0xB6); // invokevirtual
                     code.write_u16::<BigEndian>(mref).unwrap();
                 } else {
-                    let fr = cp.fieldref(class_name, field_name, &jvm_param_type_string(field_ty));
+                    let fr = cp.fieldref(field_class, field_name, &jvm_param_type_string(field_ty));
                     code.push(0xB4); // getfield
                     code.write_u16::<BigEndian>(fr).unwrap();
                 }
@@ -14499,7 +14532,7 @@ fn walk_block(
             }
             Rvalue::GetField {
                 receiver,
-                class_name,
+                class_name: field_class,
                 field_name,
                 ..
             } => {
@@ -14513,7 +14546,7 @@ fn walk_block(
                 let owning_class = module
                     .classes
                     .iter()
-                    .filter(|c| &c.name == class_name)
+                    .filter(|c| &c.name == field_class)
                     .min_by_key(|c| c.is_cross_file_stub as u8);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
@@ -14521,48 +14554,83 @@ fn walk_block(
                 let dest_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_ty);
                 let descriptor = jvm_param_type_string(field_ty);
+                // When the receiver is `this` (param 0 of an instance
+                // method on the same class), emit `getfield` directly.
+                // Routing through the synthesized getter would recurse
+                // infinitely when we are emitting the getter itself,
+                // and would not match kotlinc's shape (which uses
+                // `getfield` for `this.x` inside an instance method).
+                let is_this_same_class = !func.is_static
+                    && !func.params.is_empty()
+                    && *receiver == func.params[0]
+                    && class_name == field_class;
                 // Route through the synthesized property getter when one
                 // exists on the owning class — mirrors kotlinc's
                 // invokevirtual-getter shape for Kotlin properties.
                 // Special case: on enum classes, the `name` field is
                 // inherited from `java.lang.Enum` and accessed via
-                // `name()` (no `get` prefix).
+                // `name()` (no `get` prefix). Only safe to emit when
+                // the receiver was just pushed via getstatic of an
+                // enum entry on this class — `peephole_fold_enum_entry_name`
+                // then folds the pair to `ldc "NAME"`. Without that fold
+                // we would call a non-existent `Enum.name()` since our
+                // wrapper classes don't extend `java.lang.Enum`.
                 let is_enum_class = module
                     .enum_entry_funcs
                     .values()
-                    .any(|(ec, _)| ec == class_name);
-                let getter_name = if is_enum_class && field_name == "name" {
+                    .any(|(ec, _)| ec == field_class);
+                let last_emitted_was_enum_entry_getstatic = code.len() >= 3
+                    && code[code.len() - 3] == 0xB2
+                    && {
+                        let idx =
+                            u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
+                        cp.lookup_fieldref_parts(idx).is_some_and(|(fc, _, fd)| {
+                            fc == field_class && fd == format!("L{};", field_class)
+                        })
+                    };
+                let use_enum_name_shape = is_enum_class
+                    && field_name == "name"
+                    && last_emitted_was_enum_entry_getstatic;
+                let getter_name = if use_enum_name_shape {
                     "name".to_string()
                 } else {
                     synthesize_getter_name(field_name)
                 };
-                let has_getter = owning_class
-                    .map(|c| {
-                        if c.is_cross_file_stub {
-                            return false;
-                        }
-                        if c.methods
-                            .iter()
-                            .any(|m| m.name == getter_name && m.params.len() == 1)
-                        {
-                            return true;
-                        }
-                        c.fields.iter().any(|f| {
-                            f.name == *field_name
-                                && !f.is_jvm_field
-                                && f.name != "label"
-                                && f.name != "$stable"
-                                && !f.name.starts_with('$')
+                let has_getter = !is_this_same_class
+                    && owning_class
+                        .map(|c| {
+                            if c.is_cross_file_stub {
+                                return false;
+                            }
+                            if c.methods
+                                .iter()
+                                .any(|m| m.name == getter_name && m.params.len() == 1)
+                            {
+                                return true;
+                            }
+                            // The field-existence fallback predicts the
+                            // getter synthesized by `compile_user_class`.
+                            // Lambda classes go through different emit
+                            // paths and never get this synthesis.
+                            if module.is_lambda_class(field_class) {
+                                return false;
+                            }
+                            c.fields.iter().any(|f| {
+                                f.name == *field_name
+                                    && !f.is_jvm_field
+                                    && f.name != "label"
+                                    && f.name != "$stable"
+                                    && !f.name.starts_with('$')
+                            })
                         })
-                    })
-                    .unwrap_or(false);
+                        .unwrap_or(false);
                 if has_getter {
                     let getter_descriptor = format!("(){}", descriptor);
-                    let mref = cp.methodref(class_name, &getter_name, &getter_descriptor);
+                    let mref = cp.methodref(field_class, &getter_name, &getter_descriptor);
                     code.push(0xB6); // invokevirtual
                     code.write_u16::<BigEndian>(mref).unwrap();
                 } else {
-                    let fr = cp.fieldref(class_name, field_name, &descriptor);
+                    let fr = cp.fieldref(field_class, field_name, &descriptor);
                     code.push(0xB4); // getfield
                     code.write_u16::<BigEndian>(fr).unwrap();
                 }

@@ -3444,7 +3444,7 @@ fn body_has_unresolved_unqualified_call(
                         return true;
                     }
                 }
-                Stmt::Val(v) => {
+                Stmt::Val(v)
                     if scan_expr(
                         &v.init,
                         scope,
@@ -3453,9 +3453,9 @@ fn body_has_unresolved_unqualified_call(
                         println_sym,
                         print_sym,
                         interner,
-                    ) {
-                        return true;
-                    }
+                    ) =>
+                {
+                    return true;
                 }
                 _ => {}
             }
