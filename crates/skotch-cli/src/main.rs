@@ -2,11 +2,19 @@
 //!
 //! Subcommands:
 //!
-//! - `emit`  — compile one `.kt` file to a target format
-//! - `repl`  — interactive Kotlin REPL backed by `skotch-repl`
-//! - `run`   — execute a `.kts` script via the same backend
-//! - `build` — full project build (stub, lands later)
-//! - `test`  — test runner (stub, lands later)
+//! - `emit`    — compile one `.kt` file to a target format
+//! - `repl`    — interactive Kotlin REPL backed by `skotch-repl`
+//! - `run`     — execute a `.kts` script via the same backend
+//! - `build`   — full project build (stub, lands later)
+//! - `test`    — test runner (stub, lands later)
+//! - `kotlinc` — drop-in kotlinc-cli emulation (Kotlin/JVM only)
+//!
+//! Multi-call binary: if `argv[0]` matches a known alias (e.g. `kotlinc`
+//! via a symlink), the corresponding subcommand is injected automatically.
+//! See `multicall.rs` for the alias table.
+
+mod kotlinc;
+mod multicall;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -138,14 +146,37 @@ enum Command {
     Bsp,
     /// Generate the `.bsp/skotch.json` connection file for IDE discovery.
     Init,
+    /// kotlinc-cli emulation (Kotlin/JVM compiler options).
+    ///
+    /// Runs the same compile pipeline as the multi-file `build` path
+    /// but driven by kotlinc-style flags (`-d`, `-classpath`,
+    /// `-include-runtime`, `-script`, `-verbose`, `-version`,
+    /// `-kotlin-home`). Unrecognised flags emit a warning instead of
+    /// failing, so build scripts that pass implementation-specific
+    /// options can still proceed.
+    ///
+    /// Also reached via the `kotlinc` multi-call alias — symlink the
+    /// `skotch` binary to `kotlinc` and invoke it directly.
+    #[command(allow_hyphen_values = true, trailing_var_arg = true)]
+    Kotlinc {
+        /// Forwarded verbatim to the kotlinc emulator.
+        #[arg(value_name = "KOTLINC_ARGS")]
+        args: Vec<String>,
+    },
 }
 
 fn main() -> Result<()> {
+    // ── Multi-call binary dispatch ───────────────────────────────────
+    // If `argv[0]` is one of the aliases declared in `multicall.rs`
+    // (e.g. `kotlinc` via a symlink), inject the matching subcommand
+    // so the rest of the args go through clap unchanged.
+    let raw_args: Vec<String> = std::env::args().collect();
+    let args = multicall::rewrite_argv(raw_args);
+
     // ── Shebang support ─────────────────────────────────────────────
     // When invoked as `#!/usr/bin/env skotch`, the OS passes the script
     // path as the first argument: `skotch myscript.kts`. Detect this
     // and route to the `run` subcommand automatically.
-    let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         let first_arg = &args[1];
         if !first_arg.starts_with('-')
@@ -160,6 +191,7 @@ fn main() -> Result<()> {
                     | "test"
                     | "bsp"
                     | "init"
+                    | "kotlinc"
                     | "help"
             )
             && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
@@ -173,7 +205,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(args);
     match cli.cmd {
         Command::Emit {
             target,
@@ -314,6 +346,9 @@ fn main() -> Result<()> {
             let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let path = skotch_bsp::generate_connection_file(&project_dir)?;
             eprintln!("Generated {}", path.display());
+        }
+        Command::Kotlinc { args } => {
+            kotlinc::run(&args)?;
         }
     }
     Ok(())

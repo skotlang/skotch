@@ -11,11 +11,21 @@ name = "skotch"
 path = "src/main.rs"
 
 [dependencies]
-skotch-driver = { workspace = true }
-skotch-build  = { workspace = true }
-skotch-repl   = { workspace = true }
-skotch-lsp    = { workspace = true }
-skotch-bsp    = { workspace = true }
-clap          = { workspace = true }
-anyhow        = { workspace = true }
-tokio         = { workspace = true }
+skotch-driver       = { workspace = true }
+skotch-build        = { workspace = true }
+skotch-repl         = { workspace = true }
+skotch-lsp          = { workspace = true }
+skotch-bsp          = { workspace = true }
+# Used by the `kotlinc` subcommand for multi-file front-end + JVM emit.
+skotch-intern       = { workspace = true }
+skotch-diagnostics  = { workspace = true }
+skotch-span         = { workspace = true }
+skotch-syntax       = { workspace = true }
+skotch-lexer        = { workspace = true }
+skotch-parser       = { workspace = true }
+skotch-resolve      = { workspace = true }
+skotch-backend-jvm  = { workspace = true }
+skotch-compose      = { workspace = true }
+clap                = { workspace = true }
+anyhow              = { workspace = true }
+tokio               = { workspace = true }

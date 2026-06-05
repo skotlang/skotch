@@ -1816,11 +1816,66 @@ pub fn lower_file(
                         local_generic_args: rustc_hash::FxHashMap::default(),
                     }
                 };
-                let methods: Vec<MirFunction> = ext_class
+                let mut methods: Vec<MirFunction> = ext_class
                     .methods
                     .iter()
                     .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
                     .collect();
+                // Synthesize the compiler-generated data class methods
+                // (`copy`, `componentN`, `equals`, `hashCode`, `toString`)
+                // on the stub so cross-file callers see them. Without
+                // these entries, `p.copy(y = 10)` falls through to the
+                // generic dispatcher which guesses the wrong signature
+                // (e.g. `copy(I)V` instead of the real `copy(I,I)LPoint;`)
+                // and produces bad bytecode.
+                //
+                // Only the shapes that affect descriptor selection matter
+                // here; the bodies stay empty because the JVM backend
+                // never emits a stubbed cross-file class.
+                if is_data {
+                    let ctor_param_tys_for_copy: Vec<Ty> = if ext_class.ctor_params.is_empty() {
+                        ext_class.fields.iter().map(|(_, t)| t.clone()).collect()
+                    } else {
+                        ext_class
+                            .ctor_params
+                            .iter()
+                            .map(|(_, t)| t.clone())
+                            .collect()
+                    };
+                    let ctor_param_names_for_copy: Vec<String> = if ext_class.ctor_params.is_empty()
+                    {
+                        ext_class.fields.iter().map(|(n, _)| n.clone()).collect()
+                    } else {
+                        ext_class
+                            .ctor_params
+                            .iter()
+                            .map(|(n, _)| n.clone())
+                            .collect()
+                    };
+                    let self_ty = Ty::Class(ext_class.jvm_name.clone());
+                    let existing: rustc_hash::FxHashSet<String> =
+                        methods.iter().map(|m| m.name.clone()).collect();
+                    if !existing.contains("copy") {
+                        let mut m = stub_fn("copy", &ctor_param_tys_for_copy, &self_ty);
+                        m.param_names = ctor_param_names_for_copy.clone();
+                        methods.push(m);
+                    }
+                    if !existing.contains("equals") {
+                        methods.push(stub_fn("equals", &[Ty::Any], &Ty::Bool));
+                    }
+                    if !existing.contains("hashCode") {
+                        methods.push(stub_fn("hashCode", &[], &Ty::Int));
+                    }
+                    if !existing.contains("toString") {
+                        methods.push(stub_fn("toString", &[], &Ty::String));
+                    }
+                    for (idx, fty) in ctor_param_tys_for_copy.iter().enumerate() {
+                        let mname = format!("component{}", idx + 1);
+                        if !existing.contains(&mname) {
+                            methods.push(stub_fn(&mname, &[], fty));
+                        }
+                    }
+                }
                 // Populate the cross-file stub constructor with the
                 // class's full primary-ctor param types (val/var or not).
                 // Without this, every call site that crosses files sees

@@ -2272,11 +2272,20 @@ version = "0.40.1"
 dependencies = [
  "anyhow",
  "clap",
+ "skotch-backend-jvm",
  "skotch-bsp",
  "skotch-build",
+ "skotch-compose",
+ "skotch-diagnostics",
  "skotch-driver",
+ "skotch-intern",
+ "skotch-lexer",
  "skotch-lsp",
+ "skotch-parser",
  "skotch-repl",
+ "skotch-resolve",
+ "skotch-span",
+ "skotch-syntax",
  "tokio",
 ]
 
