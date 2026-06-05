@@ -4205,7 +4205,7 @@ fn emit_method_body(
         peephole_hoist_getstatic_swap_pattern(&mut code, &mut [], &mut [], &*cp);
         peephole_hoist_aconst_null_swap_pattern(&mut code, &mut [], &mut [], &*cp);
         peephole_hoist_new_dup_around_arg(&mut code, &mut [], &mut [], &*cp);
-        peephole_elide_spill_swap_pattern(&mut code, &*cp);
+        peephole_elide_spill_swap_pattern(&mut code, &mut [], &mut [], &*cp);
         peephole_drop_redundant_swap_swap(&mut code, &mut [], &mut []);
         peephole_fold_enum_entry_name(&mut code, &mut [], &mut [], cp, module);
         // Fold `aconst_null; if_acmpeq/ne L` to `ifnull/ifnonnull L`.
@@ -4608,7 +4608,12 @@ fn emit_method_body(
                     &mut block_offsets,
                     &*cp,
                 );
-                peephole_elide_spill_swap_pattern(&mut code, &*cp);
+                peephole_elide_spill_swap_pattern(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &*cp,
+                );
                 peephole_drop_redundant_swap_swap(&mut code, &mut cmp_targets, &mut block_offsets);
                 peephole_fold_enum_entry_name(
                     &mut code,
@@ -22932,7 +22937,12 @@ fn peephole_hoist_aconst_null_swap_pattern(
 /// evaluating the second, then loads it back at the right position.
 /// kotlinc keeps both values on the operand stack. Net savings: 3
 /// bytes (astore + aload + swap).
-fn peephole_elide_spill_swap_pattern(code: &mut Vec<u8>, cp: &ConstantPool) {
+fn peephole_elide_spill_swap_pattern(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
     loop {
         let stack_in = compute_stack_at_entry(code, cp);
         // (astore_pos, astore_len, slot_n, aload_pos, aload_len)
@@ -23164,6 +23174,19 @@ fn peephole_elide_spill_swap_pattern(code: &mut Vec<u8>, cp: &ConstantPool) {
                     j += instruction_len(code, j);
                 }
                 code.remove(drain_pos);
+                for ct in cmp_targets.iter_mut() {
+                    if ct.offset > drain_pos {
+                        ct.offset -= 1;
+                    }
+                    if ct.cmp_start > drain_pos {
+                        ct.cmp_start -= 1;
+                    }
+                }
+                for b in block_offsets.iter_mut() {
+                    if *b > drain_pos {
+                        *b -= 1;
+                    }
+                }
             }
         }
     }

@@ -8412,11 +8412,35 @@ fn lower_expr(
                                     )?;
                                     arg_locals.push(id);
                                 }
-                                let dest = fb.new_local(ret_ty);
+                                let dest = fb.new_local(ret_ty.clone());
+                                // Emit as a static call on the enum class
+                                // itself (kotlinc's shape): `invokestatic
+                                // Color.values()` / `Color.valueOf(String)`.
+                                // The synthetic body still lives in
+                                // `module.functions` so the InputKt wrapper
+                                // can hold a delegate, but the
+                                // user-visible static method is on the
+                                // enum class — which is also where we
+                                // emit it as a static method below in
+                                // `synthesize_enum_class`.
+                                let descriptor = {
+                                    let mut d = String::from("(");
+                                    for arg_local in &arg_locals {
+                                        let ty = &fb.mf.locals[arg_local.0 as usize];
+                                        d.push_str(&jvm_type_string_for_ty(ty));
+                                    }
+                                    d.push(')');
+                                    d.push_str(&jvm_type_string_for_ty(&ret_ty));
+                                    d
+                                };
                                 fb.push_stmt(MStmt::Assign {
                                     dest,
                                     value: Rvalue::Call {
-                                        kind: CallKind::Static(fid),
+                                        kind: CallKind::StaticJava {
+                                            class_name: recv_name.clone(),
+                                            method_name: method_str.clone(),
+                                            descriptor,
+                                        },
                                         args: arg_locals,
                                     },
                                 });
@@ -21968,7 +21992,24 @@ fn lower_enum(
         }
 
         fb.set_terminator(Terminator::ReturnValue(list_local));
-        module.add_function(fb.finish());
+        let mut finished = fb.finish();
+        // Also expose as a static method on the enum class so that
+        // `EnumClass.values()` call sites can `invokestatic
+        // EnumClass.values()` (kotlinc's shape). The body is the same.
+        let mut as_method = finished.clone();
+        as_method.name = "values".to_string();
+        as_method.is_static = true;
+        if let Some(class) = module
+            .classes
+            .iter_mut()
+            .find(|c| c.name == *enum_name && !c.is_cross_file_stub)
+        {
+            class.methods.push(as_method);
+        }
+        // Keep the InputKt-level delegate too (other resolution paths may
+        // still look it up by name).
+        finished.id = FuncId(module.functions.len() as u32);
+        module.functions.push(finished);
     }
 
     // ── valueOf(name: String) function ─────────────────────────────────
@@ -22076,7 +22117,22 @@ fn lower_enum(
                 Terminator::ReturnValue(fallback_result);
         }
 
-        module.add_function(fb.finish());
+        let mut finished = fb.finish();
+        // Mirror as a static method `valueOf` on the enum class itself
+        // (kotlinc shape). See the `values()` block above for the
+        // rationale.
+        let mut as_method = finished.clone();
+        as_method.name = "valueOf".to_string();
+        as_method.is_static = true;
+        if let Some(class) = module
+            .classes
+            .iter_mut()
+            .find(|c| c.name == *enum_name && !c.is_cross_file_stub)
+        {
+            class.methods.push(as_method);
+        }
+        finished.id = FuncId(module.functions.len() as u32);
+        module.functions.push(finished);
     }
 }
 
