@@ -23064,6 +23064,28 @@ fn peephole_elide_spill_swap_pattern(code: &mut Vec<u8>, cp: &ConstantPool) {
                 i += instruction_len(code, i);
                 continue;
             }
+            // Liveness: slot N must be dead outside the spill region.
+            // Otherwise eliding the astore leaves later loads of slot N
+            // observing stale data (verifier rejects: see fixture
+            // 381-mutablelistof-basic, where the list assigned to slot 4
+            // is also read after the spill region by `println(list)`).
+            let mut slot_read_elsewhere = false;
+            let mut k = 0;
+            while k < code.len() {
+                if k >= region_lo && k < region_hi {
+                    k += instruction_len(code, k);
+                    continue;
+                }
+                if reads_slot_at(code, k, slot_n) {
+                    slot_read_elsewhere = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if slot_read_elsewhere {
+                i += instruction_len(code, i);
+                continue;
+            }
             applied = Some((i, astore_len, slot_n, aload_pos, aload_len));
             break;
         }
