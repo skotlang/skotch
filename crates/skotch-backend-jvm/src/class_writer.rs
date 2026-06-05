@@ -15153,25 +15153,61 @@ fn walk_block(
                             }
                             recipe.push_str(&s);
                         } else {
-                            recipe.push('\u{1}');
-                            dyn_args.push(arg);
                             let ty = &func.locals[arg.0 as usize];
-                            descriptor.push_str(&jvm_type_string(ty));
+                            // Unit-typed args produce no value on the
+                            // stack (load_local short-circuits for
+                            // Ty::Unit), so adding them as dynamic args
+                            // both yields an invalid descriptor — the
+                            // void marker `V` is illegal in parameter
+                            // position — and creates a stack/descriptor
+                            // mismatch. Embed the literal text "kotlin.Unit"
+                            // in the recipe instead, matching the runtime
+                            // result of calling Unit.toString().
+                            if matches!(ty, Ty::Unit) {
+                                recipe.push_str("kotlin.Unit");
+                            } else {
+                                recipe.push('\u{1}');
+                                dyn_args.push(arg);
+                                // Use the parameter-context descriptor:
+                                // `jvm_type_string` returns `V` (void) for
+                                // `Ty::Unit`, which is illegal as a method
+                                // arg type. `jvm_param_type_string` boxes
+                                // it to `Lkotlin/Unit;`.
+                                descriptor.push_str(&jvm_param_type_string(ty));
+                            }
                         }
                     }
                     descriptor.push_str(")Ljava/lang/String;");
-                    if recipe_safe && !dyn_args.is_empty() {
-                        for &dyn_arg in &dyn_args {
-                            load_local(code, stack, max_stack, slots, dyn_arg, &func.locals);
+                    if recipe_safe {
+                        // Push the result string onto the stack. With
+                        // dynamic args we use the invokedynamic
+                        // bootstrap; with none (all args were skipped
+                        // because they were `Ty::Unit`-typed and got
+                        // inlined as "kotlin.Unit" text) we just push
+                        // the recipe as a string constant.
+                        if dyn_args.is_empty() {
+                            let s_idx = cp.string(&recipe);
+                            if s_idx <= 0xFF {
+                                code.push(0x12);
+                                code.push(s_idx as u8);
+                            } else {
+                                code.push(0x13);
+                                code.write_u16::<BigEndian>(s_idx).unwrap();
+                            }
+                            bump(stack, max_stack, 1);
+                        } else {
+                            for &dyn_arg in &dyn_args {
+                                load_local(code, stack, max_stack, slots, dyn_arg, &func.locals);
+                            }
+                            emit_make_concat_with_constants(
+                                code,
+                                cp,
+                                stack,
+                                max_stack,
+                                &descriptor,
+                                &recipe,
+                            );
                         }
-                        emit_make_concat_with_constants(
-                            code,
-                            cp,
-                            stack,
-                            max_stack,
-                            &descriptor,
-                            &recipe,
-                        );
                         // Now stack has [String]. Get System.out, swap so
                         // [PrintStream, String], then println(Object).
                         let ps = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");

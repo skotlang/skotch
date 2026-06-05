@@ -7,8 +7,8 @@ classes       1
 --- strings ---
   "<init>"
   "I"
-  "LInputKt$Lambda$0;"
-  "LInputKt$Lambda$3;"
+  "LInputKt$main$1;"
+  "LInputKt$sumWithScope$1;"
   "LInputKt;"
   "LL"
   "LLL"
@@ -28,8 +28,8 @@ classes       1
 
 --- types ---
   I
-  LInputKt$Lambda$0;
-  LInputKt$Lambda$3;
+  LInputKt$main$1;
+  LInputKt$sumWithScope$1;
   LInputKt;
   Ljava/lang/Object;
   Lkotlin/coroutines/CoroutineContext;
@@ -39,8 +39,8 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>(Ljava/lang/Object;)V
-  LInputKt$Lambda$3;.<init>(Ljava/lang/Object;)V
+  LInputKt$main$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$sumWithScope$1;.<init>(Ljava/lang/Object;)V
   LInputKt;.coroutineScope(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V

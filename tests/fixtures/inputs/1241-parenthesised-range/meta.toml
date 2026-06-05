@@ -1,0 +1,4 @@
+name = "1241-parenthesised-range"
+status = "supported"
+features = ["ranges", "parser", "IntRange"]
+reason = "Locks in the parenthesised-range parse fix: parse_infix_call must always consume `..` regardless of what follows the range end."

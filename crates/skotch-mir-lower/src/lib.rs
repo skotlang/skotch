@@ -16870,18 +16870,53 @@ fn lower_expr(
                     }
                 }
                 if recipe_safe && !dyn_args.is_empty() {
+                    // Unit-typed args produce no stack value at runtime
+                    // (load_local short-circuits Ty::Unit), so they would
+                    // create a descriptor/stack mismatch in the bootstrap
+                    // call. Rebuild the recipe + descriptor + arg list,
+                    // substituting "kotlin.Unit" for each Unit arg.
+                    let mut fixed_recipe = String::new();
+                    let mut fixed_args: Vec<LocalId> = Vec::new();
                     let mut descriptor = String::from("(");
-                    for a in &dyn_args {
-                        let ty = &fb.mf.locals[a.0 as usize];
-                        descriptor.push_str(&jvm_type_string_for_ty(ty));
+                    let mut dyn_idx = 0usize;
+                    for ch in recipe.chars() {
+                        if ch == '\u{1}' {
+                            let arg = dyn_args[dyn_idx];
+                            dyn_idx += 1;
+                            let ty = &fb.mf.locals[arg.0 as usize];
+                            if matches!(ty, Ty::Unit) {
+                                fixed_recipe.push_str("kotlin.Unit");
+                            } else {
+                                fixed_recipe.push('\u{1}');
+                                descriptor.push_str(&jvm_type_string_for_ty(ty));
+                                fixed_args.push(arg);
+                            }
+                        } else {
+                            fixed_recipe.push(ch);
+                        }
                     }
                     descriptor.push_str(")Ljava/lang/String;");
+                    if fixed_args.is_empty() {
+                        // All dynamic parts were Unit — emit a plain
+                        // string constant instead of an invokedynamic
+                        // with zero args (which the bootstrap rejects).
+                        let sid = module.intern_string(&fixed_recipe);
+                        let dest = fb.new_local(Ty::String);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Const(MirConst::String(sid)),
+                        });
+                        return Some(dest);
+                    }
                     let dest = fb.new_local(Ty::String);
                     fb.push_stmt(MStmt::Assign {
                         dest,
                         value: Rvalue::Call {
-                            kind: CallKind::MakeConcatWithConstants { recipe, descriptor },
-                            args: dyn_args,
+                            kind: CallKind::MakeConcatWithConstants {
+                                recipe: fixed_recipe,
+                                descriptor,
+                            },
+                            args: fixed_args,
                         },
                     });
                     return Some(dest);

@@ -1,0 +1,63 @@
+dex_version   035
+strings       25
+types         12
+methods       8
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "L"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/Iterator;"
+  "Lkotlin/ranges/IntRange;"
+  "V"
+  "VI"
+  "VII"
+  "VL"
+  "Z"
+  "[Ljava/lang/String;"
+  "hasNext"
+  "input.kt"
+  "intValue"
+  "iterator"
+  "main"
+  "next"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/Iterator;
+  Lkotlin/ranges/IntRange;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Lkotlin/ranges/IntRange;.<init>(II)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=25 ins=0 outs=3 insns=84
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

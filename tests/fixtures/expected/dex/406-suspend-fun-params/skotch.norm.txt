@@ -10,7 +10,7 @@ classes       1
   "J"
   "LI"
   "LIL"
-  "LInputKt$Lambda$0;"
+  "LInputKt$main$1;"
   "LInputKt;"
   "LJL"
   "LLLIL"
@@ -33,7 +33,7 @@ classes       1
 --- types ---
   I
   J
-  LInputKt$Lambda$0;
+  LInputKt$main$1;
   LInputKt;
   Ljava/lang/Integer;
   Ljava/lang/Object;
@@ -45,7 +45,7 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>(Ljava/lang/Object;)V
+  LInputKt$main$1;.<init>(Ljava/lang/Object;)V
   LInputKt;.compute(ILjava/lang/Object;)Ljava/lang/Object;
   LInputKt;.delay(JLjava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V

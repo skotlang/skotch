@@ -7,8 +7,8 @@ classes       1
 --- strings ---
   "<init>"
   "LDbConn;"
-  "LInputKt$Lambda$1;"
-  "LInputKt$Lambda$2;"
+  "LInputKt$main$1;"
+  "LInputKt$main$2;"
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
@@ -30,8 +30,8 @@ classes       1
 
 --- types ---
   LDbConn;
-  LInputKt$Lambda$1;
-  LInputKt$Lambda$2;
+  LInputKt$main$1;
+  LInputKt$main$2;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
@@ -43,9 +43,9 @@ classes       1
 --- methods ---
   LDbConn;.<init>()V
   LDbConn;.close()V
-  LInputKt$Lambda$1;.<init>(Ljava/lang/Object;)V
-  LInputKt$Lambda$2;.<init>(Ljava/lang/Object;)V
-  LInputKt$Lambda$2;.invoke()V
+  LInputKt$main$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$main$2;.<init>(Ljava/lang/Object;)V
+  LInputKt$main$2;.invoke()V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LInputKt;.process(Ljava/lang/Object;)Ljava/lang/String;

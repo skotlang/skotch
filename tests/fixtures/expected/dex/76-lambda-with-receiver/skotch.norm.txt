@@ -7,7 +7,7 @@ classes       1
 --- strings ---
   "<init>"
   "L"
-  "LInputKt$Lambda$0;"
+  "LInputKt$main$1;"
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
@@ -28,7 +28,7 @@ classes       1
   "toString"
 
 --- types ---
-  LInputKt$Lambda$0;
+  LInputKt$main$1;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
@@ -40,7 +40,7 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>()V
+  LInputKt$main$1;.<init>()V
   LInputKt;.buildString(Ljava/lang/Object;)Ljava/lang/String;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V

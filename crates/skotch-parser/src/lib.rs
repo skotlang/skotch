@@ -2935,40 +2935,37 @@ impl<'a> Parser<'a> {
     fn parse_infix_call(&mut self) -> Expr {
         let lhs = self.parse_equality();
         self.skip_trivia();
-        // `..` range operator: `1..10` → rangeTo call.
-        // Only consume `..` when NOT inside for-loop/when range context
-        // (those parsers handle `..` themselves). We detect this by
-        // checking that the token AFTER `..` and the range end is NOT
-        // `)` (for-loop end) or `->` (when pattern end).
+        // `..` range operator: `1..10` → `1.rangeTo(10)`. Always consume
+        // here — the contexts that need to handle `..` themselves
+        // (`for (i in 1..10)` and when's `in 1..10 ->` pattern) deliberately
+        // call `parse_equality`/`parse_additive` instead of `parse_expr`,
+        // so they don't reach this path.
+        //
+        // Previously this was gated on a lookahead heuristic that skipped
+        // consumption when the token two ahead was `)` or `->`. That broke
+        // every parenthesised range (`(1..10)`, `(1..10).first()`) and
+        // bare-range when patterns (`1..10 -> body`). See the
+        // `parenthesised_range_*` and `when_bare_range_pattern` tests.
         if self.peek_kind() == TokenKind::DotDot {
-            // Peek ahead: if after `.. expr` we see `)` or `->`, this
-            // is a for-loop or when range — let the caller handle `..`.
-            // Otherwise consume it as a rangeTo expression.
-            //
-            // Simple heuristic: if the TWO tokens ahead include `)` or
-            // `->`, skip. This isn't perfect but handles the common cases.
-            let after_dotdot = self.peek_kind_at(2); // token after `.. <number>`
-            if after_dotdot != TokenKind::RParen && after_dotdot != TokenKind::Arrow {
-                let span_start = lhs.span();
-                self.bump(); // consume ..
-                self.skip_trivia();
-                let rhs = self.parse_equality();
-                let span = span_start.merge(rhs.span());
-                let name = self.interner.intern("rangeTo");
-                return Expr::Call {
-                    callee: Box::new(Expr::Field {
-                        receiver: Box::new(lhs),
-                        name,
-                        span,
-                    }),
-                    args: vec![CallArg {
-                        name: None,
-                        expr: rhs,
-                    }],
-                    type_args: Vec::new(),
+            let span_start = lhs.span();
+            self.bump(); // consume ..
+            self.skip_trivia();
+            let rhs = self.parse_equality();
+            let span = span_start.merge(rhs.span());
+            let name = self.interner.intern("rangeTo");
+            return Expr::Call {
+                callee: Box::new(Expr::Field {
+                    receiver: Box::new(lhs),
+                    name,
                     span,
-                };
-            }
+                }),
+                args: vec![CallArg {
+                    name: None,
+                    expr: rhs,
+                }],
+                type_args: Vec::new(),
+                span,
+            };
         }
         // `in` operator: `5 in r` → `r.contains(5)`.
         // `!in` operator: `5 !in r` → `!r.contains(5)`.
@@ -4647,5 +4644,65 @@ mod tests {
             panic!();
         };
         assert!(!f.is_suspend);
+    }
+
+    // ── Range-operator parsing regression tests ────────────────────────
+    //
+    // These pin down the parse_infix_call path so the lookahead heuristic
+    // that used to skip `..` when the next-next token was `)` or `->`
+    // can never come back. Each call site that broke in
+    // skotch-examples/02-vars-and-control-flow is covered.
+
+    fn parses_clean(src: &str) {
+        let (_file, d) = parse(src);
+        assert!(d.is_empty(), "{} produced diagnostics: {:?}", src, d);
+    }
+
+    #[test]
+    fn parenthesised_range_simple() {
+        // `(1..10)` was rejected as "expected ), found DotDot" because
+        // parse_infix_call peeked two tokens ahead, saw `)`, and refused
+        // to consume `..`.
+        parses_clean("fun main() { val r = (1..10) }");
+    }
+
+    #[test]
+    fn parenthesised_range_with_call_chain() {
+        // The original failure site from skotch-examples 02:
+        //   val first = (1..20).firstOrNull { it % 7 == 0 }
+        parses_clean("fun main() { val x = (1..20).firstOrNull { it % 7 == 0 } }");
+    }
+
+    #[test]
+    fn parenthesised_range_as_argument() {
+        // `f((1..3))` — same shape but the `)` belongs to the outer call.
+        parses_clean("fun main() { println((1..3).count()) }");
+    }
+
+    #[test]
+    fn bare_range_when_pattern() {
+        // `1..10 -> body` as a when pattern. parse_expr is called for the
+        // pattern; the heuristic used to skip `..` because the token two
+        // ahead was `->`, leaving the parser stuck on a leftover `..`.
+        parses_clean(
+            "fun main() { val n = 5; val s = when (n) { 1..10 -> \"small\"; else -> \"big\" } }",
+        );
+    }
+
+    #[test]
+    fn for_range_loop_still_works() {
+        // Sanity: removing the heuristic must not regress the for-loop
+        // parser, which uses parse_equality (not parse_expr) so it never
+        // reaches parse_infix_call's `..` branch.
+        parses_clean("fun main() { for (i in 1..5) println(i) }");
+    }
+
+    #[test]
+    fn when_in_range_pattern_still_works() {
+        // Sanity for the `in 1..10` when pattern path, which uses
+        // parse_additive and handles `..` itself.
+        parses_clean(
+            "fun main() { val n = 5; val s = when (n) { in 1..10 -> \"ok\"; else -> \"no\" } }",
+        );
     }
 }

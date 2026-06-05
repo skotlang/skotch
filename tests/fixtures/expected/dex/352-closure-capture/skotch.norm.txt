@@ -9,8 +9,8 @@ classes       1
   "Hello"
   "I"
   "LI"
-  "LInputKt$Lambda$0;"
-  "LInputKt$Lambda$1;"
+  "LInputKt$main$1;"
+  "LInputKt$main$2;"
   "LInputKt;"
   "LL"
   "Ljava/io/PrintStream;"
@@ -32,8 +32,8 @@ classes       1
 
 --- types ---
   I
-  LInputKt$Lambda$0;
-  LInputKt$Lambda$1;
+  LInputKt$main$1;
+  LInputKt$main$2;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Integer;
@@ -44,10 +44,10 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>(I)V
-  LInputKt$Lambda$0;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
-  LInputKt$Lambda$1;.<init>(Ljava/lang/String;)V
-  LInputKt$Lambda$1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$main$1;.<init>(I)V
+  LInputKt$main$1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$main$2;.<init>(Ljava/lang/String;)V
+  LInputKt$main$2;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/Object;)V

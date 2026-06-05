@@ -8,7 +8,7 @@ classes       1
   "<init>"
   "I"
   "L$Ref$0;"
-  "LInputKt$Lambda$1;"
+  "LInputKt$main$1;"
   "LInputKt;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Object;"
@@ -27,7 +27,7 @@ classes       1
 --- types ---
   I
   L$Ref$0;
-  LInputKt$Lambda$1;
+  LInputKt$main$1;
   LInputKt;
   Ljava/io/PrintStream;
   Ljava/lang/Object;
@@ -37,8 +37,8 @@ classes       1
 
 --- methods ---
   L$Ref$0;.<init>(I)V
-  LInputKt$Lambda$1;.<init>(Ljava/lang/Object;)V
-  LInputKt$Lambda$1;.invoke()V
+  LInputKt$main$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$main$1;.invoke()V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V

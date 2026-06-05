@@ -7,7 +7,7 @@ classes       1
 --- strings ---
   "<init>"
   "I"
-  "LInputKt$Lambda$0;"
+  "LInputKt$main$1;"
   "LInputKt;"
   "LLLIL"
   "Ljava/lang/Object;"
@@ -26,7 +26,7 @@ classes       1
 
 --- types ---
   I
-  LInputKt$Lambda$0;
+  LInputKt$main$1;
   LInputKt;
   Ljava/lang/Object;
   Ljava/lang/String;
@@ -37,7 +37,7 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt$Lambda$0;.<init>(Ljava/lang/String;Ljava/lang/Object;)V
+  LInputKt$main$1;.<init>(Ljava/lang/String;Ljava/lang/Object;)V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Lkotlinx/coroutines/BuildersKt;.runBlocking$default(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;

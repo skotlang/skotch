@@ -9,7 +9,7 @@ classes       1
   "I"
   "Inner"
   "L"
-  "LInputKt$Lambda$1;"
+  "LInputKt$Top$1;"
   "LInputKt;"
   "Ljava/lang/Object;"
   "Lkotlin/jvm/functions/Function2;"
@@ -24,14 +24,14 @@ classes       1
 
 --- types ---
   I
-  LInputKt$Lambda$1;
+  LInputKt$Top$1;
   LInputKt;
   Ljava/lang/Object;
   Lkotlin/jvm/functions/Function2;
   V
 
 --- methods ---
-  LInputKt$Lambda$1;.<init>(Ljava/lang/Object;)V
+  LInputKt$Top$1;.<init>(Ljava/lang/Object;)V
   LInputKt;.Inner(Ljava/lang/Object;IILjava/lang/Object;I)V
   LInputKt;.Outer(Ljava/lang/Object;Ljava/lang/Object;I)V
   LInputKt;.Top(Ljava/lang/Object;Ljava/lang/Object;I)V
