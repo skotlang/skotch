@@ -148,18 +148,22 @@ enum Command {
     Init,
     /// kotlinc-cli emulation (Kotlin/JVM compiler options).
     ///
-    /// Runs the same compile pipeline as the multi-file `build` path
-    /// but driven by kotlinc-style flags (`-d`, `-classpath`,
-    /// `-include-runtime`, `-script`, `-verbose`, `-version`,
-    /// `-kotlin-home`). Unrecognised flags emit a warning instead of
-    /// failing, so build scripts that pass implementation-specific
-    /// options can still proceed.
+    /// The full flag list and examples live in `kotlinc::HELP_TEXT` and
+    /// are shared between clap's `--help` output and the kotlinc
+    /// module's own `-help` printer — single source of truth.
     ///
-    /// Also reached via the `kotlinc` multi-call alias — symlink the
-    /// `skotch` binary to `kotlinc` and invoke it directly.
-    #[command(allow_hyphen_values = true, trailing_var_arg = true)]
+    /// `disable_help_flag = true` keeps clap from intercepting `-h` /
+    /// `--help` so they reach our hand parser, which prints the same
+    /// `HELP_TEXT` content.
+    #[command(
+        allow_hyphen_values = true,
+        trailing_var_arg = true,
+        disable_help_flag = true,
+        long_about = kotlinc::HELP_TEXT,
+    )]
     Kotlinc {
-        /// Forwarded verbatim to the kotlinc emulator.
+        /// kotlinc-style arguments — see `skotch kotlinc -help` for the
+        /// supported flag list and examples.
         #[arg(value_name = "KOTLINC_ARGS")]
         args: Vec<String>,
     },

@@ -456,23 +456,57 @@ fn warn_only_arity(flag: &str) -> usize {
     }
 }
 
+/// Help text shown both by `skotch kotlinc -help` and by clap when
+/// it generates `--help` for the `Kotlinc` subcommand.
+///
+/// Exposed as a single `&'static str` so main.rs's clap attribute and
+/// this module's `print_help` share the same source of truth — adding
+/// a flag means editing one constant.
+pub const HELP_TEXT: &str = "\
+skotch kotlinc — drop-in emulation of the Kotlin/JVM compiler.
+
+Compiles one or more `.kt` files using skotch's own front-end and JVM
+backend, exposing a kotlinc-compatible command line. Also reached via
+the `kotlinc` multi-call alias — symlink the `skotch` binary to
+`kotlinc` and invoke it directly.
+
+USAGE:
+    skotch kotlinc [OPTIONS] <SOURCE_FILES...>
+
+OPTIONS:
+    -d <path>            Destination for class files (directory or .jar)
+    -classpath, -cp      Colon-separated classpath entries
+    -include-runtime     Include kotlin-stdlib in the output jar
+                         (accepted; jar packaging is not yet implemented)
+    -script              Evaluate <SOURCE_FILE> as a `.kts` script
+    -verbose             Chatty logging on stderr
+    -version             Print the compiler version and exit
+    -kotlin-home <path>  Path to a kotlin install (informational only)
+    -help, -h, --help    Print this help and exit
+
+RECOGNISED-BUT-UNIMPLEMENTED FLAGS:
+    The following kotlinc flags are accepted (so build scripts that
+    pass them keep working) but emit a warning and are otherwise
+    ignored. Each entry's comment in `crates/skotch-cli/src/kotlinc.rs`
+    notes what would be needed to support it:
+
+      -Werror, -nowarn, -progressive, -suppress-version-warnings,
+      -Xsuppress-version-warnings, -module-name, -jvm-target,
+      -api-version, -language-version, -opt-in, -explicit-api,
+      -script-templates, -P, -no-stdlib, -no-reflect, -no-jdk,
+      -jdk-home, -friend-paths, -Xjsr305 (and any other `-X…`/`-P…`)
+
+EXAMPLES:
+    # Compile two files into out/:
+    skotch kotlinc -d out/ Main.kt Util.kt
+
+    # With an external dependency on the classpath:
+    skotch kotlinc -cp libs/coroutines.jar -d out/ Main.kt
+
+    # Run a .kts script:
+    skotch kotlinc -script setup.kts
+";
+
 fn print_help() {
-    println!(
-        "skotch kotlinc — drop-in emulation of the Kotlin/JVM compiler\n\
-         \n\
-         USAGE:\n    \
-             skotch kotlinc [OPTIONS] <SOURCE_FILES...>\n\
-         \n\
-         OPTIONS:\n    \
-             -d <path>            Destination for class files (dir or .jar)\n    \
-             -classpath, -cp      Colon-separated classpath entries\n    \
-             -include-runtime     Include kotlin-stdlib in the output jar\n    \
-             -script              Evaluate <SOURCE_FILE> as a .kts script\n    \
-             -verbose             Chatty logging on stderr\n    \
-             -version             Print the compiler version and exit\n    \
-             -kotlin-home <path>  Path to a kotlin install (informational)\n    \
-             -help, -h            Print this help\n\
-         \n\
-         Unsupported flags emit a warning and are otherwise ignored.\n"
-    );
+    println!("{HELP_TEXT}");
 }

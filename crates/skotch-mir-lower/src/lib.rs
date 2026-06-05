@@ -10006,7 +10006,7 @@ fn lower_expr(
                             // Helper: emit either the user's local or a
                             // null placeholder (mask bit will tell the
                             // $default dispatcher to use the real default).
-                            let mut emit_null_cs = |fb: &mut FnBuilder| -> LocalId {
+                            let emit_null_cs = |fb: &mut FnBuilder| -> LocalId {
                                 let l = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
                                 fb.push_stmt(MStmt::Assign {
                                     dest: l,
@@ -10014,7 +10014,7 @@ fn lower_expr(
                                 });
                                 l
                             };
-                            let mut emit_zero_int = |fb: &mut FnBuilder| -> LocalId {
+                            let emit_zero_int = |fb: &mut FnBuilder| -> LocalId {
                                 let l = fb.new_local(Ty::Int);
                                 fb.push_stmt(MStmt::Assign {
                                     dest: l,
