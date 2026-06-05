@@ -1,0 +1,4 @@
+name = "1245-list-numeric-reductions"
+status = "supported"
+features = ["sum", "average", "max", "stdlib-extension"]
+reason = "Locks in dispatch for the numeric `Iterable<Int>` reductions (`sum`, `average`, `max`) which previously fell through to a non-existent `java.util.List` virtual method."

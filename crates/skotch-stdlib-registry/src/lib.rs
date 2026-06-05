@@ -129,6 +129,26 @@ pub static STDLIB_EXTENSIONS: &[StdlibExtension] = &[
     StdlibExtension { receiver: "List", method: "toList", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "toList", descriptor: "(Ljava/lang/Iterable;)Ljava/util/List;", return_ty: ty_list },
     StdlibExtension { receiver: "List", method: "toSet", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "toSet", descriptor: "(Ljava/lang/Iterable;)Ljava/util/Set;", return_ty: ty_set },
     StdlibExtension { receiver: "List", method: "toMutableList", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "toMutableList", descriptor: "(Ljava/lang/Iterable;)Ljava/util/List;", return_ty: ty_list },
+    // ── Numeric reductions on List<Int> / Iterable<Int> ──
+    //
+    // kotlinc mangles the JVM method name by element type — `sum()` on
+    // `Iterable<Int>` becomes `CollectionsKt.sumOfInt`, on `Iterable<Double>`
+    // it's `sumOfDouble`. Same for `averageOfInt` / `averageOfDouble` and the
+    // value-class flavors. We only register the `Int` flavors here because
+    // (a) those are what example 04 exercises and (b) without element-type
+    // inference we'd otherwise have to guess. Adding `Double`/`Long`/etc. is
+    // a one-line entry per element type.
+    StdlibExtension { receiver: "", method: "sum", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "sumOfInt", descriptor: "(Ljava/lang/Iterable;)I", return_ty: || Ty::Int },
+    StdlibExtension { receiver: "", method: "average", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "averageOfInt", descriptor: "(Ljava/lang/Iterable;)D", return_ty: || Ty::Double },
+    // `max()` was deprecated in 1.4 — kotlinc routes the call to the
+    // internal `maxOrThrow` (throws NoSuchElementException on empty
+    // collections). The return is `Comparable`; numeric callers
+    // typically toString it (string templates) or compare further so
+    // leaving it boxed matches what kotlinc emits.
+    StdlibExtension { receiver: "", method: "max", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "maxOrThrow", descriptor: "(Ljava/lang/Iterable;)Ljava/lang/Comparable;", return_ty: || Ty::Class("java/lang/Comparable".to_string()) },
+    StdlibExtension { receiver: "", method: "min", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "minOrThrow", descriptor: "(Ljava/lang/Iterable;)Ljava/lang/Comparable;", return_ty: || Ty::Class("java/lang/Comparable".to_string()) },
+    StdlibExtension { receiver: "", method: "maxOrNull", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "maxOrNull", descriptor: "(Ljava/lang/Iterable;)Ljava/lang/Comparable;", return_ty: || Ty::Nullable(Box::new(Ty::Class("java/lang/Comparable".to_string()))) },
+    StdlibExtension { receiver: "", method: "minOrNull", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "minOrNull", descriptor: "(Ljava/lang/Iterable;)Ljava/lang/Comparable;", return_ty: || Ty::Nullable(Box::new(Ty::Class("java/lang/Comparable".to_string()))) },
     // ── Map extensions (MapsKt) ──
     StdlibExtension { receiver: "Map", method: "forEach", facade_class: "kotlin/collections/MapsKt", jvm_method: "forEach", descriptor: "(Ljava/util/Map;Lkotlin/jvm/functions/Function2;)V", return_ty: || Ty::Unit },
     StdlibExtension { receiver: "Map", method: "toList", facade_class: "kotlin/collections/MapsKt", jvm_method: "toList", descriptor: "(Ljava/util/Map;)Ljava/util/List;", return_ty: ty_list },

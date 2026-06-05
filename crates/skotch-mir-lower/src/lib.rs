@@ -9947,61 +9947,100 @@ fn lower_expr(
                             all_args[1] = mir_autobox(fb, init, &init_ty);
                         }
                         // joinToString$default needs all 9 params even when
-                        // the user only supplies the separator.  Cast the
-                        // String separator to CharSequence, pad nulls for
-                        // prefix/postfix/truncated/transform, 0 for limit,
-                        // set the bitmask, and add the trailing marker null.
+                        // the user only supplies a subset. Map each user
+                        // arg (already lowered into `all_args`) to its
+                        // declared slot — by name when the call site used
+                        // a named arg (`prefix = "["`), otherwise by the
+                        // positional order on `CollectionsKt.joinToString`
+                        // (separator, prefix, postfix, limit, truncated,
+                        // transform). Slots without a user-provided value
+                        // get a null/zero placeholder and their bit set
+                        // in the default-mask so the $default dispatcher
+                        // substitutes the real default.
+                        //
+                        // Without the name-aware routing, `joinToString(
+                        // prefix = "[", postfix = "]", separator = ", ")`
+                        // would silently route the first user arg ("[")
+                        // into the separator slot and drop the rest,
+                        // producing output like `6[7[8[9[10`.
                         if facade_method == "joinToString$default" {
-                            // all_args[0] = receiver (Iterable)
-                            // all_args[1] = separator (user-supplied String)
-                            // Cast separator to CharSequence descriptor match
-                            // (no-op on JVM, types are compatible)
-
-                            // Build full arg list:
-                            //   Iterable, CharSequence, CharSequence, CharSequence, int, CharSequence, Function1, int, Object
                             let receiver = all_args[0];
-                            let separator = if all_args.len() > 1 {
-                                all_args[1]
-                            } else {
-                                // default separator ", "
-                                let sid = module.intern_string(", ");
-                                let s = fb.new_local(Ty::String);
+                            // user_arg_locals[i] corresponds to args[i].
+                            let user_arg_locals: Vec<LocalId> =
+                                all_args.iter().skip(1).copied().collect();
+                            // joinToString param order (after the receiver):
+                            //   0 separator, 1 prefix, 2 postfix,
+                            //   3 limit, 4 truncated, 5 transform
+                            const PARAM_NAMES: &[&str] = &[
+                                "separator",
+                                "prefix",
+                                "postfix",
+                                "limit",
+                                "truncated",
+                                "transform",
+                            ];
+                            let mut slot: [Option<LocalId>; 6] = [None; 6];
+                            let mut next_positional = 0usize;
+                            for (i, a) in args.iter().enumerate() {
+                                let local = user_arg_locals[i];
+                                if let Some(name_sym) = a.name {
+                                    let name = interner.resolve(name_sym);
+                                    if let Some(idx) = PARAM_NAMES.iter().position(|p| *p == name) {
+                                        slot[idx] = Some(local);
+                                        continue;
+                                    }
+                                    // Unknown name — fall through to
+                                    // positional so we at least don't
+                                    // silently drop the value.
+                                }
+                                while next_positional < PARAM_NAMES.len()
+                                    && slot[next_positional].is_some()
+                                {
+                                    next_positional += 1;
+                                }
+                                if next_positional < PARAM_NAMES.len() {
+                                    slot[next_positional] = Some(local);
+                                    next_positional += 1;
+                                }
+                            }
+                            // Helper: emit either the user's local or a
+                            // null placeholder (mask bit will tell the
+                            // $default dispatcher to use the real default).
+                            let mut emit_null_cs = |fb: &mut FnBuilder| -> LocalId {
+                                let l = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
                                 fb.push_stmt(MStmt::Assign {
-                                    dest: s,
-                                    value: Rvalue::Const(MirConst::String(sid)),
+                                    dest: l,
+                                    value: Rvalue::Const(MirConst::Null),
                                 });
-                                s
+                                l
                             };
-                            let null_cs = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
-                            fb.push_stmt(MStmt::Assign {
-                                dest: null_cs,
-                                value: Rvalue::Const(MirConst::Null),
-                            });
-                            let null_cs2 = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
-                            fb.push_stmt(MStmt::Assign {
-                                dest: null_cs2,
-                                value: Rvalue::Const(MirConst::Null),
-                            });
-                            let zero = fb.new_local(Ty::Int);
-                            fb.push_stmt(MStmt::Assign {
-                                dest: zero,
-                                value: Rvalue::Const(MirConst::Int(0)),
-                            });
-                            let null_cs3 = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
-                            fb.push_stmt(MStmt::Assign {
-                                dest: null_cs3,
-                                value: Rvalue::Const(MirConst::Null),
-                            });
-                            let null_fn = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
-                            fb.push_stmt(MStmt::Assign {
-                                dest: null_fn,
-                                value: Rvalue::Const(MirConst::Null),
-                            });
-                            // Bitmask: 62 = 0b111110 — all params except separator use defaults
+                            let mut emit_zero_int = |fb: &mut FnBuilder| -> LocalId {
+                                let l = fb.new_local(Ty::Int);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: l,
+                                    value: Rvalue::Const(MirConst::Int(0)),
+                                });
+                                l
+                            };
+                            let separator = slot[0].unwrap_or_else(|| emit_null_cs(fb));
+                            let prefix = slot[1].unwrap_or_else(|| emit_null_cs(fb));
+                            let postfix = slot[2].unwrap_or_else(|| emit_null_cs(fb));
+                            let limit = slot[3].unwrap_or_else(|| emit_zero_int(fb));
+                            let truncated = slot[4].unwrap_or_else(|| emit_null_cs(fb));
+                            let transform = slot[5].unwrap_or_else(|| emit_null_cs(fb));
+                            // Bitmask: bit `i` set ⇒ slot `i` uses the
+                            // declared default. We set the bit for every
+                            // slot the user DIDN'T provide.
+                            let mut mask_value: i32 = 0;
+                            for (i, s) in slot.iter().enumerate() {
+                                if s.is_none() {
+                                    mask_value |= 1 << i;
+                                }
+                            }
                             let bitmask = fb.new_local(Ty::Int);
                             fb.push_stmt(MStmt::Assign {
                                 dest: bitmask,
-                                value: Rvalue::Const(MirConst::Int(62)),
+                                value: Rvalue::Const(MirConst::Int(mask_value)),
                             });
                             let null_marker = fb.new_local(Ty::Nullable(Box::new(Ty::Any)));
                             fb.push_stmt(MStmt::Assign {
@@ -10011,11 +10050,11 @@ fn lower_expr(
                             all_args = vec![
                                 receiver,
                                 separator,
-                                null_cs,
-                                null_cs2,
-                                zero,
-                                null_cs3,
-                                null_fn,
+                                prefix,
+                                postfix,
+                                limit,
+                                truncated,
+                                transform,
                                 bitmask,
                                 null_marker,
                             ];
@@ -10926,11 +10965,28 @@ fn lower_expr(
                             },
                             return_ty,
                         )
-                    } else if let Some((_, callable_local)) = scope
-                        .iter()
-                        .rev()
-                        .find(|(s, _)| interner.resolve(*s) == method_name_str)
-                    {
+                    } else if let Some((_, callable_local)) = scope.iter().rev().find(|(s, lid)| {
+                        // Only treat `recv.name(args)` as
+                        // `name.invoke(recv, args)` when `name` is
+                        // ACTUALLY function-typed in scope. Falling
+                        // through on a same-named non-function local
+                        // (e.g. `val sum = nums.fold(...)` shadows
+                        // the `sum` extension and `nums.sum()`
+                        // would mis-dispatch to `sum.invoke(nums)`)
+                        // produces a runtime
+                        // `NoSuchMethodError: Object.invoke(Object)`.
+                        if interner.resolve(*s) != method_name_str {
+                            return false;
+                        }
+                        match fb.mf.locals.get(lid.0 as usize) {
+                            Some(Ty::Function { .. }) => true,
+                            Some(Ty::Class(n)) => {
+                                n.starts_with("kotlin/jvm/functions/Function")
+                                    || module.is_lambda_class(n)
+                            }
+                            _ => false,
+                        }
+                    }) {
                         // receiver.callable(args) where callable is a
                         // local variable of function/lambda type.
                         // Invoke as callable.invoke(receiver, args).

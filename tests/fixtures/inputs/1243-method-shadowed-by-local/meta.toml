@@ -1,0 +1,4 @@
+name = "1243-method-shadowed-by-local"
+status = "supported"
+features = ["stdlib-extension", "scope-resolution", "shadowing"]
+reason = "A local val whose name matches a stdlib extension method must NOT capture method-call dispatch. `nums.sum()` after `val sum = ...` previously dispatched to `sum.invoke(nums)` and crashed at runtime."

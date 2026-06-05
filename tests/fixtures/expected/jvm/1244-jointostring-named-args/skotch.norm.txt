@@ -1,0 +1,100 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=9 max_locals=7
+    0000 iconst_5
+    0001 anewarray Class(java/lang/Object)
+    0004 astore_0
+    0005 bipush 6
+    0007 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0010 astore_1
+    0011 aload_0
+    0012 iconst_0
+    0013 aload_1
+    0014 aastore
+    0015 bipush 7
+    0017 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0020 astore_1
+    0021 aload_0
+    0022 iconst_1
+    0023 aload_1
+    0024 aastore
+    0025 bipush 8
+    0027 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0030 astore_1
+    0031 aload_0
+    0032 iconst_2
+    0033 aload_1
+    0034 aastore
+    0035 bipush 9
+    0037 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0040 astore_1
+    0041 aload_0
+    0042 iconst_3
+    0043 aload_1
+    0044 aastore
+    0045 bipush 10
+    0047 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0050 astore_1
+    0051 aload_0
+    0052 iconst_4
+    0053 aload_1
+    0054 aastore
+    0055 aload_0
+    0056 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0059 astore 6
+    0061 aload 6
+    0063 checkcast Class(java/lang/Iterable)
+    0066 ldc ", "
+    0068 checkcast Class(java/lang/CharSequence)
+    0071 ldc "["
+    0073 checkcast Class(java/lang/CharSequence)
+    0076 ldc "]"
+    0078 checkcast Class(java/lang/CharSequence)
+    0081 iconst_0
+    0082 aconst_null
+    0083 aconst_null
+    0084 bipush 56
+    0086 aconst_null
+    0087 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
+    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0093 swap
+    0094 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0097 aload 6
+    0099 checkcast Class(java/lang/Iterable)
+    0102 aconst_null
+    0103 ldc "<"
+    0105 checkcast Class(java/lang/CharSequence)
+    0108 ldc ">"
+    0110 checkcast Class(java/lang/CharSequence)
+    0113 iconst_0
+    0114 aconst_null
+    0115 aconst_null
+    0116 bipush 57
+    0118 aconst_null
+    0119 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
+    0122 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0125 swap
+    0126 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0129 aload 6
+    0131 checkcast Class(java/lang/Iterable)
+    0134 ldc " | "
+    0136 checkcast Class(java/lang/CharSequence)
+    0139 aconst_null
+    0140 aconst_null
+    0141 iconst_0
+    0142 aconst_null
+    0143 aconst_null
+    0144 bipush 62
+    0146 aconst_null
+    0147 invokestatic Method(kotlin/collections/CollectionsKt.joinToString$default:(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;)
+    0150 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0153 swap
+    0154 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0157 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
