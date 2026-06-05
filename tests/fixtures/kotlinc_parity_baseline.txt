@@ -359,7 +359,6 @@
 424-compound-field-assign
 425-sealed-interface
 426-range-expression
-427-enum-with-properties
 428-property-setter
 429-math-functions
 430-type-conversion
@@ -477,7 +476,6 @@
 646-suspend-return-arg-int
 647-suspend-string-plus-int
 649-suspend-int-times-2
-65-enum-basic
 650-suspend-int-plus-1
 651-suspend-int-minus-1
 652-suspend-int-divide
