@@ -4,21 +4,22 @@ super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
   code        max_stack=2 max_locals=0
-    0000 ldc "RED"
-    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0005 swap
-    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0009 getstatic Field(Color.RED:LColor;)
-    0012 invokevirtual Method(Color.getHex:()Ljava/lang/String;)
-    0015 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0018 swap
-    0019 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0022 getstatic Field(Color.BLUE:LColor;)
-    0025 invokevirtual Method(Color.getHex:()Ljava/lang/String;)
-    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0031 swap
-    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0035 return
+    0000 getstatic Field(Color.RED:LColor;)
+    0003 invokevirtual Method(Color.getName:()Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(Color.RED:LColor;)
+    0016 invokevirtual Method(Color.getHex:()Ljava/lang/String;)
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 swap
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 getstatic Field(Color.BLUE:LColor;)
+    0029 invokevirtual Method(Color.getHex:()Ljava/lang/String;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 swap
+    0036 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0039 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

@@ -1,0 +1,4 @@
+name = "1242-repeat-with-counter"
+status = "supported"
+features = ["repeat", "lambda", "Function1", "FunctionN-arity"]
+reason = "Locks in the Function0→Function1 lambda-arity fix: an empty-param lambda passed to `repeat` must implement Function1 because the lowered `lambda.invoke(i)` call requires the (Object)->Object signature."

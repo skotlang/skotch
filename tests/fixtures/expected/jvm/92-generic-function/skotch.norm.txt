@@ -20,18 +20,19 @@ method        main ()V 0x0019
     0019 invokevirtual Method(java/io/PrintStream.println:(I)V)
     0022 ldc "hello"
     0024 invokestatic Method(InputKt.identity:(Ljava/lang/Object;)Ljava/lang/Object;)
-    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0030 swap
-    0031 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0034 iconst_1
-    0035 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0038 iconst_2
-    0039 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0042 invokestatic Method(InputKt.pair:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0048 swap
-    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0052 return
+    0027 checkcast Class(java/lang/String)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 iconst_1
+    0038 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0041 iconst_2
+    0042 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0045 invokestatic Method(InputKt.pair:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0048 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0051 swap
+    0052 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0055 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

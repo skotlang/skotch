@@ -2964,6 +2964,26 @@ fn emit_throw_new(
 /// Parse a JVM method descriptor and return the param classes/primitives
 /// as `Ty`s. Used to recover expected types for external static fn calls
 /// where we don't have a MirFunction.
+/// Hard-coded lambda parameter shapes for the handful of stdlib HOFs
+/// that skotch lowers through a dedicated synthesis path (rather than
+/// through `find_external_static_descriptor`). Each entry returns the
+/// types of the lambda parameters for one specific arg position; e.g.
+/// `repeat(Int, (Int) -> Unit)` returns `Some(vec![Ty::Int])` when
+/// queried with `("repeat", 1)`.
+///
+/// Without this fallback the call site can't tell the lambda emitter
+/// what FunctionN arity to synthesize, and the resulting lambda class
+/// implements the wrong interface (e.g. `Function0` when `repeat`
+/// expects `Function1`), causing `NoSuchMethodError` at the synthesized
+/// `invoke(Object)` call.
+fn stdlib_hof_lambda_params(callee: &str, arg_idx: usize) -> Option<Vec<Ty>> {
+    match (callee, arg_idx) {
+        // `kotlin.repeat(times: Int, action: (Int) -> Unit)`
+        ("repeat", 1) => Some(vec![Ty::Int]),
+        _ => None,
+    }
+}
+
 fn descriptor_arg_tys(desc: &str) -> Vec<Ty> {
     let inner = match desc.split(')').next().and_then(|s| s.strip_prefix('(')) {
         Some(s) => s,
@@ -7639,6 +7659,20 @@ fn lower_expr(
                                     kind: CallKind::MakeConcatWithConstants { recipe, descriptor },
                                     args,
                                 },
+                            });
+                            return Some(dest);
+                        }
+                        // All-literal fast path: when every operand was a
+                        // string literal, `args` is empty and the recipe
+                        // is the fully-concatenated string. kotlinc folds
+                        // this at compile time to a single `ldc` rather
+                        // than an invokedynamic.
+                        if recipe_safe && args.is_empty() {
+                            let dest = fb.new_local(Ty::String);
+                            let string_id = module.intern_string(&recipe);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Const(MirConst::String(string_id)),
                             });
                             return Some(dest);
                         }
@@ -12875,18 +12909,48 @@ fn lower_expr(
                     // `kotlin/jvm/functions/FunctionN` at decl-lowering
                     // time, recover the original lambda param types from
                     // `local_generic_args` (preserved in `lower_fun_decl`).
-                    let recovered: Option<Vec<Ty>> = match param_tys.get(arg_idx) {
-                        Some(Ty::Function { params: fp, .. }) => Some(fp.clone()),
-                        _ => name_to_func.get(&callee_name).and_then(|fid| {
+                    // For external Kotlin stdlib callees whose param is
+                    // already `Ty::Class("kotlin/jvm/functions/FunctionN")`
+                    // (descriptor-derived), fall back to N copies of
+                    // `Ty::Any` so the lambda emitter still knows the
+                    // arity even though it can't recover the precise param
+                    // type. Finally, for a handful of stdlib HOFs that
+                    // skotch lowers via a dedicated synthesis path (and so
+                    // never goes through external-descriptor lookup),
+                    // hard-code the lambda's arg shape.
+                    // 1. Structured `Ty::Function` — full precision.
+                    // 2. Stored `local_generic_args` on the callee param —
+                    //    preserves the original lambda param types for
+                    //    user functions whose param was erased to
+                    //    `Ty::Class("FunctionN")` at decl-lowering.
+                    // 3. Erased `Ty::Class("FunctionN")` fallback — yields
+                    //    N copies of `Ty::Any` so the lambda emitter at
+                    //    least knows the arity (downstream code filters
+                    //    out `Ty::Any` so it doesn't clobber other infer).
+                    // 4. Hard-coded shapes for stdlib HOFs lowered via
+                    //    dedicated synthesis (e.g. `repeat`).
+                    let local_generic_args_recovered =
+                        name_to_func.get(&callee_name).and_then(|fid| {
                             let target = &module.functions[fid.0 as usize];
                             target
                                 .params
                                 .get(arg_idx)
                                 .and_then(|pid| target.local_generic_args.get(&pid.0).cloned())
-                        }),
+                        });
+                    let recovered: Option<Vec<Ty>> = match param_tys.get(arg_idx) {
+                        Some(Ty::Function { params: fp, .. }) => Some(fp.clone()),
+                        Some(Ty::Class(cn)) if cn.starts_with("kotlin/jvm/functions/Function") => {
+                            local_generic_args_recovered.or_else(|| {
+                                cn.strip_prefix("kotlin/jvm/functions/Function")
+                                    .and_then(|n| n.parse::<usize>().ok())
+                                    .map(|n| vec![Ty::Any; n])
+                            })
+                        }
+                        _ => local_generic_args_recovered
+                            .or_else(|| stdlib_hof_lambda_params(callee_str.as_str(), arg_idx)),
                     };
                     if let Some(fparams) = recovered {
-                        if fparams.len() == 1 && !matches!(fparams[0], Ty::Any) {
+                        if fparams.len() == 1 {
                             module.lambda_param_type = Some(fparams[0].clone());
                         }
                     }
@@ -20394,24 +20458,33 @@ fn lower_expr(
                     invoke_scope.push((it_sym, it_local));
                 } else if params.is_empty()
                     && invoke_fb.mf.params.len() == 1
-                    && body_references_ident(body, interner.intern("it"))
+                    && !is_suspend_lambda
+                    && (body_references_ident(body, interner.intern("it"))
+                        || module.lambda_param_type.is_some())
                 {
                     // No explicit params, no implicit `it` from the
-                    // FunctionN invoke shape — but the body uses `it`,
-                    // meaning the surrounding context expects a
-                    // `(T) -> R` (Function1). Add an invoke param so
-                    // the lambda's runtime arity matches Function1
+                    // FunctionN invoke shape — but either the body uses
+                    // `it` OR the call site told us the expected param
+                    // type via `module.lambda_param_type`. Either way,
+                    // the surrounding context expects a `(T) -> R`
+                    // (Function1) lambda. Add an invoke param so the
+                    // lambda's runtime arity matches Function1
                     // (`invoke(Object): Object`). Without this, the
-                    // class only implements Function0 and the
-                    // call-site `checkcast Function1` fails (e.g.
-                    // JetChat's `onChatClicked = { ... selectedMenu
-                    // = it }` lambdas).
+                    // class only implements Function0 and the call-site
+                    // `checkcast Function1` fails (e.g. JetChat's
+                    // `onChatClicked = { ... selectedMenu = it }`
+                    // lambdas, and stdlib `repeat(N) { … }` where the
+                    // body silently ignores the index).
                     //
                     // Consume `module.lambda_param_type` (set by the
-                    // call site for collection methods like `filter`/
-                    // `map`) so `it`'s type matches the receiver's
-                    // element type — `it.author` resolves against the
-                    // right class instead of falling back to `Any`.
+                    // call site for HOFs like `filter`/`map`/`repeat`)
+                    // so the synthesised `it` has the right type — even
+                    // when the body never names it.
+                    //
+                    // Skip for suspend lambdas: the Continuation param
+                    // is appended later by the SuspendLambda lowering,
+                    // and bumping the explicit arity here would push the
+                    // lambda from Function1 (Continuation) to Function2.
                     let it_ty = module.lambda_param_type.take().unwrap_or(Ty::Any);
                     let it_local = invoke_fb.new_local(it_ty);
                     invoke_fb.mf.params.push(it_local);
